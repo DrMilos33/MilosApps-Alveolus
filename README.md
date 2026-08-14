@@ -44,6 +44,12 @@ python -m http.server 8766 --bind 127.0.0.1 --directory build/web
 
 Danach läuft das Spiel unter `http://127.0.0.1:8766/`. Der Browser darf nicht direkt über `file://` geöffnet werden, da WebAssembly über einen lokalen Webserver geladen werden muss.
 
+Die aktuelle, ausdrücklich nicht für Production freigegebene DEV-Vorschau wird über GitHub Pages aus `docs/` veröffentlicht:
+
+```text
+https://drmilos33.github.io/MilosApps-Alveolus/
+```
+
 ## Spielschleife
 
 - Der Spielfluss lautet `Prolog → Campus → Fallarchiv → Briefing → Run → Ergebnis`; bestehende Spielstände beginnen direkt auf dem Campus.
