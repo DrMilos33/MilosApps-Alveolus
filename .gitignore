@@ -1,0 +1,11 @@
+# Godot-generated files
+.godot/
+
+# Local and exported builds (keep the Godot ignore marker tracked)
+build/*
+!build/.gdignore
+*.tmp
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
