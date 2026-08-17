@@ -286,17 +286,7 @@ func _refresh_responsive_layout() -> void:
 	# resize feedback loop through the PanelContainer's children.
 	_fit_shell_to_host.call_deferred()
 	var compact := size.x < 620.0
-	var screen_margin := AlveolusVisualTheme.SCREEN_MARGIN_COMPACT if compact else AlveolusVisualTheme.SCREEN_MARGIN
-	if _safe_area != null:
-		for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
-			_safe_area.add_theme_constant_override(side, screen_margin)
-	if _shell_stack != null:
-		_shell_stack.add_theme_constant_override(
-			"separation",
-			AlveolusVisualTheme.HEADER_CONTENT_GAP_COMPACT if compact else AlveolusVisualTheme.HEADER_CONTENT_GAP
-		)
-	if _header != null:
-		_header.custom_minimum_size.y = AlveolusVisualTheme.HEADER_HEIGHT_COMPACT if compact else AlveolusVisualTheme.HEADER_HEIGHT
+	AlveolusUIComponents.refresh_page_shell_layout(_shell, compact)
 	_header_actions.add_theme_constant_override(
 		"separation",
 		AlveolusVisualTheme.GRID_UNIT if compact else AlveolusVisualTheme.CONTROL_GAP

@@ -339,6 +339,7 @@ func _update_responsive_layout() -> void:
 	var logical_width := size.x
 	if logical_width <= 0.0 and get_viewport() != null:
 		logical_width = get_viewport_rect().size.x
+	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, logical_width < 620.0)
 	_columns.columns = 2 if logical_width >= WIDE_LAYOUT_MINIMUM else 1
 
 

@@ -118,13 +118,6 @@ func _run() -> void:
 			"danger": true,
 			"vertical_inset": 14.0,
 		},
-		{
-			"variation": AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON,
-			"accent": AlveolusVisualTheme.TEAL,
-			"primary": false,
-			"danger": false,
-			"vertical_inset": 14.0,
-		},
 	]:
 		var variation: StringName = button_contract["variation"]
 		var minimum_vertical_inset: float = button_contract["vertical_inset"]
@@ -261,6 +254,41 @@ func _run() -> void:
 	var planning_right: Color = planning_material.get_shader_parameter(&"right_color") if planning_material != null else Color.TRANSPARENT
 	_check(not _is_accidental_black(planning_left) and not _is_accidental_black(planning_right), "PlanningStart behält Türkis und Warmgold auch im Webmaterial")
 	_check(navigation_action.theme_type_variation == AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON and navigation_action.get_meta(&"ui_sound_cue") == &"back", "Navigation bündelt Variante und Zurück-Soundcue")
+	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+		var visual_state: StringName = &"hover" if state == &"hover_pressed" else state
+		var navigation_factory := AlveolusVisualTheme.navigation_button_style(visual_state)
+		var navigation_registered := visual_theme.get_stylebox(state, AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON) as StyleBoxFlat
+		_check(
+			navigation_registered != null and _same_button_chassis(navigation_registered, navigation_factory),
+			"NavigationButton verwendet in Zustand %s ausschließlich navigation_button_style" % state
+		)
+	var navigation_membranes: Array[PreparationBioLumenSurfaceFill] = []
+	for child in navigation_action.get_children():
+		if child is PreparationBioLumenSurfaceFill:
+			navigation_membranes.append(child as PreparationBioLumenSurfaceFill)
+	var navigation_fill := navigation_action.get_node_or_null("MembraneFill") as PreparationBioLumenSurfaceFill
+	var navigation_material := navigation_fill.material as ShaderMaterial if navigation_fill != null else null
+	var navigation_left: Color = navigation_material.get_shader_parameter(&"left_color") if navigation_material != null else Color.TRANSPARENT
+	var navigation_right: Color = navigation_material.get_shader_parameter(&"right_color") if navigation_material != null else Color.TRANSPARENT
+	_check(navigation_membranes.size() == 1 and navigation_fill == navigation_membranes[0], "Navigation besitzt genau einen zentralen MembraneFill")
+	_check(
+		navigation_left.is_equal_approx(PreparationBioLumenSurfaceFill.NORMAL_LEFT) \
+			and navigation_right.is_equal_approx(PreparationBioLumenSurfaceFill.NORMAL_RIGHT),
+		"Navigation übernimmt den freigegebenen Planning-Normalverlauf"
+	)
+	_check(navigation_action is IconTextButton and (navigation_action as IconTextButton).content_row.alignment == BoxContainer.ALIGNMENT_CENTER, "Navigation zentriert Icon und Text als gemeinsame Einheit")
+	var navigation_minimum_before := navigation_action.custom_minimum_size
+	var navigation_scale_before := navigation_action.scale
+	navigation_action.mouse_entered.emit()
+	navigation_action.focus_entered.emit()
+	_check(
+		navigation_action.custom_minimum_size.is_equal_approx(navigation_minimum_before) \
+			and navigation_action.scale.is_equal_approx(navigation_scale_before) \
+			and navigation_action.scale.is_equal_approx(Vector2.ONE),
+		"Hover und Fokus verändern die Navigationsgeometrie nicht"
+	)
+	navigation_action.mouse_exited.emit()
+	navigation_action.focus_exited.emit()
 	AlveolusUIComponents.set_button_disabled(primary_action, true)
 	var disabled_top: Color = bio_material.get_shader_parameter(&"top_color") if bio_material != null else Color.TRANSPARENT
 	_check(primary_action.disabled and _hue_distance(disabled_top.h, AlveolusVisualTheme.MUTED.h) <= 0.08, "Programmatisches Disabled synchronisiert den Shader ereignisgesteuert")
@@ -270,6 +298,23 @@ func _run() -> void:
 	var shell_parts := AlveolusUIComponents.page_shell(header_parts["panel"] as Control, shell_content)
 	var shell := shell_parts["shell"] as PanelContainer
 	_check(shell.get_meta(&"alveolus_component") == &"page_shell" and (header_parts["panel"] as PanelContainer).theme_type_variation == AlveolusVisualTheme.TYPE_PAGE_HEADER, "PageShell und PageHeader besitzen zentrale semantische Komponenten")
+	var page_stack := shell_parts["stack"] as VBoxContainer
+	var page_header_control := header_parts["panel"] as PanelContainer
+	var page_body_safe_area := shell_parts["safe_area"] as MarginContainer
+	_check(
+		page_stack != null and page_header_control.get_parent() == page_stack \
+			and page_stack.get_child(0) == page_header_control \
+			and page_body_safe_area.get_parent() == page_stack \
+			and page_stack.get_child(1) == page_body_safe_area \
+			and page_header_control.size_flags_horizontal == Control.SIZE_EXPAND_FILL,
+		"PageHeader ist das direkte vollbreite Topband; erst danach folgt PageBodySafeArea"
+	)
+	var page_medallion := header_parts["medallion"] as PanelContainer
+	var page_icon := header_parts["icon"] as SimpleIcon
+	var page_title := header_parts["title"] as Label
+	_check(page_medallion != null and page_medallion.custom_minimum_size.is_equal_approx(Vector2(44.0, 44.0)), "PageHeader besitzt das feste 44-px-Medaillon")
+	_check(page_icon != null and page_icon.kind == &"settings" and SimpleIcon.supports(page_icon.kind), "PageHeader verwendet ein semantisches SimpleIcon")
+	_check(page_title != null and page_title.text == "Einstellungen" and page_title.theme_type_variation == AlveolusVisualTheme.TYPE_TITLE_LABEL, "PageHeader enthält genau den Seitentitel")
 	_check(shell.oversampling_with_scale == CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED, "PageShell aktiviert skalierungsabhängiges Font-Oversampling")
 	var tooltip_parts := AlveolusUIComponents.tooltip_card("Fokusfeld", "Verstärkt die Behandlung.", "Aktiv · 2 K")
 	var detail_parts := AlveolusUIComponents.detail_card("Fokusfeld", "Verstärkt die Behandlung.", "I · Information")
@@ -388,6 +433,24 @@ func _asymmetric_corners(style: StyleBoxFlat, large_radius: int, small_radius: i
 		and style.corner_radius_top_right == small_radius \
 		and style.corner_radius_bottom_right == large_radius \
 		and style.corner_radius_bottom_left == small_radius
+
+func _same_button_chassis(first: StyleBoxFlat, second: StyleBoxFlat) -> bool:
+	if first == null or second == null:
+		return false
+	return first.bg_color.is_equal_approx(second.bg_color) \
+		and first.border_color.is_equal_approx(second.border_color) \
+		and first.border_width_left == second.border_width_left \
+		and first.border_width_top == second.border_width_top \
+		and first.border_width_right == second.border_width_right \
+		and first.border_width_bottom == second.border_width_bottom \
+		and first.corner_radius_top_left == second.corner_radius_top_left \
+		and first.corner_radius_top_right == second.corner_radius_top_right \
+		and first.corner_radius_bottom_right == second.corner_radius_bottom_right \
+		and first.corner_radius_bottom_left == second.corner_radius_bottom_left \
+		and is_equal_approx(first.content_margin_left, second.content_margin_left) \
+		and is_equal_approx(first.content_margin_top, second.content_margin_top) \
+		and is_equal_approx(first.content_margin_right, second.content_margin_right) \
+		and is_equal_approx(first.content_margin_bottom, second.content_margin_bottom)
 
 func _has_minimum_content_insets(style: StyleBox, horizontal: float, vertical: float) -> bool:
 	return style != null \

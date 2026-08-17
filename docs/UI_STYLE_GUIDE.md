@@ -24,7 +24,7 @@ und Eingabetests in diesem Projekt machen die Regeln überprüfbar.
 - Eine Ansicht hat genau eine klar hervorgehobene Hauptaktion.
 - Die visuelle Sprache ist „Bio-Lumen · lebendige Membran“ als organische Weiterentwicklung des dunklen medizinischen Einsatzdossiers: Petroltiefe, feine Zell- und Kapillarspuren, präzise Linien und wenige leuchtende Akzente. Weiße Kachelwände und beliebige Neon-Sci-Fi-Dekoration sind kein ALVEOLUS-Muster.
 - Diese Sprache gilt für die gesamte Oberfläche: Texte, Buttons, Formcontrols, Karten, Popups, Tooltips, Dialoge, HUD-Flächen, Beschriftungen, Fokusdarstellung und Lebensleisten. Häuser und Umgebungsbilder sowie die Figuren von Monstern und Spielern bleiben außerhalb dieses visuellen Rollouts; ihre darüberliegenden UI-Elemente gehören dazu.
-- Der feste Seitenkopf besitzt eine eigene sichere Zone. Inhalt, Gebäude und Karten beginnen immer unterhalb des Kopfes und nach dem verbindlichen Inhaltsabstand. Seine Zeichenebene bleibt lokal in der jeweiligen Seite und darf niemals über eine später geöffnete Seite ragen.
+- Der feste Seitenkopf folgt auf allen Dokumentseiten der Golden Reference: Er liegt bündig am oberen Fensterrand, füllt die gesamte Breite und enthält links ein 44-Pixel-Medaillon mit Seitensymbol, daneben genau einen Titel und rechts die Navigation. Nur der Dokumentkörper erhält den 24/16-Pixel-Sicherheitsrand. Inhalt, Gebäude und Karten beginnen immer unterhalb des Kopfes und nach dem verbindlichen Inhaltsabstand. Seine Zeichenebene bleibt lokal in der jeweiligen Seite und darf niemals über eine später geöffnete Seite ragen.
 - Der Seitenkopf wird durch seine durchgehende Unterkante getrennt. Zusätzliche kurze Akzentbalken unter dem Titel werden nicht verwendet.
 - Normale Aktionen, Auswahl, Gefahr und Navigation verwenden semantische Theme-Varianten. Lokale Farb- und Rahmenkopien sind zu vermeiden.
 - Farbe ist nie das einzige Signal. Auswahl wird zusätzlich durch Zustand, Text oder Symbol vermittelt.
@@ -103,10 +103,18 @@ Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht 
 ## Forschung und Talente
 
 - Dauerhafte Fortschrittsoptionen erscheinen als responsives kompaktes Brett statt als lange Dokumentliste.
-- Forschungskarten sind höchstens 76 Pixel, Talentknoten höchstens 80 Pixel hoch. Sichtbar bleiben Icon, Titel, Rang beziehungsweise Kosten und ein eindeutiger Zustand.
+- Forschungskarten sind höchstens 76 Pixel hoch; sichtbar bleiben Icon, Titel, Rang beziehungsweise Kosten und ein eindeutiger Zustand.
+- Talentknoten sind kompakte quadratische Symbolknoten. Jedes Talent verwendet innerhalb des Baums ein eigenes, semantisch passendes Symbol. Dauerhafte Titel-, Kosten- oder Beschreibungstexte sind im Knoten unzulässig; aktiv und gesperrt werden zusätzlich zum Farbzustand mit Check beziehungsweise Schloss markiert.
 - Die vollständige Wirkung erscheint per Maus-Hover als kompakter Tooltip und per `ui_info` als inhaltsgleiche Detailkarte; reiner Tastatur-/Gamepadfokus öffnet nichts. Beide Darstellungen belegen keinen dauerhaften Platz oberhalb des Bretts. Ein nativer Tooltip darf ergänzen, ist aber niemals die einzige Informationsquelle.
+- Talenttooltips nennen zuerst Titel und Kosten, danach eine kurze Wirkung und nur die entscheidenden Zahlenfakten. Voraussetzungen oder Sperrgründe erscheinen ausschließlich, wenn sie für die aktuelle Aktion relevant sind.
 - Forschung verwendet auf breiten Ansichten bis zu drei Spalten. Talente bilden drei getrennte Äste mit gezeichneten Verbindungen und echten Voraussetzungen; jede Verzweigung folgt auf einen freigeschalteten Elternknoten. Bei kleiner logischer Breite werden Äste auf zwei beziehungsweise eine Spalte reduziert und vertikal gescrollt.
 - Auf niedrigen 200-Prozent-Ansichten bleiben die beiden Progressionstabs sichtbar; Summary und Brett beziehungsweise Baum liegen in einer fokusfolgenden Scrollfläche, während ein über Maus-Hover oder `ui_info` angefordertes Detail als viewportgebundener Tooltip beziehungsweise Detailkarte erscheint. Reiner Fokus öffnet es nicht. Baumränder führen per D-Pad zu Tabs oder Nachbarästen statt in Selbstschleifen. Ein aktiver Elternknoten mit aktiven Nachfolgern erklärt die Sperre und bleibt unverändert, bis die Nachfolger ausdrücklich zurückgesetzt wurden.
+
+## Einstellungen
+
+- Audio, Anzeige und Bedienung verwenden inhaltsgetriebene Bio-Lumen-Gruppen ohne reservierten Leerraum. Desktop darf zwei gleichgewichtete Spalten nutzen; kompakte Ansichten stapeln sie in einem eindeutigen vertikalen Scrollpfad.
+- Jede Option und jeder Schalter nennt links sichtbar seinen Zweck und hält die Bedienung rechts in derselben mindestens 44 Pixel hohen Zeile. Namenlose Toggle-Karten sind unzulässig.
+- Tastenbelegungen zeigen eine kurze spielerische Aktion links und die aktuelle Belegung kompakt rechts. Interne Aktionsnamen, übergroße Einzelkarten und rein dekorative Zwischenzeilen sind unzulässig.
 
 ## Semantische Varianten
 

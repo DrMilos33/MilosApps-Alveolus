@@ -189,33 +189,98 @@ static func page_shell(header: Control = null, content: Control = null, compact:
 	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	shell.oversampling_with_scale = CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED
 	shell.set_meta(&"alveolus_component", &"page_shell")
-	var safe_area := MarginContainer.new()
-	var screen_margin := AlveolusVisualTheme.SCREEN_MARGIN_COMPACT if compact else AlveolusVisualTheme.SCREEN_MARGIN
-	for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
-		safe_area.add_theme_constant_override(side, screen_margin)
-	shell.add_child(safe_area)
 	var stack := VBoxContainer.new()
-	stack.add_theme_constant_override(
-		"separation",
-		AlveolusVisualTheme.HEADER_CONTENT_GAP_COMPACT if compact else AlveolusVisualTheme.HEADER_CONTENT_GAP
-	)
-	safe_area.add_child(stack)
+	stack.name = "PageStack"
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", 0)
+	shell.add_child(stack)
 	if header != null:
+		header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		header.custom_minimum_size.y = maxf(
 			header.custom_minimum_size.y,
 			AlveolusVisualTheme.HEADER_HEIGHT_COMPACT if compact else AlveolusVisualTheme.HEADER_HEIGHT
 		)
 		stack.add_child(header)
-	if content != null:
-		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		stack.add_child(content)
-	return {"shell": shell, "safe_area": safe_area, "stack": stack, "header": header, "content": content}
 
-static func page_header(title_text: String, eyebrow_text: String = "", action: Control = null) -> Dictionary:
+	# The approved deployment screen establishes the page anatomy: its header
+	# is a full-width top band, while only the document body observes the safe
+	# area. Keeping the body margin as the public `safe_area` preserves the
+	# existing responsive screen API without turning the header into a floating
+	# card again.
+	var safe_area := MarginContainer.new()
+	safe_area.name = "PageBodySafeArea"
+	safe_area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	safe_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var screen_margin := AlveolusVisualTheme.SCREEN_MARGIN_COMPACT if compact else AlveolusVisualTheme.SCREEN_MARGIN
+	safe_area.add_theme_constant_override("margin_left", screen_margin)
+	safe_area.add_theme_constant_override(
+		"margin_top",
+		AlveolusVisualTheme.HEADER_CONTENT_GAP_COMPACT if compact else AlveolusVisualTheme.HEADER_CONTENT_GAP
+	)
+	safe_area.add_theme_constant_override("margin_right", screen_margin)
+	safe_area.add_theme_constant_override("margin_bottom", screen_margin)
+	stack.add_child(safe_area)
+	if content != null:
+		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		safe_area.add_child(content)
+	var parts := {"shell": shell, "safe_area": safe_area, "stack": stack, "header": header, "content": content}
+	refresh_page_shell_layout(shell, compact)
+	return parts
+
+static func refresh_page_shell_layout(shell: Control, compact: bool) -> void:
+	if shell == null:
+		return
+	var screen_margin := AlveolusVisualTheme.SCREEN_MARGIN_COMPACT if compact else AlveolusVisualTheme.SCREEN_MARGIN
+	var safe_area := shell.find_child("PageBodySafeArea", true, false) as MarginContainer
+	if safe_area != null:
+		safe_area.add_theme_constant_override("margin_left", screen_margin)
+		safe_area.add_theme_constant_override(
+			"margin_top",
+			AlveolusVisualTheme.HEADER_CONTENT_GAP_COMPACT if compact else AlveolusVisualTheme.HEADER_CONTENT_GAP
+		)
+		safe_area.add_theme_constant_override("margin_right", screen_margin)
+		safe_area.add_theme_constant_override("margin_bottom", screen_margin)
+	var stack := shell.find_child("PageStack", true, false) as VBoxContainer
+	if stack != null:
+		stack.add_theme_constant_override("separation", 0)
+	var header: Control = null
+	for candidate in shell.find_children("*", "Control", true, false):
+		var control := candidate as Control
+		if control != null and control.get_meta(&"alveolus_component", &"") == &"page_header":
+			header = control
+			break
+	if header != null:
+		header.custom_minimum_size.y = AlveolusVisualTheme.HEADER_HEIGHT_COMPACT if compact else AlveolusVisualTheme.HEADER_HEIGHT
+	var inset := shell.find_child("PageHeaderInset", true, false) as MarginContainer
+	if inset != null:
+		inset.add_theme_constant_override("margin_left", screen_margin)
+		inset.add_theme_constant_override("margin_right", screen_margin)
+
+static func page_header(
+	title_text: String,
+	eyebrow_text: String = "",
+	action: Control = null,
+	icon_kind: StringName = &""
+) -> Dictionary:
 	var header := surface(AlveolusVisualTheme.SurfaceRole.PAGE_HEADER)
+	header.name = "PageHeaderSurface"
 	header.set_meta(&"alveolus_component", &"page_header")
 	var row := HBoxContainer.new()
+	row.name = "PageHeaderRow"
 	row.add_theme_constant_override("separation", AlveolusVisualTheme.SECTION_GAP)
+	var resolved_icon := icon_kind if icon_kind != &"" else _page_icon_kind(title_text)
+	var medallion := surface(AlveolusVisualTheme.SurfaceRole.DOCUMENT_INSET, AlveolusVisualTheme.TEAL)
+	medallion.name = "PageMedallion"
+	medallion.custom_minimum_size = Vector2(44.0, 44.0)
+	medallion.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(medallion)
+	var page_icon := SimpleIcon.new()
+	page_icon.name = "PageIcon"
+	page_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
+	page_icon.configure(resolved_icon, AlveolusVisualTheme.TEAL)
+	medallion.add_child(page_icon)
 	var heading := VBoxContainer.new()
 	heading.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 	if not eyebrow_text.is_empty():
@@ -234,8 +299,22 @@ static func page_header(title_text: String, eyebrow_text: String = "", action: C
 	if action != null:
 		action.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		row.add_child(action)
-	header.add_child(margin(row, 12))
-	return {"panel": header, "row": row, "heading": heading, "title": title, "action": action}
+	var inset := MarginContainer.new()
+	inset.name = "PageHeaderInset"
+	inset.add_theme_constant_override("margin_left", AlveolusVisualTheme.SCREEN_MARGIN)
+	inset.add_theme_constant_override("margin_right", AlveolusVisualTheme.SCREEN_MARGIN)
+	inset.add_child(row)
+	header.add_child(inset)
+	return {
+		"panel": header,
+		"row": row,
+		"heading": heading,
+		"title": title,
+		"action": action,
+		"medallion": medallion,
+		"icon": page_icon,
+		"inset": inset,
+	}
 
 static func form_control_row(text_value: String, control: Control) -> Dictionary:
 	var row_panel := panel(AlveolusVisualTheme.TYPE_FORM_CONTROL)
@@ -489,21 +568,41 @@ static func apply_action_role(
 
 	var global_fill := button_control.get_node_or_null("BioLumenFill") as BioLumenButtonFill
 	var planning_fill := button_control.get_node_or_null("PreparationBioLumenFill") as PreparationBioLumenFill
+	var navigation_fill := button_control.get_node_or_null("MembraneFill") as PreparationBioLumenSurfaceFill
 	if role == ACTION_PRIMARY:
 		global_fill = BioLumenButtonFill.attach(button_control, resolved_accent)
 		global_fill.show()
 		if planning_fill != null:
 			planning_fill.hide()
+		if navigation_fill != null:
+			navigation_fill.hide()
 	elif role == ACTION_PLANNING_START:
 		planning_fill = PreparationBioLumenFill.attach(button_control, AlveolusVisualTheme.TURQUOISE, AlveolusVisualTheme.GOLD)
 		planning_fill.show()
 		if global_fill != null:
 			global_fill.hide()
+		if navigation_fill != null:
+			navigation_fill.hide()
+	elif role == ACTION_NAVIGATION:
+		navigation_fill = PreparationBioLumenSurfaceFill.attach(
+			button_control,
+			PreparationBioLumenSurfaceFill.NORMAL_LEFT,
+			PreparationBioLumenSurfaceFill.NORMAL_RIGHT,
+			11.0,
+			3.0
+		)
+		navigation_fill.show()
+		if global_fill != null:
+			global_fill.hide()
+		if planning_fill != null:
+			planning_fill.hide()
 	else:
 		if global_fill != null:
 			global_fill.hide()
 		if planning_fill != null:
 			planning_fill.hide()
+		if navigation_fill != null:
+			navigation_fill.hide()
 	refresh_button_state(button_control)
 	return button_control
 
@@ -558,7 +657,7 @@ static func _build_action_button(
 		control.text = text_value
 	else:
 		var icon_button := IconTextButton.new()
-		icon_button.configure(text_value, icon_kind, resolved_accent, 22.0, 8)
+		icon_button.configure(text_value, icon_kind, resolved_accent, 19.0 if role == ACTION_NAVIGATION else 22.0, 8)
 		icon_button.set_content_on_light(role in [ACTION_PRIMARY, ACTION_PLANNING_START])
 		control = icon_button
 	control.theme_type_variation = variation
@@ -750,6 +849,22 @@ static func _sound_cue_for(role: StringName, icon_kind: StringName) -> StringNam
 	if role == ACTION_NAVIGATION or icon_kind == &"back":
 		return &"back"
 	return &"press"
+
+static func _page_icon_kind(title_text: String) -> StringName:
+	match title_text.to_upper():
+		"PRAXIS":
+			return &"practice"
+		"FORSCHUNG", "TALENTE":
+			return &"research"
+		"FALLARCHIV":
+			return &"archive"
+		"LEXIKON":
+			return &"lexicon"
+		"EINSTELLUNGEN":
+			return &"settings"
+		"EINSATZPLANUNG":
+			return &"plan"
+	return &"information"
 
 static func _slider_value_text(value: float, step: float) -> String:
 	return "%d" % roundi(value) if step >= 1.0 else "%.1f" % value

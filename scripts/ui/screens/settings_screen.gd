@@ -23,6 +23,7 @@ var _header: PanelContainer
 var _scroll: ScrollContainer
 var _settings_stack: VBoxContainer
 var _upper_grid: GridContainer
+var _toggles_grid: GridContainer
 var _bindings_grid: GridContainer
 var _back_button: Button
 var _controls: Dictionary = {}
@@ -149,7 +150,7 @@ func _build_interface() -> void:
 	_settings_stack = VBoxContainer.new()
 	_settings_stack.name = "SettingsStack"
 	_settings_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_settings_stack.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	_settings_stack.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	_scroll.add_child(_settings_stack)
 
 	var shell_parts := AlveolusUIComponents.page_shell(_header, _scroll)
@@ -193,23 +194,28 @@ func _rebuild_sections() -> void:
 	for setting in _view_model.get_option_settings():
 		if setting.is_visible():
 			_build_option_row(display_content, setting)
+	_toggles_grid = GridContainer.new()
+	_toggles_grid.name = "DisplayTogglesGrid"
+	_toggles_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_toggles_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_toggles_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
+	display_content.add_child(_toggles_grid)
 	for setting in _view_model.get_toggle_settings():
 		if setting.is_visible():
-			_build_toggle_row(display_content, setting)
-			if setting.get_id() == &"confirm_restart":
-				var restart_hint := AlveolusUIComponents.label(
-					"Strg+R startet die aktuelle Runde neu.",
-					AlveolusVisualTheme.TYPE_MUTED_LABEL
-				)
-				restart_hint.name = "RestartShortcutHint"
-				restart_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-				display_content.add_child(restart_hint)
+			_build_toggle_row(_toggles_grid, setting)
 
 	var controls_section := _section("Steuerung", AlveolusVisualTheme.TURQUOISE)
 	var controls_panel := controls_section["panel"] as PanelContainer
 	var controls_content := controls_section["content"] as VBoxContainer
 	controls_panel.name = "ControlsSection"
 	_settings_stack.add_child(controls_panel)
+	var bindings_explanation := AlveolusUIComponents.label(
+		"Aktion links · aktuelle Belegung rechts",
+		AlveolusVisualTheme.TYPE_MUTED_LABEL
+	)
+	bindings_explanation.name = "BindingsExplanation"
+	bindings_explanation.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	controls_content.add_child(bindings_explanation)
 	_bindings_grid = GridContainer.new()
 	_bindings_grid.name = "BindingsGrid"
 	_bindings_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -267,9 +273,9 @@ func _section(title_text: String, accent: Color) -> Dictionary:
 	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	panel.set_meta(&"settings_section", StringName(title_text))
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	content.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 	content.add_child(AlveolusUIComponents.label(title_text, AlveolusVisualTheme.TYPE_SECTION_LABEL))
-	panel.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	panel.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CONTENT_GAP))
 	return {"panel": panel, "content": content}
 
 
@@ -325,7 +331,12 @@ func _build_audio_row(parent: VBoxContainer, setting: SettingsScreenViewModel.Au
 func _build_option_row(parent: VBoxContainer, setting: SettingsScreenViewModel.OptionSettingViewModel) -> void:
 	var parts := AlveolusUIComponents.option_row(setting.get_label(), setting.get_entries(), setting.get_selected_index())
 	var row := parts["row"] as HBoxContainer
+	var title := parts["label"] as Label
 	var control := parts["control"] as OptionButton
+	row.name = "OptionLayout_%s" % String(setting.get_id())
+	row.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	row.set_meta(&"alveolus_component", &"compact_setting_row")
+	title.name = "SettingPurpose"
 	var key := _option_key(setting.get_id())
 	control.name = "Option_%s" % String(setting.get_id())
 	control.set_meta(&"setting_id", key)
@@ -335,20 +346,36 @@ func _build_option_row(parent: VBoxContainer, setting: SettingsScreenViewModel.O
 	parent.add_child(row)
 
 
-func _build_toggle_row(parent: VBoxContainer, setting: SettingsScreenViewModel.ToggleSettingViewModel) -> void:
+func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.ToggleSettingViewModel) -> void:
 	var toggle := AlveolusUIComponents.toggle_row("Ein" if setting.is_enabled() else "Aus", setting.is_enabled())
 	var key := _toggle_key(setting.get_id())
 	toggle.name = "Toggle_%s" % String(setting.get_id())
 	toggle.set_meta(&"setting_id", key)
 	toggle.custom_minimum_size.x = 80.0
 	toggle.toggled.connect(_on_toggle_changed.bind(setting.get_id(), toggle))
-	var parts := AlveolusUIComponents.form_control_row(setting.get_label(), toggle)
+	var visible_label := _toggle_purpose(setting.get_id(), setting.get_label())
+	var row := _compact_setting_row(visible_label, toggle)
+	row.name = "ToggleLayout_%s" % String(setting.get_id())
 	_controls[key] = toggle
-	parent.add_child(parts["panel"] as PanelContainer)
+	parent.add_child(row)
+
+
+func _toggle_purpose(setting_id: StringName, fallback: String) -> String:
+	match setting_id:
+		&"reduce_motion":
+			return "Weniger Bewegung"
+		&"run_stats":
+			return "Werte im Run"
+		&"fullscreen":
+			return "Vollbild"
+		&"confirm_restart":
+			return "Strg+R bestätigen"
+	return fallback
 
 
 func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel) -> void:
 	var caption := "Taste drücken …" if setting.is_capturing() else setting.get_binding_text()
+	var purpose := _binding_purpose(setting.get_action_id(), setting.get_label())
 	var button := AlveolusUIComponents.action_button(
 		caption,
 		AlveolusUIComponents.ACTION_SECONDARY,
@@ -359,17 +386,53 @@ func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel
 	button.name = "Binding_%s" % String(setting.get_action_id())
 	button.set_meta(&"setting_id", key)
 	button.set_meta(&"action_id", setting.get_action_id())
-	button.set_meta(&"alveolus_accessible_name", "%s: %s" % [setting.get_label(), caption])
+	button.set_meta(&"alveolus_accessible_name", "%s: %s" % [purpose, caption])
 	button.clip_text = true
 	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	button.tooltip_text = caption
 	button.pressed.connect(_on_binding_requested.bind(setting.get_action_id()))
-	var row_parts := AlveolusUIComponents.form_control_row(setting.get_label(), button)
-	var panel := row_parts["panel"] as PanelContainer
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var row := _compact_setting_row(purpose, button)
+	row.name = "BindingLayout_%s" % String(setting.get_action_id())
 	_controls[key] = button
 	_binding_buttons.append(button)
-	_bindings_grid.add_child(panel)
+	_bindings_grid.add_child(row)
+
+
+func _compact_setting_row(text_value: String, control: Control) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	row.set_meta(&"alveolus_component", &"compact_setting_row")
+	var title := AlveolusUIComponents.label(text_value, AlveolusVisualTheme.TYPE_BODY_LABEL)
+	title.name = "SettingPurpose"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.clip_text = true
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	row.add_child(title)
+	control.focus_mode = Control.FOCUS_ALL
+	control.custom_minimum_size.y = maxf(
+		control.custom_minimum_size.y,
+		AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	)
+	row.add_child(control)
+	return row
+
+
+func _binding_purpose(action_id: StringName, fallback: String) -> String:
+	match action_id:
+		&"move_up": return "Bewegen · nach oben"
+		&"move_down": return "Bewegen · nach unten"
+		&"move_left": return "Bewegen · nach links"
+		&"move_right": return "Bewegen · nach rechts"
+		&"active_ability_1": return "Aktive Fähigkeit 1"
+		&"active_ability_2": return "Aktive Fähigkeit 2"
+		&"pause_game": return "Pausenmenü öffnen"
+		&"ui_accept": return "Auswahl bestätigen"
+		&"ui_cancel": return "Zurück / schließen"
+		&"ui_info": return "Details anzeigen"
+	return fallback
 
 
 func _on_audio_value_changed(percent_value: float, setting_id: StringName) -> void:
@@ -405,16 +468,11 @@ func _refresh_responsive_layout() -> void:
 		(_back_button as IconTextButton).set_caption("" if _compact_layout else "Zurück", true)
 		_back_button.set_meta(&"alveolus_accessible_name", "Zurück")
 		_back_button.tooltip_text = "Zurück" if _compact_layout else ""
-	var screen_margin := AlveolusVisualTheme.SCREEN_MARGIN_COMPACT if _compact_layout else AlveolusVisualTheme.SCREEN_MARGIN
-	for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
-		_safe_area.add_theme_constant_override(side, screen_margin)
-	_shell_stack.add_theme_constant_override(
-		"separation",
-		AlveolusVisualTheme.HEADER_CONTENT_GAP_COMPACT if _compact_layout else AlveolusVisualTheme.HEADER_CONTENT_GAP
-	)
-	_header.custom_minimum_size.y = AlveolusVisualTheme.HEADER_HEIGHT_COMPACT if _compact_layout else AlveolusVisualTheme.HEADER_HEIGHT
+	AlveolusUIComponents.refresh_page_shell_layout(_shell, _compact_layout)
 	if _upper_grid != null:
 		_upper_grid.columns = 1 if _compact_layout else 2
+	if _toggles_grid != null:
+		_toggles_grid.columns = 1 if _compact_layout else 2
 	if _bindings_grid != null:
 		_bindings_grid.columns = 1 if logical_width < TWO_BINDING_COLUMNS_WIDTH else 2
 	for record in _audio_layout_records:

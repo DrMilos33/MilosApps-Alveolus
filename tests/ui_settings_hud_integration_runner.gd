@@ -132,7 +132,7 @@ func _test_restart_confirmation_setting(hud: GameHUD) -> void:
 	hud.configure_ui_settings(settings)
 	_true(hud.settings_restart_confirmation_toggle.button_pressed, "Das HUD spiegelt den sicheren Standard für Strg+R als aktiven Schalter")
 	_equal(hud.settings_restart_confirmation_toggle.text, "Ein", "Der aktive Neustartschalter besitzt eine eindeutige Beschriftung")
-	_true(_control_text(hud.settings_overlay).contains("Strg+R startet die aktuelle Runde neu."), "Die Einstellungen erklären den globalen Neustart-Shortcut direkt am Schalter")
+	_true(_control_text(hud.settings_overlay).contains("Strg+R bestätigen"), "Die Einstellungen erklären den globalen Neustart-Shortcut kompakt direkt am Schalter")
 	var emitted: Array[UISettingsState] = []
 	hud.ui_settings_changed.connect(func(updated: UISettingsState) -> void: emitted.append(updated))
 	hud.settings_restart_confirmation_toggle.button_pressed = false

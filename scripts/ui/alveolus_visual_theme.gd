@@ -199,8 +199,9 @@ static func _configure_variations(theme: Theme) -> void:
 	_register_button_variation(theme, TYPE_SECONDARY_BUTTON, COBALT, false, false, BUTTON_HEIGHT_SECONDARY)
 	_register_button_variation(theme, TYPE_DANGER_BUTTON, CORAL, false, true, BUTTON_HEIGHT_SECONDARY)
 	_register_button_variation(theme, TYPE_QUIET_BUTTON, MUTED, false, false, BUTTON_HEIGHT_SECONDARY)
-	_register_button_variation(theme, TYPE_NAVIGATION_BUTTON, TEAL, false, false, BUTTON_HEIGHT_SECONDARY)
+	_register_navigation_button_variation(theme, TYPE_NAVIGATION_BUTTON)
 	theme.set_font("font", TYPE_NAVIGATION_BUTTON, body_font())
+	theme.set_font_size("font_size", TYPE_NAVIGATION_BUTTON, TEXT_CAPTION)
 	_register_button_variation(theme, TYPE_SELECTION_CARD, COBALT, false, false, 88, false, true)
 	_register_button_variation(theme, TYPE_SELECTED_CARD, TEAL, false, false, 88, true, true)
 	_register_button_variation(theme, TYPE_CHOICE_ROW, COBALT, false, false, 64, false, true)
@@ -260,6 +261,15 @@ static func _register_button_variation(
 	if primary:
 		for color_name in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color", &"font_hover_pressed_color"]:
 			theme.set_color(color_name, variation, PETROL)
+
+static func _register_navigation_button_variation(theme: Theme, variation: StringName) -> void:
+	theme.set_type_variation(variation, &"Button")
+	for color_name in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color", &"font_hover_pressed_color"]:
+		theme.set_color(color_name, variation, Color("edf5ef"))
+	theme.set_color("font_disabled_color", variation, Color(MUTED, 0.62))
+	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+		var visual_state: StringName = &"hover" if state == &"hover_pressed" else state
+		theme.set_stylebox(state, variation, navigation_button_style(visual_state))
 
 static func _configure_button_variant(
 	theme: Theme,
@@ -648,6 +658,29 @@ static func button_style(accent: Color, state: StringName, primary: bool = false
 	# margins. Keep the safe area in the factory so no direct-text button can
 	# silently lose padding when a caller recolors or refreshes it.
 	return with_content_insets(style, 18.0, 16.0 if primary else 14.0)
+
+static func navigation_button_style(state: StringName) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color.TRANSPARENT
+	style.border_color = Color("3e9290", 0.46)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 12
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_right = 12
+	style.corner_radius_bottom_left = 4
+	style.corner_detail = 16
+	style.anti_aliasing = true
+	match state:
+		&"hover":
+			style.border_color = Color("66ded5", 0.84)
+		&"pressed":
+			style.border_color = Color("4ab8b3", 0.72)
+		&"focus":
+			style.border_color = Color("6fe7dc")
+			style.set_border_width_all(2)
+		&"disabled":
+			style.border_color = Color(MUTED, 0.20)
+	return with_content_insets(style, 18.0, 10.0)
 
 static func case_card_style(accent: Color, state: StringName) -> StyleBoxFlat:
 	var background := Color(PETROL_WASH.lerp(accent, 0.035), 0.94)

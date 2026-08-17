@@ -110,6 +110,20 @@ func _run() -> void:
 	_check(top_target == root_talent, "D-Pad nach oben kehrt zum vorausgesetzten Talent zurück")
 	_check(_state_icon_kind(root_talent) == &"check", "Aktives Talent besitzt Check plus Auswahlfarbe")
 	_check(_state_icon_kind(screen.talent_action(&"plan_locked")) == &"locked", "Gesperrtes Talent besitzt Schloss plus gedämpfte Farbe")
+	var talent_symbols: Dictionary = {}
+	for talent_id in [&"plan_root", &"plan_child", &"plan_locked", &"diagnosis_root", &"deployment_root"]:
+		var talent_button := screen.talent_action(talent_id)
+		var symbol := talent_button.find_child("TalentSymbol", true, false) as SimpleIcon
+		_check(symbol != null, "Jeder Talentknoten besitzt ein eigenes Hauptsymbol")
+		if symbol != null:
+			talent_symbols[symbol.kind] = true
+		_check(_descendant_text(talent_button).is_empty(), "Talentknoten zeigt weder Titel, Kosten noch Beschreibung dauerhaft")
+		_check(is_equal_approx(talent_button.custom_minimum_size.x, TalentTreeBranch.NODE_WIDTH) and is_equal_approx(talent_button.custom_minimum_size.y, TalentTreeBranch.NODE_HEIGHT), "Talentknoten bleibt ein kompakter quadratischer Symbolknoten")
+	_check(talent_symbols.size() == 5, "Alle sichtbaren Talentknoten verwenden eindeutig verschiedene Symbole")
+	var talent_tooltip := screen.tooltip_provider_for(child_talent)
+	_check(talent_tooltip.is_valid() and talent_tooltip == screen.ui_info_provider_for(child_talent), "Talent-Hover und ui_info teilen exakt dieselbe Informationsquelle")
+	var talent_payload := screen.info_payload_for(child_talent)
+	_check(String(talent_payload.get("body", "")).contains("+2") and String(talent_payload.get("meta", "")).contains("2 P"), "Talentbeschreibung bleibt kurz und nennt Zahlen als Fakten")
 
 	var research_instance := available_research.get_instance_id()
 	var same_content: Variant = _fixture(2, &"research", "Forschung 18", "4 Talentpunkte · 2 frei")
@@ -206,7 +220,7 @@ func _talent(
 		required_ids,
 		state,
 		interactive,
-		_info(title, "Vollständige Talentwirkung.", cost, &"plan", AlveolusVisualTheme.COBALT)
+		_info(title, "+2 Kapazität.", cost, &"plan", AlveolusVisualTheme.COBALT)
 	)
 
 
@@ -239,6 +253,7 @@ func _check_source_contracts() -> void:
 	_check(not screen_source.contains("func _process("), "Progression-Screen definiert keine Prozessschleife")
 	_check(not screen_source.contains("func _physics_process("), "Progression-Screen definiert keine Physikschleife")
 	_check(not screen_source.contains("focus_entered.connect"), "Fokus allein öffnet keine Detailkarte")
+	_check(screen_source.contains("TALENT_SYMBOLS_BY_ID") and screen_source.contains("_build_talent_symbol_content"), "Talentbaum baut seine Knoten ausschließlich aus eindeutigen Symbolen")
 	_check(branch_source.contains("draw_polyline") and not branch_source.contains("draw_circle"), "Talentverbindungen verwenden Linien ohne Kreispunkte")
 	_check(model_source.contains("Array[ResearchItemViewModel]") and model_source.contains("Array[TalentBranchViewModel]"), "ViewModel hält Kindeinträge typisiert")
 

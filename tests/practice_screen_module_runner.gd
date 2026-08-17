@@ -26,6 +26,7 @@ func _run() -> void:
 
 	var shell := screen.get_node_or_null("PracticePageShell") as PanelContainer
 	_check(shell != null and shell.theme_type_variation == AlveolusVisualTheme.TYPE_PAGE_CANVAS, "Praxis verwendet den zentralen PageShell")
+	_check_page_header_contract(shell, "Praxis")
 	var offline_card := screen.find_child("OfflineResearchCard", true, false) as PanelContainer
 	var clinic_card := screen.find_child("ClinicCard", true, false) as PanelContainer
 	_check(offline_card != null and offline_card.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Offline-Forschung verwendet die zentrale ActionCard")
@@ -129,6 +130,14 @@ func _run() -> void:
 	_check(screen.back_action().focus_mode == Control.FOCUS_ALL, "Navigation bleibt per Tastatur und Gamepad fokussierbar")
 	_check(screen.offline_claim_action().focus_mode == Control.FOCUS_ALL, "Hauptaktion bleibt per Tastatur und Gamepad fokussierbar")
 
+	get_root().size = Vector2i(480, 270)
+	screen.size = Vector2(480.0, 270.0)
+	for _frame in range(3):
+		await process_frame
+	var compact_header := _semantic_component(shell, &"page_header")
+	_check(_fully_inside(compact_header, screen), "Praxisheader bleibt im logischen 480×270-Host vollständig sichtbar")
+	_check(_fully_inside(screen.back_action(), screen) and _fully_inside(screen.back_action(), compact_header), "Praxisnavigation bleibt bei 480×270 vollständig im Header und Host")
+
 	_check_source_contracts()
 	screen.free()
 	_finish()
@@ -145,6 +154,55 @@ func _check_source_contracts() -> void:
 	_check(not screen_source.contains("func _process("), "Praxis definiert keine Prozessschleife")
 	_check(not screen_source.contains("func _physics_process("), "Praxis definiert keine Physikschleife")
 	_check(model_source.contains("Array[ClinicJobOfferViewModel]"), "ViewModel hält Kindeinträge typisiert")
+
+
+func _check_page_header_contract(shell: PanelContainer, expected_title: String) -> void:
+	var stack := shell.find_child("PageStack", true, false) as VBoxContainer
+	var header := _semantic_component(shell, &"page_header")
+	var safe_area := shell.find_child("PageBodySafeArea", true, false) as MarginContainer
+	var medallion := header.find_child("PageMedallion", true, false) as PanelContainer if header != null else null
+	var icon := header.find_child("PageIcon", true, false) as SimpleIcon if header != null else null
+	var title := _page_title(header)
+	_check(
+		stack != null and header != null and safe_area != null \
+			and header.get_parent() == stack and stack.get_child(0) == header \
+			and safe_area.get_parent() == stack and stack.get_child(1) == safe_area,
+		"%s verwendet PageHeader als direktes Topband vor PageBodySafeArea" % expected_title
+	)
+	_check(medallion != null and medallion.custom_minimum_size.is_equal_approx(Vector2(44.0, 44.0)), "%s verwendet das 44-px-PageMedallion" % expected_title)
+	_check(icon != null and SimpleIcon.supports(icon.kind), "%s verwendet ein semantisches SimpleIcon" % expected_title)
+	_check(title != null and title.text == expected_title, "%s zeigt genau den erwarteten Seitentitel" % expected_title)
+
+
+func _semantic_component(scope: Node, component_id: StringName) -> Control:
+	if scope == null:
+		return null
+	for node in scope.find_children("*", "Control", true, false):
+		var control := node as Control
+		if control != null and control.get_meta(&"alveolus_component", &"") == component_id:
+			return control
+	return null
+
+
+func _page_title(header: Control) -> Label:
+	if header == null:
+		return null
+	for node in header.find_children("*", "Label", true, false):
+		var title := node as Label
+		if title.theme_type_variation == AlveolusVisualTheme.TYPE_TITLE_LABEL:
+			return title
+	return null
+
+
+func _fully_inside(control: Control, container: Control, tolerance: float = 0.5) -> bool:
+	if control == null or container == null:
+		return false
+	var rect := control.get_global_rect()
+	var bounds := container.get_global_rect()
+	return rect.position.x >= bounds.position.x - tolerance \
+		and rect.position.y >= bounds.position.y - tolerance \
+		and rect.end.x <= bounds.end.x + tolerance \
+		and rect.end.y <= bounds.end.y + tolerance
 
 
 func _check(condition: bool, message: String) -> void:

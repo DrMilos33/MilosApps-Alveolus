@@ -391,6 +391,26 @@ func _run() -> void:
 			var preparation_action_host := hud.preparation_intro_skip_button.get_parent().get_parent() as Control
 			_check(not (preparation_action_host is HBoxContainer), "Ein überfüllter Einsatzplanungsheader stapelt seine beiden Aktionen bei 1280×720 und 200 %")
 
+	# 960×540 at 200 percent resolves to a 480×270 logical document host.
+	# Exercise that host directly as a regression contract for every header that
+	# shares the planning page anatomy.
+	get_root().size = Vector2i(480, 270)
+	var compact_document_settings := UISettingsState.new()
+	compact_document_settings.ui_scale = 1.0
+	hud.configure_ui_settings(compact_document_settings)
+	await _settle()
+	for compact_document in [
+		{"id": "Praxis", "overlay": hud.practice_overlay, "show": func() -> void: hud.show_practice(meta, jobs)},
+		{"id": "Forschung", "overlay": hud.research_overlay, "show": func() -> void: hud.show_research_tabs(meta, research, TalentDefinition.definitions())},
+		{"id": "Einstellungen", "overlay": hud.settings_overlay, "show": func() -> void: hud.show_settings(false, true)},
+		{"id": "Fallarchiv", "overlay": hud.level_overlay, "show": func() -> void: hud.show_level_select(meta, levels)},
+	]:
+		(compact_document["show"] as Callable).call()
+		await _settle()
+		var compact_overlay := compact_document["overlay"] as Control
+		var compact_parts := _document_page_parts(hud, compact_overlay)
+		_check_compact_page_header(compact_parts, compact_overlay, String(compact_document["id"]))
+
 	get_root().size = Vector2i(1280, 720)
 	var baseline_settings := UISettingsState.new()
 	baseline_settings.ui_scale = 1.0
@@ -557,6 +577,44 @@ func _document_header_has_eyebrow(header: Control) -> bool:
 		if label.theme_type_variation == AlveolusVisualTheme.TYPE_EYEBROW_LABEL or String(label.name).to_lower().contains("kicker"):
 			return true
 	return false
+
+
+func _check_compact_page_header(parts: Dictionary, host: Control, context: String) -> void:
+	var shell := parts.get("shell") as Control
+	var header := parts.get("header") as Control
+	var body := parts.get("body") as Control
+	var stack := header.get_parent() as VBoxContainer if header != null else null
+	var medallion := header.find_child("PageMedallion", true, false) as PanelContainer if header != null else null
+	var icon := header.find_child("PageIcon", true, false) as SimpleIcon if header != null else null
+	var titles := _document_title_labels(header)
+	_check(
+		shell != null and header != null and body != null and stack != null \
+			and header.get_parent() == stack and stack.get_child(0) == header \
+			and body.get_parent() == stack and stack.get_child(1) == body,
+		"%s verwendet im 480×270-Host PageHeader als direktes Topband vor PageBodySafeArea" % context
+	)
+	_check(
+		header != null and shell != null \
+			and _rect_encloses_with_tolerance(host.get_global_rect(), header.get_global_rect()) \
+			and is_equal_approx(header.get_global_rect().position.x, shell.get_global_rect().position.x) \
+			and is_equal_approx(header.get_global_rect().size.x, shell.get_global_rect().size.x) \
+			and body.get_global_rect().position.y >= header.get_global_rect().end.y - 0.5,
+		"%s hält das vollbreite Topband und den darunterliegenden Body im 480×270-Host" % context
+	)
+	_check(medallion != null and medallion.custom_minimum_size.is_equal_approx(Vector2(44.0, 44.0)), "%s behält das 44-px-Medaillon" % context)
+	_check(icon != null and SimpleIcon.supports(icon.kind) and titles.size() == 1, "%s zeigt semantisches SimpleIcon und genau einen Titel" % context)
+	var visible_actions: Array[Control] = []
+	if header != null:
+		for node in _descendants(header):
+			if node is Button and (node as Button).is_visible_in_tree():
+				visible_actions.append(node as Control)
+	_check(not visible_actions.is_empty(), "%s besitzt im kompakten Header eine sichtbare Navigation" % context)
+	for action in visible_actions:
+		_check(
+			_rect_encloses_with_tolerance(host.get_global_rect(), action.get_global_rect()) \
+				and _rect_encloses_with_tolerance(header.get_global_rect(), action.get_global_rect()),
+			"%s hält Headeraktion %s vollständig im 480×270-Host" % [context, action.name]
+		)
 
 
 func _is_content_driven_modal(modal: Control) -> bool:

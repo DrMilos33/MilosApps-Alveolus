@@ -5,11 +5,10 @@ extends Control
 ## behind regular Button children so the tree remains native Godot UI for mouse,
 ## keyboard and gamepad input.
 
-const NODE_HEIGHT := 64.0
-const ROW_GAP := 20.0
-const OUTER_PADDING := 8.0
-const MINIMUM_NODE_WIDTH := 104.0
-const MAXIMUM_NODE_WIDTH := 180.0
+const NODE_HEIGHT := 68.0
+const NODE_WIDTH := 68.0
+const ROW_GAP := 24.0
+const OUTER_PADDING := 10.0
 
 var _nodes: Dictionary = {}
 var _layout: Dictionary = {}
@@ -94,7 +93,7 @@ func _layout_nodes() -> void:
 	if not is_inside_tree() or size.x <= 0.0 or _nodes.is_empty():
 		return
 	var usable_width := maxf(1.0, size.x - OUTER_PADDING * 2.0)
-	var node_width := clampf((usable_width - 16.0) * 0.5, MINIMUM_NODE_WIDTH, MAXIMUM_NODE_WIDTH)
+	var node_width := minf(NODE_WIDTH, usable_width)
 	var lane_step := maxf(0.0, (usable_width - node_width) * 0.5)
 	for id_value in _nodes:
 		var id := StringName(id_value)

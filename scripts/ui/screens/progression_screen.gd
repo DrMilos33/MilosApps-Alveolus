@@ -17,6 +17,26 @@ signal back
 const ProgressionScreenViewModelType := preload("res://scripts/ui/view_models/progression_screen_view_model.gd")
 const TalentTreeBranchType := preload("res://scripts/ui/talent_tree_branch.gd")
 const ROUTE_ID := &"research"
+const TALENT_SYMBOLS_BY_ID := {
+	&"organization_1": &"plan",
+	&"organization_2": &"components",
+	&"hold_card": &"reserve",
+	&"guided_choice": &"target",
+	&"early_classification": &"preanalysis",
+	&"rapid_evaluation": &"quick_test",
+	&"broader_perspective": &"second_opinion",
+	&"immediate_measure": &"reaction",
+	&"alternating_rhythm": &"clock",
+	&"linked_deployment": &"deployment_routine",
+	&"finding_readiness": &"finding_progress",
+	&"emergency_window": &"ability_emergency_support",
+}
+const TALENT_SYMBOL_FALLBACKS: Array[StringName] = [
+	&"plan", &"components", &"reserve", &"target",
+	&"preanalysis", &"quick_test", &"second_opinion", &"reaction",
+	&"clock", &"deployment_routine", &"finding_progress", &"ability_emergency_support",
+	&"sample_logistics", &"therapy_precision", &"ability_defense_burst", &"treatment_pierce",
+]
 
 var _page_shell: PanelContainer
 var _back_button: Button
@@ -389,6 +409,7 @@ func _rebuild_talents(branches: Array) -> void:
 	_talent_interactive.clear()
 	_talent_branches.clear()
 	_branch_order.clear()
+	var used_symbols: Dictionary = {}
 	for branch_model in branches:
 		var panel := AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
 		panel.name = "TalentBranch_%s" % String(branch_model.id())
@@ -416,26 +437,24 @@ func _rebuild_talents(branches: Array) -> void:
 		for node_model in branch_model.nodes():
 			var state := int(node_model.state())
 			var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
+			var symbol_kind := _talent_symbol_kind(node_model.id(), node_model.icon_kind(), used_symbols)
 			var button := AlveolusUIComponents.selection_card("", "", "", active, false)
 			button.name = "Talent_%s" % String(node_model.id())
-			button.custom_minimum_size.y = TalentTreeBranch.NODE_HEIGHT
+			button.custom_minimum_size = Vector2(TalentTreeBranch.NODE_WIDTH, TalentTreeBranch.NODE_HEIGHT)
 			button.clip_contents = true
 			button.tooltip_text = ""
 			button.set_meta(&"stable_focus_id", node_model.id())
 			button.set_meta(&"item_state", _state_name(state))
 			button.set_meta(&"item_interactive", node_model.interactive())
-			button.set_meta(&"alveolus_accessible_name", "%s, %s" % [node_model.title(), _accessible_state_name(state)])
+			button.set_meta(&"talent_symbol_kind", symbol_kind)
+			button.set_meta(&"alveolus_accessible_name", "%s, %s, %s" % [node_model.title(), node_model.cost_text(), _accessible_state_name(state)])
 			button.set_meta(&"ui_sound_cue", &"confirm" if node_model.interactive() else &"error")
 			button.pressed.connect(_on_talent_pressed.bind(node_model.id()))
-			_build_item_content(
+			_build_talent_symbol_content(
 				button,
-				node_model.title(),
-				"",
-				node_model.cost_text(),
-				node_model.icon_kind(),
+				symbol_kind,
 				state,
-				branch_model.accent(),
-				true
+				branch_model.accent()
 			)
 			tree.add_talent_node(
 				node_model.id(),
@@ -452,6 +471,58 @@ func _rebuild_talents(branches: Array) -> void:
 		_talent_branches[branch_model.id()] = tree
 		_branch_order.append(branch_model.id())
 	_configure_branch_exits.call_deferred()
+
+
+func _build_talent_symbol_content(
+	button: Button,
+	icon_kind: StringName,
+	state: int,
+	accent: Color
+) -> void:
+	var locked := state == ProgressionScreenViewModelType.ItemState.LOCKED
+	var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
+	var content_modulate := Color(AlveolusVisualTheme.SKY_DEEP, 0.42) if locked else Color.WHITE
+	var center := CenterContainer.new()
+	center.name = "TalentSymbolCenter"
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(center)
+	var icon := SimpleIcon.new()
+	icon.name = "TalentSymbol"
+	icon.custom_minimum_size = Vector2.ONE * 40.0
+	icon.configure(icon_kind, accent if not locked else AlveolusVisualTheme.MUTED)
+	icon.modulate = content_modulate
+	center.add_child(icon)
+	if active or locked:
+		var state_icon := SimpleIcon.new()
+		state_icon.name = "StateIcon"
+		state_icon.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		state_icon.offset_left = -22.0
+		state_icon.offset_top = 6.0
+		state_icon.offset_right = -6.0
+		state_icon.offset_bottom = 22.0
+		state_icon.configure(
+			&"check" if active else &"locked",
+			AlveolusVisualTheme.TEAL if active else AlveolusVisualTheme.MUTED
+		)
+		button.add_child(state_icon)
+
+
+func _talent_symbol_kind(id: StringName, source_kind: StringName, used_symbols: Dictionary) -> StringName:
+	var mapped := StringName(TALENT_SYMBOLS_BY_ID.get(id, &""))
+	if mapped != &"" and SimpleIcon.supports(mapped) and not used_symbols.has(mapped):
+		used_symbols[mapped] = true
+		return mapped
+	var start_index := posmod(String(id).hash(), TALENT_SYMBOL_FALLBACKS.size())
+	for offset in range(TALENT_SYMBOL_FALLBACKS.size()):
+		var candidate := TALENT_SYMBOL_FALLBACKS[(start_index + offset) % TALENT_SYMBOL_FALLBACKS.size()]
+		if used_symbols.has(candidate):
+			continue
+		used_symbols[candidate] = true
+		return candidate
+	var fallback := source_kind if SimpleIcon.supports(source_kind) else &"ability"
+	used_symbols[fallback] = true
+	return fallback
 
 
 func _build_item_content(
@@ -637,6 +708,7 @@ func _update_responsive_layout() -> void:
 	_research_grid.columns = 3 if logical_width >= 1000.0 else (2 if logical_width >= 680.0 else 1)
 	_talent_grid.columns = 3 if logical_width >= 1080.0 else (2 if logical_width >= 760.0 else 1)
 	var compact := logical_width < 620.0
+	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, compact)
 	_tab_row.columns = 2 if compact else 3
 	_balance_label.visible = not compact
 	_research_inline_balance.visible = compact
