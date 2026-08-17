@@ -6,6 +6,7 @@ const GLYPH_KEYBOARD := &"keyboard"
 const GLYPH_GAMEPAD := &"gamepad"
 
 const UI_SCALES: Array[float] = [0.75, 0.90, 1.0, 1.25, 1.5, 2.0]
+const KEYBOARD_BINDING_SLOT_COUNT := 2
 const CONFIGURABLE_ACTIONS: Array[StringName] = [
 	&"move_up",
 	&"move_down",
@@ -14,6 +15,10 @@ const CONFIGURABLE_ACTIONS: Array[StringName] = [
 	&"active_ability_1",
 	&"active_ability_2",
 	&"pause_game",
+	&"upgrade_1",
+	&"upgrade_2",
+	&"upgrade_3",
+	&"reroll_upgrades",
 	&"ui_accept",
 	&"ui_cancel",
 	&"ui_info",
@@ -135,12 +140,104 @@ func set_single_binding(action: StringName, event: InputEvent) -> bool:
 	for existing in preserved:
 		InputMap.action_add_event(action, existing)
 	InputMap.action_add_event(action, normalized)
-	var serialized: Array[Dictionary] = []
-	for bound_event in InputMap.action_get_events(action):
-		var data := serialize_input_event(bound_event)
-		if not data.is_empty():
-			serialized.append(data)
-	input_bindings[String(action)] = serialized
+	_persist_action_bindings(action)
+	return true
+
+
+## Returns the two keyboard slots shown in Settings. Gamepad and mouse events
+## remain active in InputMap and in the existing save container, but are not
+## part of the keyboard-only presentation requested for this settings pass.
+func keyboard_bindings_for(action: StringName) -> Array[InputEventKey]:
+	var all_bindings := _all_keyboard_bindings_for(action)
+	var visible: Array[InputEventKey] = []
+	for index in range(mini(KEYBOARD_BINDING_SLOT_COUNT, all_bindings.size())):
+		visible.append(all_bindings[index])
+	return visible
+
+
+## Finds the other configurable action that already owns this physical key.
+## The caller uses this to open an explicit confirmation before moving it.
+func keyboard_binding_conflict(action: StringName, event: InputEvent) -> StringName:
+	var conflicts := keyboard_binding_conflicts(action, event)
+	return conflicts[0] if not conflicts.is_empty() else &""
+
+
+func keyboard_binding_conflicts(action: StringName, event: InputEvent) -> Array[StringName]:
+	var result: Array[StringName] = []
+	if action == &"" or not CONFIGURABLE_ACTIONS.has(action) or not event is InputEventKey:
+		return result
+	var normalized := _normalized_binding_event(event)
+	if normalized == null or not normalized is InputEventKey:
+		return result
+	for other_action in CONFIGURABLE_ACTIONS:
+		if other_action == action or not InputMap.has_action(other_action):
+			continue
+		for existing in InputMap.action_get_events(other_action):
+			if existing is InputEventKey and _same_binding(existing, normalized):
+				result.append(other_action)
+				break
+	return result
+
+
+## Replaces exactly one of the two visible keyboard slots. Existing controller,
+## mouse and the other keyboard slot are preserved. When replace_conflict is
+## true, the confirmed key is atomically removed from every other configurable
+## action before it is assigned here. The serialized format remains the
+## existing Array[Dictionary], so save version 5 stays compatible.
+func set_keyboard_binding_slot(
+	action: StringName,
+	slot_index: int,
+	event: InputEvent,
+	replace_conflict: bool = false
+) -> bool:
+	if action == &"" or not CONFIGURABLE_ACTIONS.has(action) or not InputMap.has_action(action):
+		return false
+	if slot_index < 0 or slot_index >= KEYBOARD_BINDING_SLOT_COUNT or not event is InputEventKey:
+		return false
+	var normalized_event := _normalized_binding_event(event)
+	if normalized_event == null or not normalized_event is InputEventKey:
+		return false
+	var normalized := normalized_event as InputEventKey
+	if is_reserved_quick_restart_binding(normalized):
+		return false
+
+	var all_keyboard_bindings := _all_keyboard_bindings_for(action)
+	var keyboard_bindings := keyboard_bindings_for(action)
+	var extra_keyboard_bindings: Array[InputEventKey] = []
+	for existing_index in range(all_keyboard_bindings.size()):
+		if not _same_binding(all_keyboard_bindings[existing_index], normalized):
+			continue
+		# Pressing the key already stored in this slot is an idempotent success.
+		# The same key can never occupy both visible slots of one action.
+		if existing_index < KEYBOARD_BINDING_SLOT_COUNT:
+			return existing_index == slot_index
+	for existing_index in range(KEYBOARD_BINDING_SLOT_COUNT, all_keyboard_bindings.size()):
+		if not _same_binding(all_keyboard_bindings[existing_index], normalized):
+			extra_keyboard_bindings.append(all_keyboard_bindings[existing_index])
+
+	var conflict := keyboard_binding_conflict(action, normalized)
+	if conflict != &"" and not replace_conflict:
+		return false
+	if conflict != &"":
+		_remove_keyboard_binding_from_other_actions(action, normalized)
+
+	if slot_index < keyboard_bindings.size():
+		keyboard_bindings[slot_index] = normalized
+	else:
+		keyboard_bindings.append(normalized)
+
+	var preserved: Array[InputEvent] = []
+	for existing in InputMap.action_get_events(action):
+		if not existing is InputEventKey:
+			preserved.append(existing)
+	InputMap.action_erase_events(action)
+	for key_event in keyboard_bindings:
+		InputMap.action_add_event(action, key_event)
+	for key_event in extra_keyboard_bindings:
+		InputMap.action_add_event(action, key_event)
+	for existing in preserved:
+		InputMap.action_add_event(action, existing)
+	_persist_action_bindings(action)
 	return true
 
 static func is_reserved_quick_restart_binding(event: InputEvent) -> bool:
@@ -152,6 +249,45 @@ static func is_reserved_quick_restart_binding(event: InputEvent) -> bool:
 
 func clear_custom_binding(action: StringName) -> void:
 	input_bindings.erase(String(action))
+
+
+func _remove_keyboard_binding_from_other_actions(action: StringName, event: InputEventKey) -> void:
+	for other_action in CONFIGURABLE_ACTIONS:
+		if other_action == action or not InputMap.has_action(other_action):
+			continue
+		var existing_events := InputMap.action_get_events(other_action)
+		var kept: Array[InputEvent] = []
+		var changed := false
+		for existing in existing_events:
+			if existing is InputEventKey and _same_binding(existing, event):
+				changed = true
+				continue
+			kept.append(existing)
+		if not changed:
+			continue
+		InputMap.action_erase_events(other_action)
+		for kept_event in kept:
+			InputMap.action_add_event(other_action, kept_event)
+		_persist_action_bindings(other_action)
+
+
+func _all_keyboard_bindings_for(action: StringName) -> Array[InputEventKey]:
+	var result: Array[InputEventKey] = []
+	if action == &"" or not CONFIGURABLE_ACTIONS.has(action) or not InputMap.has_action(action):
+		return result
+	for event in InputMap.action_get_events(action):
+		if event is InputEventKey:
+			result.append((event as InputEventKey).duplicate() as InputEventKey)
+	return result
+
+
+func _persist_action_bindings(action: StringName) -> void:
+	var serialized: Array[Dictionary] = []
+	for bound_event in InputMap.action_get_events(action):
+		var data := serialize_input_event(bound_event)
+		if not data.is_empty():
+			serialized.append(data)
+	input_bindings[String(action)] = serialized
 
 static func serialize_input_event(event: InputEvent) -> Dictionary:
 	if event is InputEventKey:

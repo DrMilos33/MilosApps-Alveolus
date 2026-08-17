@@ -54,7 +54,7 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	_check(view_model.is_valid() and view_model.revision() == 22, "View-Model übernimmt einen gültigen revisionsgebundenen Snapshot")
 	_check(view_model.content_hash().length() == 64, "Run-HUD-View-Model besitzt einen SHA-256-Inhaltshash")
 	_check(view_model.stability_text() == "76 / 100" and view_model.shield_text() == "12", "Zustand und Schutz sind präsentationsfertig und nur lesbar")
-	_check(view_model.timer_text() == "BOSS IN · 01:24", "Presenterformatierter Timer wird unverändert übernommen")
+	_check(view_model.round_time_text() == "03:36" and view_model.timer_text() == "03:36", "Rundendauer ist präsentationsfertig und frei von Boss-Chrome")
 	_check(view_model.boss_visible() and view_model.boss_percentage_text() == "64 %", "Bossstatus enthält Sichtbarkeit und Prozentwert")
 	_check(view_model.analysis_text() == "Lv 3 · 7/12", "Analyse und Proben bilden eine kompakte gemeinsame Anzeige")
 	_check(view_model.stat_count() == 5 and view_model.ability_count() == 2, "Snapshot enthält fünf kompakte Werte und exakt zwei Fähigkeitsslots")
@@ -74,12 +74,16 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	var returned_abilities := view_model.abilities()
 	returned_stats.clear()
 	returned_abilities.clear()
-	_check(view_model.timer_text() == "BOSS IN · 01:24", "Tiefe Quellmutationen erreichen den Vital-Snapshot nicht")
+	_check(view_model.timer_text() == "03:36", "Tiefe Quellmutationen erreichen den Vital-Snapshot nicht")
 	_check(view_model.stat_count() == 5 and view_model.stat_at(0).formatted_value() == "+18 %", "Runwertarrays sind defensiv kopiert")
 	_check(view_model.ability_count() == 2 and view_model.ability_at(1).title() == "Notfallhilfe" and view_model.ability_at(1).effect_text().contains("Schutzpuffer"), "Fähigkeitsarrays, Namen und Wirkungen sind defensiv kopiert")
 
 	var equivalent: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), _stat_rows(), _ability_rows(), 23)
 	_check(equivalent.content_hash() == view_model.content_hash(), "Revision ist nicht Teil des semantischen HUD-Hashs")
+	var legacy_vital := _vital_snapshot()
+	legacy_vital.erase("round_time_text")
+	var legacy_timer: RunHUDViewModel = RunHUDViewModelScript.create(legacy_vital, _stat_rows(), _ability_rows(), 23)
+	_check(legacy_timer.timer_text() == "01:24", "Legacy-Bosschrome wird bis zur Presenterumstellung auf den reinen Uhrwert reduziert")
 	var one_slot: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), [], [
 		{"slot": 0, "title": "Fokusfeld", "effect_text": "Verstärkt die Behandlung.", "occupied": true, "key_glyph_text": "Q"},
 	], 24)
@@ -107,29 +111,45 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(hud.stability_bar().value == 76.0 and hud.stability_bar().max_value == 100.0, "Zustandsleiste übernimmt Presenterwerte")
 	_check(hud.stability_value_label().text == "76 / 100", "Zustandswert bleibt immer sichtbar")
 	_check(hud.shield_panel().visible and hud.shield_bar().value == 12.0, "Schutz bleibt auch als eigene kritische Anzeige sichtbar")
-	_check(hud.timer_value_label().text == "BOSS IN · 01:24", "Timer besitzt keine eigene Fortschrittslogik")
-	_check(hud.boss_panel().visible and hud.boss_value_label().text == "64 %", "Aktiver Bossstatus bleibt sichtbar")
+	_check(hud.timer_value_label().text == "03:36", "Freistehende Rundendauer besitzt keine eigene Fortschrittslogik")
+	_check(not hud.boss_panel().visible and hud.boss_value_label().text == "64 %", "Die frühere Bosskarte bleibt dormant, während der Kompatibilitätssnapshot gebunden bleibt")
 	_check(hud.analysis_value_label().text == "Lv 3 · 7/12" and hud.analysis_bar().value == 7.0, "Proben und Analyse bleiben als kompakte Zielanzeige sichtbar")
-	_check(hud.stability_panel().size.y <= 36.0 and hud.stability_panel().find_child("StabilityIcon", true, false) == null, "Zustand nutzt einen niedrigen, breiteren Balken ohne redundantes Vital-Icon")
-	_check(hud.analysis_panel().size.y <= 28.0, "Befund und Level bleiben als dezente Zielzeile kompakt")
-	_check(hud.timer_panel().size.x <= 176.0 and hud.timer_panel().global_position.x > 640.0, "Bosstimer sitzt klein und dezent oben rechts")
+	_check(hud.stability_panel().size.y <= 30.0 and hud.stability_panel().size.x >= 360.0 and hud.stability_panel().find_child("StabilityIcon", true, false) == null, "Zustand nutzt einen niedrigen, breiten und zentrierten Balken ohne redundantes Vital-Icon")
+	_check(hud.stability_panel().get_meta(&"alveolus_component", &"") == &"transparent_hud_vital" and is_zero_approx(hud.stability_panel().self_modulate.a), "Zustand schwebt ohne Kartenfläche über dem Run")
+	_check(hud.analysis_panel().size.y <= 30.0 and is_zero_approx(hud.analysis_panel().self_modulate.a), "Befund und Level bleiben ohne Kachel als dezente Zielzeile kompakt")
+	_check(hud.timer_panel().size.x <= 82.0 and hud.timer_panel().global_position.x > 640.0 and is_zero_approx(hud.timer_panel().self_modulate.a), "Rundendauer sitzt freistehend oben rechts")
 
 	_check(hud.run_stats_strip().is_class("HFlowContainer") and not hud.run_stats_strip().is_class("Panel"), "Runwerte besitzen einen transparenten Flow statt einer eigenen Panel-Fläche")
 	_check(hud.stat_rows().size() == 5, "Alle fünf präsentierten Runwerte sind sichtbar")
 	for row in hud.stat_rows():
 		_check(row.get_child_count() == 2 and row.get_child(0) is SimpleIcon and row.get_child(1) is Label, "Runwert zeigt ausschließlich Icon und Wert")
 		_check(row.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Transparenter Runwert blockiert kein Gameplay-Pointerevent")
+		_check((row.get_child(0) as SimpleIcon).accent == (row.get_child(1) as Label).modulate, "Icon und Wert teilen ihren semantischen Farbakzent")
+	_check(_row_populations(hud.stat_rows()) == [4, 1], "Kampfwerte stehen rechts unter der Zeit in exakt vier Spalten")
 
 	_check(hud.ability_cards().size() == 2 and hud.ability_buttons().size() == 2, "Run-HUD behält exakt zwei stabile logische Fähigkeitsslots")
 	_check(hud.ability_icons().size() == 2 and hud.ability_key_labels().size() == 2, "Jeder Fähigkeitsslot besitzt Icon und Glyphtext")
 	_check(hud.ability_title_labels()[0].text == "Fokusfeld" and not hud.ability_title_labels()[0].visible and hud.ability_key_labels()[0].text == "Q", "Titel bleibt für Kompatibilität gebunden, aber dauerhaft aus dem knappen HUD ausgeblendet")
 	_check(hud.ability_cards().all(func(card: Panel) -> bool: return is_zero_approx(card.self_modulate.a) and card.get_meta(&"alveolus_component", &"") == &"transparent_hud_ability"), "Fähigkeiten zeigen keine massive Kachel hinter Icon und Readout")
+	_check(hud.ability_cooldown_bars().all(func(bar: ProgressBar) -> bool: return bar.position.is_equal_approx(Vector2.ZERO) and is_equal_approx(bar.size.y, 38.0)), "Cooldownleiste selbst trägt Icon, Shortcut und Timer kompakt über exakt 38 Pixel")
+	for bar in hud.ability_cooldown_bars():
+		var track_background := bar.get_theme_stylebox("background") as StyleBoxFlat
+		var track_fill := bar.get_theme_stylebox("fill") as StyleBoxFlat
+		_check(bar.get_meta(&"alveolus_component", &"") == &"ability_cooldown_track", "Cooldown verwendet die explizite kompakte Track-Komponente")
+		_check(track_background != null and track_background.bg_color.a <= 0.19, "Cooldowntrack lässt den Spielhintergrund sichtbar")
+		_check(track_fill != null and track_fill.bg_color.a <= 0.23, "Auch eine bereite Fähigkeit wird nur als zurückhaltender Wash statt als massive Türkiskachel gefüllt")
+	for icon in hud.ability_icons():
+		_check(icon.visible and icon.custom_minimum_size.x >= 22.0 and icon.modulate.a > 0.95, "Belegte Fähigkeit zeigt ihr Icon klar über dem Cooldowntrack")
+	_check(hud.ability_key_labels().all(func(label: Label) -> bool: return label.visible), "Shortcuts liegen sichtbar direkt auf dem Cooldowntrack")
+	_check(hud.ability_cooldown_labels().all(func(label: Label) -> bool: return label.visible), "Timer beziehungsweise Bereitstatus liegen sichtbar direkt auf dem Cooldowntrack")
 	_check(hud.ability_cooldown_labels()[0].text == "Ziel wählen", "Targeting wird im ersten Slot eindeutig angezeigt")
 	_check(hud.ability_cooldown_labels()[1].text == "7.2 s", "Zweiter Slot zeigt seinen Presenter-Cooldown")
 	_check(is_equal_approx(hud.ability_cooldown_bars()[1].value, 0.4), "Cooldownleiste bindet den normalisierten Fortschritt")
 	_check(hud.ability_cards()[0].get_meta(&"targeting", false), "Targetingstatus bleibt am kompatiblen Slot-Control verfügbar")
 	_check(not hud.ability_buttons()[0].disabled and not hud.ability_buttons()[1].disabled, "Belegte Slots bleiben interaktiv")
 	_check(hud.ability_buttons()[0].scale.is_equal_approx(Vector2.ONE), "Fähigkeitsfokus verwendet keine Scale-Transformation")
+	for slot_index in range(hud.ability_buttons().size()):
+		_check(_inside(hud.ability_buttons()[slot_index], hud.ability_cards()[slot_index]), "Fähigkeitstrefferfläche %d bleibt vollständig in der 38-px-Cooldownleiste" % (slot_index + 1))
 	_check(hud.ability_buttons().all(func(button: Button) -> bool: return button.tooltip_text.is_empty()), "Native Tooltips konkurrieren nicht mit der zentralen Hoverkarte")
 	_check(hud.ability_buttons().all(func(button: Button) -> bool: return UISoundService.sound_role(button) == UISoundService.NONE), "Fähigkeitstrefferflächen überlassen Soundfeedback ausschließlich dem Gameplay-Intent")
 	var registrations := hud.context_detail_registrations()
@@ -139,6 +159,7 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	var hover_payload: Dictionary = hover_provider.call()
 	_check(hover_payload.get("title", "") == "Fokusfeld" and String(hover_payload.get("body", "")).contains("verstärkt"), "Fähigkeitstooltip nennt Name und konkrete Wirkung kompakt")
 	_check(hud.pause_action().get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "Pause bleibt eine ruhige HUD-Aktion")
+	_check(hud.pause_action().flat and hud.pause_action().get_meta(&"alveolus_component", &"") == &"transparent_pause_action", "Pause erscheint als freistehendes Icon ohne Kachel")
 	_check(get_root().gui_get_focus_owner() == null or not hud.is_ancestor_of(get_root().gui_get_focus_owner()), "Presenterupdate erzeugt keinen unerwarteten HUD-Fokus")
 
 	var ability_intents: Array[int] = []
@@ -163,7 +184,7 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	for card in hud.ability_cards():
 		original_ability_ids.append(card.get_instance_id())
 	var updated_vital := _vital_snapshot()
-	updated_vital["timer_text"] = "BOSS IN · 01:23"
+	updated_vital["round_time_text"] = "03:37"
 	var updated_stats := _stat_rows()
 	updated_stats[0]["value"] = "+19 %"
 	var updated_abilities := _ability_rows()
@@ -173,18 +194,14 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	await _settle()
 	_check(_instance_ids(hud.stat_rows()) == original_stat_ids, "Wertupdates erzeugen keine neuen Stat-Nodes")
 	_check(_instance_ids(hud.ability_cards()) == original_ability_ids, "Cooldownupdates erzeugen keine neuen Fähigkeitsslots")
-	_check(hud.timer_value_label().text == "BOSS IN · 01:23", "Presenterupdate ändert den Timer exakt einmal")
+	_check(hud.timer_value_label().text == "03:37", "Presenterupdate ändert die Rundendauer exakt einmal")
 	_check(not hud.apply_view_model(updated), "Identischer Snapshot ist idempotent")
 
 	for viewport_size in [Vector2i(1280, 720), Vector2i(1024, 576), Vector2i(960, 540)]:
 		_resize_logical_host(host, viewport_size)
 		await _settle()
 		_assert_critical_layout(hud, viewport_size)
-		var row_levels := _row_levels(hud.stat_rows())
-		if viewport_size.x >= 1024:
-			_check(row_levels.size() == 1, "%s nutzt den gewonnenen Platz für eine ruhige einzeilige Wertleiste" % viewport_size)
-		else:
-			_check(row_levels.size() == 2, "%s verwendet erst bei echtem Platzmangel eine zweite Statzeile" % viewport_size)
+		_check(_row_populations(hud.stat_rows()) == [4, 1], "%s hält rechts unter der Zeit exakt vier Kampfwerte pro Reihe" % viewport_size)
 
 	# Logical 480 × 270 corresponds to the required 960 × 540 at 200 percent.
 	_resize_logical_host(host, Vector2i(480, 270))
@@ -192,6 +209,7 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_assert_critical_layout(hud, Vector2i(480, 270))
 	_check(hud.ability_panel().columns == 2, "Auch bei 200 Prozent bleiben zwei belegte Fähigkeiten eindeutig nebeneinander")
 	_check(hud.stability_panel().visible and hud.shield_panel().visible and hud.timer_panel().visible and hud.analysis_panel().visible, "200-Prozent-Layout blendet keinen gameplaykritischen Wert aus")
+	_check(_row_populations(hud.stat_rows()) == [4, 1], "Auch bei 200 Prozent bleiben exakt vier Kampfwerte pro Reihe")
 	_check(hud.run_stats_strip().get_global_rect().end.y <= hud.analysis_panel().get_global_rect().position.y + 0.5, "Kompakte Statzeilen kollidieren nicht mit Analyse und Proben")
 
 	var one_slot_model: RunHUDViewModel = RunHUDViewModelScript.create(updated_vital, [], [
@@ -220,7 +238,7 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 
 	var stale: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), _stat_rows(), _ability_rows(), 8)
 	_check(not hud.apply_view_model(stale), "Veraltete Presenterrevision wird abgewiesen")
-	_check(hud.timer_value_label().text == "BOSS IN · 01:23", "Veraltetes Apply verändert keinen sichtbaren HUD-Wert")
+	_check(hud.timer_value_label().text == "03:37", "Veraltetes Apply verändert keinen sichtbaren HUD-Wert")
 	host.queue_free()
 	await process_frame
 
@@ -265,6 +283,7 @@ func _vital_snapshot() -> Dictionary:
 		"shield_current": 12.0,
 		"shield_maximum": 20.0,
 		"timer_text": "BOSS IN · 01:24",
+		"round_time_text": "03:36",
 		"boss_visible": true,
 		"boss_title": "Infektionsherd",
 		"boss_current": 64.0,
@@ -323,13 +342,19 @@ func _instance_ids(controls: Array) -> Array[int]:
 	return result
 
 
-func _row_levels(rows: Array[HBoxContainer]) -> Array[int]:
-	var levels: Array[int] = []
+func _row_populations(rows: Array[HBoxContainer]) -> Array[int]:
+	var levels: Dictionary = {}
+	var order: Array[int] = []
 	for row in rows:
 		var level := roundi(row.global_position.y)
 		if not levels.has(level):
-			levels.append(level)
-	return levels
+			levels[level] = 0
+			order.append(level)
+		levels[level] = int(levels[level]) + 1
+	var result: Array[int] = []
+	for level in order:
+		result.append(int(levels[level]))
+	return result
 
 
 func _inside(control: Control, container: Control) -> bool:

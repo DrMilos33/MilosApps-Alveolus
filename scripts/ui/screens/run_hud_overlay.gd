@@ -12,11 +12,12 @@ signal pause_requested
 const WIDE_THRESHOLD := 900.0
 const WIDE_MARGIN := 16.0
 const COMPACT_MARGIN := 8.0
-const STAT_ROW_WIDTH := 76.0
-const STAT_ROW_HEIGHT := 22.0
-const STAT_GAP := 6
-const ABILITY_WIDTH := 118.0
-const ABILITY_HEIGHT := 56.0
+const STAT_COLUMN_COUNT := 4
+const STAT_ROW_WIDTH := 68.0
+const STAT_ROW_HEIGHT := 20.0
+const STAT_GAP := 4
+const ABILITY_WIDTH := 146.0
+const ABILITY_HEIGHT := 38.0
 const ABILITY_GAP := 6.0
 
 var _view_model: RunHUDViewModel
@@ -31,7 +32,6 @@ var _shield_icon: SimpleIcon
 var _shield_bar: ProgressBar
 var _shield_value: Label
 var _timer_panel: Panel
-var _timer_icon: SimpleIcon
 var _timer_value: Label
 var _boss_panel: Panel
 var _boss_icon: SimpleIcon
@@ -40,7 +40,6 @@ var _boss_value: Label
 var _boss_phase: Label
 var _boss_bar: ProgressBar
 var _analysis_panel: Panel
-var _analysis_icon: SimpleIcon
 var _analysis_bar: ProgressBar
 var _analysis_value: Label
 var _stats_strip: HFlowContainer
@@ -282,35 +281,39 @@ func _build() -> void:
 
 func _build_stability() -> void:
 	_stability_panel = _surface_panel("Stability", AlveolusVisualTheme.SurfaceRole.HUD_VITAL, AlveolusVisualTheme.TEAL)
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	_stability_panel.add_child(_full_inset(row, 6))
+	_make_hud_surface_transparent(_stability_panel, &"transparent_hud_vital")
+	var stack := VBoxContainer.new()
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	stack.add_theme_constant_override("separation", 1)
+	_stability_panel.add_child(_full_inset(stack, 1))
+	_stability_value = _hud_value("100 / 100", 0.0)
+	_stability_value.name = "StabilityValue"
+	_stability_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stability_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.add_child(_stability_value)
 	_stability_bar = AlveolusUIComponents.progress(0.0, 100.0, false)
 	_stability_bar.name = "StabilityBar"
-	_stability_bar.custom_minimum_size.y = 9.0
+	_stability_bar.custom_minimum_size.y = 7.0
 	_stability_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stability_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(_stability_bar)
-	_stability_value = _hud_value("100 / 100", 62.0)
-	_stability_value.name = "StabilityValue"
-	row.add_child(_stability_value)
+	stack.add_child(_stability_bar)
 	_stability_panel.set_meta(&"alveolus_accessible_name", "Zustand")
 
 
 func _build_shield() -> void:
 	_shield_panel = _surface_panel("Shield", AlveolusVisualTheme.SurfaceRole.HUD_VITAL, AlveolusVisualTheme.COBALT)
+	_make_hud_surface_transparent(_shield_panel, &"transparent_hud_shield")
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	_shield_panel.add_child(_full_inset(row, 5))
-	_shield_icon = _hud_icon("ShieldIcon", &"ability_protection_field", AlveolusVisualTheme.COBALT, 20.0)
+	row.add_theme_constant_override("separation", 5)
+	_shield_panel.add_child(_full_inset(row, 2))
+	_shield_icon = _hud_icon("ShieldIcon", &"ability_protection_field", AlveolusVisualTheme.COBALT, 16.0)
 	row.add_child(_shield_icon)
 	_shield_bar = AlveolusUIComponents.progress(0.0, 1.0, false)
 	_shield_bar.name = "ShieldBar"
-	_shield_bar.custom_minimum_size.y = 8.0
+	_shield_bar.custom_minimum_size.y = 6.0
 	_shield_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_shield_bar)
-	_shield_value = _hud_value("0", 38.0)
+	_shield_value = _hud_value("0", 28.0)
 	_shield_value.name = "ShieldValue"
 	row.add_child(_shield_value)
 	_shield_panel.set_meta(&"alveolus_accessible_name", "Schutz")
@@ -318,23 +321,23 @@ func _build_shield() -> void:
 
 func _build_timer() -> void:
 	_timer_panel = _surface_panel("Timer", AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, AlveolusVisualTheme.MUTED)
+	_make_hud_surface_transparent(_timer_panel, &"transparent_hud_timer")
 	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	_timer_panel.add_child(_full_inset(row, 4))
-	_timer_icon = _hud_icon("TimerIcon", &"clock", AlveolusVisualTheme.SKY_DEEP, 16.0)
-	row.add_child(_timer_icon)
-	_timer_value = AlveolusUIComponents.label("BOSS IN · 00:45", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
+	row.alignment = BoxContainer.ALIGNMENT_END
+	_timer_panel.add_child(_full_inset(row, 0))
+	_timer_value = AlveolusUIComponents.label("00:00", AlveolusVisualTheme.TYPE_HUD_LABEL)
 	_timer_value.name = "TimerValue"
 	_timer_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_timer_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_timer_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_timer_value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_timer_value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(_timer_value)
+	_timer_panel.set_meta(&"alveolus_accessible_name", "Rundendauer")
 
 
 func _build_boss() -> void:
 	_boss_panel = _surface_panel("Boss", AlveolusVisualTheme.SurfaceRole.HUD_ALERT, AlveolusVisualTheme.CORAL)
+	_make_hud_surface_transparent(_boss_panel, &"dormant_boss_compatibility")
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 2)
 	_boss_panel.add_child(_full_inset(stack, 6))
@@ -366,21 +369,24 @@ func _build_boss() -> void:
 
 func _build_analysis() -> void:
 	_analysis_panel = _surface_panel("Analysis", AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, AlveolusVisualTheme.MUTED)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 5)
-	_analysis_panel.add_child(_full_inset(row, 4))
-	_analysis_icon = _hud_icon("AnalysisIcon", &"sample", AlveolusVisualTheme.SKY_DEEP, 16.0)
-	row.add_child(_analysis_icon)
+	_make_hud_surface_transparent(_analysis_panel, &"transparent_hud_analysis")
+	var stack := VBoxContainer.new()
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	stack.add_theme_constant_override("separation", 1)
+	_analysis_panel.add_child(_full_inset(stack, 1))
 	_analysis_value = AlveolusUIComponents.label("Lv 0 · 0/0", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 	_analysis_value.name = "AnalysisValue"
-	_analysis_value.custom_minimum_size.x = 78.0
+	_analysis_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_analysis_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_analysis_value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(_analysis_value)
+	stack.add_child(_analysis_value)
 	_analysis_bar = AlveolusUIComponents.progress(0.0, 1.0, false)
 	_analysis_bar.name = "AnalysisBar"
-	_analysis_bar.custom_minimum_size.y = 6.0
+	_analysis_bar.custom_minimum_size.y = 5.0
 	_analysis_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(_analysis_bar)
+	_analysis_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	stack.add_child(_analysis_bar)
+	_analysis_panel.set_meta(&"alveolus_accessible_name", "Level und Befund")
 
 
 func _build_stats() -> void:
@@ -413,12 +419,23 @@ func _build_abilities() -> void:
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_ability_panel.add_child(card)
 		_ability_cards.append(card)
-		_make_ability_surface_transparent(card)
+		_make_hud_surface_transparent(card, &"transparent_hud_ability")
+		var cooldown := AlveolusUIComponents.progress(0.0, 1.0, false)
+		cooldown.name = "AbilityCooldown%d" % (slot + 1)
+		cooldown.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		cooldown.custom_minimum_size = Vector2(ABILITY_WIDTH, ABILITY_HEIGHT)
+		cooldown.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		cooldown.set_meta(&"alveolus_component", &"ability_cooldown_track")
+		card.add_child(cooldown)
+		_ability_bars.append(cooldown)
 		var row := HBoxContainer.new()
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
-		row.add_theme_constant_override("separation", 7)
-		card.add_child(_full_inset(row, 5))
-		var icon := _hud_icon("AbilityIcon%d" % (slot + 1), &"ability", AlveolusVisualTheme.TURQUOISE, 30.0)
+		row.add_theme_constant_override("separation", 5)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.z_index = 1
+		row.set_meta(&"alveolus_component", &"ability_track_readout")
+		card.add_child(_full_inset(row, 6))
+		var icon := _hud_icon("AbilityIcon%d" % (slot + 1), &"ability", AlveolusVisualTheme.TURQUOISE, 22.0)
 		row.add_child(icon)
 		_ability_icons.append(icon)
 		var title := AlveolusUIComponents.label("Nicht belegt", AlveolusVisualTheme.TYPE_HUD_LABEL)
@@ -426,34 +443,19 @@ func _build_abilities() -> void:
 		title.hide()
 		row.add_child(title)
 		_ability_titles.append(title)
-		var status_stack := VBoxContainer.new()
-		status_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		status_stack.alignment = BoxContainer.ALIGNMENT_CENTER
-		status_stack.add_theme_constant_override("separation", 1)
-		row.add_child(status_stack)
-		var readout := HBoxContainer.new()
-		readout.add_theme_constant_override("separation", 5)
-		status_stack.add_child(readout)
 		var glyph := AlveolusUIComponents.label("Q" if slot == 0 else "E", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 		glyph.name = "AbilityGlyph%d" % (slot + 1)
-		glyph.custom_minimum_size.x = 20.0
-		glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		glyph.custom_minimum_size.x = 24.0
+		glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		glyph.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		readout.add_child(glyph)
+		row.add_child(glyph)
 		_ability_glyphs.append(glyph)
 		var status := AlveolusUIComponents.label("Nicht belegt", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 		status.name = "AbilityStatus%d" % (slot + 1)
 		status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		readout.add_child(status)
+		row.add_child(status)
 		_ability_statuses.append(status)
-		var cooldown := AlveolusUIComponents.progress(0.0, 1.0, false)
-		cooldown.name = "AbilityCooldown%d" % (slot + 1)
-		cooldown.custom_minimum_size = Vector2(58.0, 5.0)
-		cooldown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		cooldown.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		status_stack.add_child(cooldown)
-		_ability_bars.append(cooldown)
 		var hit := AlveolusUIComponents.action_button(
 			"",
 			AlveolusUIComponents.ACTION_QUIET,
@@ -461,6 +463,7 @@ func _build_abilities() -> void:
 			AlveolusVisualTheme.TURQUOISE
 		)
 		hit.name = "AbilitySlot%d" % (slot + 1)
+		hit.custom_minimum_size = Vector2.ZERO
 		hit.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		hit.flat = true
 		hit.focus_mode = Control.FOCUS_ALL
@@ -486,6 +489,7 @@ func _build_pause() -> void:
 	)
 	_pause_button.name = "Pause"
 	_pause_button.tooltip_text = "Pause"
+	_pause_button.flat = true
 	_pause_button.focus_mode = Control.FOCUS_ALL
 	_pause_button.scale = Vector2.ONE
 	_pause_button.set_meta(&"disable_motion_scale", true)
@@ -495,7 +499,8 @@ func _build_pause() -> void:
 		var compact_button := _pause_button as IconTextButton
 		compact_button.content_inset.add_theme_constant_override("margin_left", 10)
 		compact_button.content_inset.add_theme_constant_override("margin_right", 10)
-		compact_button.icon_view.custom_minimum_size = Vector2(18.0, 18.0)
+		compact_button.icon_view.custom_minimum_size = Vector2(17.0, 17.0)
+		compact_button.set_meta(&"alveolus_component", &"transparent_pause_action")
 	_pause_button.pressed.connect(func() -> void: pause_requested.emit())
 	add_child(_pause_button)
 
@@ -523,7 +528,10 @@ func _apply_vitals() -> void:
 			timer_color = AlveolusVisualTheme.CORAL
 	if _timer_value.modulate != timer_color:
 		_timer_value.modulate = timer_color
-	_boss_panel.visible = _view_model.boss_visible()
+	# Boss health remains part of the immutable compatibility snapshot, but its
+	# former card is deliberately dormant. The world presentation owns boss
+	# health; this overlay keeps the top-right lane for elapsed run time only.
+	_boss_panel.hide()
 	_set_label_text(_boss_title, _view_model.boss_title())
 	if _boss_title.tooltip_text != _view_model.boss_title():
 		_boss_title.tooltip_text = _view_model.boss_title()
@@ -554,12 +562,17 @@ func _sync_stats() -> void:
 			_build_stat_row(stat)
 	for index in range(_view_model.stat_count()):
 		var stat := _view_model.stat_at(index)
-		if _stat_icons[index].kind != stat.icon_id() or _stat_icons[index].accent != AlveolusVisualTheme.IVORY:
-			_stat_icons[index].configure(stat.icon_id(), AlveolusVisualTheme.IVORY)
+		var accent := _stat_accent(stat)
+		if _stat_icons[index].kind != stat.icon_id() or _stat_icons[index].accent != accent:
+			_stat_icons[index].configure(stat.icon_id(), accent)
 		_set_label_text(_stat_values[index], stat.formatted_value())
+		if _stat_values[index].modulate != accent:
+			_stat_values[index].modulate = accent
 		var accessible_text := "%s: %s" % [stat.accessible_name(), stat.formatted_value()]
 		if _stat_rows[index].get_meta(&"alveolus_accessible_name", "") != accessible_text:
 			_stat_rows[index].set_meta(&"alveolus_accessible_name", accessible_text)
+	if _stats_strip.size.x > 0.0:
+		_fit_stat_columns(_stats_strip.size.x)
 	_stats_strip.visible = not _stat_rows.is_empty()
 
 
@@ -573,16 +586,19 @@ func _build_stat_row(stat: RunHUDViewModel.StatValueViewModel) -> void:
 	row.set_meta(&"stat_id", stat.id())
 	_stats_strip.add_child(row)
 	_stat_rows.append(row)
-	var icon := _hud_icon("StatIcon", stat.icon_id(), AlveolusVisualTheme.IVORY, 17.0)
+	var accent := _stat_accent(stat)
+	var icon := _hud_icon("StatIcon", stat.icon_id(), accent, 15.0)
 	row.add_child(icon)
 	_stat_icons.append(icon)
 	var value := AlveolusUIComponents.label(stat.formatted_value(), AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 	value.name = "StatValue"
-	value.custom_minimum_size = Vector2(54.0, STAT_ROW_HEIGHT)
+	value.custom_minimum_size = Vector2(0.0, STAT_ROW_HEIGHT)
+	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(value)
+	value.modulate = accent
 	_stat_values.append(value)
 
 
@@ -617,7 +633,7 @@ func _apply_abilities() -> void:
 		if _ability_statuses[slot].modulate != accent:
 			_ability_statuses[slot].modulate = accent
 		_set_progress(_ability_bars[slot], ability.cooldown_progress(), 1.0)
-		AlveolusUIComponents.apply_progress_accent(_ability_bars[slot], accent)
+		AlveolusUIComponents.apply_hud_cooldown_track(_ability_bars[slot], accent)
 		if not _ability_cards[slot].has_meta(&"targeting") or _ability_cards[slot].get_meta(&"targeting") != ability.targeting():
 			_ability_cards[slot].set_meta(&"targeting", ability.targeting())
 		if not _ability_cards[slot].has_meta(&"ready") or _ability_cards[slot].get_meta(&"ready") != ability.ready():
@@ -710,23 +726,21 @@ func _apply_wide_layout() -> void:
 	var width := size.x
 	var height := size.y
 	var margin := WIDE_MARGIN
-	var vital_width := 294.0
-	var timer_width := 176.0
+	var vital_width := 360.0
+	var timer_width := 82.0
 	var pause_width := 44.0
 	var pause_left := width - margin - pause_width
-	var timer_left := pause_left - 8.0 - timer_width
-	_place(_stability_panel, Rect2(margin, 16.0, vital_width, 36.0))
-	_place(_shield_panel, Rect2(margin, 56.0, vital_width, 28.0))
-	_place(_timer_panel, Rect2(timer_left, 16.0, timer_width, 34.0))
-	_place(_pause_button, Rect2(pause_left, 11.0, pause_width, 44.0))
-	var stats_left := margin + vital_width + 12.0
-	var stats_right := timer_left - 8.0
-	_place(_stats_strip, Rect2(stats_left, 12.0, maxf(0.0, stats_right - stats_left), 48.0))
-	_stats_strip.alignment = FlowContainer.ALIGNMENT_BEGIN
-	var boss_left := maxf(margin + vital_width + 12.0, floorf((width - 520.0) * 0.5))
-	var boss_width := minf(520.0, width - margin - boss_left)
-	_place(_boss_panel, Rect2(boss_left, 64.0, boss_width, 44.0))
-	_place(_analysis_panel, Rect2(margin, height - margin - 28.0, 202.0, 28.0))
+	var timer_left := pause_left - 6.0 - timer_width
+	var stability_left := floorf((width - vital_width) * 0.5)
+	_place(_stability_panel, Rect2(stability_left, 10.0, vital_width, 30.0))
+	_place(_shield_panel, Rect2(margin, 14.0, 230.0, 24.0))
+	_place(_timer_panel, Rect2(timer_left, 12.0, timer_width, 24.0))
+	_place(_pause_button, Rect2(pause_left, 2.0, pause_width, 44.0))
+	var stats_width := 304.0
+	_place(_stats_strip, Rect2(width - margin - stats_width, 50.0, stats_width, 44.0))
+	_fit_stat_columns(stats_width)
+	_stats_strip.alignment = FlowContainer.ALIGNMENT_END
+	_place(_analysis_panel, Rect2(margin, height - margin - 30.0, 230.0, 30.0))
 	var visible_abilities := _visible_ability_count()
 	var ability_width := float(visible_abilities) * ABILITY_WIDTH + float(maxi(0, visible_abilities - 1)) * ABILITY_GAP
 	_place(_ability_panel, Rect2(width - margin - ability_width, height - margin - ABILITY_HEIGHT, ability_width, ABILITY_HEIGHT))
@@ -737,21 +751,24 @@ func _apply_compact_layout() -> void:
 	var width := size.x
 	var height := size.y
 	var margin := COMPACT_MARGIN
-	var gap := 8.0
-	var vital_width := floorf((width - margin * 2.0 - gap) * 0.54)
-	var right_left := margin + vital_width + gap
-	var right_width := width - margin - right_left
+	var gap := 6.0
 	var pause_width := 44.0
-	_place(_stability_panel, Rect2(margin, 8.0, vital_width, 36.0))
-	_place(_timer_panel, Rect2(right_left, 9.0, maxf(72.0, right_width - pause_width - gap), 34.0))
-	_place(_pause_button, Rect2(width - margin - pause_width, 8.0, pause_width, 44.0))
-	_place(_shield_panel, Rect2(margin, 48.0, vital_width, 28.0))
-	_place(_boss_panel, Rect2(right_left, 54.0, right_width, 40.0))
-	_place(_stats_strip, Rect2(margin, 98.0, width - margin * 2.0, 40.0))
-	_stats_strip.alignment = FlowContainer.ALIGNMENT_BEGIN
-	_place(_analysis_panel, Rect2(margin, 150.0, minf(202.0, width - margin * 2.0), 28.0))
+	var timer_width := 72.0
+	var pause_left := width - margin - pause_width
+	var timer_left := pause_left - gap - timer_width
+	var vital_width := minf(220.0, maxf(132.0, timer_left - margin - gap))
+	_place(_stability_panel, Rect2(margin, 8.0, vital_width, 30.0))
+	_place(_shield_panel, Rect2(margin, 40.0, vital_width, 22.0))
+	_place(_timer_panel, Rect2(timer_left, 10.0, timer_width, 24.0))
+	_place(_pause_button, Rect2(pause_left, 0.0, pause_width, 44.0))
+	var stats_width := minf(236.0, width - margin * 2.0)
+	_place(_stats_strip, Rect2(width - margin - stats_width, 52.0, stats_width, 44.0))
+	_fit_stat_columns(stats_width)
+	_stats_strip.alignment = FlowContainer.ALIGNMENT_END
 	var visible_abilities := _visible_ability_count()
 	var ability_width := float(visible_abilities) * ABILITY_WIDTH + float(maxi(0, visible_abilities - 1)) * ABILITY_GAP
+	var analysis_width := maxf(120.0, width - margin * 3.0 - ability_width)
+	_place(_analysis_panel, Rect2(margin, height - margin - 30.0, analysis_width, 30.0))
 	_place(_ability_panel, Rect2(width - margin - ability_width, height - margin - ABILITY_HEIGHT, ability_width, ABILITY_HEIGHT))
 	_ability_panel.columns = maxi(1, visible_abilities)
 
@@ -785,15 +802,37 @@ func _surface_panel(
 	return panel
 
 
-func _make_ability_surface_transparent(card: Panel) -> void:
-	# Preserve the semantic HUD_ABILITY role for tooling and focus contracts,
-	# but suppress its painted chrome. `self_modulate` only affects the Panel's
-	# own style; icon, readout and hit target stay fully opaque.
-	card.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
-	var membrane := card.get_node_or_null("BioLumenSurface") as Control
+func _make_hud_surface_transparent(panel: Panel, component_name: StringName) -> void:
+	# Preserve semantic roles for tooling, while the HUD information itself
+	# floats directly over the world. self_modulate affects the Panel's own draw
+	# only; child readouts and interaction targets remain fully opaque.
+	panel.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
+	var membrane := panel.get_node_or_null("BioLumenSurface") as Control
 	if membrane != null:
 		membrane.hide()
-	card.set_meta(&"alveolus_component", &"transparent_hud_ability")
+	panel.set_meta(&"alveolus_component", component_name)
+
+
+func _fit_stat_columns(available_width: float) -> void:
+	var gaps := float(STAT_GAP * (STAT_COLUMN_COUNT - 1))
+	var row_width := maxf(44.0, floorf((available_width - gaps) / float(STAT_COLUMN_COUNT)))
+	for row in _stat_rows:
+		row.custom_minimum_size.x = row_width
+
+
+func _stat_accent(stat: RunHUDViewModel.StatValueViewModel) -> Color:
+	match stat.icon_id():
+		&"treatment":
+			return AlveolusVisualTheme.TURQUOISE
+		&"automatic_therapy":
+			return AlveolusVisualTheme.GOLD
+		&"therapy_precision":
+			return AlveolusVisualTheme.SKY_DEEP
+		&"immune":
+			return AlveolusVisualTheme.CORAL
+		&"sample":
+			return AlveolusVisualTheme.TEAL
+	return AlveolusVisualTheme.IVORY
 
 
 func _full_inset(content: Control, amount: int) -> MarginContainer:

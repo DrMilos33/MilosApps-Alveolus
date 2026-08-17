@@ -45,7 +45,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 
 static func tutorial_hint_definitions() -> Dictionary:
 	return {
-		&"movement": TutorialHintDefinition.create(&"movement", &"run_started", "Im Lungenmodell bewegen", "Bewege den Arzt mit WASD oder den Pfeiltasten. Gegnerkontakt senkt den Zustand."),
+		&"movement": TutorialHintDefinition.create(&"movement", &"run_started", "Im Lungenmodell bewegen", "Bewege Doctor Milos mit WASD oder den Pfeiltasten. Gegnerkontakt senkt den Zustand."),
 		&"therapy": TutorialHintDefinition.create(&"therapy", &"first_shot", "Behandlung arbeitet automatisch", "Die Behandlung wählt ein nahes Bakterium selbstständig aus."),
 		&"analysis": TutorialHintDefinition.create(&"analysis", &"first_analysis", "Proben aufnehmen", "Proben sind Erfahrungspunkte. Eine volle Leiste erhöht dein Level und ermöglicht einen Ausbau."),
 		&"upgrade": TutorialHintDefinition.create(&"upgrade", &"first_upgrade", "Drei Wege", "Behandlung verursacht direkten Schaden, Abwehr schützt den Nahbereich und Atemhilfe stabilisiert den Zustand."),
@@ -101,8 +101,8 @@ static func discovery_definitions() -> Dictionary:
 			"Proben sind die Erfahrungspunkte eines Runs. Aufnehmen füllt die Leiste am unteren Rand; eine volle Leiste erhöht dein Level und ermöglicht einen Ausbau.", &"pickup", 80, &"grundlagen", &"analysis_pickup", "Analyse"
 		),
 		&"character_stats": DiscoveryDefinition.create(
-			&"character_stats", &"catalog", "Arztwerte",
-			"Der Arzt koordiniert die Behandlung im Lungenmodell. Er besitzt keine eigene Lebensleiste; der Zustand gehört zum Patienten.",
+			&"character_stats", &"catalog", "Doctor Milos",
+			"Doctor Milos koordiniert die Behandlung im Lungenmodell. Er besitzt keine eigene Lebensleiste; der Zustand gehört zum Patienten.",
 			"GRUNDWERTE\nBewegung 275 · Wirkung 18 · Intervall 0,82 s · Reichweite 470 · 1 Ziel · Probenradius 185. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", "Therapie-Avatar"
 		),
 		&"patient_stability": DiscoveryDefinition.create(
@@ -267,11 +267,11 @@ static func loadout_module_definitions() -> Dictionary:
 		&"treatment_precision": LoadoutModuleDefinition.create(&"treatment_precision", "Präziser Impuls", "Verfolgt ein einzelnes Ziel mit hoher Grundwirkung.", LoadoutModuleDefinition.Kind.TREATMENT, 2, [&"treatment", &"precision"], &"", true),
 		&"treatment_spread": LoadoutModuleDefinition.create(&"treatment_spread", "Streuimpuls", "Trifft drei Ziele mit schwächeren Einzelimpulsen.", LoadoutModuleDefinition.Kind.TREATMENT, 2, [&"treatment", &"spread"], &"unlock_spread_treatment"),
 		&"treatment_pierce": LoadoutModuleDefinition.create(&"treatment_pierce", "Durchdringender Impuls", "Durchquert mehrere Gegner in einer Linie.", LoadoutModuleDefinition.Kind.TREATMENT, 2, [&"treatment", &"pierce"], &"unlock_piercing_treatment"),
-		&"ability_focus_field": LoadoutModuleDefinition.create(&"ability_focus_field", "Fokusfeld", "Priorisiert und verstärkt die Behandlung im Zielgebiet.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"focus", &"control"], &"", true),
-		&"ability_emergency_support": LoadoutModuleDefinition.create(&"ability_emergency_support", "Notfallhilfe", "Stellt Zustand wieder her und erzeugt einen Schutzpuffer.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"support"], &"", true),
-		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Abwehrstoß", "Flächenwirkung und Rückstoß am Zielpunkt.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"control"], &"unlock_defense_burst"),
-		&"ability_treatment_line": LoadoutModuleDefinition.create(&"ability_treatment_line", "Behandlungslinie", "Durchdringende Wirkung in Cursorrichtung.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"pierce"], &"unlock_treatment_line"),
-		&"ability_protection_field": LoadoutModuleDefinition.create(&"ability_protection_field", "Schutzfeld", "Verlangsamt Gegner und verringert ihren Kontaktdruck.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control", &"support"], &"unlock_protection_field"),
+		&"ability_focus_field": LoadoutModuleDefinition.create(&"ability_focus_field", "Fokusfeld", "Behandlung im Zielgebiet verursacht 25 % mehr Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"focus", &"control"], &"", true),
+		&"ability_emergency_support": LoadoutModuleDefinition.create(&"ability_emergency_support", "Notfallhilfe", "Stellt 14 Zustand wieder her und gewährt 8 Schutz.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"support"], &"", true),
+		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Abwehrstoß", "42 AoE-Schaden und Rückstoß im Zielbereich.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"control"], &"unlock_defense_burst"),
+		&"ability_treatment_line": LoadoutModuleDefinition.create(&"ability_treatment_line", "Behandlungslinie", "55 Schaden in einer durchdringenden Linie.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"pierce"], &"unlock_treatment_line"),
+		&"ability_protection_field": LoadoutModuleDefinition.create(&"ability_protection_field", "Schutzfeld", "Gegner im Feld: −35 % Tempo und Kontaktschaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control", &"support"], &"unlock_protection_field"),
 		&"ability_sample_pull": LoadoutModuleDefinition.create(&"ability_sample_pull", "Probenzug", "Zieht Proben an und beschleunigt kurz den Befund.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"samples", &"diagnosis"], &"unlock_sample_pull"),
 		&"stability_reserve": LoadoutModuleDefinition.create(&"stability_reserve", "Startreserve", "+3 Startzustand je gekauftem Rang.", LoadoutModuleDefinition.Kind.PASSIVE, 1, [&"passive", &"support"], &"stability_reserve"),
 		&"therapy_precision": LoadoutModuleDefinition.create(&"therapy_precision", "Ruhige Hand", "+2 % Grundwirkung je gekauftem Rang.", LoadoutModuleDefinition.Kind.PASSIVE, 1, [&"passive", &"treatment"], &"therapy_precision"),
@@ -288,7 +288,7 @@ static func case_trait_definitions() -> Dictionary:
 	var all_levels: Array[StringName] = [&"localized_focus", &"spreading_infection", &"severe_pneumonia"]
 	return {
 		&"high_load": CaseTraitDefinition.create(&"high_load", "Hohe Keimlast", "Gegner erscheinen 15 % schneller, besitzen aber 10 % weniger Leben.", [{"stat_id": &"spawn_interval", "operation": &"multiply", "value": 0.85}, {"stat_id": &"enemy_health", "operation": &"multiply", "value": 0.90}], all_levels),
-		&"mobile_pathogens": CaseTraitDefinition.create(&"mobile_pathogens", "Bewegliche Erreger", "Gegner bewegen sich 18 % schneller, verursachen aber 10 % weniger Kontaktdruck.", [{"stat_id": &"enemy_speed", "operation": &"multiply", "value": 1.18}, {"stat_id": &"contact_damage", "operation": &"multiply", "value": 0.90}], all_levels),
+		&"mobile_pathogens": CaseTraitDefinition.create(&"mobile_pathogens", "Bewegliche Erreger", "Gegner bewegen sich 18 % schneller, verursachen aber 10 % weniger Kontaktschaden.", [{"stat_id": &"enemy_speed", "operation": &"multiply", "value": 1.18}, {"stat_id": &"contact_damage", "operation": &"multiply", "value": 0.90}], all_levels),
 		&"resistant_pathogens": CaseTraitDefinition.create(&"resistant_pathogens", "Widerstandsfähige Erreger", "Gegner besitzen 25 % mehr Leben und bewegen sich 10 % langsamer.", [{"stat_id": &"enemy_health", "operation": &"multiply", "value": 1.25}, {"stat_id": &"enemy_speed", "operation": &"multiply", "value": 0.90}], all_levels),
 		&"fragile_condition": CaseTraitDefinition.create(&"fragile_condition", "Fragiler Zustand", "Der Startzustand sinkt um 15; Atemhilfe wirkt 20 % stärker.", [{"stat_id": &"initial_stability", "operation": &"add", "value": -15.0}, {"stat_id": &"support_effect", "operation": &"multiply", "value": 1.20}], all_levels),
 	}
@@ -306,13 +306,13 @@ static func reaction_definitions() -> Dictionary:
 	return {
 		&"group_area": ReactionDefinition.create(&"group_area", &"grouping", "Breite Wirkung", "+20 % Flächenwirkung gegen Gruppen.", [{"stat_id": &"group_area_effect", "operation": &"multiply", "value": 1.20}], [&"damage"]),
 		&"group_control": ReactionDefinition.create(&"group_control", &"grouping", "Gruppen bremsen", "+30 % Kontrollwirkung gegen Gruppen.", [{"stat_id": &"group_control", "operation": &"multiply", "value": 1.30}], [&"control"]),
-		&"group_safety": ReactionDefinition.create(&"group_safety", &"grouping", "Sichere Distanz", "25 % weniger Kontaktdruck durch Gruppen.", [{"stat_id": &"group_contact", "operation": &"multiply", "value": 0.75}], [&"support"]),
+		&"group_safety": ReactionDefinition.create(&"group_safety", &"grouping", "Sichere Distanz", "25 % weniger Kontaktschaden durch Gruppen.", [{"stat_id": &"group_contact", "operation": &"multiply", "value": 0.75}], [&"support"]),
 		&"accel_rhythm": ReactionDefinition.create(&"accel_rhythm", &"acceleration", "Rhythmus anpassen", "+12 % Behandlungstempo.", [{"stat_id": &"therapy_cooldown", "operation": &"multiply", "value": 0.88}], [&"treatment"]),
 		&"accel_active": ReactionDefinition.create(&"accel_active", &"acceleration", "Schneller eingreifen", "10 % kürzere aktive Abklingzeiten.", [{"stat_id": &"ability_cooldown", "operation": &"multiply", "value": 0.90}], [&"active"]),
 		&"accel_priority": ReactionDefinition.create(&"accel_priority", &"acceleration", "Prioritäten setzen", "+25 % Wirkung auf markierte Ziele.", [{"stat_id": &"marked_damage", "operation": &"multiply", "value": 1.25}], [&"focus"]),
 		&"surge_buffer": ReactionDefinition.create(&"surge_buffer", &"pressure_surges", "Reserve aktivieren", "+12 Schutzpuffer.", [{"stat_id": &"shield", "operation": &"add", "value": 12.0}], [&"shield"]),
 		&"surge_support": ReactionDefinition.create(&"surge_support", &"pressure_surges", "Atemhilfe verstärken", "+30 % Atemhilfe.", [{"stat_id": &"support_effect", "operation": &"multiply", "value": 1.30}], [&"support"]),
-		&"surge_guard": ReactionDefinition.create(&"surge_guard", &"pressure_surges", "Schub abfangen", "25 % weniger Kontaktdruck während Belastungsschüben.", [{"stat_id": &"surge_contact", "operation": &"multiply", "value": 0.75}], [&"control"]),
+		&"surge_guard": ReactionDefinition.create(&"surge_guard", &"pressure_surges", "Schub abfangen", "25 % weniger Kontaktschaden während Belastungsschüben.", [{"stat_id": &"surge_contact", "operation": &"multiply", "value": 0.75}], [&"control"]),
 		&"nest_damage": ReactionDefinition.create(&"nest_damage", &"hidden_nests", "Herde fokussieren", "+25 % Wirkung gegen kleine Herde.", [{"stat_id": &"nest_damage", "operation": &"multiply", "value": 1.25}], [&"damage"]),
 		&"nest_range": ReactionDefinition.create(&"nest_range", &"hidden_nests", "Reichweite nutzen", "+20 % Reichweite und +1 Durchdringung.", [{"stat_id": RunBuildState.TREATMENT_RANGE, "operation": &"multiply", "value": 1.20}, {"stat_id": RunBuildState.TREATMENT_MAX_HITS, "operation": &"add", "value": 1.0}], [&"pierce"]),
 		&"nest_samples": ReactionDefinition.create(&"nest_samples", &"hidden_nests", "Nester auswerten", "Kleine Herde geben zusätzliche Proben und verkürzen aktive Restzeiten.", [{"stat_id": &"nest_samples", "operation": &"add", "value": 4.0}], [&"samples"]),

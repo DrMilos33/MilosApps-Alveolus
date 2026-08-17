@@ -176,7 +176,13 @@ static func create(
 		0.0,
 		result._shield_maximum
 	)
-	result._timer_text = String(vital.get("timer_text", "00:00")).strip_edges()
+	# The HUD only presents elapsed run time. `round_time_text` is the explicit
+	# presenter contract; timer_text remains a bridge for older callers and is
+	# reduced to its clock token so legacy "BOSS IN" chrome cannot leak back in.
+	result._timer_text = _clock_token(String(vital.get(
+		"round_time_text",
+		vital.get("timer_text", "00:00")
+	)).strip_edges())
 	if result._timer_text.is_empty():
 		result._timer_text = "00:00"
 	result._timer_tone = StringName(String(vital.get("timer_tone", "neutral")))
@@ -239,6 +245,10 @@ func shield_text() -> String:
 
 
 func timer_text() -> String:
+	return _timer_text
+
+
+func round_time_text() -> String:
 	return _timer_text
 
 
@@ -438,3 +448,14 @@ func _float_key(value: float) -> String:
 
 func _length_prefixed(value: String) -> String:
 	return "%d:%s" % [value.length(), value]
+
+
+static func _clock_token(value: String) -> String:
+	for token_value in value.replace("·", " ").split(" ", false):
+		var token := String(token_value).strip_edges()
+		if token.count(":") != 1:
+			continue
+		var parts := token.split(":", false, 1)
+		if parts.size() == 2 and parts[0].is_valid_int() and parts[1].is_valid_int():
+			return "%s:%s" % [parts[0], parts[1]]
+	return value

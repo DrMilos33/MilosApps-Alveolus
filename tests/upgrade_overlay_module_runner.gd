@@ -119,6 +119,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 
 	_check(overlay.modal_sheet().theme_type_variation == AlveolusVisualTheme.TYPE_MODAL_SHEET, "Ausbauwahl besitzt die zentrale ModalSheet-Rolle")
 	_check(overlay.modal_sheet().get_meta(&"alveolus_component", &"") == &"modal_sheet", "Ausbauwahl stammt aus der gemeinsamen ModalSheet-Komponente")
+	_check(overlay.modal_sheet().find_child("Title", true, false) == null, "Ausbauwahl reserviert keine sichtbare Überschrift")
 	_check(overlay.body_scroll().follow_focus, "Responsiver Inhaltsviewport folgt Tastatur- und Gamepadfokus")
 	_check(overlay.body_scroll().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Ausbauwahl scrollt niemals horizontal")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Eine normale einzelne Option benötigt keinen Scrollmodus")
@@ -153,10 +154,10 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 
 	var generic_numeric := UpgradeOverlayViewModelScript.create([{
 		"id": &"future_upgrade_without_special_case",
-		"title": "Dichter Streuimpuls",
-		"effect": "+1 Projektil.",
-		"before": "3",
-		"after": "4 Projektile",
+		"title": "Kräftigere Streuung",
+		"effect": "Stufe 2: +3 Wirkung.",
+		"before": "8 Wirkung",
+		"after": "11 Wirkung",
 		"icon_id": &"treatment",
 	}], 9)
 	_check(overlay.present(generic_numeric, false), "Beliebige zukünftige Ausbau-ID erhält die semantische Zahlenhierarchie")
@@ -164,10 +165,21 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var generic_card := overlay.cards()[0]
 	var numeric_effect := generic_card.find_child("UpgradeEffect", true, false) as RichTextLabel
 	var numeric_comparison := generic_card.find_child("UpgradeComparison", true, false) as RichTextLabel
-	_check(numeric_effect != null and numeric_effect.get_parsed_text() == "+1 Projektil.", "RichText-Ausbauwirkung bewahrt den vollständigen sichtbaren Text")
-	_check(numeric_effect != null and numeric_effect.get_meta(&"semantic_highlights", PackedStringArray()) == PackedStringArray(["+1"]), "Generischer Zahlenparser hebt das wichtige +1 hervor")
-	_check(numeric_comparison != null and numeric_comparison.get_parsed_text().contains("3") and numeric_comparison.get_parsed_text().contains("4 Projektile"), "Vorher-nachher-Zeile bleibt vollständig lesbar")
-	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_after", "") == "4 Projektile", "Der vollständige Zielwert wird semantisch als Ergebnis hervorgehoben")
+	_check(numeric_effect != null and numeric_effect.get_parsed_text() == "Stufe 2: +3 Wirkung.", "RichText-Ausbauwirkung bewahrt den vollständigen sichtbaren Text")
+	_check(numeric_effect != null and numeric_effect.get_meta(&"semantic_highlights", PackedStringArray()) == PackedStringArray(["+3"]), "Generischer Zahlenparser hebt oben nur das vorzeichenbehaftete Delta hervor")
+	_check(numeric_effect != null and numeric_effect.get_theme_font_size("normal_font_size") == AlveolusVisualTheme.TEXT_CAPTION, "Ausbauwirkung verwendet die kompakte zentrale Caption-Größe")
+	_check(numeric_comparison != null and numeric_comparison.get_parsed_text().contains("8 Wirkung") and numeric_comparison.get_parsed_text().contains("11 Wirkung"), "Vorher-nachher-Zeile bleibt vollständig lesbar")
+	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_after", "") == "11 Wirkung", "Nur der vollständige rechte Zielwert wird semantisch als Ergebnis hervorgehoben")
+	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_before_role", &"") == &"body", "Linker Ausgangswert bleibt neutraler Fließtext statt Farbakzent")
+	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_arrow_role", &"") == &"muted_separator", "Vergleichspfeil bleibt ein unauffälliger Trenner")
+	if numeric_comparison != null:
+		var before_color: Color = numeric_comparison.get_meta(&"semantic_before_color", Color.TRANSPARENT)
+		var arrow_color: Color = numeric_comparison.get_meta(&"semantic_arrow_color", Color.TRANSPARENT)
+		var after_color: Color = numeric_comparison.get_meta(&"semantic_after_color", Color.TRANSPARENT)
+		_check(before_color.is_equal_approx(AlveolusVisualTheme.IVORY_DEEP), "Linker Ausgangswert verwendet exakt die normale Bodyfarbe")
+		_check(arrow_color.is_equal_approx(AlveolusVisualTheme.MUTED), "Pfeil verwendet exakt die unaufdringliche Muted-Farbe")
+		_check(after_color.is_equal_approx(AlveolusVisualTheme.GOLD), "Nur der rechte Zielwert verwendet den Goldakzent")
+		_check(not before_color.is_equal_approx(AlveolusVisualTheme.TURQUOISE) and not arrow_color.is_equal_approx(AlveolusVisualTheme.TURQUOISE), "Vorwert und Pfeil konkurrieren nicht mehr mit den beiden gewünschten Highlights")
 
 	var scripted: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
 		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Wirkung."
@@ -237,6 +249,7 @@ func _assert_card_contract(card: Button, option_id: StringName) -> void:
 	_check(card.get_meta(&"upgrade_id", &"") == option_id, "Ausbaukarte trägt ausschließlich ihre stabile ID")
 	_check(card.focus_mode == Control.FOCUS_NONE, "Mauskarten übernehmen keinen Keyboardfokus")
 	_check(card.scale.is_equal_approx(Vector2.ONE), "Ausbaukarte bleibt ohne Scale-Transform")
+	_check(card.custom_minimum_size.y <= 104.0, "Ausbaukarte bleibt typografisch kompakt")
 	var title := card.find_child("UpgradeTitle", true, false) as Label
 	var effect := card.find_child("UpgradeEffect", true, false) as RichTextLabel
 	var comparison := card.find_child("UpgradeComparison", true, false) as RichTextLabel

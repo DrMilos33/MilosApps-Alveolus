@@ -17,7 +17,7 @@ const SINGLE_EDUCATION_WIDTH := 520.0
 const DOUBLE_WIDTH := 680.0
 const TRIPLE_WIDTH := 940.0
 const MINIMUM_CARD_WIDTH := 240.0
-const CARD_HEIGHT := 124.0
+const CARD_HEIGHT := 104.0
 const MODAL_PADDING := 20
 const FOCUS_LINE_WIDTH := 2.0
 
@@ -31,7 +31,6 @@ var _backdrop: ColorRect
 var _safe_area: MarginContainer
 var _center: CenterContainer
 var _sheet: PanelContainer
-var _title_label: Label
 var _body_scroll: ScrollContainer
 var _scrollbar_inset: MarginContainer
 var _body_stack: VBoxContainer
@@ -262,7 +261,7 @@ func _build() -> void:
 
 	var footer_buttons: Array[Control] = [_reroll_button, _cancel_button]
 	var sheet_parts := AlveolusUIComponents.modal_sheet(
-		"Ausbau wählen",
+		"",
 		_body_scroll,
 		footer_buttons,
 		MODAL_PADDING,
@@ -270,9 +269,6 @@ func _build() -> void:
 	)
 	_sheet = sheet_parts["panel"] as PanelContainer
 	_sheet.name = "UpgradeSheet"
-	var sheet_stack := sheet_parts["content"] as VBoxContainer
-	_title_label = sheet_stack.get_child(0) as Label
-	_title_label.name = "Title"
 	_footer_actions = sheet_parts["actions"] as HBoxContainer
 	_footer_actions.hide()
 	_neutral_focus = Control.new()
@@ -317,7 +313,7 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	content.name = "CardCopy"
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
-	var inset := AlveolusUIComponents.margin(content, 12)
+	var inset := AlveolusUIComponents.margin(content, 10)
 	inset.name = "CardInset"
 	inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -330,7 +326,7 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	content.add_child(heading)
 	var icon := SimpleIcon.new()
 	icon.name = "UpgradeIcon"
-	icon.custom_minimum_size = Vector2(24.0, 24.0)
+	icon.custom_minimum_size = Vector2(22.0, 22.0)
 	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon.configure(option.icon_id(), _accent_color(option.accent_role()))
 	heading.add_child(icon)
@@ -365,42 +361,47 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	return card
 
 
-## Highlights numeric deltas in every effect sentence by content, never by
-## upgrade ID. New upgrades therefore inherit the same visual hierarchy.
+## Highlights one meaningful delta in the upper effect copy by content, never
+## by upgrade ID. New upgrades therefore inherit the same visual hierarchy.
 func _build_effect_copy(effect_text: String) -> RichTextLabel:
-	var copy := _rich_copy("UpgradeEffect", AlveolusVisualTheme.body_font(), AlveolusVisualTheme.TEXT_BODY)
+	var copy := _rich_copy("UpgradeEffect", AlveolusVisualTheme.body_font(), AlveolusVisualTheme.TEXT_CAPTION)
 	var highlights := PackedStringArray()
-	var cursor := 0
-	for matched_fragment in _numeric_pattern().search_all(effect_text):
-		var match := matched_fragment as RegExMatch
-		if match.get_start() > cursor:
-			_append_colored_text(copy, effect_text.substr(cursor, match.get_start() - cursor), AlveolusVisualTheme.IVORY_DEEP)
-		var fragment := match.get_string()
-		_append_colored_text(copy, fragment, AlveolusVisualTheme.GOLD)
-		highlights.append(fragment)
-		cursor = match.get_end()
-	if cursor < effect_text.length():
-		_append_colored_text(copy, effect_text.substr(cursor), AlveolusVisualTheme.IVORY_DEEP)
+	var highlight := _delta_match(effect_text)
+	if highlight == null:
+		_append_colored_text(copy, effect_text, AlveolusVisualTheme.IVORY_DEEP)
+	else:
+		var start := highlight.get_start()
+		var finish := highlight.get_end()
+		_append_colored_text(copy, effect_text.substr(0, start), AlveolusVisualTheme.IVORY_DEEP)
+		_append_colored_text(copy, highlight.get_string(), AlveolusVisualTheme.GOLD)
+		_append_colored_text(copy, effect_text.substr(finish), AlveolusVisualTheme.IVORY_DEEP)
+		highlights.append(highlight.get_string())
 	copy.set_meta(&"semantic_highlights", highlights)
 	copy.set_meta(&"semantic_highlight_role", &"positive_delta")
 	return copy
 
 
-## Comparisons consistently de-emphasize the current value and emphasize the
-## resulting value as one meaningful unit (for example "4 Projektile").
+## Comparisons consistently keep the current value in the normal body colour,
+## reduce the arrow to a quiet separator and emphasize only the resulting
+## value as one meaningful unit (for example "4 Projektile").
 func _build_comparison_copy(before_value: String, after_value: String) -> RichTextLabel:
 	var copy := _rich_copy("UpgradeComparison", AlveolusVisualTheme.heading_font(), AlveolusVisualTheme.TEXT_BODY)
 	if not before_value.is_empty() and not after_value.is_empty():
-		_append_colored_text(copy, before_value, AlveolusVisualTheme.SKY_DEEP)
-		_append_colored_text(copy, "  →  ", AlveolusVisualTheme.TURQUOISE)
+		_append_colored_text(copy, before_value, AlveolusVisualTheme.IVORY_DEEP)
+		_append_colored_text(copy, "  →  ", AlveolusVisualTheme.MUTED)
 		_append_colored_text(copy, after_value, AlveolusVisualTheme.GOLD)
 	elif not after_value.is_empty():
 		_append_colored_text(copy, after_value, AlveolusVisualTheme.GOLD)
 	else:
-		_append_colored_text(copy, before_value, AlveolusVisualTheme.GOLD)
+		_append_colored_text(copy, before_value, AlveolusVisualTheme.IVORY_DEEP)
 	copy.set_meta(&"semantic_before", before_value)
 	copy.set_meta(&"semantic_after", after_value)
+	copy.set_meta(&"semantic_before_role", &"body")
+	copy.set_meta(&"semantic_arrow_role", &"muted_separator")
 	copy.set_meta(&"semantic_highlight_role", &"result_value")
+	copy.set_meta(&"semantic_before_color", AlveolusVisualTheme.IVORY_DEEP)
+	copy.set_meta(&"semantic_arrow_color", AlveolusVisualTheme.MUTED)
+	copy.set_meta(&"semantic_after_color", AlveolusVisualTheme.GOLD)
 	return copy
 
 
@@ -433,6 +434,21 @@ func _numeric_pattern() -> RegEx:
 		_numeric_fragment_pattern = RegEx.new()
 		_numeric_fragment_pattern.compile("[+\\-−]?\\d+(?:[.,]\\d+)?(?:\\s*%)?")
 	return _numeric_fragment_pattern
+
+
+## The short upper copy gets one highlighted change value. Prefer an explicit
+## signed delta and otherwise fall back to the first numeric fact. This keeps
+## future upgrade content consistent without coupling presentation to IDs.
+func _delta_match(effect_text: String) -> RegExMatch:
+	var matches := _numeric_pattern().search_all(effect_text)
+	if matches.is_empty():
+		return null
+	for candidate_value in matches:
+		var candidate := candidate_value as RegExMatch
+		var fragment := candidate.get_string()
+		if fragment.begins_with("+") or fragment.begins_with("-") or fragment.begins_with("−"):
+			return candidate
+	return matches[0] as RegExMatch
 
 
 func _build_focus_ring() -> Control:
@@ -558,10 +574,9 @@ func _update_responsive_layout() -> void:
 	_body_scroll.custom_minimum_size.y = 0.0
 	var body_height := _body_stack.get_combined_minimum_size().y
 	var footer_height := _footer_actions.get_combined_minimum_size().y if _footer_actions.visible else 0.0
-	var gap_count := 2 if _footer_actions.visible else 1
+	var gap_count := 1 if _footer_actions.visible else 0
 	var chrome_height := (
 		float(MODAL_PADDING * 2)
-		+ _title_label.get_combined_minimum_size().y
 		+ footer_height
 		+ float(AlveolusVisualTheme.CONTENT_GAP * gap_count)
 	)

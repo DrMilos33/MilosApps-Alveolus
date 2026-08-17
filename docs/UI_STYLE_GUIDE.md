@@ -34,6 +34,7 @@ und Eingabetests in diesem Projekt machen die Regeln überprüfbar.
 - Fokus und Auswahl werden innerhalb der zugeteilten Geometrie gezeichnet. Hover oder Fokus dürfen Controls niemals skalieren, über ihre Rasterzelle malen oder aus einem Dialog hinausragen.
 - Reines Zeigen mit der Maus bleibt still. Sounds markieren bestätigte Aktionen, Öffnen/Schließen, Fehler oder eine tatsächlich per Tastatur beziehungsweise Gamepad bewegte Fokusposition.
 - Texte werden in natürlichem Deutsch und Satzschreibweise formuliert. Lange Bindestrichketten und dauerhafte Großschreibung entfallen.
+- Aktivfähigkeitstexte verwenden kurze, spielernahe Wirkungsformulierungen statt medizinisch-technischer Umschreibungen. Sie nennen zuerst die Aktion und dann die entscheidende Mechanik beziehungsweise Zahl; `Kontaktschaden` ist der verbindliche Spielerbegriff statt `Kontaktdruck`. Die behandelnde Figur heißt in allen sichtbaren Texten „Doctor Milos“.
 - Flächen folgen auf normalen Ansichten ihrer tatsächlichen Inhaltshöhe. Feste Höhen sind nur Viewportgrenzen für Scrollflächen, keine Reserve für dekorativen Leerraum; unsichtbare Spacer dürfen kurze Dialoge nicht künstlich strecken.
 - Text berührt niemals seine bemalte Fläche: Primär-, Sekundär- und Gefahrbuttons besitzen in jedem Zustand mindestens 18 Pixel horizontalen Innenabstand, Auswahlzeilen mindestens 12 Pixel und gestylte Textbadges mindestens 8 Pixel. Lokale Zustands- oder Farb-Overrides müssen diese Safe Area erhalten; Panels mit eigenem `MarginContainer` werden nicht doppelt gepolstert.
 - Ausführliche Hilfen oder Wirkungsbeschreibungen belegen keine dauerhafte Kopf- oder Brettfläche. Auf Maus-Hover öffnen sie als kompakter Tooltip; Tastatur und Gamepad öffnen dieselbe Information ausschließlich über `ui_info` als kompakte Detailkarte. Reiner Fokus öffnet nichts. Beide Darstellungen verändern die Geometrie der Ansicht nicht.
@@ -79,7 +80,7 @@ Die Einsatzplanung ist strikt platzorientiert:
 4. Bei einem belegten Platz ersetzt ein zulässiger Komponenten-Klick den Inhalt direkt und atomar. Es gibt keinen Bestätigungsdialog; aktueller Inhalt, neue Wirkung und Kapazitätsfolge sind vor dem Klick im gemeinsamen Inspektor sichtbar. Danach bleibt derselbe Platz im Picker aktiv, damit ein weiterer Wechsel oder Entfernen die Auswahl unmittelbar reversibel macht.
 5. Entfernen ist eine ausdrückliche Sekundäraktion. Die Reserve ist kein sichtbarer Planplatz; alte Savefelder und IDs bleiben lediglich für Kompatibilität bestehen.
 
-Ein Klick auf eine Komponente darf niemals raten, welcher Platz gefüllt oder ersetzt wird. Jede Planzeile besitzt mindestens 12 Pixel horizontalen Innenabstand. Kapazität wird global und auf der kompakten Kandidatenzeile gezeigt; der Inspektor nennt die unmittelbare Änderung vor dem direkten Ersetzen. Der aktuelle Inhalt wird nicht als scheinbar neu gewählter Kandidat wiederholt. Verfügbare, anderweitig verwendete und gesperrte Einträge sind durch Symbol und Kontrast unterscheidbar; gesperrte Icons, Titel und Kosten sind vollständig entsättigt.
+Ein Klick auf eine Komponente darf niemals raten, welcher Platz gefüllt oder ersetzt wird. Jede Planzeile besitzt mindestens 12 Pixel horizontalen Innenabstand. Die globale Kapazität wird im Plankopf als semantischer Wert farblich hervorgehoben. Kosten auf Plan- und Kandidatenzeilen bestehen nur aus der Zahl; das Kürzel `K` wird nicht verwendet. Der Inspektor nennt die unmittelbare Änderung vor dem direkten Ersetzen. Der aktuelle Inhalt wird nicht als scheinbar neu gewählter Kandidat wiederholt. Verfügbare, anderweitig verwendete und gesperrte Einträge sind durch Symbol und Kontrast unterscheidbar; gesperrte Icons, Titel und Kosten sind vollständig entsättigt.
 
 Im Intro ist der gesamte Planbereich schreibgeschützt. Eine flächendeckende Schlosskennzeichnung erklärt knapp, dass der Einführungsplan vorgegeben ist; einzelne darunterliegende Plätze oder Komponenten dürfen weder per Maus noch Fokus beziehungsweise Gamepad verändert werden.
 
@@ -87,11 +88,13 @@ Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht 
 
 ## Run-HUD
 
-- Oben erscheinen höchstens fünf optionale Charakterwerte als transparentes `Icon + Wert`-Band ohne Überschrift, Beschriftung, Kachel oder Mausblockade. Es beginnt 16 Pixel rechts des Timers, füllt den freien Raum bis zum rechten Rand horizontal und bricht nur bei Platzmangel in eine zweite Zeile um.
+- Oben rechts stehen ausschließlich die verstrichene Rundenzeit und das kompakte Pause-Icon frei über dem Spielfeld; beide besitzen weder Kachel noch Rahmen. Ein separater Boss-Timer ist dort nicht dauerhaft sichtbar.
+- Optionale Kampfwerte stehen direkt unter der Rundenzeit als enge, farbcodierte `Icon + Wert`-Paare ohne Überschrift, Kachel oder Mausblockade. Sie werden mit vier Werten pro Reihe angeordnet und dürfen bei kleiner Breite in weitere Vierer- beziehungsweise Teilreihen umbrechen.
 - Vollständige Erklärungen und alle weiteren Werte liegen ausschließlich im pausierten Untermenü „Charakterwerte“.
-- Das Pausenmenü selbst ist nicht scrollbar: Titel und Fortsetzen bleiben sichtbar, die übrigen Aktionen liegen in einem responsiven Raster. Charakterwerte bilden einen ruhigen zweispaltigen Statblock. Jede Zeile besitzt einen farbcodierten semantischen Marker, eine linksbündige Bezeichnung und einen an einer gemeinsamen rechten Kante ausgerichteten Wert. Gruppenkarten und dreispaltige Textblöcke sind unzulässig; nur bei zukünftig mehr als neun Zeilen je Spalte darf der innere Wertebereich scrollen, die Zurückaktion bleibt fest sichtbar.
-- Dauerhaft sichtbar sind nur Zustand, Zeit, aktuelle Ziele und unmittelbar bedienbare Fähigkeiten. HUD-Flächen verwenden transparente Petrolrollen; massive weiße Hintergründe sind unzulässig.
-- Fähigkeitskarten sitzen kompakt am unteren Rand, zeigen Eingabesymbol, Bereitschaft und Abklingzeit und dürfen das Spielfeld nicht als durchgehende Leiste verdecken.
+- Das Pausenmenü trägt den Titel „☕ Pause“ und benennt die behandelnde Figur als „Doctor Milos“. Es ist nicht scrollbar: Titel und Fortsetzen bleiben sichtbar, die übrigen Aktionen liegen in einem responsiven Raster. Charakterwerte bilden einen ruhigen zweispaltigen Statblock. Jede Zeile besitzt einen farbcodierten semantischen Marker, eine linksbündige Bezeichnung und einen an einer gemeinsamen rechten Kante ausgerichteten Wert. Gruppenkarten und dreispaltige Textblöcke sind unzulässig; nur bei zukünftig mehr als neun Zeilen je Spalte darf der innere Wertebereich scrollen, die Zurückaktion bleibt fest sichtbar.
+- Dauerhaft sichtbar sind nur Zustand, verstrichene Rundenzeit, aktuelle Ziele und unmittelbar bedienbare Fähigkeiten. Zustand, Befund und Level verwenden keine umgebende Kachel; der Levelbalken ist innerhalb seiner freien HUD-Zone zentriert. Massive weiße oder deckende Petrol-Hintergründe sind unzulässig.
+- Belegte aktive Fähigkeiten sitzen kompakt am unteren Rand als schmale Abklingzeitspuren. Icon, Shortcut und verbleibende Zeit liegen gemeinsam auf der Spur; ein dauerhafter Fähigkeitsname oder eine zusätzliche Kartenfläche entfällt. Maus-Hover beziehungsweise `ui_info` liefert die vollständige Wirkung. Leere Plätze werden nicht dargestellt und reagieren nicht auf Eingaben.
+- Wird eine belegte, aber noch nicht bereite Fähigkeit ausgelöst, bestätigt ausschließlich ein leiser Fehlersound den blockierten Versuch; zusätzlicher Text, Toast oder Dialog ist unzulässig.
 - `Strg+R` fordert während eines laufenden oder pausierten Falls einen Neustart desselben Falls an. Standard ist ein einzelner kompakter Bestätigungsdialog; die Option „Neustart bestätigen“ darf ihn abschalten. Der Shortcut umgeht niemals einen bereits bindenden Pflichtdialog.
 
 ## Campus
@@ -113,8 +116,10 @@ Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht 
 ## Einstellungen
 
 - Audio, Anzeige und Bedienung verwenden inhaltsgetriebene Bio-Lumen-Gruppen ohne reservierten Leerraum. Desktop darf zwei gleichgewichtete Spalten nutzen; kompakte Ansichten stapeln sie in einem eindeutigen vertikalen Scrollpfad.
-- Jede Option und jeder Schalter nennt links sichtbar seinen Zweck und hält die Bedienung rechts in derselben mindestens 44 Pixel hohen Zeile. Namenlose Toggle-Karten sind unzulässig.
-- Tastenbelegungen zeigen eine kurze spielerische Aktion links und die aktuelle Belegung kompakt rechts. Interne Aktionsnamen, übergroße Einzelkarten und rein dekorative Zwischenzeilen sind unzulässig.
+- Jede Option und jeder Schalter nennt links sichtbar seinen Zweck und hält die Bedienung rechts in derselben mindestens 44 Pixel hohen Zeile. Schalter liegen direkt in dieser Zeile und erhalten keine eigene Hintergrundkachel; namenlose Toggle-Karten sind unzulässig.
+- Jede konfigurierbare Aktion besitzt eine kompakte Zeile mit kurzer spielerischer Bezeichnung links und zwei getrennten Tastaturfeldern rechts. Beide Felder können unabhängig belegt werden, damit beispielsweise `W` und `Pfeil hoch` gleichzeitig bestehen bleiben. Interne Aktionsnamen, übergroße Einzelkarten und rein dekorative Zwischenzeilen sind unzulässig.
+- Controller- und Mausbelegungen bleiben für Laufzeit, Glyphen und Save v5 kompatibel, sind in der aktuellen Einstellungsansicht jedoch visuell ausgeblendet. Ihre Entfernung aus der Oberfläche darf bestehende Belegungen nicht löschen oder umdeuten.
+- Wird eine Taste gewählt, die bereits einer anderen konfigurierbaren Aktion gehört, öffnet vor jeder Änderung ein kompakter Pflichtdialog. Bestätigen verschiebt die Taste atomar zur neuen Aktion; Abbrechen erhält beide bisherigen Belegungen. Ein Tastendruck darf nie zwei konkurrierende Aktionen auslösen.
 
 ## Semantische Varianten
 
@@ -166,6 +171,8 @@ Die UI- und Binding-Runner, darunter `tests/style_gallery_runner.gd`, prüfen:
 - Maus-Hover als einzigen automatischen Tooltip-Auslöser sowie stilles Schließen ohne Fokus- oder Aktionswechsel;
 - dass Tastatur-/Gamepadfokus allein keine Detailkarte öffnet, `ui_info` jedoch inhaltsgleiche Informationen zeigt und `ui_info` beziehungsweise `ui_cancel` mit erhaltenem Auslöserfokus schließt;
 - konfigurierbare `ui_info`-Belegungen und passende Tastatur-/Gamepadglyphen;
+- zwei unabhängige Tastaturplätze je konfigurierbarer Aktion, Save-v5-Erhalt ausgeblendeter Maus-/Controllerbindungen und den atomaren Konfliktdialog;
+- das kachellose Run-HUD mit verstrichener Rundenzeit, Viererreihen optionaler Werte sowie Abklingzeitspuren für ausschließlich belegte Fähigkeiten;
 - Mindestschrift und Kontrast;
 - gemeinsame Zentrierung von Symbol und Text;
 - Referenzansichten bei 1280×720, 1024×576 und 960×540;

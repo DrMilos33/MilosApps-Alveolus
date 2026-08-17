@@ -178,6 +178,13 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	game._begin_or_queue_ability(0, AbilityCommand.InputDevice.KEYBOARD_MOUSE)
 	_check(game.hud.alert_label.text == alert_before_blocked, "Eine noch abklingende Fähigkeit blendet keinen Text ein")
 	_check(game.ui_sound_service.next_player == (sound_before_blocked + 1) % UISoundService.PLAYER_COUNT, "Eine noch abklingende Fähigkeit antwortet ausschließlich mit einem leichten Sound")
+	var queued_cooldown := AbilityExecutionResult.new()
+	queued_cooldown.code = AbilityExecutionResult.Code.COOLDOWN
+	queued_cooldown.reason = "Der Eingriff ist noch nicht bereit."
+	var sound_before_queued_block: int = game.ui_sound_service.next_player
+	game._on_ability_execution_completed(queued_cooldown)
+	_check(game.hud.alert_label.text == alert_before_blocked, "Auch ein verzögert abgewiesener Cooldown erzeugt keinen Textalarm")
+	_check(game.ui_sound_service.next_player == (sound_before_queued_block + 1) % UISoundService.PLAYER_COUNT, "Ein verzögert abgewiesener Cooldown verwendet denselben leichten Sound")
 	var sound_before_empty: int = game.ui_sound_service.next_player
 	game._begin_or_queue_ability(7, AbilityCommand.InputDevice.KEYBOARD_MOUSE)
 	_check(game.hud.alert_label.text == alert_before_blocked and game.ui_sound_service.next_player == sound_before_empty, "Ein unbelegter Fähigkeitsslot bleibt vollständig stumm")

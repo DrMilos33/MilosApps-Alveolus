@@ -323,7 +323,7 @@ func _run() -> void:
 	_check((tooltip_parts["panel"] as PanelContainer).theme_type_variation == AlveolusVisualTheme.TYPE_TOOLTIP_CARD and float((tooltip_parts["panel"] as PanelContainer).get_meta(&"alveolus_maximum_width")) <= 288.0, "TooltipCard bleibt kompakt und semantisch typisiert")
 	_check((detail_parts["panel"] as PanelContainer).theme_type_variation == AlveolusVisualTheme.TYPE_DETAIL_CARD, "Explizite Detailkarte ist vom Hover-Tooltip getrennt")
 	var modal_actions: Array[Control] = [AlveolusUIComponents.action_button("Weiter", AlveolusUIComponents.ACTION_PRIMARY)]
-	var modal_parts := AlveolusUIComponents.modal_sheet("Behandlung pausiert", AlveolusUIComponents.label("Run eingefroren"), modal_actions)
+	var modal_parts := AlveolusUIComponents.modal_sheet("☕  Pause", AlveolusUIComponents.label("Doctor Milos"), modal_actions)
 	_check((modal_parts["panel"] as PanelContainer).theme_type_variation == AlveolusVisualTheme.TYPE_MODAL_SHEET and (modal_parts["actions"] as HBoxContainer).get_child_count() == 1, "ModalSheet bündelt Inhalt und Aktionen ohne Leerraumreserve")
 	var semantic_fills: Array[BioLumenSurfaceFill] = [
 		(header_parts["panel"] as PanelContainer).get_node_or_null("BioLumenSurface") as BioLumenSurfaceFill,

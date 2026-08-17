@@ -59,22 +59,10 @@ func _run() -> void:
 	hud.show_level_select(level_meta, levels)
 	await process_frame
 	_check(hud.level_overlay.visible and campus_header_layer.z_index == 0, "Der Fallarchivheader bleibt frei vom abgedunkelten Campusheader")
-	var archive_accents := {}
-	var locked_illustrations := 0
 	for level in levels:
 		var level_button := hud.level_buttons[level.id] as Button
-		var illustration := hud.level_illustrations[level.id] as LevelCaseIllustration
-		_check(illustration != null, "Jeder Fall besitzt eine eigene ungerahmte Fallillustration")
-		if illustration == null:
-			continue
-		archive_accents[illustration.accent.to_html()] = true
-		_check(is_equal_approx(illustration.custom_minimum_size.x, illustration.custom_minimum_size.y), "Fallillustrationen behalten einen quadratischen Zeichenraum")
-		_check(illustration.mouse_filter == Control.MOUSE_FILTER_IGNORE and illustration.get_child_count() == 0, "Fallillustrationen sind ungerahmte, nicht interaktive Glyphen statt verschachtelter Kacheln")
-		_check(illustration.locked == level_button.disabled, "Gesperrte Fälle tragen direkt in der Illustration ein Schloss")
-		if illustration.locked:
-			locked_illustrations += 1
-	_check(archive_accents.size() >= 3, "Das Fallarchiv unterscheidet Fälle mit mehreren semantischen Akzentfarben")
-	_check(locked_illustrations > 0, "Das Fallarchiv prüft den sichtbaren Lock-Zustand noch nicht freigeschalteter Fälle")
+		_check(level_button != null and level_button.find_child("CaseIllustration", true, false) == null, "Fallkarten verzichten auf dekorative Fall-Icons")
+		_check(level_button != null and level_button.find_child("Title", true, false) != null and level_button.find_child("Status", true, false) != null, "Fallkarten tragen ihren Zustand über klare Text- und Kartenrollen")
 	hud.show_story()
 	await process_frame
 	var story_focus := get_root().gui_get_focus_owner()
@@ -186,15 +174,29 @@ func _run() -> void:
 	_check(run_stat_rows.size() <= 5, "Die Runstatistik bleibt auf höchstens fünf Werte begrenzt")
 	_check(hud.run_hud_screen.run_stats_strip() is HFlowContainer and hud.run_hud_screen.run_stats_strip().get_meta(&"alveolus_component", &"") == &"transparent_run_stats", "Die Runstatistik verwendet ein flaches transparentes Statband")
 	var stat_strip_rect := hud.run_hud_screen.run_stats_strip().get_global_rect()
-	_check(stat_strip_rect.position.x >= hud.stability_panel.get_global_rect().end.x and stat_strip_rect.end.x <= hud.timer_panel.get_global_rect().position.x, "Das transparente Statband nutzt kollisionsfrei den Raum zwischen Zustand und Timer")
+	var timer_rect := hud.timer_panel.get_global_rect()
+	var hud_rect := hud.run_hud_screen.get_global_rect()
+	_check(stat_strip_rect.position.y >= timer_rect.end.y - 0.5 and stat_strip_rect.end.x <= hud_rect.end.x + 0.5, "Das transparente Statband sitzt kollisionsfrei rechts unter der Rundendauer")
 	var previous_row: Control = null
-	for row in run_stat_rows:
+	var stat_row_populations: Dictionary = {}
+	var stat_row_order: Array[int] = []
+	for row_index in range(run_stat_rows.size()):
+		var row := run_stat_rows[row_index]
+		var row_level := roundi(row.global_position.y)
+		if not stat_row_populations.has(row_level):
+			stat_row_populations[row_level] = 0
+			stat_row_order.append(row_level)
+		stat_row_populations[row_level] = int(stat_row_populations[row_level]) + 1
 		_check(row.is_visible_in_tree(), "Jeder präsentierte Runwert ist tatsächlich sichtbar")
 		_check(row.get_child_count() == 2, "Eine Statistikzeile enthält ausschließlich Icon und Wert")
 		_check(row.get_child(0) is SimpleIcon and row.get_child(1) is Label, "Icon und Wert besitzen eine eindeutige Reihenfolge")
-		if previous_row != null:
-			_check(row.position.x > previous_row.position.x and is_equal_approx(row.position.y, previous_row.position.y), "Werte füllen das breite Statband zuerst horizontal")
+		if row_index > 0 and row_index < 4:
+			_check(previous_row != null and row.position.x > previous_row.position.x and is_equal_approx(row.position.y, previous_row.position.y), "Die ersten vier Werte füllen die obere Reihe horizontal")
 		previous_row = row
+	var stat_row_counts: Array[int] = []
+	for row_level in stat_row_order:
+		stat_row_counts.append(int(stat_row_populations[row_level]))
+	_check(stat_row_counts == [4, 1], "Kampfwerte stehen rechts unter der Zeit in Viererreihen")
 	# Force the reusable strip into a genuinely constrained width. Target
 	# resolutions normally still expose the 1280×720 design canvas, while the
 	# FlowContainer must nevertheless wrap correctly if future HUD elements use
@@ -263,7 +265,8 @@ func _run() -> void:
 	_check(visibility_events == [false], "Anzeigeeinstellung meldet Änderungen an den Spielstand")
 	_check(not hud.run_stats_panel.visible, "Deaktivierte Anzeige verschwindet sofort")
 
-	hud.show_upgrade_choices(ContentCatalog.upgrade_definitions().slice(0, 3), stats, false, false)
+	var upgrade_options := ContentCatalog.upgrade_definitions().slice(0, 3)
+	hud.show_upgrade_choices(upgrade_options, stats, false, false)
 	await process_frame
 	_check(hud.upgrade_panel != null and _has_scroll_ancestor(hud.upgrade_cards), "Ausbaukarten bleiben bei großer UI in einem scrollbaren Dialog")
 	_check(hud.upgrade_panel.custom_minimum_size.y <= 240.0, "Ausbaudialog folgt ohne Zusatzbereiche seiner Inhaltshöhe")
@@ -277,6 +280,15 @@ func _run() -> void:
 			if child is ColorRect:
 				has_left_strip = true
 		_check(not has_left_strip, "Ausbaukarten besitzen keinen linken Farbbalken")
+	var first_upgrade_preview := stats.preview_upgrade(upgrade_options[0])
+	var first_upgrade_comparison := (hud.upgrade_cards.get_child(0) as Control).find_child("UpgradeComparison", true, false) as RichTextLabel
+	var expected_comparison := first_upgrade_preview.before_after_text.split(">", false, 1)
+	_check(
+		first_upgrade_comparison != null and expected_comparison.size() == 2 \
+			and String(first_upgrade_comparison.get_meta(&"semantic_before", "")) == String(expected_comparison[0]).strip_edges() \
+			and String(first_upgrade_comparison.get_meta(&"semantic_after", "")) == String(expected_comparison[1]).strip_edges(),
+		"Der GameHUD-Presenter trennt Ausbau-Vorherwert und nur den rechten Zielwert für die Hervorhebung"
+	)
 	hud.show_upgrade_choices(ContentCatalog.upgrade_definitions().slice(0, 1), stats, false, false)
 	await process_frame
 	var single_regular_upgrade := hud.upgrade_cards.get_child(0) as Control

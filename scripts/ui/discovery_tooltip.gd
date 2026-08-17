@@ -322,7 +322,4 @@ func _is_fresh_action(event: InputEvent, action: StringName) -> bool:
 
 
 func _is_confirmation_key(event: InputEvent) -> bool:
-	if not event is InputEventKey:
-		return false
-	var key_event := event as InputEventKey
-	return key_event.pressed and not key_event.echo and key_event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]
+	return _is_fresh_action(event, &"ui_accept")

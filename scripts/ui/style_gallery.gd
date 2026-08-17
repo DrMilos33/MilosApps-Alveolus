@@ -369,10 +369,10 @@ func _build_pause_view() -> Control:
 	center.add_child(modal)
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	var title := AlveolusUIComponents.label("Behandlung pausiert", AlveolusVisualTheme.TYPE_TITLE_LABEL)
+	var title := AlveolusUIComponents.label("☕  Pause", AlveolusVisualTheme.TYPE_TITLE_LABEL)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(title)
-	var subtitle := AlveolusUIComponents.label("Der Run bleibt vollständig eingefroren.", AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	var subtitle := AlveolusUIComponents.label("Doctor Milos", AlveolusVisualTheme.TYPE_MUTED_LABEL)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(subtitle)
 	content.add_child(AlveolusUIComponents.button("Weiter", AlveolusVisualTheme.TYPE_PRIMARY_BUTTON, &"play", AlveolusVisualTheme.TEAL))

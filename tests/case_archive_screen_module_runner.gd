@@ -9,6 +9,9 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var screen_source := _read_source("res://scripts/ui/screens/case_archive_screen.gd")
+	_check(not screen_source.contains("LevelCaseIllustration"), "Fallarchiv baut keine Fallillustrationen mehr")
+	_check(not screen_source.contains("add_theme_stylebox_override"), "Fallarchiv erzeugt für iconfreie Karten keine lokalen StyleBoxen")
 	var host := _create_logical_host(Vector2i(1280, 720))
 	var source_entries := _fixture_entries()
 	var view_model := CaseArchiveViewModel.new(7, source_entries, &"case_01")
@@ -52,11 +55,10 @@ func _run() -> void:
 	_check(unlocked.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD, "Gewählter Fall nutzt den zentralen Auswahlzustand")
 	_check(locked.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTION_CARD, "Gesperrter Fall bleibt eine zentrale Auswahlkarte")
 	var locked_status := locked.find_child("Status", true, false) as Label
-	var locked_icon := locked.find_child("CaseIllustration", true, false) as LevelCaseIllustration
 	_check(locked_status != null and locked_status.text.contains("Gesperrt"), "Gesperrt wird zusätzlich zur Farbe als Text genannt")
-	_check(locked_icon != null and locked_icon.locked, "Gesperrt wird zusätzlich als Schloss in der Illustration gezeigt")
-	_check(locked_icon.custom_minimum_size.x == locked_icon.custom_minimum_size.y, "Ungerahmte Fallillustration besitzt einen quadratischen Zeichenraum")
-	_check(locked_icon.mouse_filter == Control.MOUSE_FILTER_IGNORE and locked_icon.get_child_count() == 0, "Fallillustration ist eine ungerahmte, input-transparente Glyphe")
+	_check(unlocked.find_child("CaseIllustration", true, false) == null and locked.find_child("CaseIllustration", true, false) == null, "Fallkarten verzichten vollständig auf Illustrations- und Icon-Chrome")
+	_check(is_equal_approx(unlocked.custom_minimum_size.y, CaseArchiveScreen.CARD_HEIGHT), "Iconfreie Desktop-Fallkarten besitzen eine inhaltsgerechte Höhe")
+	_check(CaseArchiveScreen.CARD_HEIGHT >= 184.0, "Alle fünf Textzeilen bleiben innerhalb der Fallkarte")
 
 	var selected_ids: Array[StringName] = []
 	screen.case_selected.connect(func(case_id: StringName) -> void: selected_ids.append(case_id))
@@ -123,6 +125,13 @@ func _check(condition: bool, message: String) -> void:
 	assertions += 1
 	if not condition:
 		failures.append(message)
+
+
+func _read_source(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	return file.get_as_text()
 
 
 func _create_logical_host(logical_size: Vector2i) -> Control:

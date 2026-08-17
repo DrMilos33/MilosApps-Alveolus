@@ -466,9 +466,10 @@ func _run() -> void:
 		hud.update_boss_health(64.0, 100.0)
 		hud.show_alert("BELASTUNGSSCHUB", AlveolusVisualTheme.CORAL, 2.0)
 		await _settle()
-		_check(not run_hud.run_stats_strip().visible, "%s blendet optionale Werte für Boss und Alarm aus" % compact_context)
-		_check(_rects_separate(run_hud.shield_panel(), run_hud.boss_panel()), "%s trennt Schutz und Bosszustand" % compact_context)
-		_check(_rects_separate(run_hud.boss_panel(), hud.alert_label), "%s trennt Bosszustand und Alarm" % compact_context)
+		_check(run_hud.run_stats_strip().visible and _rects_separate(run_hud.run_stats_strip(), run_hud.analysis_panel()), "%s hält vierwertige Runstatistik unter dem Timer trotz Boss und Alarm lesbar" % compact_context)
+		_check(_rects_separate(run_hud.timer_panel(), run_hud.pause_action()), "%s trennt freistehende Rundendauer und Pauseaktion" % compact_context)
+		_check(not run_hud.boss_panel().visible, "%s hält die veraltete Bosskachel dormant" % compact_context)
+		_check(_rects_separate(hud.alert_label, run_hud.run_stats_strip()), "%s trennt Alarm und Kampfwerte" % compact_context)
 		_check(_rects_separate(hud.alert_label, hud.finding_progress_panel), "%s trennt Alarm und untere Befundreihe" % compact_context)
 
 	hud.queue_free()

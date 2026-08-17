@@ -22,11 +22,11 @@ func _run() -> void:
 	hud.configure_input_glyphs(glyphs)
 
 	_test_prompt_icons_and_text_fallback(hud, glyphs)
-	_test_mouse_and_axis_capture(hud, glyphs)
+	_test_dual_keyboard_capture_and_conflict_popup(hud)
 	_test_scale_and_reduced_motion(hud)
 	_test_restart_confirmation_setting(hud)
 	_test_semantic_sounds(hud, sound)
-	_test_binding_feedback(hud, sound)
+	_test_binding_cancel_feedback(hud, sound)
 
 	for player in sound.players:
 		player.stop()
@@ -71,26 +71,43 @@ func _test_prompt_icons_and_text_fallback(hud: GameHUD, glyphs: InputGlyphServic
 	_true(hud.ability_key_labels[0].visible and hud.ability_key_labels[0].text == "F", "Freie Remaps aktualisieren die sichtbare Textglyphe unmittelbar")
 
 
-func _test_mouse_and_axis_capture(hud: GameHUD, glyphs: InputGlyphService) -> void:
+func _test_dual_keyboard_capture_and_conflict_popup(hud: GameHUD) -> void:
 	hud.show_settings(false)
-	hud._begin_binding_capture(&"move_up")
+	_true(hud.settings_screen.control_for_setting(&"binding.move_up.0") != null, "Nach oben besitzt ein erstes Tastaturfeld")
+	_true(hud.settings_screen.control_for_setting(&"binding.move_up.1") != null, "Nach oben besitzt ein zweites Tastaturfeld")
+	_equal(_button_caption(hud.settings_screen.control_for_setting(&"binding.move_up.0") as Button), "W", "Der erste Bewegungsplatz zeigt W ohne Controllerzusatz")
+	_equal(_button_caption(hud.settings_screen.control_for_setting(&"binding.move_up.1") as Button), "Up", "Der zweite Bewegungsplatz zeigt Pfeil hoch getrennt")
+	_true(not hud._binding_summary(&"move_up").contains("D-Pad"), "Die Settings-Zusammenfassung blendet Controllerbelegungen visuell aus")
+	for action in [&"upgrade_1", &"upgrade_2", &"upgrade_3", &"reroll_upgrades"]:
+		_true(hud.settings_screen.control_for_setting(StringName("binding.%s.0" % String(action))) != null, "%s ist im Settings-Screen belegbar" % String(action))
+
+	hud._begin_binding_capture(&"move_up", 1)
 	var mouse := InputEventMouseButton.new()
 	mouse.button_index = MOUSE_BUTTON_MIDDLE
 	mouse.pressed = true
 	hud._input(mouse)
-	_true(hud.pending_binding_action == &"", "Eine Maustaste schließt die erfolgreiche Erfassung")
-	_true(hud._binding_summary(&"move_up").contains("Maus 3"), "Die Einstellungen zeigen die remappte Maustaste verständlich")
+	_true(hud.pending_binding_action == &"move_up", "Unsichtbare Maustasten ändern einen Tastaturplatz nicht")
+	hud._input(_pressed_key(KEY_T))
+	_true(hud.pending_binding_action == &"", "Eine Tastaturbelegung schließt die erfolgreiche Erfassung")
+	_true(_has_key(InputMap.action_get_events(&"move_up"), KEY_W) and _has_key(InputMap.action_get_events(&"move_up"), KEY_T), "Der zweite Tastaturplatz ändert sich unabhängig vom ersten")
+	_true(_has_joy(InputMap.action_get_events(&"move_up"), JOY_BUTTON_DPAD_UP), "Controllerbelegung bleibt runtime-seitig erhalten")
 
-	hud._begin_binding_capture(&"active_ability_2")
-	var axis := InputEventJoypadMotion.new()
-	axis.axis = JOY_AXIS_RIGHT_X
-	axis.axis_value = 0.90
-	hud._input(axis)
-	_true(hud.pending_binding_action == &"", "Eine deutliche Stickbewegung kann als Gamepadeingabe belegt werden")
-	_true(hud._binding_summary(&"active_ability_2").contains("RS X+"), "Die Achsenbelegung wird mit Stick und Richtung benannt")
-	glyphs.configure(UISettingsState.GLYPH_GAMEPAD)
-	_true(hud.ability_key_labels[1].visible and hud.ability_key_labels[1].text == "RS X+", "Eine remappte Achse erscheint vollständig als Textglyphe im Fähigkeiten-HUD")
-	_equal(hud.ability_key_labels[1].text_overrun_behavior, TextServer.OVERRUN_TRIM_ELLIPSIS, "Lange Fähigkeitsglyphen bleiben auf den kompakten HUD-Platz begrenzt")
+	hud._begin_binding_capture(&"active_ability_1", 1)
+	hud._apply_binding_event(_key(KEY_S))
+	_true(hud.settings_screen.is_binding_conflict_open(), "Eine bereits verwendete Taste öffnet das Bestätigungspopup")
+	_true(_has_key(InputMap.action_get_events(&"move_down"), KEY_S), "Vor Bestätigung bleibt die bestehende Aktion unverändert")
+	var confirm := hud.settings_screen.find_child("BindingConflictConfirm", true, false) as Button
+	_true(confirm != null, "Das Konfliktpopup besitzt eine ausdrückliche Übernehmen-Aktion")
+	confirm.pressed.emit()
+	_true(_has_key(InputMap.action_get_events(&"active_ability_1"), KEY_S), "Bestätigung übernimmt die Taste in den gewählten Fähigkeitsslot")
+	_true(not _has_key(InputMap.action_get_events(&"move_down"), KEY_S), "Bestätigung entfernt die Taste aus der vorherigen Aktion")
+	_true(not hud.is_binding_interaction_active(), "Nach der Konfliktentscheidung bleibt keine exklusive Eingabeebene aktiv")
+
+	hud._begin_binding_capture(&"move_left", 1)
+	_true(hud.is_binding_interaction_active(), "Eine laufende Tastaturerfassung ist als exklusive Eingabeebene erkennbar")
+	hud.show_running_hud()
+	_true(not hud.is_binding_interaction_active() and hud.pending_binding_action == &"", "Verlassen der Einstellungen verwirft eine unvollständige Erfassung vollständig")
+	hud.show_settings(false)
 
 
 func _test_scale_and_reduced_motion(hud: GameHUD) -> void:
@@ -176,13 +193,9 @@ func _test_semantic_sounds(hud: GameHUD, sound: UISoundService) -> void:
 	_equal(sound.next_player, (before_campus + 1) % UISoundService.PLAYER_COUNT, "Auch die nicht von Button abgeleiteten Campusgebäude geben Öffnungsfeedback")
 
 
-func _test_binding_feedback(hud: GameHUD, sound: UISoundService) -> void:
+func _test_binding_cancel_feedback(hud: GameHUD, sound: UISoundService) -> void:
 	hud.show_settings(false)
-	hud._begin_binding_capture(&"active_ability_1")
-	var before_error := sound.next_player
-	hud._apply_binding_event(_key(KEY_S))
-	_equal(sound.next_player, (before_error + 1) % UISoundService.PLAYER_COUNT, "Ein Bindingkonflikt spielt den Error-Cue")
-	_true(hud.pending_binding_action == &"active_ability_1", "Nach einem Konflikt bleibt die Erfassung kontrolliert offen")
+	hud._begin_binding_capture(&"active_ability_1", 1)
 	var before_cancel := sound.next_player
 	hud._cancel_binding_capture()
 	_equal(sound.next_player, (before_cancel + 1) % UISoundService.PLAYER_COUNT, "Abbruch der Erfassung spielt den Back-Cue")
@@ -190,14 +203,18 @@ func _test_binding_feedback(hud: GameHUD, sound: UISoundService) -> void:
 
 func _prepare_actions() -> void:
 	var defaults := {
-		&"move_up": [_key(KEY_W), _joy(JOY_BUTTON_DPAD_UP)],
-		&"move_down": [_key(KEY_S), _joy(JOY_BUTTON_DPAD_DOWN)],
-		&"move_left": [_key(KEY_A), _joy(JOY_BUTTON_DPAD_LEFT)],
-		&"move_right": [_key(KEY_D), _joy(JOY_BUTTON_DPAD_RIGHT)],
+		&"move_up": [_key(KEY_W), _key(KEY_UP), _joy(JOY_BUTTON_DPAD_UP)],
+		&"move_down": [_key(KEY_S), _key(KEY_DOWN), _joy(JOY_BUTTON_DPAD_DOWN)],
+		&"move_left": [_key(KEY_A), _key(KEY_LEFT), _joy(JOY_BUTTON_DPAD_LEFT)],
+		&"move_right": [_key(KEY_D), _key(KEY_RIGHT), _joy(JOY_BUTTON_DPAD_RIGHT)],
 		&"active_ability_1": [_key(KEY_Q), _joy(JOY_BUTTON_LEFT_SHOULDER)],
 		&"active_ability_2": [_key(KEY_E), _joy(JOY_BUTTON_RIGHT_SHOULDER)],
-		&"pause_game": [_key(KEY_ESCAPE), _joy(JOY_BUTTON_START)],
-		&"ui_accept": [_key(KEY_ENTER), _joy(JOY_BUTTON_A)],
+		&"pause_game": [_key(KEY_P), _key(KEY_ESCAPE), _joy(JOY_BUTTON_START)],
+		&"upgrade_1": [_key(KEY_1)],
+		&"upgrade_2": [_key(KEY_2)],
+		&"upgrade_3": [_key(KEY_3)],
+		&"reroll_upgrades": [_key(KEY_R), _joy(JOY_BUTTON_X)],
+		&"ui_accept": [_key(KEY_ENTER), _key(KEY_SPACE), _joy(JOY_BUTTON_A)],
 		&"ui_cancel": [_key(KEY_BACKSPACE), _joy(JOY_BUTTON_B)],
 		&"ui_info": [_key(KEY_I), _joy(JOY_BUTTON_Y)],
 	}
@@ -231,9 +248,21 @@ func _control_text(node: Node) -> String:
 	return result
 
 
+func _button_caption(button: Button) -> String:
+	if button is IconTextButton:
+		return (button as IconTextButton).caption.text
+	return button.text
+
+
 func _key(code: Key) -> InputEventKey:
 	var event := InputEventKey.new()
 	event.physical_keycode = code
+	return event
+
+
+func _pressed_key(code: Key) -> InputEventKey:
+	var event := _key(code)
+	event.pressed = true
 	return event
 
 
@@ -241,6 +270,20 @@ func _joy(button_index: JoyButton) -> InputEventJoypadButton:
 	var event := InputEventJoypadButton.new()
 	event.button_index = button_index
 	return event
+
+
+func _has_key(events: Array[InputEvent], code: Key) -> bool:
+	for event in events:
+		if event is InputEventKey and (event as InputEventKey).physical_keycode == code:
+			return true
+	return false
+
+
+func _has_joy(events: Array[InputEvent], button_index: JoyButton) -> bool:
+	for event in events:
+		if event is InputEventJoypadButton and (event as InputEventJoypadButton).button_index == button_index:
+			return true
+	return false
 
 
 func _true(condition: bool, message: String) -> void:

@@ -23,7 +23,7 @@ func _run() -> void:
 	source_bindings.clear()
 	_check(view_model.get_audio_settings().size() == 4, "Audio-View-Models werden tief kopiert")
 	_check(view_model.get_option_settings()[0].get_entries().size() == 6, "Optionslisten geben keine interne Collection frei")
-	_check(view_model.get_binding_settings().size() == 10, "Binding-View-Models werden tief kopiert")
+	_check(view_model.get_binding_settings().size() == 14, "Alle Spielaktionen werden als Binding-View-Models tief kopiert")
 	_check(view_model.get_content_hash() == original_hash, "Externe Mutationen verändern den Content-Hash nicht")
 
 	var screen := SettingsScreen.new()
@@ -42,10 +42,12 @@ func _run() -> void:
 	_check(screen.get_binding_column_count() == 2, "Steuerungszeilen nutzen auf breiten Ansichten zwei Spalten")
 	var wide_toggles := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
 	_check(wide_toggles != null and wide_toggles.columns == 2, "Anzeige ordnet vier Schalter platzsparend in zwei Spalten an")
-	_check(screen.control_for_setting(&"binding.ui_info") != null, "ui_info erscheint als reguläre, zugängliche Binding-Zeile")
+	_check(screen.control_for_setting(&"binding.ui_info.0") != null, "ui_info besitzt einen zugänglichen ersten Tastaturplatz")
+	_check(screen.control_for_setting(&"binding.ui_info.1") != null, "ui_info besitzt einen zugänglichen zweiten Tastaturplatz")
 	_assert_sections_are_content_driven(screen)
 	_assert_compact_labeled_rows(screen)
 	_assert_intents(screen)
+	await _assert_conflict_modal(screen)
 
 	_resize_logical_host(host, Vector2i(480, 270))
 	await _settle()
@@ -65,18 +67,18 @@ func _run() -> void:
 	_check(first_audio_row != null and _visible_children_inside(first_audio_row), "Label, Wert, Slider und Stummschalter bleiben in der ersten Audiozeile")
 	_check(screen.get_scroll_container().scroll_vertical == 0, "Kompakte Settings öffnen am oberen Scrollanfang")
 
-	var info_binding := screen.control_for_setting(&"binding.ui_info") as Button
+	var info_binding := screen.control_for_setting(&"binding.ui_info.1") as Button
 	info_binding.grab_focus()
 	await process_frame
 	screen.get_scroll_container().scroll_vertical = 120
 	await process_frame
 	var updated_model := SettingsScreenViewModel.new(
-		2, _audio_fixture(0.55), _option_fixture(), _toggle_fixture(), _binding_fixture(), "Belegung aktualisiert.", true
+		4, _audio_fixture(0.55), _option_fixture(), _toggle_fixture(), _binding_fixture(), "Belegung aktualisiert.", true
 	)
 	_check(screen.apply(updated_model), "Neue Settings-Revision aktualisiert den Screen")
 	await _settle()
 	var restored_focus := get_root().gui_get_focus_owner()
-	_check(restored_focus == screen.control_for_setting(&"binding.ui_info"), "Apply stellt Fokus anhand der semantischen Setting-ID wieder her")
+	_check(restored_focus == screen.control_for_setting(&"binding.ui_info.1"), "Apply stellt Fokus bis auf den konkreten Tastaturplatz wieder her")
 	_check(screen.get_scroll_container().scroll_vertical > 0, "Apply bewahrt die vorherige Scrollposition soweit möglich")
 
 	_assert_dependency_contract()
@@ -90,7 +92,8 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	var audio_mutes: Array = []
 	var options: Array = []
 	var toggles: Array = []
-	var bindings: Array[StringName] = []
+	var bindings: Array = []
+	var legacy_bindings: Array[StringName] = []
 	var reset_count := [0]
 	var quit_count := [0]
 	var back_count := [0]
@@ -98,7 +101,8 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	screen.audio_mute_changed.connect(func(id: StringName, muted: bool) -> void: audio_mutes.append([id, muted]))
 	screen.option_changed.connect(func(id: StringName, index: int) -> void: options.append([id, index]))
 	screen.toggle_changed.connect(func(id: StringName, enabled: bool) -> void: toggles.append([id, enabled]))
-	screen.binding_change_requested.connect(func(id: StringName) -> void: bindings.append(id))
+	screen.binding_slot_change_requested.connect(func(id: StringName, slot_index: int) -> void: bindings.append([id, slot_index]))
+	screen.binding_change_requested.connect(func(id: StringName) -> void: legacy_bindings.append(id))
 	screen.bindings_reset_requested.connect(func() -> void: reset_count[0] += 1)
 	screen.quit_requested.connect(func() -> void: quit_count[0] += 1)
 	screen.back.connect(func() -> void: back_count[0] += 1)
@@ -107,7 +111,8 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	(screen.control_for_setting(&"audio.master.mute") as CheckButton).toggled.emit(true)
 	(screen.control_for_setting(&"option.ui_scale") as OptionButton).item_selected.emit(3)
 	(screen.control_for_setting(&"toggle.reduce_motion") as CheckButton).toggled.emit(true)
-	(screen.control_for_setting(&"binding.ui_info") as Button).pressed.emit()
+	(screen.control_for_setting(&"binding.ui_info.1") as Button).pressed.emit()
+	(screen.control_for_setting(&"binding.ui_info.0") as Button).pressed.emit()
 	(screen.control_for_setting(&"bindings.reset") as Button).pressed.emit()
 	(screen.control_for_setting(&"quit") as Button).pressed.emit()
 	(screen.control_for_setting(&"back") as Button).pressed.emit()
@@ -116,8 +121,53 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	_check(audio_mutes == [[&"master", true]], "Stummschaltung emittiert einen typisierten Intent")
 	_check(options == [[&"ui_scale", 3]], "Option emittiert ID und Index")
 	_check(toggles == [[&"reduce_motion", true]], "Schalter emittiert ID und Zustand")
-	_check(bindings == [&"ui_info"], "Binding-Intent enthält ausschließlich die Aktions-ID")
+	_check(bindings == [[&"ui_info", 1], [&"ui_info", 0]], "Binding-Intent enthält Aktion und den ausdrücklich gewählten Tastaturplatz")
+	_check(legacy_bindings == [&"ui_info"], "Der erste Tastaturplatz emittiert weiterhin den kompatiblen Ein-Slot-Intent")
 	_check(reset_count[0] == 1 and quit_count[0] == 1 and back_count[0] == 1, "Reset, Beenden und Zurück bleiben getrennte Intents")
+
+
+func _assert_conflict_modal(screen: SettingsScreen) -> void:
+	var conflict := SettingsScreenViewModel.BindingConflictViewModel.new(
+		&"active_ability_1",
+		1,
+		"Aktive Fähigkeit 1",
+		&"move_down",
+		"Bewegen · nach unten",
+		"S"
+	)
+	var conflict_model := SettingsScreenViewModel.new(
+		2,
+		_audio_fixture(),
+		_option_fixture(),
+		_toggle_fixture(),
+		_binding_fixture(),
+		"",
+		true,
+		conflict
+	)
+	_check(screen.apply(conflict_model), "Ein Bindingkonflikt aktualisiert die Settings-Ansicht")
+	await _settle()
+	_check(screen.is_binding_conflict_open(), "Eine bereits verwendete Taste öffnet eine ausdrückliche Bestätigung")
+	var modal := screen.find_child("BindingConflictModal", true, false) as PanelContainer
+	_check(modal != null and modal.get_meta(&"alveolus_component", &"") == &"modal_sheet", "Bindingkonflikt verwendet den zentralen ModalSheet")
+	var conflict_text := screen.find_child("BindingConflictText", true, false) as Label
+	_check(conflict_text != null and conflict_text.text.contains("S") and conflict_text.text.contains("Bewegen · nach unten"), "Popup nennt Taste und bestehende Aktion")
+	_check(screen.get_binding_conflict_default_focus_control() == screen.find_child("BindingConflictCancel", true, false), "Die sichere Behalten-Aktion erhält den Standardfokus")
+	_check(get_root().gui_get_focus_owner() == screen.get_binding_conflict_default_focus_control(), "Der verzögerte Navigations-Restore stiehlt dem Konfliktmodal keinen Fokus")
+	var decisions: Array = []
+	screen.binding_conflict_decided.connect(func(action: StringName, slot: int, other: StringName, replace_existing: bool) -> void:
+		decisions.append([action, slot, other, replace_existing])
+	)
+	(screen.find_child("BindingConflictConfirm", true, false) as Button).pressed.emit()
+	_check(decisions == [[&"active_ability_1", 1, &"move_down", true]], "Popup emittiert eine explizite bestätigte Konfliktentscheidung")
+
+	var cleared_model := SettingsScreenViewModel.new(
+		3, _audio_fixture(), _option_fixture(), _toggle_fixture(), _binding_fixture(), "Taste übernommen.", true
+	)
+	_check(screen.apply(cleared_model), "Aufgelöster Bindingkonflikt aktualisiert die Ansicht")
+	await _settle()
+	_check(not screen.is_binding_conflict_open(), "Bestätigung verschwindet erst nach dem aktualisierten View-Model")
+	_check(get_root().gui_get_focus_owner() == screen.control_for_setting(&"binding.active_ability_1.1"), "Nach dem Popup kehrt der Fokus zum konkreten Tastaturplatz zurück")
 
 
 func _assert_sections_are_content_driven(screen: SettingsScreen) -> void:
@@ -131,7 +181,7 @@ func _assert_sections_are_content_driven(screen: SettingsScreen) -> void:
 
 func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	var explanation := screen.find_child("BindingsExplanation", true, false) as Label
-	_check(explanation != null and explanation.text.contains("Aktion") and explanation.text.contains("Belegung"), "Steuerung benennt die sichtbaren Spalten Aktion und Belegung")
+	_check(explanation != null and explanation.text.contains("zwei") and explanation.text.contains("Tastatur"), "Steuerung erklärt die zwei sichtbaren Tastaturplätze ohne Controllertext")
 	for row_name in [
 		"OptionLayout_ui_scale",
 		"ToggleLayout_reduce_motion",
@@ -165,17 +215,45 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	_check(binding_purpose != null and binding_purpose.text == "Details anzeigen", "ui_info benennt seinen Spielerzweck statt nur die interne Aktion")
 	for action_id in [
 		"move_up", "move_down", "move_left", "move_right", "active_ability_1",
-		"active_ability_2", "pause_game", "ui_accept", "ui_cancel", "ui_info",
+		"active_ability_2", "pause_game", "upgrade_1", "upgrade_2", "upgrade_3",
+		"reroll_upgrades", "ui_accept", "ui_cancel", "ui_info",
 	]:
 		var shortcut_card := screen.find_child("BindingCard_%s" % action_id, true, false) as PanelContainer
 		_check(shortcut_card != null, "%s besitzt einen eigenen kompakten Bio-Lumen-Container" % action_id)
+		var slot_group := screen.find_child("BindingSlots_%s" % action_id, true, false) as HBoxContainer
+		_check(slot_group != null and slot_group.get_child_count() == 2, "%s zeigt genau zwei getrennte Tastaturfelder" % action_id)
 	var binding_card := screen.find_child("BindingCard_ui_info", true, false) as PanelContainer
 	if binding_card != null:
 		_check(binding_card.get_meta(&"alveolus_component", &"") == &"shortcut_container", "Shortcut-Container ist semantisch als gemeinsame Einstellungsstruktur markiert")
 		_check(binding_card.get_meta(&"alveolus_surface_role", -1) == AlveolusVisualTheme.SurfaceRole.VALUE_ROW, "Shortcut-Container verwendet die zentrale ValueRow-Fläche")
-	var binding_button := screen.control_for_setting(&"binding.ui_info") as Button
+	var binding_button := screen.control_for_setting(&"binding.ui_info.0") as Button
+	var second_binding_button := screen.control_for_setting(&"binding.ui_info.1") as Button
 	if binding_purpose != null and binding_button != null:
-		_check(binding_purpose.custom_minimum_size.x <= 176.0 and binding_button.custom_minimum_size.x <= 210.0, "Beschreibung und Belegung bleiben in der Containerzeile direkt benachbart")
+		_check(binding_purpose.custom_minimum_size.x <= 188.0 and binding_button.custom_minimum_size.x <= 120.0, "Beschreibung und erster Tastaturplatz bleiben direkt benachbart")
+	for action_id in [&"move_up", &"move_down", &"move_left", &"move_right"]:
+		var movement_row := screen.find_child("BindingLayout_%s" % String(action_id), true, false) as HBoxContainer
+		var movement_purpose := movement_row.find_child("SettingPurpose", true, false) as Label if movement_row != null else null
+		_check(
+			movement_purpose != null
+			and not movement_purpose.clip_text
+			and movement_purpose.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING
+			and _label_fits_single_line(movement_purpose),
+			"%s bleibt im Desktop-Zweispaltenraster vollständig lesbar" % String(action_id)
+		)
+	_check(second_binding_button != null and _button_caption(second_binding_button) == "Nicht belegt", "Ein freier zweiter Tastaturplatz ist ausdrücklich sichtbar")
+	var visible_binding := _button_caption(binding_button)
+	_check(not visible_binding.contains("Y") and not visible_binding.contains("Gamepad"), "Controllerbelegungen sind in der Settings-Zeile visuell ausgeblendet")
+	for setting_id in [&"reduce_motion", &"run_stats", &"fullscreen", &"confirm_restart"]:
+		var toggle := screen.control_for_setting(StringName("toggle.%s" % String(setting_id))) as CheckButton
+		_check(toggle != null and toggle.theme_type_variation == &"", "%s verwendet keinen eigenen Kachelhintergrund" % setting_id)
+		_check(toggle != null and toggle.flat, "%s entfernt die umgebende Button-Kachel vollständig" % setting_id)
+		_check(toggle != null and toggle.custom_minimum_size.y >= 44.0, "%s behält trotz flacher Darstellung ein 44-Pixel-Trefferziel" % setting_id)
+		_check(toggle != null and toggle.get_meta(&"alveolus_component", &"") == &"transparent_toggle", "%s ist redundant als transparenter Switch markiert" % setting_id)
+	for bus_id in [&"master", &"ui", &"effects", &"music"]:
+		var mute := screen.control_for_setting(StringName("audio.%s.mute" % String(bus_id))) as CheckButton
+		_check(mute != null and mute.theme_type_variation == &"", "%s-Stummschaltung liegt transparent in ihrer Audiozeile" % bus_id)
+		_check(mute != null and mute.flat, "%s-Stummschaltung besitzt keine umgebende Button-Kachel" % bus_id)
+		_check(mute != null and mute.custom_minimum_size.y >= 44.0, "%s-Stummschaltung behält ihr 44-Pixel-Trefferziel" % bus_id)
 
 
 func _assert_dependency_contract() -> void:
@@ -218,16 +296,20 @@ func _toggle_fixture() -> Array[SettingsScreenViewModel.ToggleSettingViewModel]:
 func _binding_fixture() -> Array[SettingsScreenViewModel.BindingSettingViewModel]:
 	var result: Array[SettingsScreenViewModel.BindingSettingViewModel] = []
 	for entry in [
-		[&"move_up", "Nach oben", "W / ↑ · D-Pad ↑"],
-		[&"move_down", "Nach unten", "S / ↓ · D-Pad ↓"],
-		[&"move_left", "Nach links", "A / ← · D-Pad ←"],
-		[&"move_right", "Nach rechts", "D / → · D-Pad →"],
-		[&"active_ability_1", "Fähigkeit 1", "Q · LB"],
-		[&"active_ability_2", "Fähigkeit 2", "E · RB"],
-		[&"pause_game", "Pause", "Esc · Menü"],
-		[&"ui_accept", "Bestätigen", "Enter · A"],
-		[&"ui_cancel", "Zurück", "Esc · B"],
-		[&"ui_info", "Informationen", "I · Y"],
+		[&"move_up", "Nach oben", ["W", "↑"]],
+		[&"move_down", "Nach unten", ["S", "↓"]],
+		[&"move_left", "Nach links", ["A", "←"]],
+		[&"move_right", "Nach rechts", ["D", "→"]],
+		[&"active_ability_1", "Fähigkeit 1", ["Q", "Nicht belegt"]],
+		[&"active_ability_2", "Fähigkeit 2", ["E", "Nicht belegt"]],
+		[&"pause_game", "Pause", ["P", "Esc"]],
+		[&"upgrade_1", "Ausbau links", ["1", "Nicht belegt"]],
+		[&"upgrade_2", "Ausbau mittig", ["2", "Nicht belegt"]],
+		[&"upgrade_3", "Ausbau rechts", ["3", "Nicht belegt"]],
+		[&"reroll_upgrades", "Neu ziehen", ["R", "Nicht belegt"]],
+		[&"ui_accept", "Bestätigen", ["Enter", "Leertaste"]],
+		[&"ui_cancel", "Zurück", ["Esc", "Nicht belegt"]],
+		[&"ui_info", "Informationen", ["I", "Nicht belegt"]],
 	]:
 		result.append(SettingsScreenViewModel.BindingSettingViewModel.new(entry[0], entry[1], entry[2]))
 	return result
@@ -278,6 +360,28 @@ func _visible_children_inside(container: Control, tolerance: float = 0.5) -> boo
 			or rect.end.y > bounds.end.y + tolerance:
 			return false
 	return true
+
+
+func _label_fits_single_line(label: Label) -> bool:
+	if label == null:
+		return false
+	var font := label.get_theme_font("font")
+	var font_size := label.get_theme_font_size("font_size")
+	if font == null or font_size <= 0:
+		return false
+	var required_width := font.get_string_size(
+		label.text,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0,
+		font_size
+	).x
+	return label.size.x + 0.5 >= required_width
+
+
+func _button_caption(button: Button) -> String:
+	if button is IconTextButton:
+		return (button as IconTextButton).caption.text
+	return button.text
 
 
 func _check(condition: bool, message: String) -> void:

@@ -6,7 +6,8 @@ signal replay_story
 signal back
 
 const CARD_MINIMUM_WIDTH := 260.0
-const CARD_HEIGHT := 196.0
+const CARD_HEIGHT := 188.0
+const CARD_HEIGHT_COMPACT := 180.0
 
 var _applied_revision := -1
 var _applied_content_hash := 0
@@ -235,17 +236,8 @@ func _build_case_card(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: 
 	record.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	copy.add_child(record)
 
-	var illustration := LevelCaseIllustration.new()
-	illustration.name = "CaseIllustration"
-	illustration.custom_minimum_size = Vector2(72.0, 72.0)
-	illustration.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	illustration.configure(entry.get_order(), entry.is_tutorial(), entry.get_accent())
-	illustration.set_locked(not entry.is_unlocked())
-	row.add_child(illustration)
-
 	if not entry.is_unlocked():
 		copy.modulate = Color(0.66, 0.72, 0.73, 0.58)
-		illustration.modulate = Color(0.56, 0.64, 0.65, 0.52)
 
 	var card_margin := AlveolusUIComponents.margin(row, 12)
 	card_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -301,10 +293,7 @@ func _refresh_responsive_layout() -> void:
 		var card := card_value as Button
 		if card == null:
 			continue
-		card.custom_minimum_size.y = 160.0 if compact else CARD_HEIGHT
-		var illustration := card.find_child("CaseIllustration", true, false) as Control
-		if illustration != null:
-			illustration.custom_minimum_size = Vector2.ONE * (56.0 if compact else 72.0)
+		card.custom_minimum_size.y = CARD_HEIGHT_COMPACT if compact else CARD_HEIGHT
 		var card_margin := card.get_child(0) as MarginContainer
 		if card_margin != null:
 			var inset := 8 if compact else 12

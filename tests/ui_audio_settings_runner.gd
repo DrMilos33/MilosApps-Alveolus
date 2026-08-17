@@ -27,14 +27,18 @@ func _run() -> void:
 
 func _capture_and_prepare_actions() -> void:
 	var defaults := {
-		&"move_up": [_key(KEY_W), _joy(JOY_BUTTON_DPAD_UP)],
-		&"move_down": [_key(KEY_S), _joy(JOY_BUTTON_DPAD_DOWN)],
-		&"move_left": [_key(KEY_A), _joy(JOY_BUTTON_DPAD_LEFT)],
-		&"move_right": [_key(KEY_D), _joy(JOY_BUTTON_DPAD_RIGHT)],
+		&"move_up": [_key(KEY_W), _key(KEY_UP), _joy(JOY_BUTTON_DPAD_UP)],
+		&"move_down": [_key(KEY_S), _key(KEY_DOWN), _joy(JOY_BUTTON_DPAD_DOWN)],
+		&"move_left": [_key(KEY_A), _key(KEY_LEFT), _joy(JOY_BUTTON_DPAD_LEFT)],
+		&"move_right": [_key(KEY_D), _key(KEY_RIGHT), _joy(JOY_BUTTON_DPAD_RIGHT)],
 		&"active_ability_1": [_key(KEY_Q), _joy(JOY_BUTTON_LEFT_SHOULDER)],
 		&"active_ability_2": [_key(KEY_E), _joy(JOY_BUTTON_RIGHT_SHOULDER)],
-		&"pause_game": [_key(KEY_ESCAPE), _joy(JOY_BUTTON_START)],
-		&"ui_accept": [_key(KEY_ENTER), _joy(JOY_BUTTON_A)],
+		&"pause_game": [_key(KEY_P), _key(KEY_ESCAPE), _joy(JOY_BUTTON_START)],
+		&"upgrade_1": [_key(KEY_1)],
+		&"upgrade_2": [_key(KEY_2)],
+		&"upgrade_3": [_key(KEY_3)],
+		&"reroll_upgrades": [_key(KEY_R), _joy(JOY_BUTTON_X)],
+		&"ui_accept": [_key(KEY_ENTER), _key(KEY_SPACE), _joy(JOY_BUTTON_A)],
 		&"ui_cancel": [_key(KEY_BACKSPACE), _joy(JOY_BUTTON_B)],
 		&"ui_info": [_key(KEY_I), _joy(JOY_BUTTON_Y)],
 	}
@@ -73,6 +77,8 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_true(defaults.confirm_run_restart, "Strg+R verlangt standardmäßig eine bewusste Bestätigung")
 	_true(UISettingsState.from_dict({}).confirm_run_restart, "Ältere Einstellungsdaten erhalten den sicheren Neustart-Standard")
 	_true(UISettingsState.CONFIGURABLE_ACTIONS.has(&"ui_info"), "Kontextinformationen besitzen eine konfigurierbare Eingabeaktion")
+	for upgrade_action in [&"upgrade_1", &"upgrade_2", &"upgrade_3", &"reroll_upgrades"]:
+		_true(UISettingsState.CONFIGURABLE_ACTIONS.has(upgrade_action), "%s ist in den Einstellungen frei belegbar" % String(upgrade_action))
 	_true(_has_key(InputMap.action_get_events(&"ui_info"), KEY_I), "Informationen verwenden standardmäßig I")
 	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_Y), "Informationen verwenden standardmäßig Gamepad-Y")
 
@@ -123,11 +129,11 @@ func _test_rebinding_conflicts_and_safe_restore() -> void:
 	_true(UISettingsState.is_reserved_quick_restart_binding(reserved_restart), "Strg+R wird als reservierter Rundenneustart erkannt")
 	_true(not settings.set_single_binding(&"active_ability_1", reserved_restart), "Der globale Neustart-Shortcut kann keine konfigurierbare Spielaktion überschreiben")
 	_true(not settings.set_single_binding(&"ui_info", reserved_restart), "Auch die Informationstaste respektiert die Strg+R-Reservierung")
-	_true(settings.set_single_binding(&"active_ability_1", _key(KEY_R)), "Eine freie Taste kann neu belegt werden")
+	_true(settings.set_single_binding(&"active_ability_1", _key(KEY_H)), "Eine freie Taste kann neu belegt werden")
 	var ability_one_events := InputMap.action_get_events(&"active_ability_1")
-	_true(_has_key(ability_one_events, KEY_R), "Die neue Tastaturbelegung ist sofort aktiv")
+	_true(_has_key(ability_one_events, KEY_H), "Die neue Tastaturbelegung ist sofort aktiv")
 	_true(_has_joy_button(ability_one_events, JOY_BUTTON_LEFT_SHOULDER), "Neue Tastaturbelegung bewahrt die Gamepadbelegung")
-	_true(not settings.set_single_binding(&"active_ability_2", _key(KEY_R)), "Doppelte konfigurierbare Eingaben werden abgelehnt")
+	_true(not settings.set_single_binding(&"active_ability_2", _key(KEY_H)), "Doppelte konfigurierbare Eingaben werden abgelehnt")
 	var chord := _key(KEY_R)
 	chord.ctrl_pressed = true
 	_true(not settings.set_single_binding(&"active_ability_2", chord), "Strg+R bleibt auch nach anderen Belegungen für den Neustart reserviert")
@@ -138,19 +144,46 @@ func _test_rebinding_conflicts_and_safe_restore() -> void:
 	_true(settings.set_single_binding(&"ui_info", _key(KEY_G)), "Die Informationstaste lässt sich unabhängig neu belegen")
 	_true(_has_key(InputMap.action_get_events(&"ui_info"), KEY_G), "Die neue Informationstaste ist sofort aktiv")
 	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_Y), "Ein Tastatur-Remap bewahrt Gamepad-Y")
-	_true(settings.set_single_binding(&"ui_info", _joy(JOY_BUTTON_X)), "Auch die Gamepadbelegung für Informationen lässt sich ändern")
+	_true(settings.set_single_binding(&"ui_info", _joy(JOY_BUTTON_RIGHT_STICK)), "Auch die Gamepadbelegung für Informationen lässt sich ändern")
 	_true(_has_key(InputMap.action_get_events(&"ui_info"), KEY_G), "Ein Gamepad-Remap bewahrt die Informationstaste der Tastatur")
-	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_X), "Der Gamepad-Remap ersetzt Y innerhalb seiner Geräteklasse")
+	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_RIGHT_STICK), "Der Gamepad-Remap ersetzt Y innerhalb seiner Geräteklasse")
 	_true(not _has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_Y), "Die alte Gamepadbelegung bleibt nach dem Remap nicht doppelt aktiv")
 	_true(settings.input_bindings.has("ui_info"), "Der ui_info-Remap verwendet das bestehende save-kompatible Bindingformat")
 
+	var move_up_keys := settings.keyboard_bindings_for(&"move_up")
+	_equal(move_up_keys.size(), 2, "Bewegung stellt beide sichtbaren Tastaturplätze bereit")
+	_equal(move_up_keys[0].physical_keycode, KEY_W, "Der erste Tastaturplatz bewahrt W")
+	_equal(move_up_keys[1].physical_keycode, KEY_UP, "Der zweite Tastaturplatz bewahrt Pfeil hoch")
+	_true(settings.set_keyboard_binding_slot(&"move_up", 1, _key(KEY_T)), "Der zweite Tastaturplatz lässt sich unabhängig ändern")
+	var remapped_move_up := InputMap.action_get_events(&"move_up")
+	_true(_has_key(remapped_move_up, KEY_W) and _has_key(remapped_move_up, KEY_T), "Ein Slot-Remap bewahrt die andere Tastaturbelegung")
+	_true(_has_joy_button(remapped_move_up, JOY_BUTTON_DPAD_UP), "Unsichtbare Controllerbelegungen bleiben beim Tastatur-Remap aktiv")
+	_equal(settings.keyboard_binding_conflict(&"active_ability_1", _key(KEY_S)), &"move_down", "Eine anderweitig verwendete Taste benennt die Konfliktaktion")
+	_true(not settings.set_keyboard_binding_slot(&"active_ability_1", 1, _key(KEY_S)), "Konflikte werden ohne Bestätigung nicht still übernommen")
+	_true(settings.set_keyboard_binding_slot(&"active_ability_1", 1, _key(KEY_S), true), "Eine ausdrücklich bestätigte Taste wird übernommen")
+	_true(_has_key(InputMap.action_get_events(&"active_ability_1"), KEY_H) and _has_key(InputMap.action_get_events(&"active_ability_1"), KEY_S), "Bestätigtes Verschieben bewahrt den anderen Fähigkeitsslot")
+	_true(not _has_key(InputMap.action_get_events(&"move_down"), KEY_S), "Bestätigtes Verschieben entfernt die Taste atomar von der Konfliktaktion")
+	_true(_has_key(InputMap.action_get_events(&"move_down"), KEY_DOWN), "Die zweite Taste hält die bisherige Konfliktaktion weiterhin bedienbar")
+	_true(settings.input_bindings.has("move_down"), "Auch die veränderte Konfliktaktion wird im vorhandenen Saveformat aktualisiert")
+
+	# Legacy saves may contain more keyboard events than the two visible slots.
+	# Editing one visible slot must not silently erase those additional inputs.
+	InputMap.action_add_event(&"ui_accept", _key(KEY_KP_ENTER))
+	_true(settings.set_keyboard_binding_slot(&"ui_accept", 0, _key(KEY_U)), "Ein sichtbarer Bestätigen-Slot lässt sich trotz Legacy-Zusatztaste ändern")
+	_true(_has_key(InputMap.action_get_events(&"ui_accept"), KEY_U) and _has_key(InputMap.action_get_events(&"ui_accept"), KEY_SPACE), "Beide sichtbaren Bestätigen-Slots bleiben erhalten")
+	_true(_has_key(InputMap.action_get_events(&"ui_accept"), KEY_KP_ENTER), "Eine zusätzliche Legacy-Tastaturbelegung wird beim Zwei-Slot-Edit nicht gelöscht")
+
+	InputMap.action_add_event(&"ui_cancel", _key(KEY_ESCAPE))
+	var escape_conflicts := settings.keyboard_binding_conflicts(&"active_ability_2", _key(KEY_ESCAPE))
+	_true(escape_conflicts.has(&"pause_game") and escape_conflicts.has(&"ui_cancel"), "Ein Mehrfachkonflikt benennt jede betroffene Aktion vor der Übernahme")
+
 	InputMap.action_erase_events(&"active_ability_1")
-	InputMap.action_add_event(&"active_ability_1", _key(KEY_T))
+	InputMap.action_add_event(&"active_ability_1", _key(KEY_V))
 	settings.apply_saved_bindings()
-	_true(_has_key(InputMap.action_get_events(&"active_ability_1"), KEY_R), "Gespeicherte Belegung wird wieder angewendet")
+	_true(_has_key(InputMap.action_get_events(&"active_ability_1"), KEY_H), "Gespeicherte Belegung wird wieder angewendet")
 	_true(_has_joy_button(InputMap.action_get_events(&"active_ability_1"), JOY_BUTTON_LEFT_SHOULDER), "Gespeicherter Roundtrip bewahrt beide Geräteklassen")
 	_true(_has_key(InputMap.action_get_events(&"ui_info"), KEY_G), "Der gespeicherte ui_info-Roundtrip stellt die Tastaturklasse wieder her")
-	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_X), "Der gespeicherte ui_info-Roundtrip stellt die Gamepadklasse wieder her")
+	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_RIGHT_STICK), "Der gespeicherte ui_info-Roundtrip stellt die Gamepadklasse wieder her")
 
 	var saved_gamepad := UISettingsState.new()
 	saved_gamepad.input_bindings = {
@@ -184,7 +217,7 @@ func _test_input_glyphs_follow_bindings_and_device() -> void:
 	var notifications := [0]
 	service.input_method_changed.connect(func(_method: StringName) -> void: notifications[0] += 1)
 	service.configure(UISettingsState.GLYPH_KEYBOARD)
-	_equal(service.glyph_for_action(&"active_ability_1"), "R", "Tastatursymbol folgt der tatsächlichen neuen Belegung")
+	_equal(service.glyph_for_action(&"active_ability_1"), "H", "Tastatursymbol folgt der tatsächlichen neuen Belegung")
 	_true(service.icon_for_action(&"active_ability_1") == null, "Eine freie Remap-Taste verwendet bewusst den Textfallback")
 	_equal(service.glyph_for_action(&"ui_info"), "I", "Die Informationstaste löst auf der Tastatur ihr tatsächliches Glyph auf")
 	_equal(InputGlyphService.caption_for_action(&"ui_info"), "Informationen", "Die Einstellungszeile benennt ui_info verständlich")
@@ -351,7 +384,10 @@ func _test_save_v5_settings_roundtrip() -> void:
 	settings.glyph_mode = UISettingsState.GLYPH_GAMEPAD
 	settings.confirm_run_restart = false
 	settings.input_bindings = {
-		"active_ability_1": [{"type": "key", "physical_keycode": KEY_R, "keycode": 0}],
+		"active_ability_1": [
+			{"type": "key", "physical_keycode": KEY_Q, "keycode": 0},
+			{"type": "key", "physical_keycode": KEY_F, "keycode": 0},
+		],
 		"ui_info": [
 			{"type": "key", "physical_keycode": KEY_I, "keycode": 0},
 			{"type": "joy_button", "button_index": JOY_BUTTON_Y},
@@ -370,6 +406,7 @@ func _test_save_v5_settings_roundtrip() -> void:
 	_true(not restored.ui_settings.confirm_run_restart, "Die ausgeschaltete Neustartbestätigung überlebt den Savegame-Roundtrip")
 	_true(restored.ui_settings.input_bindings.has("ui_info"), "Eine angepasste ui_info-Belegung überlebt ohne neue Saveversion")
 	_equal((restored.ui_settings.input_bindings["ui_info"] as Array).size(), 2, "ui_info bewahrt Tastatur- und Gamepadklasse im Save-v5-Container")
+	_equal((restored.ui_settings.input_bindings["active_ability_1"] as Array).size(), 2, "Zwei Tastaturplätze überleben unverändert im Save-v5-Container")
 	var migrated := MetaProgressionState.new(func() -> int: return 900000)
 	_true(migrated.load_dict({"version": 4, "research_points": 17}), "Save v4 wird weiterhin migriert")
 	_equal(migrated.ui_settings.to_dict(), UISettingsState.new().to_dict(), "Save v4 erhält vollständige sichere Standardeinstellungen")

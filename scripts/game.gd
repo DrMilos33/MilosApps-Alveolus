@@ -256,7 +256,7 @@ func _ready() -> void:
 	treatment_controller.set_physics_process(false)
 	ability_controller = AbilityController.new()
 	ability_controller.ability_used.connect(_on_ability_used)
-	ability_controller.ability_failed.connect(_on_ability_failed)
+	ability_controller.execution_completed.connect(_on_ability_execution_completed)
 	ability_controller.cooldown_changed.connect(_on_ability_cooldown_changed)
 	ability_controller.feedback_requested.connect(_on_ability_feedback_requested)
 	ability_controller.shield_changed.connect(_on_ability_shield_changed)
@@ -415,7 +415,7 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 		return
 	if selected_level.is_tutorial:
 		_intro_step(delta)
-		hud.update_intro_timer(intro_lesson, intro_phase, state.boss_spawned)
+		hud.update_round_time(state.elapsed)
 	else:
 		hud.update_timer(state.elapsed, config.run_duration_seconds, config.final_deadline_seconds, state.boss_spawned)
 	pressure_grace_timer = maxf(0.0, pressure_grace_timer - delta)
@@ -484,6 +484,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	# actions are edge-triggered, so an echo must never enqueue a second cast or
 	# repeat a destructive navigation action.
 	if event is InputEventKey and (event as InputEventKey).echo:
+		return
+	# Binding capture and its confirmation sheet are exclusive input layers.
+	# GUI actions get the first chance to consume the event; anything reaching
+	# this fallback must not trigger pause, reroll or another gameplay command.
+	if hud != null and hud.is_binding_interaction_active():
+		get_viewport().set_input_as_handled()
 		return
 	if _is_quick_restart_event(event):
 		get_viewport().set_input_as_handled()
@@ -580,7 +586,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_confirm_ability_targeting()
 				get_viewport().set_input_as_handled()
 				return
-	if flow_state == GameFlowState.State.DISCOVERY_PAUSE and event is InputEventKey and event.pressed and event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
+	if flow_state == GameFlowState.State.DISCOVERY_PAUSE and event.is_action_pressed(&"ui_accept"):
 		_on_discovery_dismissed()
 		get_viewport().set_input_as_handled()
 		return
@@ -910,7 +916,7 @@ func _on_ui_settings_changed(settings: UISettingsState) -> void:
 	_save_meta()
 
 func _on_settings_reset_bindings_requested() -> void:
-	for action in [&"move_left", &"move_right", &"move_up", &"move_down", &"pause_game", &"active_ability_1", &"active_ability_2", &"ui_accept", &"ui_cancel", &"ui_info", &"reroll_upgrades"]:
+	for action in [&"move_left", &"move_right", &"move_up", &"move_down", &"pause_game", &"active_ability_1", &"active_ability_2", &"upgrade_1", &"upgrade_2", &"upgrade_3", &"reroll_upgrades", &"ui_accept", &"ui_cancel", &"ui_info"]:
 		if InputMap.has_action(action):
 			InputMap.action_erase_events(action)
 	_register_input_actions()
@@ -1231,7 +1237,7 @@ func start_run(run_context: RunContext = null) -> void:
 		ability_controller.clear()
 		hud.configure_active_abilities([])
 		hud.hide_finding_progress()
-		hud.update_intro_timer(1, intro_phase, false)
+		hud.update_round_time(0.0)
 		if not meta.tutorial_status.has(&"movement"):
 			hud.show_alert("Bewege dich mit WASD oder den Pfeiltasten", Color("f2bd68"), 3.2)
 	else:
@@ -2201,8 +2207,14 @@ func _on_ability_used(slot: int, _ability_id: StringName, _target: Vector2) -> v
 	last_ability_slot = slot
 	last_ability_time = state.elapsed if state != null else 0.0
 
-func _on_ability_failed(_slot: int, reason: String) -> void:
-	hud.show_alert(reason, Color("eab553"), 1.5)
+func _on_ability_execution_completed(result: AbilityExecutionResult) -> void:
+	if result == null or result.success:
+		return
+	if result.code == AbilityExecutionResult.Code.COOLDOWN:
+		if ui_sound_service != null:
+			ui_sound_service.play(UISoundService.ABILITY_BLOCKED)
+		return
+	hud.show_alert(result.reason, Color("eab553"), 1.5)
 
 func _on_ability_cooldown_changed(slot: int, remaining: float, total: float) -> void:
 	var title := ""
@@ -2992,7 +3004,7 @@ func _register_input_actions() -> void:
 	_add_keys(&"reroll_upgrades", [KEY_R])
 	_add_keys(&"active_ability_1", [KEY_Q])
 	_add_keys(&"active_ability_2", [KEY_E])
-	_add_keys(&"ui_accept", [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE])
+	_add_keys(&"ui_accept", [KEY_ENTER, KEY_SPACE])
 	_add_keys(&"ui_cancel", [KEY_ESCAPE])
 	_add_keys(&"ui_info", [KEY_I])
 	_add_joy_button(&"move_left", JOY_BUTTON_DPAD_LEFT)

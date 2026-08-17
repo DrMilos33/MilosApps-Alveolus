@@ -76,6 +76,7 @@ var run_hud_vitals: Dictionary = {
 	"stability_maximum": 100.0,
 	"shield_current": 0.0,
 	"shield_maximum": 0.0,
+	"round_time_text": "00:00",
 	"timer_text": "BOSS IN · 00:00",
 	"timer_tone": &"neutral",
 	"boss_visible": false,
@@ -148,7 +149,7 @@ var ability_key_labels: Array[Label] = []
 var ability_key_icons: Array[TextureRect] = []
 var ability_cooldown_labels: Array[Label] = []
 var ability_cooldown_bars: Array[ProgressBar] = []
-var finding_progress_panel: Panel
+var finding_progress_panel: Control
 var finding_progress_bar: ProgressBar
 var finding_progress_label: Label
 var run_stats_enabled: bool = false
@@ -219,7 +220,6 @@ var level_screen: CaseArchiveScreen
 var level_view_revision: int = 0
 var level_buttons: Dictionary = {}
 var level_card_labels: Dictionary = {}
-var level_illustrations: Dictionary = {}
 var lexicon_overlay: Control
 var lexicon_master_detail: LexiconMasterDetail
 var lexicon_buttons: Dictionary = {}
@@ -263,7 +263,9 @@ var settings_scroll: ScrollContainer
 var settings_upper_grid: GridContainer
 var settings_bindings_grid: GridContainer
 var pending_binding_action: StringName = &""
-var pending_binding_axis_latched: bool = false
+var pending_binding_slot: int = -1
+var pending_binding_event: InputEventKey
+var pending_binding_conflicting_action: StringName = &""
 var current_ui_settings: UISettingsState = UISettingsState.new()
 var input_glyph_service: InputGlyphService
 var reduced_motion_enabled: bool = false
@@ -494,6 +496,13 @@ func _process(delta: float) -> void:
 		set_process(false)
 
 func _input(event: InputEvent) -> void:
+	if settings_overlay != null and settings_overlay.is_visible_in_tree() and settings_screen != null and settings_screen.is_binding_conflict_open():
+		var cancel_conflict: bool = (event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE) \
+			or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_B)
+		if cancel_conflict:
+			settings_screen.cancel_binding_conflict()
+			get_viewport().set_input_as_handled()
+		return
 	if pending_binding_action == &"" or not settings_overlay.visible:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -503,22 +512,6 @@ func _input(event: InputEvent) -> void:
 			return
 		_apply_binding_event(event)
 		get_viewport().set_input_as_handled()
-	elif event is InputEventJoypadButton and event.pressed:
-		if event.button_index == JOY_BUTTON_B:
-			_cancel_binding_capture()
-		else:
-			_apply_binding_event(event)
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		_apply_binding_event(event)
-		get_viewport().set_input_as_handled()
-	elif event is InputEventJoypadMotion:
-		if absf(event.axis_value) <= 0.35:
-			pending_binding_axis_latched = false
-		elif absf(event.axis_value) >= 0.75 and not pending_binding_axis_latched:
-			pending_binding_axis_latched = true
-			_apply_binding_event(event)
-			get_viewport().set_input_as_handled()
 
 func _build_gameplay_hud() -> Control:
 	var layer := Control.new()
@@ -572,7 +565,7 @@ func _build_gameplay_hud() -> Control:
 	announcement_margin.add_child(boss_announcement)
 	boss_announcement_panel.hide()
 
-	finding_progress_panel = Panel.new()
+	finding_progress_panel = Control.new()
 	finding_progress_panel.name = "FindingProgress"
 	finding_progress_panel.set_anchor(SIDE_LEFT, 0.5)
 	finding_progress_panel.set_anchor(SIDE_RIGHT, 0.5)
@@ -583,7 +576,6 @@ func _build_gameplay_hud() -> Control:
 	finding_progress_panel.offset_top = -40.0
 	finding_progress_panel.offset_bottom = -10.0
 	finding_progress_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	AlveolusUIComponents.apply_surface_role(finding_progress_panel, AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, COLOR_GOLD)
 	layer.add_child(finding_progress_panel)
 	var finding_margin := _margin(9, 4, 9, 4)
 	finding_progress_panel.add_child(finding_margin)
@@ -809,7 +801,8 @@ func _build_settings() -> Control:
 	)
 	settings_screen.option_changed.connect(_on_settings_option_changed)
 	settings_screen.toggle_changed.connect(_on_settings_toggle_changed)
-	settings_screen.binding_change_requested.connect(_begin_binding_capture)
+	settings_screen.binding_slot_change_requested.connect(_begin_binding_capture)
+	settings_screen.binding_conflict_decided.connect(_on_binding_conflict_decided)
 	settings_screen.bindings_reset_requested.connect(func() -> void: settings_reset_bindings_requested.emit())
 	settings_screen.quit_requested.connect(func() -> void: quit_requested.emit())
 	settings_screen.back.connect(func() -> void: back_requested.emit())
@@ -861,12 +854,28 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 	]
 	var binding_settings: Array[SettingsScreenViewModel.BindingSettingViewModel] = []
 	for action in UISettingsState.CONFIGURABLE_ACTIONS:
+		var keyboard_slots: Array[String] = []
+		for slot_index in range(UISettingsState.KEYBOARD_BINDING_SLOT_COUNT):
+			keyboard_slots.append(_keyboard_binding_slot_summary(action, slot_index))
 		binding_settings.append(SettingsScreenViewModel.BindingSettingViewModel.new(
 			action,
 			_binding_caption(action),
-			_binding_summary(action),
-			pending_binding_action == action
+			keyboard_slots,
+			pending_binding_slot if pending_binding_action == action else -1
 		))
+	var conflict_view_model: SettingsScreenViewModel.BindingConflictViewModel = null
+	if pending_binding_event != null and pending_binding_action != &"" and pending_binding_conflicting_action != &"":
+		var conflict_labels: PackedStringArray = []
+		for conflict_action in current_ui_settings.keyboard_binding_conflicts(pending_binding_action, pending_binding_event):
+			conflict_labels.append(_binding_caption(conflict_action))
+		conflict_view_model = SettingsScreenViewModel.BindingConflictViewModel.new(
+			pending_binding_action,
+			pending_binding_slot,
+			_binding_caption(pending_binding_action),
+			pending_binding_conflicting_action,
+			", ".join(conflict_labels) if not conflict_labels.is_empty() else _binding_caption(pending_binding_conflicting_action),
+			InputGlyphService.text_for_event(pending_binding_event)
+		)
 	var model := SettingsScreenViewModel.new(
 		settings_view_revision,
 		audio_settings,
@@ -874,7 +883,8 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 		toggle_settings,
 		binding_settings,
 		settings_status_text,
-		settings_show_quit
+		settings_show_quit,
+		conflict_view_model
 	)
 	settings_screen.apply(model)
 	_map_settings_compatibility_controls()
@@ -904,7 +914,7 @@ func _map_settings_compatibility_controls() -> void:
 	settings_initial_focus = settings_screen.get_default_focus_control()
 	settings_binding_buttons.clear()
 	for action in UISettingsState.CONFIGURABLE_ACTIONS:
-		var button := settings_screen.control_for_setting(StringName("binding.%s" % String(action))) as Button
+		var button := settings_screen.control_for_setting(StringName("binding.%s.0" % String(action))) as Button
 		if button != null:
 			settings_binding_buttons[action] = button
 
@@ -998,20 +1008,21 @@ func _emit_ui_settings_changed() -> void:
 	current_ui_settings.apply_audio()
 	ui_settings_changed.emit(current_ui_settings.duplicate_settings())
 
-func _begin_binding_capture(action: StringName) -> void:
+func _begin_binding_capture(action: StringName, slot_index: int = 0) -> void:
+	if not UISettingsState.CONFIGURABLE_ACTIONS.has(action):
+		return
 	pending_binding_action = action
-	pending_binding_axis_latched = false
-	settings_status_text = "Taste, Maustaste oder Gamepadeingabe für „%s“ drücken. Escape bricht ab." % _binding_caption(action)
+	pending_binding_slot = clampi(slot_index, 0, UISettingsState.KEYBOARD_BINDING_SLOT_COUNT - 1)
+	pending_binding_event = null
+	pending_binding_conflicting_action = &""
+	settings_status_text = "Tastaturtaste für „%s“ · Platz %d drücken. Escape bricht ab." % [_binding_caption(action), pending_binding_slot + 1]
 	_refresh_settings_screen(settings_show_quit)
-	for button in settings_binding_buttons.values():
-		AlveolusUIComponents.set_button_disabled(button as Button, true)
-	if settings_binding_buttons.has(action):
-		var selected_button: Button = settings_binding_buttons[action]
-		AlveolusUIComponents.set_button_disabled(selected_button, false)
 
 func _cancel_binding_capture() -> void:
 	pending_binding_action = &""
-	pending_binding_axis_latched = false
+	pending_binding_slot = -1
+	pending_binding_event = null
+	pending_binding_conflicting_action = &""
 	settings_status_text = "Belegung nicht verändert."
 	_play_ui_sound(UISoundService.BACK)
 	if settings_overlay != null and settings_overlay.visible:
@@ -1019,16 +1030,27 @@ func _cancel_binding_capture() -> void:
 
 func _apply_binding_event(event: InputEvent) -> void:
 	var action := pending_binding_action
-	if action == &"":
+	if action == &"" or pending_binding_slot < 0 or not event is InputEventKey:
 		return
 	if UISettingsState.is_reserved_quick_restart_binding(event):
 		settings_status_text = "Strg+R ist für den Rundenneustart reserviert."
 		_play_ui_sound(UISoundService.ERROR)
 		_refresh_binding_buttons()
 		return
-	if current_ui_settings.set_single_binding(action, event):
+	var key_event := event as InputEventKey
+	var conflicting_actions := current_ui_settings.keyboard_binding_conflicts(action, key_event)
+	if not conflicting_actions.is_empty():
+		pending_binding_event = key_event.duplicate() as InputEventKey
+		pending_binding_conflicting_action = conflicting_actions[0]
+		settings_status_text = "„%s“ ist bereits belegt. Bitte Übernahme bestätigen." % InputGlyphService.text_for_event(key_event)
+		_play_ui_sound(UISoundService.OPEN)
+		_refresh_binding_buttons()
+		return
+	if current_ui_settings.set_keyboard_binding_slot(action, pending_binding_slot, key_event):
 		pending_binding_action = &""
-		pending_binding_axis_latched = false
+		pending_binding_slot = -1
+		pending_binding_event = null
+		pending_binding_conflicting_action = &""
 		settings_status_text = "„%s“ wurde neu belegt." % _binding_caption(action)
 		_play_ui_sound(UISoundService.CONFIRM)
 		_emit_ui_settings_changed()
@@ -1037,25 +1059,57 @@ func _apply_binding_event(event: InputEvent) -> void:
 		_play_ui_sound(UISoundService.ERROR)
 	_refresh_binding_buttons()
 
+func _on_binding_conflict_decided(
+	action: StringName,
+	slot_index: int,
+	conflicting_action: StringName,
+	replace_existing: bool
+) -> void:
+	if action != pending_binding_action or slot_index != pending_binding_slot or conflicting_action != pending_binding_conflicting_action or pending_binding_event == null:
+		return
+	var applied := replace_existing and current_ui_settings.set_keyboard_binding_slot(action, slot_index, pending_binding_event, true)
+	pending_binding_action = &""
+	pending_binding_slot = -1
+	pending_binding_event = null
+	pending_binding_conflicting_action = &""
+	if applied:
+		settings_status_text = "„%s“ wurde übernommen." % _binding_caption(action)
+		_play_ui_sound(UISoundService.CONFIRM)
+		_emit_ui_settings_changed()
+	else:
+		settings_status_text = "Die bestehende Belegung bleibt erhalten."
+		_play_ui_sound(UISoundService.BACK)
+	_refresh_binding_buttons()
+
 func _refresh_binding_buttons() -> void:
 	_refresh_settings_screen(settings_show_quit)
 
+func is_binding_interaction_active() -> bool:
+	if settings_overlay == null or not settings_overlay.is_visible_in_tree():
+		return false
+	return pending_binding_action != &"" or (settings_screen != null and settings_screen.is_binding_conflict_open())
+
+func _clear_binding_interaction() -> void:
+	pending_binding_action = &""
+	pending_binding_slot = -1
+	pending_binding_event = null
+	pending_binding_conflicting_action = &""
+	settings_status_text = ""
+
 func _binding_summary(action: StringName) -> String:
-	var keyboard_mouse: PackedStringArray = []
-	var gamepad: PackedStringArray = []
-	for event in InputMap.action_get_events(action):
-		var text := InputGlyphService.text_for_event(event)
-		if text.is_empty():
-			continue
-		if event is InputEventKey or event is InputEventMouseButton:
-			keyboard_mouse.append(text)
-		elif event is InputEventJoypadButton or event is InputEventJoypadMotion:
-			gamepad.append(text)
-	if keyboard_mouse.is_empty():
-		keyboard_mouse.append("Nicht belegt")
-	if gamepad.is_empty():
-		gamepad.append("Kein Gamepad")
-	return "%s  |  %s" % [" / ".join(keyboard_mouse), " / ".join(gamepad)]
+	var slots: PackedStringArray = []
+	for slot_index in range(UISettingsState.KEYBOARD_BINDING_SLOT_COUNT):
+		slots.append(_keyboard_binding_slot_summary(action, slot_index))
+	return " / ".join(slots)
+
+func _keyboard_binding_slot_summary(action: StringName, slot_index: int) -> String:
+	if current_ui_settings == null:
+		return "Nicht belegt"
+	var bindings := current_ui_settings.keyboard_bindings_for(action)
+	if slot_index < 0 or slot_index >= bindings.size():
+		return "Nicht belegt"
+	var text := InputGlyphService.text_for_event(bindings[slot_index])
+	return text if not text.is_empty() else "Nicht belegt"
 
 func _binding_caption(action: StringName) -> String:
 	return InputGlyphService.caption_for_action(action)
@@ -1456,7 +1510,7 @@ func _build_preparation() -> Control:
 	plan_title.add_theme_font_override("font", AlveolusVisualTheme.body_font())
 	plan_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	plan_header.add_child(plan_title)
-	preparation_capacity_label = _label("0 / 8 KAPAZITÄT", 12, Color("56d2c7"))
+	preparation_capacity_label = _label("0 / 8 KAPAZITÄT", 12, Color("f0bc57"))
 	preparation_capacity_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	plan_header.add_child(preparation_capacity_label)
 	preparation_capacity_bar = ProgressBar.new()
@@ -2373,7 +2427,6 @@ func show_level_select(meta: MetaProgressionState, levels: Array[LevelDefinition
 	level_screen.apply_view_model(CaseArchiveViewModel.new(level_view_revision, entries, &""))
 	level_buttons.clear()
 	level_card_labels.clear()
-	level_illustrations.clear()
 	for level in levels:
 		var button := level_screen.card_for_case(level.id)
 		if button == null:
@@ -2386,7 +2439,6 @@ func show_level_select(meta: MetaProgressionState, levels: Array[LevelDefinition
 			"best": button.find_child("Best", true, false),
 			"record": button.find_child("Record", true, false),
 		}
-		level_illustrations[level.id] = button.find_child("CaseIllustration", true, false)
 	level_overlay.show()
 	level_screen.grab_initial_focus.call_deferred()
 
@@ -2448,6 +2500,7 @@ func is_context_detail_explicit() -> bool:
 	return context_detail_controller != null and context_detail_controller.is_explicit()
 
 func configure_ui_settings(settings: UISettingsState) -> void:
+	_clear_binding_interaction()
 	current_ui_settings = settings.duplicate_settings() if settings != null else UISettingsState.new()
 	reduced_motion_enabled = current_ui_settings.reduce_motion
 	_refresh_settings_screen(settings_show_quit)
@@ -2703,7 +2756,7 @@ func _case_modifier_fact(modifier: Variant) -> Dictionary:
 			amount = (value - 1.0) * 100.0 if operation == &"multiply" else value
 			beneficial = amount <= 0.0
 		&"contact_damage":
-			caption = "Kontaktdruck"
+			caption = "Kontaktschaden"
 			amount = (value - 1.0) * 100.0 if operation == &"multiply" else value
 			beneficial = amount <= 0.0
 		_:
@@ -2747,8 +2800,9 @@ func _refresh_run_stats() -> void:
 	if run_stats_panel == null:
 		return
 	var available := current_player_stats != null
-	var compact_critical_overlay := root != null and root.size.x < 740.0 and (boss_hud_active or alert_time > 0.0)
-	var should_show := run_stats_enabled and available and not compact_critical_overlay
+	# The compact four-column strip has a dedicated top-right lane. Critical
+	# alerts no longer need to erase player-selected combat values.
+	var should_show := run_stats_enabled and available
 	if not available:
 		run_hud_stat_rows.clear()
 		_apply_run_hud_model()
@@ -3057,12 +3111,21 @@ func hide_finding_progress() -> void:
 	finding_progress_panel.hide()
 
 func update_timer(elapsed: float, boss_spawn_seconds: float, deadline_seconds: float, boss_active: bool) -> void:
-	var remaining := maxf(0.0, (deadline_seconds if boss_active else boss_spawn_seconds) - elapsed)
-	var timer_text := "%s %s" % ["BOSS AKTIV ·" if boss_active else "BOSS IN", _clock_text(remaining)]
-	var timer_tone := &"danger" if boss_active else &"neutral"
-	if run_hud_vitals.get("timer_text", "") == timer_text and run_hud_vitals.get("timer_tone", &"") == timer_tone:
+	# The permanent top-right readout is elapsed round time. Boss state keeps
+	# its own dedicated bar and must not repurpose the clock into a countdown.
+	if boss_spawn_seconds < 0.0 or deadline_seconds < 0.0 or boss_active:
+		# Retain the established facade arguments without allocating per frame;
+		# the elapsed readout deliberately ignores the former countdown context.
+		pass
+	update_round_time(elapsed)
+
+func update_round_time(elapsed: float) -> void:
+	var round_time_text := _clock_text(maxf(elapsed, 0.0))
+	var timer_tone := &"neutral"
+	if run_hud_vitals.get("round_time_text", "") == round_time_text and run_hud_vitals.get("timer_tone", &"") == timer_tone:
 		return
-	run_hud_vitals["timer_text"] = timer_text
+	run_hud_vitals["round_time_text"] = round_time_text
+	run_hud_vitals["timer_text"] = round_time_text
 	run_hud_vitals["timer_tone"] = timer_tone
 	_apply_run_hud_model()
 
@@ -3117,12 +3180,13 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 		if definition == null:
 			continue
 		var preview := stats.preview_upgrade(definition)
+		var comparison := _split_upgrade_comparison(preview.before_after_text)
 		rows.append({
 			"id": definition.id,
 			"title": definition.title,
 			"effect": _intro_upgrade_copy(definition.id) if scripted_intro else preview.effect_text,
-			"before": "",
-			"after": "" if scripted_intro else preview.before_after_text,
+			"before": "" if scripted_intro else comparison[0],
+			"after": "" if scripted_intro else comparison[1],
 			"icon_id": _upgrade_icon_kind(definition),
 			"accent_role": _upgrade_accent_role(definition),
 		})
@@ -3152,6 +3216,15 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 	reroll_button = upgrade_screen.reroll_action()
 	if upgrade_target_preview != null:
 		upgrade_target_preview.clear()
+
+func _split_upgrade_comparison(copy: String) -> Array[String]:
+	var separator_index := copy.find(">")
+	if separator_index < 0:
+		return ["", copy.strip_edges()]
+	return [
+		copy.substr(0, separator_index).strip_edges(),
+		copy.substr(separator_index + 1).strip_edges(),
+	]
 
 func _upgrade_accent_role(definition: UpgradeDefinition) -> StringName:
 	match definition.path:
@@ -3506,6 +3579,7 @@ func _all_overlays() -> Array[Control]:
 	return [campus_overlay, practice_overlay, research_overlay, level_overlay, lexicon_overlay, story_overlay, settings_overlay, preparation_overlay, upgrade_overlay, pause_overlay, pause_stats_overlay, abort_overlay, intro_skip_overlay, restart_overlay, finding_overlay, end_overlay]
 
 func _hide_all() -> void:
+	_clear_binding_interaction()
 	gameplay_hud.hide()
 	close_all_context_details()
 	if upgrade_target_preview != null:
@@ -3740,7 +3814,7 @@ func _build_preparation_slot_card(slot_id: StringName) -> Button:
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
 	right.add_theme_constant_override("separation", 4)
 	row.add_child(right)
-	var cost := _label("0 K", 14, Color("f0bc57"))
+	var cost := _label("0", 14, Color("f0bc57"))
 	cost.name = "Cost"
 	cost.add_theme_font_override("font", AlveolusVisualTheme.body_font())
 	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -3827,7 +3901,7 @@ func _refresh_preparation_slot_content(slot_id: StringName, component_id: String
 	if component_id == &"":
 		title_label.text = "%s · Wählen" % caption
 		description_label.text = "Freier Platz"
-		cost_label.text = "0 K"
+		cost_label.text = "0"
 		icon.configure(&"plus", Color("51d6cb"))
 		return
 	var component_title := String(_view_value(entry, &"title", String(component_id)))
@@ -3837,7 +3911,7 @@ func _refresh_preparation_slot_content(slot_id: StringName, component_id: String
 	var icon_kind := visual_id if SimpleIcon.supports(visual_id) else _component_icon_kind(kind_value)
 	title_label.text = "%s · %s" % [caption, component_title]
 	description_label.text = _preparation_slot_short_description(component_id, entry)
-	cost_label.text = "%d K" % cost
+	cost_label.text = "%d" % cost
 	icon.configure(icon_kind, Color("51d6cb"))
 
 func _preparation_slot_short_description(component_id: StringName, entry: Variant) -> String:
@@ -3845,7 +3919,7 @@ func _preparation_slot_short_description(component_id: StringName, entry: Varian
 		&"precise", &"treatment_precision": return "Präziser Einzelimpuls"
 		&"focus", &"ability_focus_field": return "Verstärkt das Zielgebiet"
 		&"emergency", &"ability_emergency_support": return "Stabilität und Schutz"
-		&"shield", &"ability_defense_burst": return "Abwehr und Rückstoß"
+		&"shield", &"ability_defense_burst": return "AoE-Schaden und Rückstoß"
 	var description := String(_view_value(entry, &"description", _view_value(entry, &"effect", "Vorbereitete Komponente")))
 	var first_sentence := description.get_slice(".", 0).strip_edges()
 	return first_sentence if not first_sentence.is_empty() else "Vorbereitete Komponente"
@@ -3935,7 +4009,7 @@ func show_preparation_replacement(component_id: StringName, compatible_slots: Ar
 	)
 	preparation_replacement_slots = [target_slot]
 	preparation_confirm_current.text = "%s\n%s" % [_loadout_slot_caption(target_slot), planning_snapshot.current_title]
-	preparation_confirm_candidate.text = "%s · %d K\n%s" % [planning_snapshot.candidate_title, planning_snapshot.candidate_cost, planning_snapshot.candidate_description]
+	preparation_confirm_candidate.text = "%s · %d\n%s" % [planning_snapshot.candidate_title, planning_snapshot.candidate_cost, planning_snapshot.candidate_description]
 	preparation_confirm_capacity.text = planning_snapshot.capacity_change_text(current_preparation_capacity_limit)
 	_set_preparation_validation("Austausch offen.", COLOR_GOLD)
 	_apply_preparation_editor_state(false)
@@ -4128,7 +4202,7 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	state_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	state_label.visible = not state_text.is_empty()
 	title_stack.add_child(state_label)
-	var cost_text := "0 PLAN-K" if planning_snapshot.mode == PlanningSnapshot.Mode.RESERVE_PICK else "%d K" % cost
+	var cost_text := "0" if planning_snapshot.mode == PlanningSnapshot.Mode.RESERVE_PICK else "%d" % cost
 	var cost_label := _label(cost_text, 14, Color("8aa2a1") if current else (muted_content if not available else Color("f0bc57")))
 	cost_label.name = "Cost"
 	cost_label.custom_minimum_size.x = 40.0
@@ -4198,11 +4272,11 @@ func _preparation_component_context_payload(id: StringName) -> Dictionary:
 	var icon_kind := visual_id if SimpleIcon.supports(visual_id) else _component_icon_kind(kind_value)
 	var button := preparation_component_buttons.get(id, null) as Button
 	var state := StringName(button.get_meta(&"catalog_state", &"available")) if button != null else &"available"
-	var meta := "%d K" % cost
+	var meta := "%d" % cost
 	match state:
-		&"locked": meta = "%d K · Gesperrt · Forschung" % cost
-		&"assigned": meta = "%d K · In anderem Planplatz" % cost
-		&"current": meta = "%d K · Aktueller Inhalt" % cost
+		&"locked": meta = "%d · Gesperrt · Forschung" % cost
+		&"assigned": meta = "%d · In anderem Planplatz" % cost
+		&"current": meta = "%d · Aktueller Inhalt" % cost
 		_:
 			if planning_snapshot.mode == PlanningSnapshot.Mode.RESERVE_PICK:
 				meta = "Ohne Plankapazität"
@@ -4226,7 +4300,7 @@ func _preparation_comparison_delta(current_id: StringName, candidate_id: StringN
 		match candidate_id:
 			&"spread", &"treatment_spread": return "1 Ziel → 3 Ziele"
 			&"pierce", &"treatment_pierce": return "Einzelziel → Linie"
-	return "%d K · direkt einsetzen" % cost
+	return "%d · direkt einsetzen" % cost
 
 func _component_kind_for_slot(slot_id: StringName) -> String:
 	match LoadoutSlotId.expected_kind(slot_id):

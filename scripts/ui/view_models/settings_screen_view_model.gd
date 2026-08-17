@@ -123,14 +123,42 @@ class ToggleSettingViewModel extends RefCounted:
 class BindingSettingViewModel extends RefCounted:
 	var _action_id: StringName
 	var _label: String
-	var _binding_text: String
-	var _is_capturing: bool
+	var _binding_texts: Array[String]
+	var _capturing_slot: int
 
-	func _init(action_id_value: StringName, label_value: String, binding_text_value: String, is_capturing_value: bool = false) -> void:
+	func _init(
+		action_id_value: StringName,
+		label_value: String,
+		binding_text_value: Variant,
+		capturing_slot_value: Variant = -1
+	) -> void:
 		_action_id = action_id_value
 		_label = label_value
-		_binding_text = binding_text_value
-		_is_capturing = is_capturing_value
+		_binding_texts = []
+		if binding_text_value is Array:
+			for entry in binding_text_value:
+				if _binding_texts.size() >= 2:
+					break
+				_binding_texts.append(str(entry))
+		else:
+			# Compatibility for the former single-summary constructor. The new
+			# screen extracts keyboard entries and deliberately omits the former
+			# controller suffix from its visual presentation.
+			var keyboard_summary := str(binding_text_value)
+			if keyboard_summary.contains("|"):
+				keyboard_summary = keyboard_summary.get_slice("|", 0).strip_edges()
+			elif keyboard_summary.contains("·"):
+				keyboard_summary = keyboard_summary.get_slice("·", 0).strip_edges()
+			for entry in keyboard_summary.split("/", false, 2):
+				if _binding_texts.size() >= 2:
+					break
+				_binding_texts.append(entry.strip_edges())
+		while _binding_texts.size() < 2:
+			_binding_texts.append("Nicht belegt")
+		if capturing_slot_value is bool:
+			_capturing_slot = 0 if bool(capturing_slot_value) else -1
+		else:
+			_capturing_slot = clampi(int(capturing_slot_value), -1, 1)
 
 	func get_action_id() -> StringName:
 		return _action_id
@@ -138,20 +166,93 @@ class BindingSettingViewModel extends RefCounted:
 	func get_label() -> String:
 		return _label
 
-	func get_binding_text() -> String:
-		return _binding_text
+	func get_binding_text(slot_index: int = 0) -> String:
+		if slot_index < 0 or slot_index >= _binding_texts.size():
+			return "Nicht belegt"
+		return _binding_texts[slot_index]
+
+	func get_binding_texts() -> Array[String]:
+		return _binding_texts.duplicate()
 
 	func is_capturing() -> bool:
-		return _is_capturing
+		return _capturing_slot >= 0
+
+	func is_slot_capturing(slot_index: int) -> bool:
+		return _capturing_slot == slot_index
+
+	func get_capturing_slot() -> int:
+		return _capturing_slot
 
 	func duplicate_immutable() -> BindingSettingViewModel:
-		return BindingSettingViewModel.new(_action_id, _label, _binding_text, _is_capturing)
+		return BindingSettingViewModel.new(_action_id, _label, _binding_texts, _capturing_slot)
 
 	func append_signature(parts: PackedStringArray) -> void:
 		parts.append(SettingsScreenViewModel._signature_part(String(_action_id)))
 		parts.append(SettingsScreenViewModel._signature_part(_label))
+		parts.append(str(_binding_texts.size()))
+		for binding_text in _binding_texts:
+			parts.append(SettingsScreenViewModel._signature_part(binding_text))
+		parts.append(str(_capturing_slot))
+
+
+class BindingConflictViewModel extends RefCounted:
+	var _action_id: StringName
+	var _slot_index: int
+	var _action_label: String
+	var _conflicting_action_id: StringName
+	var _conflicting_action_label: String
+	var _binding_text: String
+
+	func _init(
+		action_id_value: StringName,
+		slot_index_value: int,
+		action_label_value: String,
+		conflicting_action_id_value: StringName,
+		conflicting_action_label_value: String,
+		binding_text_value: String
+	) -> void:
+		_action_id = action_id_value
+		_slot_index = clampi(slot_index_value, 0, 1)
+		_action_label = action_label_value
+		_conflicting_action_id = conflicting_action_id_value
+		_conflicting_action_label = conflicting_action_label_value
+		_binding_text = binding_text_value
+
+	func action_id() -> StringName:
+		return _action_id
+
+	func slot_index() -> int:
+		return _slot_index
+
+	func action_label() -> String:
+		return _action_label
+
+	func conflicting_action_id() -> StringName:
+		return _conflicting_action_id
+
+	func conflicting_action_label() -> String:
+		return _conflicting_action_label
+
+	func binding_text() -> String:
+		return _binding_text
+
+	func duplicate_immutable() -> BindingConflictViewModel:
+		return BindingConflictViewModel.new(
+			_action_id,
+			_slot_index,
+			_action_label,
+			_conflicting_action_id,
+			_conflicting_action_label,
+			_binding_text
+		)
+
+	func append_signature(parts: PackedStringArray) -> void:
+		parts.append(SettingsScreenViewModel._signature_part(String(_action_id)))
+		parts.append(str(_slot_index))
+		parts.append(SettingsScreenViewModel._signature_part(_action_label))
+		parts.append(SettingsScreenViewModel._signature_part(String(_conflicting_action_id)))
+		parts.append(SettingsScreenViewModel._signature_part(_conflicting_action_label))
 		parts.append(SettingsScreenViewModel._signature_part(_binding_text))
-		parts.append("1" if _is_capturing else "0")
 
 
 var _revision: int
@@ -162,6 +263,7 @@ var _audio_settings: Array[AudioSettingViewModel]
 var _option_settings: Array[OptionSettingViewModel]
 var _toggle_settings: Array[ToggleSettingViewModel]
 var _binding_settings: Array[BindingSettingViewModel]
+var _binding_conflict: BindingConflictViewModel
 
 
 func _init(
@@ -171,7 +273,8 @@ func _init(
 	toggle_settings_value: Array[ToggleSettingViewModel] = [],
 	binding_settings_value: Array[BindingSettingViewModel] = [],
 	status_text_value: String = "",
-	show_quit_value: bool = false
+	show_quit_value: bool = false,
+	binding_conflict_value: BindingConflictViewModel = null
 ) -> void:
 	_revision = maxi(revision_value, 0)
 	_show_quit = show_quit_value
@@ -180,6 +283,7 @@ func _init(
 	_option_settings = _copy_options(option_settings_value)
 	_toggle_settings = _copy_toggles(toggle_settings_value)
 	_binding_settings = _copy_bindings(binding_settings_value)
+	_binding_conflict = binding_conflict_value.duplicate_immutable() if binding_conflict_value != null else null
 	_content_hash = _calculate_content_hash()
 
 
@@ -215,6 +319,10 @@ func get_binding_settings() -> Array[BindingSettingViewModel]:
 	return _copy_bindings(_binding_settings)
 
 
+func get_binding_conflict() -> BindingConflictViewModel:
+	return _binding_conflict.duplicate_immutable() if _binding_conflict != null else null
+
+
 func duplicate_immutable() -> SettingsScreenViewModel:
 	return SettingsScreenViewModel.new(
 		_revision,
@@ -223,7 +331,8 @@ func duplicate_immutable() -> SettingsScreenViewModel:
 		_toggle_settings,
 		_binding_settings,
 		_status_text,
-		_show_quit
+		_show_quit,
+		_binding_conflict
 	)
 
 
@@ -276,6 +385,9 @@ func _calculate_content_hash() -> int:
 	parts.append(str(_binding_settings.size()))
 	for entry in _binding_settings:
 		entry.append_signature(parts)
+	parts.append("1" if _binding_conflict != null else "0")
+	if _binding_conflict != null:
+		_binding_conflict.append_signature(parts)
 	return hash("|".join(parts))
 
 

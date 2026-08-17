@@ -42,7 +42,7 @@ static func category_name(category: StringName) -> String:
 static func _append_enemy_entries(result: Array[LexiconEntryDefinition]) -> void:
 	var enemies := ContentCatalog.enemy_definitions()
 	var roles := {
-		&"pneumococcus": ["Schneller Einzelerreger", "Bewegt sich direkt auf den Arzt zu und verursacht bei Kontakt eine kleine Belastung."],
+		&"pneumococcus": ["Schneller Einzelerreger", "Bewegt sich direkt auf Doctor Milos zu und verursacht bei Kontakt eine kleine Belastung."],
 		&"bacterial_cluster": ["Widerstandsfähige Gruppe", "Bewegt sich langsamer, hält mehr aus und hinterlässt mehrere Proben."],
 		&"minor_focus": ["Stationäres Nebenziel", "Setzt nach einiger Zeit weitere Bakterien frei, wenn es nicht rechtzeitig kontrolliert wird."],
 		&"infection_focus": ["Bossgegner", "Seine Phasen erhöhen den Druck im Fall. Die tatsächlichen Werte werden je Fall skaliert."],
@@ -70,10 +70,10 @@ static func _append_character_entries(result: Array[LexiconEntryDefinition]) -> 
 	result.append(LexiconEntryDefinition.create(
 		&"character_stats",
 		LexiconEntryDefinition.CATEGORY_CHARACTER,
-		"Arzt",
+		"Doctor Milos",
 		"Therapieavatar",
 		"Koordiniert die Behandlung im Lungenmodell.",
-		"Der Arzt besitzt keine eigene Lebensleiste. Der Zustand gehört zum Patienten. Die hier gezeigten Werte sind die Basis vor Forschung und Ausbauten im Run.",
+		"Doctor Milos besitzt keine eigene Lebensleiste. Der Zustand gehört zum Patienten. Die hier gezeigten Werte sind die Basis vor Forschung und Ausbauten im Run.",
 		"Die Spielfigur stellt die koordinierende Rolle des Behandlungsteams vereinfacht dar.",
 		&"character_stats",
 		LexiconEntryDefinition.SOURCE_PLAYER,
@@ -89,7 +89,7 @@ static func _append_gameplay_entries(result: Array[LexiconEntryDefinition]) -> v
 		&"analysis_pickup": ["Erfahrung im laufenden Fall", "Gesammelte Proben füllen die Leiste für das nächste Level."],
 		&"patient_stability": ["Gemeinsamer Zustand des Patienten", "Gegnerkontakt senkt den Zustand. Bei null endet der Fall."],
 		&"automatic_therapy": ["Automatische Grundbehandlung", "Wählt gültige Ziele selbstständig aus. Bewegung, aktive Fähigkeiten und Ausbau bleiben deine Entscheidungen."],
-		&"neutrophil_orbit": ["Abwehr im Nahbereich", "Abwehrzellen umkreisen den Arzt und wirken regelmäßig auf Gegner in ihrer Nähe."],
+		&"neutrophil_orbit": ["Abwehr im Nahbereich", "Abwehrzellen umkreisen Doctor Milos und wirken regelmäßig auf Gegner in ihrer Nähe."],
 		&"supportive_oxygenation": ["Regelmäßige Stabilisierung", "Atemhilfe stellt Zustand wieder her, verursacht aber keinen direkten Gegnerschaden."],
 		&"boss_phases": ["Belastungsschübe des Bosses", "Phasengrenzen verändern den Kampf und können zusätzliche Bakterien freisetzen."],
 		&"research_reward": ["Dauerhafter Fortschritt", "Forschung wird zwischen den Fällen für Freischaltungen und Verbesserungen ausgegeben."],

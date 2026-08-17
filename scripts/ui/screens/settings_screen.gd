@@ -5,13 +5,23 @@ signal audio_value_changed(setting_id: StringName, linear_value: float)
 signal audio_mute_changed(setting_id: StringName, muted: bool)
 signal option_changed(setting_id: StringName, selected_index: int)
 signal toggle_changed(setting_id: StringName, enabled: bool)
+# Compatibility signal retained for facade/API stability. New integrations
+# connect binding_slot_change_requested so both keyboard slots stay distinct.
 signal binding_change_requested(action_id: StringName)
+signal binding_slot_change_requested(action_id: StringName, slot_index: int)
+signal binding_conflict_decided(
+	action_id: StringName,
+	slot_index: int,
+	conflicting_action_id: StringName,
+	replace_existing: bool
+)
 signal bindings_reset_requested
 signal quit_requested
 signal back
 
 const COMPACT_WIDTH := 760.0
-const TWO_BINDING_COLUMNS_WIDTH := 920.0
+const TWO_BINDING_COLUMNS_WIDTH := 1080.0
+const BINDING_PURPOSE_WIDTH_DESKTOP := 188.0
 
 var _view_model: SettingsScreenViewModel
 var _applied_revision := -1
@@ -30,6 +40,10 @@ var _controls: Dictionary = {}
 var _audio_layout_records: Array[Dictionary] = []
 var _option_controls: Array[OptionButton] = []
 var _binding_layout_records: Array[Dictionary] = []
+var _conflict_layer: ColorRect
+var _conflict_modal: PanelContainer
+var _conflict_cancel_button: Button
+var _conflict_confirm_button: Button
 var _compact_layout := false
 var _navigation_restore_scheduled := false
 var _pending_restore_setting_id: StringName = &""
@@ -63,7 +77,13 @@ func apply(view_model: SettingsScreenViewModel) -> bool:
 	_applied_revision = next_revision
 	_applied_content_hash = next_hash
 	_rebuild_sections()
-	_restore_navigation_state(previous_focus_id, previous_scroll, _applied_revision)
+	_sync_binding_conflict()
+	if is_binding_conflict_open():
+		_pending_restore_setting_id = &""
+		_pending_restore_scroll = previous_scroll
+		_pending_restore_revision = _applied_revision
+	else:
+		_restore_navigation_state(previous_focus_id, previous_scroll, _applied_revision)
 	return true
 
 
@@ -101,6 +121,28 @@ func is_compact_layout() -> bool:
 
 func control_for_setting(setting_key: StringName) -> Control:
 	return _controls.get(setting_key) as Control
+
+
+func is_binding_conflict_open() -> bool:
+	return (
+		_conflict_layer != null
+		and is_instance_valid(_conflict_layer)
+		and _conflict_layer.is_visible_in_tree()
+	)
+
+
+func get_binding_conflict_default_focus_control() -> Control:
+	return _conflict_cancel_button
+
+
+func cancel_binding_conflict() -> bool:
+	if _view_model == null:
+		return false
+	var conflict := _view_model.get_binding_conflict()
+	if conflict == null:
+		return false
+	_on_binding_conflict_decided(conflict, false)
+	return true
 
 
 func get_default_focus_control() -> Control:
@@ -210,7 +252,7 @@ func _rebuild_sections() -> void:
 	controls_panel.name = "ControlsSection"
 	_settings_stack.add_child(controls_panel)
 	var bindings_explanation := AlveolusUIComponents.label(
-		"Aktion links · aktuelle Belegung rechts",
+		"Jede Aktion besitzt zwei frei belegbare Tastaturplätze.",
 		AlveolusVisualTheme.TYPE_MUTED_LABEL
 	)
 	bindings_explanation.name = "BindingsExplanation"
@@ -292,6 +334,11 @@ func _build_audio_row(parent: VBoxContainer, setting: SettingsScreenViewModel.Au
 	var slider := parts["control"] as HSlider
 	var value_label := parts["value_label"] as Label
 	var mute := AlveolusUIComponents.toggle_row("Stumm", setting.is_muted())
+	# The switch remains a full-size input, but its Button chrome is flat so it
+	# does not read as another card inside the section surface.
+	mute.theme_type_variation = &""
+	mute.flat = true
+	mute.set_meta(&"alveolus_component", &"transparent_toggle")
 	# Four controls in a fixed HBox cannot shrink safely at 200 percent because
 	# label text contributes its intrinsic width. A responsive grid keeps the
 	# desktop row unchanged and forms two readable rows on compact canvases.
@@ -348,6 +395,9 @@ func _build_option_row(parent: VBoxContainer, setting: SettingsScreenViewModel.O
 
 func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.ToggleSettingViewModel) -> void:
 	var toggle := AlveolusUIComponents.toggle_row("Ein" if setting.is_enabled() else "Aus", setting.is_enabled())
+	toggle.theme_type_variation = &""
+	toggle.flat = true
+	toggle.set_meta(&"alveolus_component", &"transparent_toggle")
 	var key := _toggle_key(setting.get_id())
 	toggle.name = "Toggle_%s" % String(setting.get_id())
 	toggle.set_meta(&"setting_id", key)
@@ -374,24 +424,42 @@ func _toggle_purpose(setting_id: StringName, fallback: String) -> String:
 
 
 func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel) -> void:
-	var caption := "Taste drücken …" if setting.is_capturing() else setting.get_binding_text()
 	var purpose := _binding_purpose(setting.get_action_id(), setting.get_label())
-	var button := AlveolusUIComponents.action_button(
-		caption,
-		AlveolusUIComponents.ACTION_SECONDARY,
-		&"",
-		AlveolusVisualTheme.COBALT
-	)
-	var key := _binding_key(setting.get_action_id())
-	button.name = "Binding_%s" % String(setting.get_action_id())
-	button.set_meta(&"setting_id", key)
-	button.set_meta(&"action_id", setting.get_action_id())
-	button.set_meta(&"alveolus_accessible_name", "%s: %s" % [purpose, caption])
-	button.clip_text = true
-	button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	button.tooltip_text = caption
-	button.pressed.connect(_on_binding_requested.bind(setting.get_action_id()))
-	var row := _compact_setting_row(purpose, button)
+	var slots := HBoxContainer.new()
+	slots.name = "BindingSlots_%s" % String(setting.get_action_id())
+	slots.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	slots.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	var buttons: Array[Button] = []
+	for slot_index in range(2):
+		var caption := "Taste drücken …" if setting.is_slot_capturing(slot_index) else setting.get_binding_text(slot_index)
+		var button := AlveolusUIComponents.action_button(
+			caption,
+			AlveolusUIComponents.ACTION_SECONDARY,
+			&"",
+			AlveolusVisualTheme.COBALT
+		)
+		var key := _binding_slot_key(setting.get_action_id(), slot_index)
+		button.name = "Binding_%s_%d" % [String(setting.get_action_id()), slot_index]
+		button.set_meta(&"setting_id", key)
+		button.set_meta(&"action_id", setting.get_action_id())
+		button.set_meta(&"binding_slot", slot_index)
+		button.set_meta(
+			&"alveolus_accessible_name",
+			"%s, Taste %d: %s" % [purpose, slot_index + 1, caption]
+		)
+		button.clip_text = true
+		button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		button.tooltip_text = "Taste %d · %s" % [slot_index + 1, caption]
+		button.pressed.connect(_on_binding_requested.bind(setting.get_action_id(), slot_index))
+		_controls[key] = button
+		# The former semantic key resolves to the primary keyboard slot so
+		# existing focus-restoration and facade lookups remain compatible.
+		if slot_index == 0:
+			_controls[_binding_key(setting.get_action_id())] = button
+		slots.add_child(button)
+		buttons.append(button)
+	var row := _compact_setting_row(purpose, slots)
+	slots.focus_mode = Control.FOCUS_NONE
 	row.name = "BindingLayout_%s" % String(setting.get_action_id())
 	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var purpose_label := row.find_child("SettingPurpose", true, false) as Label
@@ -404,12 +472,12 @@ func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel
 	card.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM + 12.0
 	card.set_meta(&"alveolus_component", &"shortcut_container")
 	card.add_child(AlveolusUIComponents.margin(row, 6))
-	_controls[key] = button
 	_binding_layout_records.append({
 		"card": card,
 		"row": row,
 		"purpose": purpose_label,
-		"button": button,
+		"slots": slots,
+		"buttons": buttons,
 	})
 	_bindings_grid.add_child(card)
 
@@ -445,10 +513,153 @@ func _binding_purpose(action_id: StringName, fallback: String) -> String:
 		&"active_ability_1": return "Aktive Fähigkeit 1"
 		&"active_ability_2": return "Aktive Fähigkeit 2"
 		&"pause_game": return "Pausenmenü öffnen"
+		&"upgrade_1": return "Ausbau links wählen"
+		&"upgrade_2": return "Ausbau mittig wählen"
+		&"upgrade_3": return "Ausbau rechts wählen"
+		&"reroll_upgrades": return "Ausbauten neu ziehen"
 		&"ui_accept": return "Auswahl bestätigen"
 		&"ui_cancel": return "Zurück / schließen"
 		&"ui_info": return "Details anzeigen"
 	return fallback
+
+
+func _sync_binding_conflict() -> void:
+	if _conflict_layer != null and is_instance_valid(_conflict_layer):
+		remove_child(_conflict_layer)
+		_conflict_layer.queue_free()
+	_conflict_layer = null
+	_conflict_modal = null
+	_conflict_cancel_button = null
+	_conflict_confirm_button = null
+	if _view_model == null:
+		return
+	var conflict := _view_model.get_binding_conflict()
+	if conflict == null:
+		return
+
+	_conflict_layer = ColorRect.new()
+	_conflict_layer.name = "BindingConflictLayer"
+	_conflict_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_conflict_layer.color = Color(AlveolusVisualTheme.PETROL_DEEP, 0.86)
+	_conflict_layer.mouse_filter = Control.MOUSE_FILTER_STOP
+	_conflict_layer.z_index = 100
+	add_child(_conflict_layer)
+
+	var safe_area := MarginContainer.new()
+	safe_area.name = "BindingConflictSafeArea"
+	safe_area.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
+		safe_area.add_theme_constant_override(side, AlveolusVisualTheme.SCREEN_MARGIN_COMPACT)
+	_conflict_layer.add_child(safe_area)
+
+	var center := CenterContainer.new()
+	center.name = "BindingConflictCenter"
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	safe_area.add_child(center)
+
+	var body := AlveolusUIComponents.label(
+		"„%s“ ist bereits für „%s“ belegt. Für „%s“ übernehmen?" % [
+			conflict.binding_text(),
+			conflict.conflicting_action_label(),
+			conflict.action_label(),
+		],
+		AlveolusVisualTheme.TYPE_BODY_LABEL
+	)
+	body.name = "BindingConflictText"
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var actions := GridContainer.new()
+	actions.name = "BindingConflictActions"
+	actions.columns = 2
+	actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	actions.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	actions.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_conflict_cancel_button = AlveolusUIComponents.action_button(
+		"Behalten",
+		AlveolusUIComponents.ACTION_SECONDARY,
+		&"back",
+		AlveolusVisualTheme.COBALT
+	)
+	_conflict_cancel_button.name = "BindingConflictCancel"
+	_conflict_cancel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_conflict_cancel_button.set_meta(
+		&"setting_id",
+		_binding_slot_key(conflict.action_id(), conflict.slot_index())
+	)
+	_conflict_cancel_button.pressed.connect(_on_binding_conflict_decided.bind(conflict, false))
+	actions.add_child(_conflict_cancel_button)
+	_conflict_confirm_button = AlveolusUIComponents.action_button(
+		"Taste übernehmen",
+		AlveolusUIComponents.ACTION_PRIMARY,
+		&"check",
+		AlveolusVisualTheme.TEAL
+	)
+	_conflict_confirm_button.name = "BindingConflictConfirm"
+	_conflict_confirm_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_conflict_confirm_button.set_meta(
+		&"setting_id",
+		_binding_slot_key(conflict.action_id(), conflict.slot_index())
+	)
+	_conflict_confirm_button.pressed.connect(_on_binding_conflict_decided.bind(conflict, true))
+	actions.add_child(_conflict_confirm_button)
+
+	var modal_actions: Array[Control] = [actions]
+	var modal_parts := AlveolusUIComponents.modal_sheet(
+		"Taste bereits belegt",
+		body,
+		modal_actions,
+		20,
+		AlveolusVisualTheme.TEAL
+	)
+	_conflict_modal = modal_parts["panel"] as PanelContainer
+	_conflict_modal.name = "BindingConflictModal"
+	_conflict_modal.custom_minimum_size.x = 420.0
+	_conflict_modal.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_conflict_modal.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	center.add_child(_conflict_modal)
+	_link_binding_conflict_focus()
+	_grab_binding_conflict_focus.call_deferred()
+
+
+func _link_binding_conflict_focus() -> void:
+	if _conflict_cancel_button == null or _conflict_confirm_button == null:
+		return
+	var to_confirm := _conflict_cancel_button.get_path_to(_conflict_confirm_button)
+	var to_cancel := _conflict_confirm_button.get_path_to(_conflict_cancel_button)
+	_conflict_cancel_button.focus_previous = to_confirm
+	_conflict_cancel_button.focus_next = to_confirm
+	_conflict_cancel_button.focus_neighbor_left = to_confirm
+	_conflict_cancel_button.focus_neighbor_right = to_confirm
+	_conflict_confirm_button.focus_previous = to_cancel
+	_conflict_confirm_button.focus_next = to_cancel
+	_conflict_confirm_button.focus_neighbor_left = to_cancel
+	_conflict_confirm_button.focus_neighbor_right = to_cancel
+
+
+func _grab_binding_conflict_focus() -> void:
+	if (
+		_conflict_cancel_button != null
+		and is_instance_valid(_conflict_cancel_button)
+		and _conflict_cancel_button.is_inside_tree()
+		and _conflict_cancel_button.is_visible_in_tree()
+	):
+		_conflict_cancel_button.grab_focus()
+
+
+func _on_binding_conflict_decided(
+	conflict: SettingsScreenViewModel.BindingConflictViewModel,
+	replace_existing: bool
+) -> void:
+	if conflict == null:
+		return
+	binding_conflict_decided.emit(
+		conflict.action_id(),
+		conflict.slot_index(),
+		conflict.conflicting_action_id(),
+		replace_existing
+	)
 
 
 func _on_audio_value_changed(percent_value: float, setting_id: StringName) -> void:
@@ -469,8 +680,10 @@ func _on_toggle_changed(enabled: bool, setting_id: StringName, toggle: CheckButt
 	toggle_changed.emit(setting_id, enabled)
 
 
-func _on_binding_requested(action_id: StringName) -> void:
-	binding_change_requested.emit(action_id)
+func _on_binding_requested(action_id: StringName, slot_index: int) -> void:
+	binding_slot_change_requested.emit(action_id, slot_index)
+	if slot_index == 0:
+		binding_change_requested.emit(action_id)
 
 
 func _refresh_responsive_layout() -> void:
@@ -521,14 +734,24 @@ func _refresh_responsive_layout() -> void:
 		option.custom_minimum_size.x = 148.0 if _compact_layout else 176.0
 	for record in _binding_layout_records:
 		var binding_purpose := record["purpose"] as Label
-		var binding_button := record["button"] as Button
+		var binding_slots := record["slots"] as HBoxContainer
+		var binding_buttons: Array = record["buttons"] as Array
 		# Each shortcut is a compact two-part unit. Fixed local columns keep the
-		# action and its binding visually adjacent instead of pushing the binding
-		# to the remote edge of a wide settings section.
+		# action and both keyboard slots visually adjacent instead of pushing the
+		# bindings to the remote edge of a wide settings section.
 		binding_purpose.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		binding_purpose.custom_minimum_size.x = 124.0 if _compact_layout else 176.0
-		binding_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		binding_button.custom_minimum_size.x = 156.0 if _compact_layout else 210.0
+		binding_purpose.custom_minimum_size.x = 116.0 if _compact_layout else BINDING_PURPOSE_WIDTH_DESKTOP
+		binding_purpose.clip_text = _compact_layout
+		binding_purpose.text_overrun_behavior = (
+			TextServer.OVERRUN_TRIM_ELLIPSIS
+			if _compact_layout
+			else TextServer.OVERRUN_NO_TRIMMING
+		)
+		binding_slots.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		for binding_button_value in binding_buttons:
+			var binding_button := binding_button_value as Button
+			binding_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			binding_button.custom_minimum_size.x = 108.0 if _compact_layout else 120.0
 
 
 func _focused_setting_id() -> StringName:
@@ -559,12 +782,15 @@ func _restore_navigation_scroll() -> void:
 	_navigation_restore_scheduled = false
 	if not is_inside_tree() or _pending_restore_revision != _applied_revision:
 		return
+	if is_binding_conflict_open():
+		_grab_binding_conflict_focus.call_deferred()
+		return
 	_scroll.scroll_vertical = _pending_restore_scroll
 	_restore_navigation_focus.call_deferred(_pending_restore_setting_id, _pending_restore_revision)
 
 
 func _restore_navigation_focus(setting_id: StringName, revision: int) -> void:
-	if not is_inside_tree() or revision != _applied_revision or setting_id == &"":
+	if not is_inside_tree() or revision != _applied_revision or setting_id == &"" or is_binding_conflict_open():
 		return
 	var control := control_for_setting(setting_id)
 	if control != null and control.is_visible_in_tree():
@@ -589,3 +815,7 @@ func _toggle_key(setting_id: StringName) -> StringName:
 
 func _binding_key(action_id: StringName) -> StringName:
 	return StringName("binding.%s" % String(action_id))
+
+
+func _binding_slot_key(action_id: StringName, slot_index: int) -> StringName:
+	return StringName("binding.%s.%d" % [String(action_id), slot_index])

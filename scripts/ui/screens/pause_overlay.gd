@@ -48,7 +48,10 @@ var _center: CenterContainer
 var _sheet: PanelContainer
 var _sheet_margin: MarginContainer
 var _sheet_stack: VBoxContainer
+var _pause_header: VBoxContainer
+var _coffee_symbol: Label
 var _title_label: Label
+var _doctor_label: Label
 var _body_scroll: ScrollContainer
 var _scrollbar_inset: MarginContainer
 var _body_stack: VBoxContainer
@@ -270,7 +273,7 @@ func _build() -> void:
 
 	var footer_buttons: Array[Control] = [_resume_button, _back_button]
 	var sheet_parts := AlveolusUIComponents.modal_sheet(
-		"Behandlung pausiert",
+		"",
 		_body_scroll,
 		footer_buttons,
 		MODAL_PADDING,
@@ -281,8 +284,29 @@ func _build() -> void:
 	_sheet_stack = sheet_parts["content"] as VBoxContainer
 	_sheet_margin = _sheet_stack.get_parent() as MarginContainer
 	_footer_actions = sheet_parts["actions"] as HBoxContainer
-	_title_label = _sheet_stack.get_child(0) as Label
+
+	_pause_header = VBoxContainer.new()
+	_pause_header.name = "PauseHeader"
+	_pause_header.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	var title_line := HBoxContainer.new()
+	title_line.name = "PauseTitleLine"
+	title_line.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	_coffee_symbol = AlveolusUIComponents.label("☕", AlveolusVisualTheme.TYPE_TITLE_LABEL)
+	_coffee_symbol.name = "CoffeeSymbol"
+	_coffee_symbol.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_coffee_symbol.set_meta(&"decorative", true)
+	title_line.add_child(_coffee_symbol)
+	_title_label = AlveolusUIComponents.label("Pause", AlveolusVisualTheme.TYPE_TITLE_LABEL)
 	_title_label.name = "Title"
+	_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_line.add_child(_title_label)
+	_doctor_label = AlveolusUIComponents.label("Doctor Milos", AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	_doctor_label.name = "DoctorMeta"
+	_doctor_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title_line.add_child(_doctor_label)
+	_pause_header.add_child(title_line)
+	_sheet_stack.add_child(_pause_header)
+	_sheet_stack.move_child(_pause_header, 0)
 	_center.add_child(_sheet)
 
 	var all_buttons: Array[Button] = [
@@ -442,7 +466,9 @@ func _rebuild_stat_rows() -> void:
 func _apply_mode(mode: int) -> void:
 	_mode = mode
 	var menu_visible := mode == Mode.MENU
-	_title_label.text = "Behandlung pausiert" if menu_visible else "Charakterwerte"
+	_title_label.text = "Pause" if menu_visible else "Charakterwerte"
+	_coffee_symbol.visible = menu_visible
+	_doctor_label.visible = menu_visible
 	_menu_body.visible = menu_visible
 	_stats_body.visible = not menu_visible
 	_resume_button.visible = menu_visible
@@ -515,7 +541,7 @@ func _update_responsive_layout() -> void:
 	var active_footer := _resume_button if _mode == Mode.MENU else _back_button
 	var chrome_height := (
 		float(sheet_padding * 2)
-		+ _title_label.get_combined_minimum_size().y
+		+ _pause_header.get_combined_minimum_size().y
 		+ active_footer.get_combined_minimum_size().y
 		+ float(AlveolusVisualTheme.CONTENT_GAP * 2)
 	)

@@ -90,9 +90,12 @@ func _run() -> void:
 		var normal_style := slot_button.get_theme_stylebox("normal") as StyleBoxFlat
 		_check(_stylebox_matches(normal_style, PreparationBioLumenStyle.slot(&"normal", slot_selected)), "Planplatz %s verwendet seinen Bio-Lumen-Normalzustand" % slot_id)
 		_check(_structured_slot_card(slot_button), "Planplatz %s enthält Icon, Titel, Beschreibung und Kosten" % slot_id)
+		var slot_cost := slot_button.find_child("Cost", true, false) as Label
+		_check(slot_cost != null and not slot_cost.text.contains("K"), "Planplatz %s zeigt Kapazitätskosten als nackte Zahl" % slot_id)
 		_check(slot_button.find_child("SelectedRail", true, false) == null, "Planplatz %s verwendet keinen separaten Auswahlbalken" % slot_id)
 	_check(not hud.preparation_reserve_button.is_visible_in_tree() and hud.preparation_reserve_button.disabled, "Die Reserve bleibt in der aktuellen Planung vollständig verborgen und inaktiv")
 	_check(hud.preparation_capacity_label.text.contains("6 / 8"), "Kapazität ist unabhängig von der Mockup-Wortstellung exakt")
+	_check(hud.preparation_capacity_label.get_theme_color("font_color").is_equal_approx(Color("f0bc57")), "Globale Plankapazität ist als goldener Entscheidungswert hervorgehoben")
 	_check(not hud.preparation_start_button.disabled, "Gültiger Plan kann gestartet werden")
 	var planning_cta_fill := hud.preparation_start_button.get_node_or_null("PreparationBioLumenFill") as PreparationBioLumenFill
 	_check(planning_cta_fill != null and planning_cta_fill.host == hud.preparation_start_button, "Startaktion besitzt den planungsspezifischen Bio-Lumen-Fill")
