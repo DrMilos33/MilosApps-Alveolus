@@ -4,11 +4,15 @@ extends RefCounted
 const SURFACE_SHADER_CODE := """
 shader_type canvas_item;
 
-instance uniform vec4 left_color : source_color;
-instance uniform vec4 right_color : source_color;
-instance uniform vec2 panel_size = vec2(280.0, 64.0);
-instance uniform vec4 corner_radii = vec4(15.0, 5.0, 15.0, 5.0);
-instance uniform float energy = 1.0;
+// Regular material uniforms are intentional here. CanvasItem instance
+// uniforms rendered as opaque black in the WebGL Compatibility export even
+// though the native Compatibility renderer accepted them. Each fill receives
+// a small material instance, while the compiled shader stays process-wide.
+uniform vec4 left_color : source_color = vec4(0.043137, 0.231373, 0.239216, 1.0);
+uniform vec4 right_color : source_color = vec4(0.023529, 0.121569, 0.149020, 1.0);
+uniform vec2 panel_size = vec2(280.0, 64.0);
+uniform vec4 corner_radii = vec4(15.0, 5.0, 15.0, 5.0);
+uniform float energy = 1.0;
 
 float rounded_mask(vec2 p, vec2 extent) {
 	float alpha = 1.0;
@@ -36,32 +40,29 @@ void fragment() {
 }
 """
 
-## Process-wide cache for the small, fixed set of Bio-Lumen shaders and
-## materials.
+## Process-wide cache for the small, fixed set of Bio-Lumen shaders.
 ##
 ## Bio-Lumen controls keep their colours, dimensions and interaction state in
-## CanvasItem instance uniforms. Consequently every semantic fill can share a
-## single ShaderMaterial without one resource allocation per Control. The
-## cache is intentionally append-only for the process lifetime: a warmed UI
-## can navigate and rebuild views without compiling shaders or creating
-## materials again.
+## regular uniforms on a lightweight material instance. This is the portable
+## path across native and WebGL Compatibility. Shader compilation remains
+## shared; WeakRefs only expose the live material count to churn regression
+## tests and never retain released UI resources.
 
 static var _shaders: Dictionary = {}
-static var _materials: Dictionary = {}
+static var _materials: Array[WeakRef] = []
 static var _source_hashes: Dictionary = {}
 static var _materials_created := 0
 
 static func material(shader_id: StringName, source: String) -> ShaderMaterial:
 	var shared_shader := shader(shader_id, source)
-	if _materials.has(shader_id):
-		var cached := _materials[shader_id] as ShaderMaterial
-		assert(cached != null and cached.shader == shared_shader)
-		return cached
+	# Keep the diagnostic WeakRef list bounded even when production code never
+	# calls material_count() between screen rebuilds.
+	_compact_material_refs()
 	var instance := ShaderMaterial.new()
 	instance.resource_name = "BioLumen_%s" % shader_id
-	instance.resource_local_to_scene = false
+	instance.resource_local_to_scene = true
 	instance.shader = shared_shader
-	_materials[shader_id] = instance
+	_materials.append(weakref(instance))
 	_materials_created += 1
 	return instance
 
@@ -82,7 +83,13 @@ static func shader_count() -> int:
 	return _shaders.size()
 
 static func material_count() -> int:
+	_compact_material_refs()
 	return _materials.size()
 
 static func materials_created() -> int:
 	return _materials_created
+
+static func _compact_material_refs() -> void:
+	for index in range(_materials.size() - 1, -1, -1):
+		if _materials[index].get_ref() == null:
+			_materials.remove_at(index)

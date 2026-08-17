@@ -202,12 +202,14 @@ func _on_button_up() -> void:
 	_update_shader()
 
 func _update_size() -> void:
-	if material is ShaderMaterial:
-		set_instance_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
-		set_instance_shader_parameter(&"corner_radii", surface_corner_radii)
+	var surface_material := material as ShaderMaterial
+	if surface_material != null:
+		surface_material.set_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
+		surface_material.set_shader_parameter(&"corner_radii", surface_corner_radii)
 
 func _update_shader() -> void:
-	if not material is ShaderMaterial:
+	var surface_material := material as ShaderMaterial
+	if surface_material == null:
 		return
 	var left := static_left if static_surface else normal_left
 	var right := static_right if static_surface else normal_right
@@ -236,6 +238,6 @@ func _update_shader() -> void:
 	elif not static_surface and (hovered or focused):
 		left = HOVER_LEFT
 		right = HOVER_RIGHT
-	set_instance_shader_parameter(&"left_color", left)
-	set_instance_shader_parameter(&"right_color", right)
-	set_instance_shader_parameter(&"energy", energy)
+	surface_material.set_shader_parameter(&"left_color", left)
+	surface_material.set_shader_parameter(&"right_color", right)
+	surface_material.set_shader_parameter(&"energy", energy)

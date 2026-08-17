@@ -66,6 +66,24 @@ func _run() -> void:
 		AlveolusVisualTheme.TYPE_DETAIL_CARD,
 	]:
 		_check(visual_theme.get_type_variation_base(surface_type) == &"PanelContainer", "%s ist eine semantische SurfaceRole" % surface_type)
+	for surface_role in [
+		AlveolusVisualTheme.SurfaceRole.PAGE_CANVAS,
+		AlveolusVisualTheme.SurfaceRole.SECTION_GROUP,
+		AlveolusVisualTheme.SurfaceRole.ACTION_CARD,
+		AlveolusVisualTheme.SurfaceRole.DOCUMENT_INSET,
+		AlveolusVisualTheme.SurfaceRole.MODAL_SHEET,
+		AlveolusVisualTheme.SurfaceRole.HUD_VITAL,
+		AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE,
+		AlveolusVisualTheme.SurfaceRole.HUD_ABILITY,
+		AlveolusVisualTheme.SurfaceRole.HUD_ALERT,
+		AlveolusVisualTheme.SurfaceRole.PAGE_HEADER,
+		AlveolusVisualTheme.SurfaceRole.FORM_CONTROL,
+		AlveolusVisualTheme.SurfaceRole.VALUE_ROW,
+		AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD,
+		AlveolusVisualTheme.SurfaceRole.DETAIL_CARD,
+	]:
+		var role_style := AlveolusVisualTheme.surface_role_style(surface_role)
+		_check(not _is_accidental_black(role_style.bg_color), "SurfaceRole %s besitzt einen absichtlichen Petrol-Fallback statt Schwarz" % surface_role)
 	for variation in [
 		AlveolusVisualTheme.TYPE_PRIMARY_BUTTON,
 		AlveolusVisualTheme.TYPE_SECONDARY_BUTTON,
@@ -120,6 +138,12 @@ func _run() -> void:
 			_check(
 				_has_minimum_content_insets(factory_style, 18.0, minimum_vertical_inset),
 				"button_style %s/%s bewahrt mindestens 18 px horizontalen und %.0f px vertikalen Innenrand" % [variation, state, minimum_vertical_inset]
+			)
+			var expected_large_radius := 18 if bool(button_contract["primary"]) else (11 if bool(button_contract["danger"]) else 12)
+			var expected_small_radius := 5 if bool(button_contract["primary"]) else 4
+			_check(
+				_asymmetric_corners(factory_style, expected_large_radius, expected_small_radius),
+				"button_style %s/%s übernimmt die zentrale Bio-Lumen-Signatur" % [variation, state]
 			)
 			var registered_style := visual_theme.get_stylebox(state, variation)
 			_check(
@@ -219,21 +243,26 @@ func _run() -> void:
 	var second_fill := second_primary.get_node_or_null("BioLumenFill") as BioLumenButtonFill
 	var second_material: ShaderMaterial = second_fill.material as ShaderMaterial if second_fill != null else null
 	_check(bio_lumen_fill != null and not bio_lumen_fill.is_processing(), "BioLumenFill benötigt keinen dauerhaften Process-Callback")
-	_check(bio_material != null and second_material != null and bio_material == second_material, "Primäraktionen teilen Shader und Material; Zustände bleiben CanvasItem-Instanzuniformen")
-	var second_top: Color = second_fill.get_instance_shader_parameter(&"top_color") if second_fill != null else Color.TRANSPARENT
+	_check(bio_material != null and second_material != null and bio_material != second_material and bio_material.shader == second_material.shader, "Primäraktionen teilen den Shader, behalten aber WebGL-portable Materialuniformen pro Control")
+	var second_top: Color = second_material.get_shader_parameter(&"top_color") if second_material != null else Color.TRANSPARENT
 	_check(_hue_distance(second_top.h, AlveolusVisualTheme.TEAL.h) <= 0.06, "Globale Primäraktionen bleiben auch bei abweichendem Aufrufer-Akzent Teal-zu-Teal")
-	var bio_top: Color = bio_lumen_fill.get_instance_shader_parameter(&"top_color") if bio_lumen_fill != null else Color.TRANSPARENT
-	var bio_bottom: Color = bio_lumen_fill.get_instance_shader_parameter(&"bottom_color") if bio_lumen_fill != null else Color.TRANSPARENT
+	var bio_top: Color = bio_material.get_shader_parameter(&"top_color") if bio_material != null else Color.TRANSPARENT
+	var bio_bottom: Color = bio_material.get_shader_parameter(&"bottom_color") if bio_material != null else Color.TRANSPARENT
 	_check(_hue_distance(bio_top.h, AlveolusVisualTheme.TEAL.h) <= 0.06 and _hue_distance(bio_bottom.h, AlveolusVisualTheme.TEAL.h) <= 0.06, "Der Bio-Lumen-Verlauf bleibt rollenrein im Teal-Spektrum")
+	_check(not _is_accidental_black(bio_top) and not _is_accidental_black(bio_bottom), "Globale Primärverläufe besitzen keinen schwarzen Web-Fallback")
 	_check(_rgb_distance(bio_top, AlveolusVisualTheme.GOLD) > _rgb_distance(bio_top, AlveolusVisualTheme.TEAL) and _rgb_distance(bio_bottom, AlveolusVisualTheme.GOLD) > _rgb_distance(bio_bottom, AlveolusVisualTheme.TEAL), "Bio-Lumen verwendet Gold weder oben noch unten als Dekorationsfarbe")
 	var bio_spread := _rgb_distance(bio_top, bio_bottom)
 	_check(bio_spread >= 0.02 and bio_spread <= 0.18, "Der Bio-Lumen-Verlauf bleibt mit geringer, aber sichtbarer Spreizung zurückhaltend")
 	var planning_fill := planning_start.get_node_or_null("PreparationBioLumenFill") as PreparationBioLumenFill
 	_check(planning_fill != null and planning_start.get_node_or_null("BioLumenFill") == null, "Nur PlanningStart verwendet den expliziten Türkis-Warmgold-Verlauf")
 	_check(planning_fill != null and not planning_fill.is_processing(), "PlanningStart aktualisiert Zustände ohne Process-Polling")
+	var planning_material := planning_fill.material as ShaderMaterial if planning_fill != null else null
+	var planning_left: Color = planning_material.get_shader_parameter(&"left_color") if planning_material != null else Color.TRANSPARENT
+	var planning_right: Color = planning_material.get_shader_parameter(&"right_color") if planning_material != null else Color.TRANSPARENT
+	_check(not _is_accidental_black(planning_left) and not _is_accidental_black(planning_right), "PlanningStart behält Türkis und Warmgold auch im Webmaterial")
 	_check(navigation_action.theme_type_variation == AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON and navigation_action.get_meta(&"ui_sound_cue") == &"back", "Navigation bündelt Variante und Zurück-Soundcue")
 	AlveolusUIComponents.set_button_disabled(primary_action, true)
-	var disabled_top: Color = bio_lumen_fill.get_instance_shader_parameter(&"top_color") if bio_lumen_fill != null else Color.TRANSPARENT
+	var disabled_top: Color = bio_material.get_shader_parameter(&"top_color") if bio_material != null else Color.TRANSPARENT
 	_check(primary_action.disabled and _hue_distance(disabled_top.h, AlveolusVisualTheme.MUTED.h) <= 0.08, "Programmatisches Disabled synchronisiert den Shader ereignisgesteuert")
 
 	var header_parts := AlveolusUIComponents.page_header("Einstellungen", "Laborsteuerung", navigation_action)
@@ -255,14 +284,27 @@ func _run() -> void:
 		(detail_parts["panel"] as PanelContainer).get_node_or_null("BioLumenSurface") as BioLumenSurfaceFill,
 		(modal_parts["panel"] as PanelContainer).get_node_or_null("BioLumenSurface") as BioLumenSurfaceFill,
 	]
-	var shared_surface_material: ShaderMaterial = null
+	var shared_surface_shader: Shader = null
+	var surface_materials: Array[ShaderMaterial] = []
 	for semantic_fill in semantic_fills:
 		_check(semantic_fill != null and not semantic_fill.is_processing(), "Jede zentrale Bio-Lumen-Fläche ist prozessfrei")
 		if semantic_fill == null:
 			continue
-		if shared_surface_material == null:
-			shared_surface_material = semantic_fill.material as ShaderMaterial
-		_check(semantic_fill.material == shared_surface_material, "Semantische Flächen teilen den gecachten Surface-Materialpfad")
+		var surface_material := semantic_fill.material as ShaderMaterial
+		_check(surface_material != null, "Semantische Fläche besitzt ein ShaderMaterial")
+		if surface_material == null:
+			continue
+		if shared_surface_shader == null:
+			shared_surface_shader = surface_material.shader
+		_check(surface_material.shader == shared_surface_shader, "Semantische Flächen teilen den gecachten Surface-Shader")
+		_check(not surface_materials.has(surface_material), "Jede semantische Fläche besitzt WebGL-portable eigene Uniformwerte")
+		surface_materials.append(surface_material)
+		var live_left: Color = surface_material.get_shader_parameter(&"left_color")
+		var live_right: Color = surface_material.get_shader_parameter(&"right_color")
+		_check(not _is_accidental_black(live_left) and not _is_accidental_black(live_right), "Semantische Fläche rendert mit Petrolpalette statt Schwarz")
+	_check(not BioLumenMaterialCache.SURFACE_SHADER_CODE.contains("instance uniform"), "Surface-Shader vermeidet den unzuverlässigen WebGL-Instanzuniformpfad")
+	_check(not BioLumenButtonFill.SHADER_CODE.contains("instance uniform"), "Primary-Shader vermeidet den unzuverlässigen WebGL-Instanzuniformpfad")
+	_check(not PreparationBioLumenFill.SHADER_CODE.contains("instance uniform"), "Planning-CTA vermeidet den unzuverlässigen WebGL-Instanzuniformpfad")
 	var value_row := AlveolusUIComponents.value_row("Wirkung", "18")
 	_check(value_row.theme_type_variation == AlveolusVisualTheme.TYPE_VALUE_ROW, "ValueRow besitzt eine zentrale semantische Dichte")
 	_check(segmented.toggle_mode and segmented.button_pressed and segmented.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB, "SegmentedTab besitzt einen echten Auswahlzustand")
@@ -341,6 +383,12 @@ func _signature_corners(style: StyleBoxFlat) -> bool:
 		and style.corner_radius_bottom_right == 6 \
 		and style.corner_radius_bottom_left == 0
 
+func _asymmetric_corners(style: StyleBoxFlat, large_radius: int, small_radius: int) -> bool:
+	return style.corner_radius_top_left == large_radius \
+		and style.corner_radius_top_right == small_radius \
+		and style.corner_radius_bottom_right == large_radius \
+		and style.corner_radius_bottom_left == small_radius
+
 func _has_minimum_content_insets(style: StyleBox, horizontal: float, vertical: float) -> bool:
 	return style != null \
 		and style.get_content_margin(SIDE_LEFT) >= horizontal \
@@ -366,6 +414,9 @@ func _rgb_distance(first: Color, second: Color) -> float:
 func _hue_distance(first: float, second: float) -> float:
 	var direct := absf(first - second)
 	return minf(direct, 1.0 - direct)
+
+func _is_accidental_black(color: Color) -> bool:
+	return color.a > 0.25 and maxf(color.r, maxf(color.g, color.b)) <= 0.015
 
 func _check(condition: bool, message: String) -> void:
 	assertions += 1

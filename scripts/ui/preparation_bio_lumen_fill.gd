@@ -6,10 +6,12 @@ extends ColorRect
 const SHADER_CODE := """
 shader_type canvas_item;
 
-instance uniform vec4 left_color : source_color;
-instance uniform vec4 right_color : source_color;
-instance uniform float energy = 1.0;
-instance uniform vec2 panel_size = vec2(220.0, 48.0);
+// Safe first-frame defaults match the approved planning CTA. Each visible CTA
+// owns its material parameters; the compiled shader remains shared.
+uniform vec4 left_color : source_color = vec4(0.396078, 0.866667, 0.823529, 1.0);
+uniform vec4 right_color : source_color = vec4(0.886275, 0.776471, 0.435294, 1.0);
+uniform float energy = 1.0;
+uniform vec2 panel_size = vec2(220.0, 48.0);
 // The membrane sits one pixel inside the button border, so its radii must be
 // one pixel smaller than the outer 18/5 signature. Matching them directly
 // produced transparent wedges at the large corners.
@@ -90,8 +92,9 @@ func refresh_state() -> void:
 	_update_shader()
 
 func _update_size() -> void:
-	if material is ShaderMaterial:
-		set_instance_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
+	var fill_material := material as ShaderMaterial
+	if fill_material != null:
+		fill_material.set_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
 
 func _connect_host() -> void:
 	if host == null or _signals_connected:
@@ -137,7 +140,8 @@ func _on_button_up() -> void:
 	_update_shader()
 
 func _update_shader() -> void:
-	if not material is ShaderMaterial:
+	var fill_material := material as ShaderMaterial
+	if fill_material == null:
 		return
 	var left := left_accent.lightened(0.27)
 	var right := right_accent.lightened(0.12)
@@ -154,6 +158,6 @@ func _update_shader() -> void:
 		left = left.lightened(0.06)
 		right = right.lightened(0.05)
 		energy = 1.08
-	set_instance_shader_parameter(&"left_color", left)
-	set_instance_shader_parameter(&"right_color", right)
-	set_instance_shader_parameter(&"energy", energy)
+	fill_material.set_shader_parameter(&"left_color", left)
+	fill_material.set_shader_parameter(&"right_color", right)
+	fill_material.set_shader_parameter(&"energy", energy)

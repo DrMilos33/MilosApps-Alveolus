@@ -635,6 +635,15 @@ static func button_style(accent: Color, state: StringName, primary: bool = false
 	style.border_color = border
 	style.shadow_size = shadow_size
 	style.shadow_offset = shadow_offset
+	# The approved planning controls established the Bio-Lumen signature: one
+	# calm rounded side and one tighter instrument edge. Keep that geometry in
+	# the central factory so every semantic button role inherits it.
+	var large_radius := 18 if primary else (11 if danger else 12)
+	var small_radius := 5 if primary else 4
+	style.corner_radius_top_left = large_radius
+	style.corner_radius_top_right = small_radius
+	style.corner_radius_bottom_right = large_radius
+	style.corner_radius_bottom_left = small_radius
 	# Local state overrides replace the complete StyleBox, including its content
 	# margins. Keep the safe area in the factory so no direct-text button can
 	# silently lose padding when a caller recolors or refreshes it.

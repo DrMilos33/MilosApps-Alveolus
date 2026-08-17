@@ -78,6 +78,23 @@ on its RID again after insertion, and uses only `MultiMesh.set_buffer()`. Do not
 replace this with `set_buffer_interpolated()` or per-slot engine interpolation
 without a native and Web regression on the exact supported Godot version.
 
+### Bio-Lumen render-resource contract
+
+`AlveolusVisualTheme` and `AlveolusUIComponents` are the sole public sources
+for semantic UI surfaces and actions. Bio-Lumen fills cache their three shader
+programs centrally, but each visible fill owns a lightweight `ShaderMaterial`
+and supplies its colors, size, radii, and state through regular shader
+uniforms. This is intentional: sharing one material through CanvasItem
+instance uniforms rendered unset parameters as opaque black in the supported
+WebGL Compatibility export even though the native renderer appeared correct.
+
+Bio-Lumen controls must not poll in `_process()`. Their material follows the
+control lifetime, state changes update it explicitly, and released screens
+must return live material, node, and callback-owner counts to the warmed-up
+baseline. Reintroducing shared mutable materials or CanvasItem instance
+uniforms requires both native and exported-Web visual regression evidence;
+native captures alone are insufficient.
+
 ## Fixed-step phases
 
 The canonical fixed-step order is:

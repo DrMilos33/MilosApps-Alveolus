@@ -62,10 +62,11 @@ func set_palette(left: Color, right: Color, fill_energy: float = 1.0) -> void:
 
 
 func _refresh_instance_uniforms() -> void:
-	if not material is ShaderMaterial:
+	var surface_material := material as ShaderMaterial
+	if surface_material == null:
 		return
-	set_instance_shader_parameter(&"left_color", left_color)
-	set_instance_shader_parameter(&"right_color", right_color)
-	set_instance_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
-	set_instance_shader_parameter(&"corner_radii", corner_radii)
-	set_instance_shader_parameter(&"energy", energy)
+	surface_material.set_shader_parameter(&"left_color", left_color)
+	surface_material.set_shader_parameter(&"right_color", right_color)
+	surface_material.set_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
+	surface_material.set_shader_parameter(&"corner_radii", corner_radii)
+	surface_material.set_shader_parameter(&"energy", energy)

@@ -10,19 +10,30 @@ extends ColorRect
 const SHADER_CODE := """
 shader_type canvas_item;
 
-instance uniform vec4 top_color : source_color = vec4(0.34, 0.82, 0.79, 1.0);
-instance uniform vec4 bottom_color : source_color = vec4(0.18, 0.68, 0.67, 1.0);
-uniform float edge_fade = 0.018;
+uniform vec4 top_color : source_color = vec4(0.34, 0.82, 0.79, 1.0);
+uniform vec4 bottom_color : source_color = vec4(0.18, 0.68, 0.67, 1.0);
+uniform vec2 panel_size = vec2(220.0, 48.0);
+uniform vec4 corner_radii = vec4(17.0, 4.0, 17.0, 4.0);
+
+float rounded_mask(vec2 p, vec2 extent) {
+	float alpha = 1.0;
+	float tl = corner_radii.x;
+	float tr = corner_radii.y;
+	float br = corner_radii.z;
+	float bl = corner_radii.w;
+	if (p.x < tl && p.y < tl) alpha *= 1.0 - smoothstep(tl - 0.75, tl + 0.25, distance(p, vec2(tl, tl)));
+	if (p.x > extent.x - tr && p.y < tr) alpha *= 1.0 - smoothstep(tr - 0.75, tr + 0.25, distance(p, vec2(extent.x - tr, tr)));
+	if (p.x > extent.x - br && p.y > extent.y - br) alpha *= 1.0 - smoothstep(br - 0.75, br + 0.25, distance(p, vec2(extent.x - br, extent.y - br)));
+	if (p.x < bl && p.y > extent.y - bl) alpha *= 1.0 - smoothstep(bl - 0.75, bl + 0.25, distance(p, vec2(bl, extent.y - bl)));
+	return alpha;
+}
 
 void fragment() {
 	vec2 p = UV;
-	float membrane = smoothstep(0.0, edge_fade, p.x)
-		* smoothstep(0.0, edge_fade, 1.0 - p.x)
-		* smoothstep(0.0, edge_fade, p.y)
-		* smoothstep(0.0, edge_fade, 1.0 - p.y);
 	float soft_pulse = sin((p.x * 1.7 + p.y) * 3.14159265) * 0.018;
 	vec4 color = mix(top_color, bottom_color, clamp(p.y + soft_pulse, 0.0, 1.0));
-	COLOR = vec4(color.rgb, color.a * membrane);
+	float alpha = rounded_mask(UV * panel_size, panel_size);
+	COLOR = vec4(color.rgb, color.a * alpha);
 }
 """
 
@@ -67,9 +78,12 @@ func configure(button: BaseButton, color: Color) -> void:
 	show_behind_parent = true
 	if not material is ShaderMaterial:
 		material = BioLumenMaterialCache.material(&"global_button", SHADER_CODE)
+	if not resized.is_connected(_update_size):
+		resized.connect(_update_size)
 	_connect_host()
 	set_process(false)
 	_update_colors()
+	_update_size()
 
 ## Call after changing `disabled` programmatically. Pointer, press and focus
 ## changes are already signal-driven and never require per-frame polling.
@@ -79,6 +93,11 @@ func refresh_state() -> void:
 func set_accent(color: Color) -> void:
 	accent = color
 	_update_colors()
+
+func _update_size() -> void:
+	var fill_material := material as ShaderMaterial
+	if fill_material != null:
+		fill_material.set_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
 
 func _connect_host() -> void:
 	if host_button == null or _signals_connected:
@@ -136,7 +155,8 @@ func _on_focus_exited() -> void:
 	_update_colors()
 
 func _update_colors() -> void:
-	if not material is ShaderMaterial:
+	var fill_material := material as ShaderMaterial
+	if fill_material == null:
 		return
 	var top := accent.lightened(0.27)
 	var bottom := accent.lightened(0.18)
@@ -151,5 +171,5 @@ func _update_colors() -> void:
 	elif _hovered or _focused:
 		top = accent.lightened(0.31)
 		bottom = accent.lightened(0.22)
-	set_instance_shader_parameter(&"top_color", Color(top, alpha))
-	set_instance_shader_parameter(&"bottom_color", Color(bottom, alpha))
+	fill_material.set_shader_parameter(&"top_color", Color(top, alpha))
+	fill_material.set_shader_parameter(&"bottom_color", Color(bottom, alpha))
