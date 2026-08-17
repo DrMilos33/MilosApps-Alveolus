@@ -37,10 +37,13 @@ func _run() -> void:
 	_check(AlveolusVisualTheme.HEADER_HEIGHT == 76 and AlveolusVisualTheme.HEADER_HEIGHT_COMPACT == 60, "Headerhöhen folgen dem Dossiervertrag")
 	_check(AlveolusVisualTheme.HEADER_CONTENT_GAP == 20 and AlveolusVisualTheme.HEADER_CONTENT_GAP_COMPACT == 12, "Header und Inhalt besitzen einen expliziten Abstand")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_PRIMARY_BUTTON) == &"Button", "Primäraktion ist eine semantische Theme-Variante")
+	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON) == &"Button", "Navigation besitzt eine eigene semantische Theme-Variante")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_PANEL_MODAL) == &"PanelContainer", "Modalfläche ist eine semantische Theme-Variante")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_TOGGLE_ROW) == &"CheckButton", "ToggleRow behält native Toggle-Semantik")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_OPTION_ROW) == &"OptionButton", "OptionRow behält native Auswahlsemantik")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_SLIDER_ROW) == &"HSlider", "SliderRow behält native Range-Semantik")
+	var line_edit_style := visual_theme.get_stylebox("normal", &"LineEdit") as StyleBoxFlat
+	_check(line_edit_style != null and _contrast_ratio(visual_theme.get_color("font_color", &"LineEdit"), line_edit_style.bg_color) >= 4.5, "Formfelder nutzen lesbare Bio-Lumen-Schrift auf dunkler Fläche")
 	_check(visual_theme.has_stylebox("focus", AlveolusVisualTheme.TYPE_SLIDER_ROW), "SliderRow besitzt einen sichtbaren Fokusvertrag")
 	_check(visual_theme.has_stylebox("hover_pressed", AlveolusVisualTheme.TYPE_TOGGLE_ROW), "Ein aktiver Toggle besitzt einen eigenen Hover-Pressed-Zustand")
 	var toggle_hover_pressed := visual_theme.get_stylebox("hover_pressed", AlveolusVisualTheme.TYPE_TOGGLE_ROW) as StyleBoxFlat
@@ -56,15 +59,24 @@ func _run() -> void:
 		AlveolusVisualTheme.TYPE_HUD_OBJECTIVE,
 		AlveolusVisualTheme.TYPE_HUD_ABILITY,
 		AlveolusVisualTheme.TYPE_HUD_ALERT,
+		AlveolusVisualTheme.TYPE_PAGE_HEADER,
+		AlveolusVisualTheme.TYPE_FORM_CONTROL,
+		AlveolusVisualTheme.TYPE_VALUE_ROW,
+		AlveolusVisualTheme.TYPE_TOOLTIP_CARD,
+		AlveolusVisualTheme.TYPE_DETAIL_CARD,
 	]:
 		_check(visual_theme.get_type_variation_base(surface_type) == &"PanelContainer", "%s ist eine semantische SurfaceRole" % surface_type)
 	for variation in [
 		AlveolusVisualTheme.TYPE_PRIMARY_BUTTON,
 		AlveolusVisualTheme.TYPE_SECONDARY_BUTTON,
 		AlveolusVisualTheme.TYPE_DANGER_BUTTON,
+		AlveolusVisualTheme.TYPE_QUIET_BUTTON,
+		AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON,
 		AlveolusVisualTheme.TYPE_SELECTED_CARD,
+		AlveolusVisualTheme.TYPE_CHOICE_ROW,
+		AlveolusVisualTheme.TYPE_SELECTED_CHOICE_ROW,
 	]:
-		for state in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
+		for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
 			_check(visual_theme.has_stylebox(state, variation), "%s besitzt Zustand %s" % [variation, state])
 	for button_contract in [
 		{
@@ -88,10 +100,17 @@ func _run() -> void:
 			"danger": true,
 			"vertical_inset": 14.0,
 		},
+		{
+			"variation": AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON,
+			"accent": AlveolusVisualTheme.TEAL,
+			"primary": false,
+			"danger": false,
+			"vertical_inset": 14.0,
+		},
 	]:
 		var variation: StringName = button_contract["variation"]
 		var minimum_vertical_inset: float = button_contract["vertical_inset"]
-		for state in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
+		for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
 			var factory_style := AlveolusVisualTheme.button_style(
 				button_contract["accent"],
 				state,
@@ -122,7 +141,7 @@ func _run() -> void:
 	_check(_contrast_ratio(AlveolusVisualTheme.FOCUS_RING, AlveolusVisualTheme.PETROL_DEEP) >= 3.0, "Fokuskontur erreicht auf den dunklen Interaktionsflächen mindestens 3:1")
 	var selected_tab_text := visual_theme.get_color("font_color", AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB)
 	_check(selected_tab_text.is_equal_approx(AlveolusVisualTheme.IVORY), "Ausgewählte Tabs verwenden verbindlich Elfenbein statt dunkler Schrift auf Teal")
-	for state in [&"normal", &"hover", &"pressed", &"focus"]:
+	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus"]:
 		var selected_tab_style := visual_theme.get_stylebox(state, AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB) as StyleBoxFlat
 		_check(_contrast_ratio(selected_tab_text, selected_tab_style.bg_color) >= 4.5, "Ausgewählter Tab hält in Zustand %s mindestens 4,5:1 Textkontrast" % state)
 	var selected_tab_normal := visual_theme.get_stylebox("normal", AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB) as StyleBoxFlat
@@ -136,12 +155,22 @@ func _run() -> void:
 	var action_card := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.ACTION_CARD)
 	var document_inset := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.DOCUMENT_INSET)
 	var modal_sheet := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.MODAL_SHEET)
+	var page_header := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.PAGE_HEADER)
+	var form_control := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.FORM_CONTROL, AlveolusVisualTheme.COBALT)
+	var value_row_style := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.VALUE_ROW)
+	var tooltip_style := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD, AlveolusVisualTheme.TURQUOISE)
+	var detail_style := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.DETAIL_CARD, AlveolusVisualTheme.COBALT)
 	_check(page_canvas.bg_color.is_equal_approx(AlveolusVisualTheme.PETROL_DEEP) and _contrast_ratio(page_canvas.bg_color, AlveolusVisualTheme.IVORY) >= 7.0, "PageCanvas ist die dunkle Petrol-Dossierfläche")
 	_check(section_group.bg_color.a <= 0.12 and section_group.shadow_size == 0, "SectionGroup bleibt zurückhaltend transparent und flach")
 	_check(_all_corner_radii(section_group, 0), "Große SectionGroup besitzt standardmäßig keinen Cut")
 	_check(action_card.bg_color.a < 1.0 and action_card.shadow_size <= 3, "ActionCard ist begrenzt transluzent und nur leicht erhöht")
 	_check(document_inset.shadow_size == 0 and _all_corner_radii(document_inset, 4), "DocumentInset ist flach mit CONTROL_4")
 	_check(modal_sheet.shadow_size > action_card.shadow_size and _signature_corners(modal_sheet), "ModalSheet nutzt die feste SIGNATURE_6-Behandlung")
+	_check(page_header.bg_color.a >= 0.90 and page_header.shadow_size <= 4, "PageHeader bleibt eine ruhige, klar abgegrenzte Bio-Lumen-Fläche")
+	_check(form_control.shadow_size == 0 and _all_corner_radii(form_control, 4), "FormControl ist flach, dunkel und besitzt feste Insets")
+	_check(value_row_style.shadow_size == 0 and value_row_style.bg_color.a < 0.80, "ValueRow ordnet Werte ohne unnötige Erhöhung")
+	_check(tooltip_style.shadow_size > 0 and _all_corner_radii(tooltip_style, 4), "TooltipCard ist kompakt, kontrastreich und leicht abgehoben")
+	_check(detail_style.shadow_size > 0 and _all_corner_radii(detail_style, 6), "DetailCard trennt explizite Information semantisch vom Hover-Tooltip")
 	for treatment_data in [
 		[AlveolusVisualTheme.CornerTreatment.NONE, 0],
 		[AlveolusVisualTheme.CornerTreatment.CONTROL_4, 4],
@@ -169,6 +198,9 @@ func _run() -> void:
 	icon_button.queue_free()
 
 	var primary_action := AlveolusUIComponents.action_button("Behandlung starten", AlveolusUIComponents.ACTION_PRIMARY)
+	var second_primary := AlveolusUIComponents.action_button("Weiter", AlveolusUIComponents.ACTION_PRIMARY, &"", AlveolusVisualTheme.COBALT)
+	var planning_start := AlveolusUIComponents.planning_start_button()
+	var navigation_action := AlveolusUIComponents.action_button("Zurück", AlveolusUIComponents.ACTION_NAVIGATION, &"back")
 	var segmented := AlveolusUIComponents.segmented_tab("Befunde", true)
 	var toggle := AlveolusUIComponents.toggle_row("Charakterwerte im Run", true)
 	var option_parts := AlveolusUIComponents.option_row("UI-Größe", ["75 %", "90 %", "100 %", "200 %"], 2)
@@ -176,6 +208,7 @@ func _run() -> void:
 	var choice_row := AlveolusUIComponents.choice_row("Bakterium", "Pneumokokke")
 	var choice_card := AlveolusUIComponents.choice_card("Fokusfeld", "Verstärkt den Zielbereich")
 	_check(primary_action.custom_minimum_size.y >= 48.0 and primary_action.get_meta(&"alveolus_action_role") == AlveolusUIComponents.ACTION_PRIMARY, "ActionButton bündelt Rolle und Mindestziel")
+	_check(primary_action.scale == Vector2.ONE and bool(primary_action.get_meta(&"disable_motion_scale", false)), "Hover und Fokus verändern niemals die Buttongeometrie")
 	var bio_lumen_fill := primary_action.get_node_or_null("BioLumenFill") as BioLumenButtonFill
 	var bio_lumen_count := 0
 	for child in primary_action.get_children():
@@ -183,18 +216,70 @@ func _run() -> void:
 			bio_lumen_count += 1
 	_check(bio_lumen_fill != null and bio_lumen_count == 1 and primary_action.get_child(0) == bio_lumen_fill, "Jede zentrale Primäraktion besitzt genau den BioLumenFill als unterste Füllebene")
 	var bio_material: ShaderMaterial = bio_lumen_fill.material as ShaderMaterial if bio_lumen_fill != null else null
-	var bio_top: Color = bio_material.get_shader_parameter("top_color") if bio_material != null else Color.TRANSPARENT
-	var bio_bottom: Color = bio_material.get_shader_parameter("bottom_color") if bio_material != null else Color.TRANSPARENT
+	var second_fill := second_primary.get_node_or_null("BioLumenFill") as BioLumenButtonFill
+	var second_material: ShaderMaterial = second_fill.material as ShaderMaterial if second_fill != null else null
+	_check(bio_lumen_fill != null and not bio_lumen_fill.is_processing(), "BioLumenFill benötigt keinen dauerhaften Process-Callback")
+	_check(bio_material != null and second_material != null and bio_material == second_material, "Primäraktionen teilen Shader und Material; Zustände bleiben CanvasItem-Instanzuniformen")
+	var second_top: Color = second_fill.get_instance_shader_parameter(&"top_color") if second_fill != null else Color.TRANSPARENT
+	_check(_hue_distance(second_top.h, AlveolusVisualTheme.TEAL.h) <= 0.06, "Globale Primäraktionen bleiben auch bei abweichendem Aufrufer-Akzent Teal-zu-Teal")
+	var bio_top: Color = bio_lumen_fill.get_instance_shader_parameter(&"top_color") if bio_lumen_fill != null else Color.TRANSPARENT
+	var bio_bottom: Color = bio_lumen_fill.get_instance_shader_parameter(&"bottom_color") if bio_lumen_fill != null else Color.TRANSPARENT
 	_check(_hue_distance(bio_top.h, AlveolusVisualTheme.TEAL.h) <= 0.06 and _hue_distance(bio_bottom.h, AlveolusVisualTheme.TEAL.h) <= 0.06, "Der Bio-Lumen-Verlauf bleibt rollenrein im Teal-Spektrum")
 	_check(_rgb_distance(bio_top, AlveolusVisualTheme.GOLD) > _rgb_distance(bio_top, AlveolusVisualTheme.TEAL) and _rgb_distance(bio_bottom, AlveolusVisualTheme.GOLD) > _rgb_distance(bio_bottom, AlveolusVisualTheme.TEAL), "Bio-Lumen verwendet Gold weder oben noch unten als Dekorationsfarbe")
 	var bio_spread := _rgb_distance(bio_top, bio_bottom)
 	_check(bio_spread >= 0.02 and bio_spread <= 0.18, "Der Bio-Lumen-Verlauf bleibt mit geringer, aber sichtbarer Spreizung zurückhaltend")
+	var planning_fill := planning_start.get_node_or_null("PreparationBioLumenFill") as PreparationBioLumenFill
+	_check(planning_fill != null and planning_start.get_node_or_null("BioLumenFill") == null, "Nur PlanningStart verwendet den expliziten Türkis-Warmgold-Verlauf")
+	_check(planning_fill != null and not planning_fill.is_processing(), "PlanningStart aktualisiert Zustände ohne Process-Polling")
+	_check(navigation_action.theme_type_variation == AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON and navigation_action.get_meta(&"ui_sound_cue") == &"back", "Navigation bündelt Variante und Zurück-Soundcue")
+	AlveolusUIComponents.set_button_disabled(primary_action, true)
+	var disabled_top: Color = bio_lumen_fill.get_instance_shader_parameter(&"top_color") if bio_lumen_fill != null else Color.TRANSPARENT
+	_check(primary_action.disabled and _hue_distance(disabled_top.h, AlveolusVisualTheme.MUTED.h) <= 0.08, "Programmatisches Disabled synchronisiert den Shader ereignisgesteuert")
+
+	var header_parts := AlveolusUIComponents.page_header("Einstellungen", "Laborsteuerung", navigation_action)
+	var shell_content := AlveolusUIComponents.label("Inhalt", AlveolusVisualTheme.TYPE_BODY_LABEL)
+	var shell_parts := AlveolusUIComponents.page_shell(header_parts["panel"] as Control, shell_content)
+	var shell := shell_parts["shell"] as PanelContainer
+	_check(shell.get_meta(&"alveolus_component") == &"page_shell" and (header_parts["panel"] as PanelContainer).theme_type_variation == AlveolusVisualTheme.TYPE_PAGE_HEADER, "PageShell und PageHeader besitzen zentrale semantische Komponenten")
+	_check(shell.oversampling_with_scale == CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED, "PageShell aktiviert skalierungsabhängiges Font-Oversampling")
+	var tooltip_parts := AlveolusUIComponents.tooltip_card("Fokusfeld", "Verstärkt die Behandlung.", "Aktiv · 2 K")
+	var detail_parts := AlveolusUIComponents.detail_card("Fokusfeld", "Verstärkt die Behandlung.", "I · Information")
+	_check((tooltip_parts["panel"] as PanelContainer).theme_type_variation == AlveolusVisualTheme.TYPE_TOOLTIP_CARD and float((tooltip_parts["panel"] as PanelContainer).get_meta(&"alveolus_maximum_width")) <= 288.0, "TooltipCard bleibt kompakt und semantisch typisiert")
+	_check((detail_parts["panel"] as PanelContainer).theme_type_variation == AlveolusVisualTheme.TYPE_DETAIL_CARD, "Explizite Detailkarte ist vom Hover-Tooltip getrennt")
+	var modal_actions: Array[Control] = [AlveolusUIComponents.action_button("Weiter", AlveolusUIComponents.ACTION_PRIMARY)]
+	var modal_parts := AlveolusUIComponents.modal_sheet("Behandlung pausiert", AlveolusUIComponents.label("Run eingefroren"), modal_actions)
+	_check((modal_parts["panel"] as PanelContainer).theme_type_variation == AlveolusVisualTheme.TYPE_MODAL_SHEET and (modal_parts["actions"] as HBoxContainer).get_child_count() == 1, "ModalSheet bündelt Inhalt und Aktionen ohne Leerraumreserve")
+	var semantic_fills: Array[BioLumenSurfaceFill] = [
+		(header_parts["panel"] as PanelContainer).get_node_or_null("BioLumenSurface") as BioLumenSurfaceFill,
+		(tooltip_parts["panel"] as PanelContainer).get_node_or_null("BioLumenSurface") as BioLumenSurfaceFill,
+		(detail_parts["panel"] as PanelContainer).get_node_or_null("BioLumenSurface") as BioLumenSurfaceFill,
+		(modal_parts["panel"] as PanelContainer).get_node_or_null("BioLumenSurface") as BioLumenSurfaceFill,
+	]
+	var shared_surface_material: ShaderMaterial = null
+	for semantic_fill in semantic_fills:
+		_check(semantic_fill != null and not semantic_fill.is_processing(), "Jede zentrale Bio-Lumen-Fläche ist prozessfrei")
+		if semantic_fill == null:
+			continue
+		if shared_surface_material == null:
+			shared_surface_material = semantic_fill.material as ShaderMaterial
+		_check(semantic_fill.material == shared_surface_material, "Semantische Flächen teilen den gecachten Surface-Materialpfad")
+	var value_row := AlveolusUIComponents.value_row("Wirkung", "18")
+	_check(value_row.theme_type_variation == AlveolusVisualTheme.TYPE_VALUE_ROW, "ValueRow besitzt eine zentrale semantische Dichte")
 	_check(segmented.toggle_mode and segmented.button_pressed and segmented.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB, "SegmentedTab besitzt einen echten Auswahlzustand")
 	_check(toggle.custom_minimum_size.y >= 44.0 and toggle.button_pressed, "ToggleRow ist konsistent groß und zustandsbehaftet")
 	_check((option_parts["control"] as OptionButton).custom_minimum_size.y >= 44.0, "OptionRow erfüllt das Mindestziel")
 	_check((slider_parts["control"] as HSlider).custom_minimum_size.y >= 44.0, "SliderRow erfüllt das Mindestziel")
 	_check(choice_row.custom_minimum_size.y == 64.0 and choice_card.custom_minimum_size.y == 88.0, "ChoiceRow und ChoiceCard besitzen getrennte feste Dichten")
+	_check(choice_row.theme_type_variation == AlveolusVisualTheme.TYPE_CHOICE_ROW, "ChoiceRow nutzt die kompakte zentrale Kartenrolle")
+	_check(choice_card.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTION_CARD, "ChoiceCard behält die ausführliche zentrale Kartenrolle")
 	primary_action.free()
+	second_primary.free()
+	planning_start.free()
+	shell.free()
+	(tooltip_parts["panel"] as PanelContainer).free()
+	(detail_parts["panel"] as PanelContainer).free()
+	(modal_parts["panel"] as PanelContainer).free()
+	value_row.free()
 	segmented.free()
 	toggle.free()
 	(option_parts["row"] as Control).free()

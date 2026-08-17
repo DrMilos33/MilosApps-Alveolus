@@ -38,12 +38,15 @@ signal preparation_slot_requested(slot_id: StringName)
 signal preparation_reserve_requested(id: StringName)
 signal preparation_replacement_cancelled
 signal ability_slot_requested(slot: int)
+signal pause_requested
 signal research_tab_changed(tab: StringName)
 signal talent_toggle_requested(id: StringName)
 signal talent_reset_requested
 signal finding_reaction_selected(id: StringName)
 signal finding_reserve_swap_requested(incoming_id: StringName, outgoing_id: StringName)
 signal finding_confirmed(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName)
+signal context_detail_opened(source: Control, explicit: bool)
+signal context_detail_closed
 
 const COLOR_BG := AlveolusVisualTheme.PETROL
 const COLOR_PANEL := Color("163f47")
@@ -66,6 +69,49 @@ const INTRO_SKIP_PANEL_SIZE := Vector2(470.0, 194.0)
 var root: Control
 var page_shells: Array[Dictionary] = []
 var gameplay_hud: Control
+var run_hud_screen: RunHUDOverlay
+var run_hud_view_revision: int = 0
+var run_hud_vitals: Dictionary = {
+	"stability_current": 100.0,
+	"stability_maximum": 100.0,
+	"shield_current": 0.0,
+	"shield_maximum": 0.0,
+	"timer_text": "BOSS IN · 00:00",
+	"timer_tone": &"neutral",
+	"boss_visible": false,
+	"boss_title": "Infektionsherd",
+	"boss_current": 0.0,
+	"boss_maximum": 1.0,
+	"boss_phase": "",
+	"analysis_current": 0,
+	"analysis_target": 0,
+	"analysis_level": 0,
+}
+var run_hud_stat_rows: Array = []
+var run_hud_ability_rows: Array = [
+	{
+		"slot": 0,
+		"title": "Nicht belegt",
+		"icon_id": &"ability",
+		"occupied": false,
+		"ready": false,
+		"cooldown_remaining": 0.0,
+		"cooldown_total": 0.0,
+		"targeting": false,
+		"key_glyph_text": "Q",
+	},
+	{
+		"slot": 1,
+		"title": "Nicht belegt",
+		"icon_id": &"ability",
+		"occupied": false,
+		"ready": false,
+		"cooldown_remaining": 0.0,
+		"cooldown_total": 0.0,
+		"targeting": false,
+		"key_glyph_text": "E",
+	},
+]
 var stability_panel: Panel
 var stability_bar: ProgressBar
 var stability_value: Label
@@ -77,18 +123,20 @@ var analysis_sample_panel: Panel
 var level_label: Label
 var timer_label: Label
 var timer_panel: Panel
+var alert_panel: Panel
 var alert_label: Label
 var boss_panel: Panel
 var boss_bar: ProgressBar
 var boss_value: Label
 var boss_phase_label: Label
+var boss_announcement_panel: Panel
 var boss_announcement: Label
 var alert_time: float = 0.0
 var boss_announcement_time: float = 0.0
 var boss_hud_active: bool = false
 var run_stats_panel: Control
 var run_stats_label: Label
-var run_stats_strip: HudStatStrip
+var run_stats_strip: HFlowContainer
 var ability_panel: GridContainer
 var ability_cards: Array[Panel] = []
 var ability_hit_buttons: Array[Button] = []
@@ -110,6 +158,8 @@ var campus_buttons: Dictionary = {}
 var campus_research_status: Label
 var campus_clinic_status: Label
 var practice_overlay: Control
+var practice_screen: PracticeScreen
+var practice_view_revision: int = 0
 var practice_research_value: Label
 var practice_columns: GridContainer
 var passive_info: Label
@@ -123,6 +173,14 @@ var clinic_offers: Control
 var clinic_claim_button: Button
 var clinic_offer_buttons: Dictionary = {}
 var research_overlay: Control
+var progression_screen: ProgressionScreen
+var progression_view_revision: int = 0
+var progression_research_items: Array = []
+var progression_talent_branches: Array = []
+var progression_research_balance: String = "Forschung 0"
+var progression_talent_balance: String = "0 Talentpunkte"
+var progression_talent_reset_enabled: bool = false
+var progression_context_sources: Array[Control] = []
 var research_points_label: Label
 var research_rank_labels: Dictionary = {}
 var research_buy_buttons: Dictionary = {}
@@ -155,6 +213,8 @@ var talent_inspector_description: Label
 var talent_inspector_meta: Label
 var current_research_tab: StringName = &"research"
 var level_overlay: Control
+var level_screen: CaseArchiveScreen
+var level_view_revision: int = 0
 var level_buttons: Dictionary = {}
 var level_card_labels: Dictionary = {}
 var level_illustrations: Dictionary = {}
@@ -165,14 +225,20 @@ var lexicon_labels: Dictionary = {}
 var lexicon_illustrations: Dictionary = {}
 var lexicon_detail: Label
 var story_overlay: Control
+var story_screen: StoryScreen
+var story_view_model: StoryScreenViewModel
 var story_kicker: Label
 var story_title: Label
 var story_body: Label
 var story_skip_button: Button
 var story_next_button: Button
-var story_panel: Panel
+var story_panel: PanelContainer
 var story_index: int = 0
 var settings_overlay: Control
+var settings_screen: SettingsScreen
+var settings_view_revision: int = 0
+var settings_show_quit: bool = true
+var settings_status_text: String = "Änderungen werden sofort übernommen."
 var settings_quit_button: Button
 var settings_run_stats_toggle: CheckButton
 var settings_master_slider: HSlider
@@ -217,6 +283,9 @@ var preparation_workspace: GridContainer
 var preparation_workspace_host: Control
 var preparation_lock_panel: Panel
 var preparation_lock_icon: SimpleIcon
+var preparation_lock_stack: VBoxContainer
+var preparation_lock_title: Label
+var preparation_lock_copy: Label
 var preparation_plan_panel: Panel
 var preparation_catalog_panel: Panel
 var preparation_slots: GridContainer
@@ -275,17 +344,21 @@ var preparation_intro_skip_button: Button
 var preparation_locked: bool = false
 var preparation_slot_keyboard_activation: bool = false
 var upgrade_overlay: Control
-var upgrade_panel: Panel
+var upgrade_screen: UpgradeOverlay
+var upgrade_view_revision: int = 0
+var upgrade_panel: PanelContainer
 var upgrade_cards: GridContainer
-var upgrade_education: Panel
+var upgrade_education: Control
 var reroll_button: Button
 var current_upgrade_options: Array[UpgradeDefinition] = []
 var pause_overlay: Control
-var pause_panel: Panel
+var pause_screen: PauseOverlay
+var pause_view_revision: int = 0
+var pause_panel: PanelContainer
 var pause_resume_button: Button
 var pause_skip_button: Button
 var pause_stats_overlay: Control
-var pause_stats_panel: Panel
+var pause_stats_panel: PanelContainer
 var pause_stats_label: Label
 var pause_stats_label_right: Label
 var pause_stats_grid: GridContainer
@@ -295,31 +368,58 @@ var pause_stat_rows: Array[PanelContainer] = []
 var pause_stats_back_button: Button
 var pause_is_intro: bool = false
 var abort_overlay: Control
-var abort_panel: Panel
+var abort_confirmation: ConfirmationOverlay
+var abort_confirmation_revision: int = 0
+var abort_panel: PanelContainer
 var intro_skip_overlay: Control
-var intro_skip_panel: Panel
+var intro_skip_confirmation: ConfirmationOverlay
+var intro_skip_confirmation_revision: int = 0
+var intro_skip_panel: PanelContainer
 var restart_overlay: Control
-var restart_panel: Panel
+var restart_confirmation: ConfirmationOverlay
+var restart_confirmation_revision: int = 0
+var restart_panel: PanelContainer
 var discovery_tooltip: DiscoveryTooltip
+var context_detail_controller: ContextDetailController
 var upgrade_target_preview: UpgradeTargetPreview
 var intro_upgrade_target: Variant
 var end_overlay: Control
-var end_panel: Panel
+var result_screen: ResultOverlay
+var result_view_revision: int = 0
+var result_success: bool = false
+var result_title_text: String = ""
+var result_reason_text: String = ""
+var result_detail_text: String = ""
+var result_stats_data: Array[ResultOverlayViewModel.StatViewModel] = []
+var result_reward_text: String = ""
+var result_unlock_text: String = ""
+var result_mastery_text: String = ""
+var end_panel: PanelContainer
 var end_title: Label
 var end_reason: Label
 var end_stats: Label
 var end_reward: Label
 var end_unlock: Label
-var end_mastery_panel: Panel
+var end_mastery_panel: Control
 var end_mastery_label: Label
 var finding_overlay: Control
+var finding_screen: FindingOverlay
+var finding_view_revision: int = 0
+var finding_id: StringName = &""
+var finding_title_text: String = ""
+var finding_medical_copy: String = ""
+var finding_gameplay_copy: String = ""
+var finding_reaction_models: Array[FindingOverlayViewModel.ReactionViewModel] = []
+var finding_reserve_model: FindingOverlayViewModel.ReserveSwapViewModel
+var finding_validation_text: String = ""
+var finding_context_sources: Array[Control] = []
 var finding_title: Label
 var finding_medical_text: Label
 var finding_gameplay_text: Label
 var finding_copy_grid: GridContainer
-var finding_panel: Panel
+var finding_panel: PanelContainer
 var finding_reaction_cards: GridContainer
-var finding_reserve_row: GridContainer
+var finding_reserve_row: Control
 var finding_confirm_button: Button
 var finding_swap_toggle: CheckButton
 var finding_outgoing_option: OptionButton
@@ -336,8 +436,20 @@ func _ready() -> void:
 	root = Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Dynamic TTFs must be rasterized for the effective UI scale instead of
+	# scaling an already rasterized glyph atlas. Children inherit this mode.
+	root.oversampling_with_scale = CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED
 	root.theme = AlveolusVisualTheme.create_theme()
 	add_child(root)
+	context_detail_controller = ContextDetailController.new()
+	context_detail_controller.name = "ContextDetails"
+	context_detail_controller.detail_opened.connect(func(source: Control, explicit: bool) -> void:
+		context_detail_opened.emit(source, explicit)
+	)
+	context_detail_controller.detail_closed.connect(func() -> void:
+		context_detail_closed.emit()
+	)
+	root.add_child(context_detail_controller)
 	get_viewport().size_changed.connect(_apply_ui_scale)
 	gameplay_hud = _build_gameplay_hud()
 	campus_overlay = _build_campus()
@@ -364,17 +476,20 @@ func _ready() -> void:
 	discovery_tooltip.dismissed.connect(func() -> void: discovery_dismissed.emit())
 	root.add_child(discovery_tooltip)
 	_hide_all()
+	set_process(false)
 
 func _process(delta: float) -> void:
 	if alert_time > 0.0:
 		alert_time -= delta
 		if alert_time <= 0.0:
-			alert_label.hide()
+			alert_panel.hide()
 			_refresh_run_stats()
 	if boss_announcement_time > 0.0:
 		boss_announcement_time -= delta
 		if boss_announcement_time <= 0.0:
-			boss_announcement.hide()
+			boss_announcement_panel.hide()
+	if alert_time <= 0.0 and boss_announcement_time <= 0.0:
+		set_process(false)
 
 func _input(event: InputEvent) -> void:
 	if pending_binding_action == &"" or not settings_overlay.visible:
@@ -405,284 +520,58 @@ func _input(event: InputEvent) -> void:
 
 func _build_gameplay_hud() -> Control:
 	var layer := Control.new()
+	layer.name = "GameplayHUD"
 	layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(layer)
-	stability_panel = Panel.new()
-	stability_panel.position = Vector2(16.0, 16.0)
-	stability_panel.size = Vector2(250.0, 44.0)
-	stability_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stability_panel.add_theme_stylebox_override("panel", _hud_panel_style(COLOR_TEAL, 0.78, 6))
-	layer.add_child(stability_panel)
-	var stability_margin := _margin(12, 8, 12, 7)
-	stability_panel.add_child(stability_margin)
-	var stability_row := HBoxContainer.new()
-	stability_row.add_theme_constant_override("separation", 10)
-	stability_margin.add_child(stability_row)
-	var stability_stack := VBoxContainer.new()
-	stability_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stability_stack.add_theme_constant_override("separation", 4)
-	stability_row.add_child(stability_stack)
-	stability_stack.add_child(_label("ZUSTAND", 14, Color(COLOR_TEXT, 0.76)))
-	stability_bar = ProgressBar.new()
-	stability_bar.custom_minimum_size = Vector2(0.0, 7.0)
-	stability_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	stability_bar.show_percentage = false
-	stability_bar.add_theme_stylebox_override("background", _bar_style(Color("24343d"), 3))
-	stability_bar.add_theme_stylebox_override("fill", _bar_style(COLOR_TEAL, 3))
-	stability_stack.add_child(stability_bar)
-	stability_value = _label("100 / 100", 14, COLOR_TEXT)
-	stability_value.custom_minimum_size = Vector2(68.0, 0.0)
-	stability_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	stability_value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	stability_row.add_child(stability_value)
 
-	shield_panel = Panel.new()
-	shield_panel.position = Vector2(16.0, 64.0)
-	shield_panel.size = Vector2(250.0, 28.0)
-	shield_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	shield_panel.add_theme_stylebox_override("panel", _hud_panel_style(COLOR_BLUE, 0.72, 6))
-	layer.add_child(shield_panel)
-	var shield_margin := _margin(10, 6, 10, 6)
-	shield_panel.add_child(shield_margin)
-	var shield_row := HBoxContainer.new()
-	shield_row.add_theme_constant_override("separation", 8)
-	shield_margin.add_child(shield_row)
-	var shield_title := _label("SCHUTZ", 14, Color(COLOR_TEXT, 0.78))
-	shield_title.custom_minimum_size = Vector2(54.0, 0.0)
-	shield_row.add_child(shield_title)
-	shield_bar = ProgressBar.new()
-	shield_bar.custom_minimum_size = Vector2(0.0, 6.0)
-	shield_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shield_bar.show_percentage = false
-	shield_bar.add_theme_stylebox_override("background", _bar_style(Color(AlveolusVisualTheme.PETROL_DEEP, 0.82), 3))
-	shield_bar.add_theme_stylebox_override("fill", _bar_style(COLOR_BLUE, 3))
-	shield_row.add_child(shield_bar)
-	shield_value = _label("0", 14, COLOR_TEXT)
-	shield_value.custom_minimum_size = Vector2(28.0, 0.0)
-	shield_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	shield_row.add_child(shield_value)
-	shield_panel.hide()
+	# Stable combat chrome is owned exclusively by the immutable RunHUD module.
+	# Only genuinely transient alert/finding layers remain in this compatibility
+	# facade, so hidden duplicate surfaces cannot consume nodes or materials.
+	_install_run_hud_overlay(layer)
 
-	timer_panel = Panel.new()
-	timer_panel.set_anchor(SIDE_LEFT, 0.5)
-	timer_panel.set_anchor(SIDE_RIGHT, 0.5)
-	timer_panel.offset_left = -112.0
-	timer_panel.offset_right = 112.0
-	timer_panel.offset_top = 16.0
-	timer_panel.offset_bottom = 52.0
-	timer_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	timer_panel.add_theme_stylebox_override("panel", _hud_panel_style(COLOR_TEAL, 0.66, 6))
-	layer.add_child(timer_panel)
-	timer_label = _label("BOSS IN 00:45", 15, COLOR_TEXT)
-	timer_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
-	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	timer_panel.add_child(timer_label)
-
-	boss_panel = Panel.new()
-	boss_panel.set_anchor(SIDE_LEFT, 0.5)
-	boss_panel.set_anchor(SIDE_RIGHT, 0.5)
-	boss_panel.offset_left = -260.0
-	boss_panel.offset_right = 260.0
-	boss_panel.offset_top = 70.0
-	boss_panel.offset_bottom = 112.0
-	boss_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.035, 0.05, 0.95), Color(COLOR_RED, 0.62), 1, 10))
-	layer.add_child(boss_panel)
-	var boss_margin := _margin(12, 6, 12, 6)
-	boss_panel.add_child(boss_margin)
-	var boss_stack := VBoxContainer.new()
-	boss_stack.add_theme_constant_override("separation", 3)
-	boss_margin.add_child(boss_stack)
-	var boss_row := HBoxContainer.new()
-	boss_stack.add_child(boss_row)
-	boss_value = _label("INFEKTIONSHERD", 14, COLOR_RED)
-	boss_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	boss_row.add_child(boss_value)
-	boss_phase_label = _label("PHASEN 70 % · 40 %", 14, COLOR_MUTED)
-	boss_row.add_child(boss_phase_label)
-	boss_bar = ProgressBar.new()
-	boss_bar.custom_minimum_size = Vector2(0.0, 8.0)
-	boss_bar.show_percentage = false
-	boss_bar.add_theme_stylebox_override("background", _bar_style(Color("301c27"), 3))
-	boss_bar.add_theme_stylebox_override("fill", _bar_style(COLOR_RED, 3))
-	boss_stack.add_child(boss_bar)
-	boss_panel.hide()
-
-	analysis_bar = ProgressBar.new()
-	analysis_bar.set_anchor(SIDE_RIGHT, 1.0)
-	analysis_bar.set_anchor(SIDE_TOP, 1.0)
-	analysis_bar.set_anchor(SIDE_BOTTOM, 1.0)
-	analysis_bar.offset_top = -6.0
-	analysis_bar.show_percentage = false
-	analysis_bar.add_theme_stylebox_override("background", _bar_style(Color(0.07, 0.12, 0.16, 0.92), 0))
-	analysis_bar.add_theme_stylebox_override("fill", _bar_style(COLOR_BLUE, 0))
-	layer.add_child(analysis_bar)
-	var sample_badge := Panel.new()
-	analysis_sample_panel = sample_badge
-	sample_badge.set_anchor(SIDE_TOP, 1.0)
-	sample_badge.set_anchor(SIDE_BOTTOM, 1.0)
-	sample_badge.offset_left = 12.0
-	sample_badge.offset_top = -32.0
-	sample_badge.offset_right = 190.0
-	sample_badge.offset_bottom = -8.0
-	sample_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sample_badge.add_theme_stylebox_override("panel", _hud_panel_style(COLOR_BLUE, 0.70, 6))
-	layer.add_child(sample_badge)
-	level_label = _label("PROBEN · LEVEL 0", 14, COLOR_TEXT)
-	level_label.set_anchor(SIDE_TOP, 1.0)
-	level_label.set_anchor(SIDE_BOTTOM, 1.0)
-	level_label.offset_left = 22.0
-	level_label.offset_top = -31.0
-	level_label.offset_right = 182.0
-	level_label.offset_bottom = -9.0
-	level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	layer.add_child(level_label)
-
-	alert_label = _label("", 14, COLOR_TEXT)
-	alert_label.set_anchor(SIDE_LEFT, 0.5)
-	alert_label.set_anchor(SIDE_RIGHT, 0.5)
-	alert_label.offset_left = -260.0
-	alert_label.offset_right = 260.0
-	alert_label.offset_top = 126.0
-	alert_label.offset_bottom = 160.0
+	alert_panel = Panel.new()
+	alert_panel.name = "RunAlert"
+	alert_panel.set_anchor(SIDE_LEFT, 0.5)
+	alert_panel.set_anchor(SIDE_RIGHT, 0.5)
+	alert_panel.offset_left = -260.0
+	alert_panel.offset_right = 260.0
+	alert_panel.offset_top = 126.0
+	alert_panel.offset_bottom = 160.0
+	alert_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	AlveolusUIComponents.apply_surface_role(alert_panel, AlveolusVisualTheme.SurfaceRole.HUD_ALERT, COLOR_TEAL)
+	layer.add_child(alert_panel)
+	var alert_margin := _margin(12, 6, 12, 6)
+	alert_panel.add_child(alert_margin)
+	alert_label = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_HUD_VALUE_LABEL)
 	alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	alert_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	alert_label.add_theme_stylebox_override("normal", AlveolusVisualTheme.with_content_insets(
-		_panel_style(Color(0.04, 0.09, 0.12, 0.90), Color(COLOR_TEAL, 0.32), 1, 9), 12.0, 6.0
-	))
-	alert_label.hide()
-	layer.add_child(alert_label)
+	alert_margin.add_child(alert_label)
+	alert_panel.hide()
 
-	boss_announcement = _label("INFEKTIONSHERD ERKANNT", 25, COLOR_RED)
-	boss_announcement.set_anchor(SIDE_LEFT, 0.5)
-	boss_announcement.set_anchor(SIDE_RIGHT, 0.5)
-	boss_announcement.set_anchor(SIDE_TOP, 0.5)
-	boss_announcement.offset_left = -300.0
-	boss_announcement.offset_right = 300.0
-	boss_announcement.offset_top = -42.0
-	boss_announcement.offset_bottom = 42.0
+	boss_announcement_panel = Panel.new()
+	boss_announcement_panel.name = "BossAnnouncement"
+	boss_announcement_panel.set_anchor(SIDE_LEFT, 0.5)
+	boss_announcement_panel.set_anchor(SIDE_RIGHT, 0.5)
+	boss_announcement_panel.set_anchor(SIDE_TOP, 0.5)
+	boss_announcement_panel.offset_left = -300.0
+	boss_announcement_panel.offset_right = 300.0
+	boss_announcement_panel.offset_top = -42.0
+	boss_announcement_panel.offset_bottom = 42.0
+	boss_announcement_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	AlveolusUIComponents.apply_surface_role(boss_announcement_panel, AlveolusVisualTheme.SurfaceRole.HUD_ALERT, COLOR_RED, true)
+	layer.add_child(boss_announcement_panel)
+	var announcement_margin := _margin(16, 10, 16, 10)
+	boss_announcement_panel.add_child(announcement_margin)
+	boss_announcement = AlveolusUIComponents.label("INFEKTIONSHERD ERKANNT", AlveolusVisualTheme.TYPE_HUD_VALUE_LABEL)
+	boss_announcement.add_theme_color_override("font_color", COLOR_RED)
 	boss_announcement.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	boss_announcement.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	boss_announcement.add_theme_stylebox_override("normal", AlveolusVisualTheme.with_content_insets(
-		_panel_style(Color(0.09, 0.025, 0.04, 0.94), COLOR_RED, 1, 12), 16.0, 10.0
-	))
-	boss_announcement.hide()
-	layer.add_child(boss_announcement)
-
-	run_stats_panel = Control.new()
-	run_stats_panel.name = "RunStats"
-	run_stats_panel.set_anchor(SIDE_LEFT, 0.5)
-	run_stats_panel.set_anchor(SIDE_RIGHT, 1.0)
-	run_stats_panel.offset_left = 124.0
-	run_stats_panel.offset_right = -16.0
-	run_stats_panel.offset_top = 16.0
-	run_stats_panel.offset_bottom = 66.0
-	run_stats_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	run_stats_strip = HudStatStrip.new()
-	run_stats_strip.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	run_stats_panel.add_child(run_stats_strip)
-	# Kept as a hidden compatibility field for older test adapters. The visible
-	# strip never renders headings or textual labels.
-	run_stats_label = _label("", 14, COLOR_TEXT)
-	run_stats_label.hide()
-	run_stats_panel.add_child(run_stats_label)
-	run_stats_panel.hide()
-	layer.add_child(run_stats_panel)
-
-	# Taktische Anzeigen bleiben klein und liegen bewusst in den unteren Ecken,
-	# damit sie weder Zustand noch Bossleiste verdecken.
-	ability_panel = GridContainer.new()
-	ability_panel.columns = 2
-	ability_panel.set_anchor(SIDE_LEFT, 1.0)
-	ability_panel.set_anchor(SIDE_RIGHT, 1.0)
-	ability_panel.set_anchor(SIDE_TOP, 1.0)
-	ability_panel.set_anchor(SIDE_BOTTOM, 1.0)
-	ability_panel.offset_left = -400.0
-	ability_panel.offset_right = -16.0
-	ability_panel.offset_top = -72.0
-	ability_panel.offset_bottom = -12.0
-	ability_panel.add_theme_constant_override("h_separation", 8)
-	ability_panel.add_theme_constant_override("v_separation", 8)
-	layer.add_child(ability_panel)
-	for slot_index in range(2):
-		var ability_card := Panel.new()
-		ability_card.custom_minimum_size = Vector2(180.0, 60.0)
-		ability_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ability_card.add_theme_stylebox_override("panel", _hud_panel_style(COLOR_BLUE, 0.80, 6))
-		ability_panel.add_child(ability_card)
-		ability_cards.append(ability_card)
-		var ability_margin := _margin(6, 8, 6, 7)
-		ability_card.add_child(ability_margin)
-		var ability_stack := VBoxContainer.new()
-		ability_stack.add_theme_constant_override("separation", 3)
-		ability_margin.add_child(ability_stack)
-		var ability_header := HBoxContainer.new()
-		ability_header.add_theme_constant_override("separation", 4)
-		ability_stack.add_child(ability_header)
-		var key_badge_container := Control.new()
-		key_badge_container.custom_minimum_size = Vector2(24.0, 28.0)
-		key_badge_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		ability_header.add_child(key_badge_container)
-		ability_key_containers.append(key_badge_container)
-		var key_icon := TextureRect.new()
-		key_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		key_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		key_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		key_icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		key_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		key_icon.hide()
-		key_badge_container.add_child(key_icon)
-		ability_key_icons.append(key_icon)
-		var key_badge := Label.new()
-		key_badge.text = "Q" if slot_index == 0 else "E"
-		key_badge.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		key_badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		key_badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		key_badge.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
-		key_badge.add_theme_font_size_override("font_size", 12)
-		key_badge.add_theme_color_override("font_color", AlveolusVisualTheme.IVORY)
-		key_badge.add_theme_stylebox_override("normal", AlveolusVisualTheme.with_content_insets(
-			_panel_style(COLOR_BLUE, COLOR_BLUE, 1, 8), 4.0, 2.0
-		))
-		key_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		key_badge_container.add_child(key_badge)
-		ability_key_labels.append(key_badge)
-		var ability_title := _label("NICHT BELEGT", 14, COLOR_TEXT)
-		ability_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ability_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		ability_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		ability_header.add_child(ability_title)
-		ability_title_labels.append(ability_title)
-		var cooldown := _label("", 14, COLOR_BLUE)
-		cooldown.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		cooldown.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		cooldown.custom_minimum_size = Vector2(38.0, 0.0)
-		ability_header.add_child(cooldown)
-		ability_cooldown_labels.append(cooldown)
-		var cooldown_bar := ProgressBar.new()
-		cooldown_bar.custom_minimum_size = Vector2(0.0, 6.0)
-		cooldown_bar.show_percentage = false
-		cooldown_bar.add_theme_stylebox_override("background", _bar_style(Color("21343a"), 3))
-		cooldown_bar.add_theme_stylebox_override("fill", _bar_style(COLOR_BLUE, 3))
-		ability_stack.add_child(cooldown_bar)
-		ability_cooldown_bars.append(cooldown_bar)
-		var ability_hit := Button.new()
-		ability_hit.name = "AbilitySlot%d" % (slot_index + 1)
-		ability_hit.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		ability_hit.focus_mode = Control.FOCUS_ALL
-		ability_hit.tooltip_text = "Fähigkeit auswählen oder zielen"
-		ability_hit.add_theme_stylebox_override("normal", _panel_style(Color.TRANSPARENT, Color.TRANSPARENT, 0, 12))
-		ability_hit.add_theme_stylebox_override("hover", _panel_style(Color(COLOR_BLUE, 0.06), Color(COLOR_BLUE, 0.58), 2, 12))
-		ability_hit.add_theme_stylebox_override("pressed", _panel_style(Color(COLOR_BLUE, 0.12), COLOR_BLUE, 2, 12))
-		ability_hit.add_theme_stylebox_override("focus", _panel_style(Color.TRANSPARENT, COLOR_BLUE, 3, 12))
-		ability_hit.pressed.connect(_on_ability_slot_pressed.bind(slot_index))
-		ability_card.add_child(ability_hit)
-		ability_hit_buttons.append(ability_hit)
-		ability_card.hide()
-	ability_panel.hide()
+	announcement_margin.add_child(boss_announcement)
+	boss_announcement_panel.hide()
 
 	finding_progress_panel = Panel.new()
+	finding_progress_panel.name = "FindingProgress"
 	finding_progress_panel.set_anchor(SIDE_LEFT, 0.5)
 	finding_progress_panel.set_anchor(SIDE_RIGHT, 0.5)
 	finding_progress_panel.set_anchor(SIDE_TOP, 1.0)
@@ -692,25 +581,80 @@ func _build_gameplay_hud() -> Control:
 	finding_progress_panel.offset_top = -60.0
 	finding_progress_panel.offset_bottom = -12.0
 	finding_progress_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	finding_progress_panel.add_theme_stylebox_override("panel", _hud_panel_style(COLOR_GOLD, 0.78, 6))
+	AlveolusUIComponents.apply_surface_role(finding_progress_panel, AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, COLOR_GOLD)
 	layer.add_child(finding_progress_panel)
 	var finding_margin := _margin(12, 7, 12, 7)
 	finding_progress_panel.add_child(finding_margin)
 	var finding_stack := VBoxContainer.new()
 	finding_stack.add_theme_constant_override("separation", 4)
 	finding_margin.add_child(finding_stack)
-	finding_progress_label = _label("BEFUND · 0 / 30", 14, COLOR_GOLD)
+	finding_progress_label = AlveolusUIComponents.label("BEFUND · 0 / 30", AlveolusVisualTheme.TYPE_HUD_VALUE_LABEL)
+	finding_progress_label.add_theme_color_override("font_color", COLOR_GOLD)
 	finding_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	finding_stack.add_child(finding_progress_label)
-	finding_progress_bar = ProgressBar.new()
-	finding_progress_bar.custom_minimum_size = Vector2(0.0, 7.0)
-	finding_progress_bar.show_percentage = false
-	finding_progress_bar.add_theme_stylebox_override("background", _bar_style(Color("21343a"), 4))
-	finding_progress_bar.add_theme_stylebox_override("fill", _bar_style(COLOR_GOLD, 4))
+	finding_progress_bar = AlveolusUIComponents.progress(0.0, 30.0, false)
+	finding_progress_bar.custom_minimum_size.y = 7.0
+	AlveolusUIComponents.apply_progress_accent(finding_progress_bar, COLOR_GOLD)
 	finding_stack.add_child(finding_progress_bar)
 	finding_progress_panel.hide()
 
 	return layer
+
+
+func _install_run_hud_overlay(layer: Control) -> void:
+	# Stable run chrome is presented exclusively by the immutable RunHUD module
+	# while the public GameHUD facade keeps its established compatibility handles.
+	run_hud_screen = RunHUDOverlay.new()
+	run_hud_screen.name = "RunHUD"
+	run_hud_screen.ability_requested.connect(func(slot: int) -> void:
+		ability_slot_requested.emit(slot)
+	)
+	run_hud_screen.pause_requested.connect(func() -> void:
+		pause_requested.emit()
+	)
+	layer.add_child(run_hud_screen)
+	layer.move_child(run_hud_screen, 0)
+
+	# Preserve the established compatibility handles for callers and focused
+	# layout tests. They now point at the central module's controls.
+	stability_panel = run_hud_screen.stability_panel()
+	stability_bar = run_hud_screen.stability_bar()
+	stability_value = run_hud_screen.stability_value_label()
+	shield_panel = run_hud_screen.shield_panel()
+	shield_bar = run_hud_screen.shield_bar()
+	shield_value = run_hud_screen.shield_value_label()
+	timer_panel = run_hud_screen.timer_panel()
+	timer_label = run_hud_screen.timer_value_label()
+	boss_panel = run_hud_screen.boss_panel()
+	boss_bar = run_hud_screen.boss_bar()
+	boss_value = run_hud_screen.boss_value_label()
+	boss_phase_label = run_hud_screen.boss_phase_label()
+	analysis_sample_panel = run_hud_screen.analysis_panel()
+	analysis_bar = run_hud_screen.analysis_bar()
+	level_label = run_hud_screen.analysis_value_label()
+	run_stats_panel = run_hud_screen.run_stats_strip()
+	run_stats_strip = run_hud_screen.run_stats_strip()
+	ability_panel = run_hud_screen.ability_panel()
+	ability_cards = run_hud_screen.ability_cards()
+	ability_hit_buttons = run_hud_screen.ability_buttons()
+	ability_title_labels = run_hud_screen.ability_title_labels()
+	ability_key_labels = run_hud_screen.ability_key_labels()
+	ability_cooldown_labels = run_hud_screen.ability_cooldown_labels()
+	ability_cooldown_bars = run_hud_screen.ability_cooldown_bars()
+	ability_key_containers.clear()
+	ability_key_icons.clear()
+	_apply_run_hud_model()
+
+func _apply_run_hud_model() -> void:
+	if run_hud_screen == null:
+		return
+	run_hud_view_revision += 1
+	run_hud_screen.apply_view_model(RunHUDViewModel.create(
+		run_hud_vitals,
+		run_hud_stat_rows,
+		run_hud_ability_rows,
+		run_hud_view_revision
+	))
 
 func _build_campus() -> Control:
 	var overlay := _overlay_base(Color.TRANSPARENT)
@@ -783,340 +727,34 @@ func _build_campus() -> Control:
 	return overlay
 
 func _build_practice() -> Control:
-	var page := _page("PRAXIS", "ZUM CAMPUS")
-	var overlay: Control = page["overlay"]
-	var page_body: VBoxContainer = page["body"]
-	var practice_scroll := ScrollContainer.new()
-	practice_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	practice_scroll.follow_focus = true
-	page_body.add_child(practice_scroll)
-	var body := VBoxContainer.new()
-	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
-	practice_scroll.add_child(body)
-	var balance_row := HBoxContainer.new()
-	body.add_child(balance_row)
-	var balance_spacer := Control.new()
-	balance_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	balance_row.add_child(balance_spacer)
-	practice_research_value = _label("Forschung 0", 16, COLOR_GOLD)
-	balance_row.add_child(practice_research_value)
-	practice_columns = GridContainer.new()
-	practice_columns.columns = 2
-	practice_columns.custom_minimum_size = Vector2(0.0, 208.0)
-	practice_columns.add_theme_constant_override("h_separation", 12)
-	practice_columns.add_theme_constant_override("v_separation", 12)
-	body.add_child(practice_columns)
-	var offline := _card(COLOR_BLUE)
-	offline["panel"].custom_minimum_size = Vector2(320.0, 208.0)
-	practice_columns.add_child(offline["panel"])
-	var offline_box: VBoxContainer = offline["content"]
-	offline_box.add_child(_section_header("AUTOMATISCHE FORSCHUNG", &"passive_research", COLOR_BLUE))
-	passive_info = _label("Noch keine Forschung abholbar", 14, COLOR_TEXT)
-	passive_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	offline_box.add_child(passive_info)
-	passive_claim_button = _primary_button("ABHOLEN", COLOR_BLUE)
-	passive_claim_button.custom_minimum_size = Vector2(0.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	passive_claim_button.pressed.connect(func() -> void: offline_claim_requested.emit())
-	offline_box.add_child(passive_claim_button)
-
-	var clinic := _card(COLOR_TEAL)
-	clinic["panel"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	clinic["panel"].custom_minimum_size = Vector2(0.0, 208.0)
-	practice_columns.add_child(clinic["panel"])
-	var clinic_box: VBoxContainer = clinic["content"]
-	clinic_box.add_child(_section_header("KLINIKFALL · EIN AKTIVER SLOT", &"clinic", COLOR_TEAL))
-	clinic_status = _label("Wähle einen zeitgesteuerten Fall.", 14, COLOR_TEXT)
-	clinic_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	clinic_box.add_child(clinic_status)
-	clinic_progress = ProgressBar.new()
-	clinic_progress.custom_minimum_size = Vector2(0.0, 8.0)
-	clinic_progress.show_percentage = false
-	clinic_progress.add_theme_stylebox_override("background", _bar_style(Color("24343d"), 5))
-	clinic_progress.add_theme_stylebox_override("fill", _bar_style(COLOR_TEAL, 5))
-	clinic_box.add_child(clinic_progress)
-	var clinic_details := HBoxContainer.new()
-	clinic_box.add_child(clinic_details)
-	clinic_remaining = _label("", 14, COLOR_TEXT)
-	clinic_remaining.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	clinic_details.add_child(clinic_remaining)
-	clinic_reward = _label("", 14, COLOR_GOLD)
-	clinic_details.add_child(clinic_reward)
-	clinic_finish = _label("", 14, COLOR_MUTED)
-	clinic_box.add_child(clinic_finish)
-	clinic_offers = GridContainer.new()
-	(clinic_offers as GridContainer).columns = 1
-	clinic_offers.add_theme_constant_override("h_separation", 8)
-	clinic_offers.add_theme_constant_override("v_separation", 8)
-	clinic_box.add_child(clinic_offers)
-	for id in [&"short_review", &"follow_up", &"complex_case"]:
-		var button := _secondary_button("", COLOR_TEAL)
-		button.custom_minimum_size = Vector2(0.0, 54.0)
-		button.add_theme_font_size_override("font_size", 14)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.pressed.connect(_emit_job_start.bind(id))
-		clinic_offers.add_child(button)
-		clinic_offer_buttons[id] = button
-	clinic_claim_button = _primary_button("BELOHNUNG ABHOLEN", COLOR_GOLD)
-	clinic_claim_button.custom_minimum_size = Vector2(0.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	clinic_claim_button.pressed.connect(func() -> void: clinic_job_claim_requested.emit())
-	clinic_box.add_child(clinic_claim_button)
-	return overlay
+	practice_screen = PracticeScreen.new()
+	practice_screen.offline_claim_requested.connect(func() -> void: offline_claim_requested.emit())
+	practice_screen.clinic_job_start_requested.connect(func(id: StringName) -> void: clinic_job_start_requested.emit(id))
+	practice_screen.clinic_job_claim_requested.connect(func() -> void: clinic_job_claim_requested.emit())
+	practice_screen.back_requested.connect(func() -> void: back_requested.emit())
+	practice_columns = practice_screen.find_child("PracticeColumns", true, false) as GridContainer
+	clinic_offers = practice_screen.find_child("ClinicOffers", true, false) as Control
+	passive_claim_button = practice_screen.offline_claim_action()
+	clinic_claim_button = practice_screen.clinic_claim_action()
+	clinic_progress = practice_screen.clinic_progress_control()
+	return practice_screen
 
 func _build_research() -> Control:
-	var page := _page("FORSCHUNG", "ZUM CAMPUS")
-	var overlay: Control = page["overlay"]
-	var body: VBoxContainer = page["body"]
-	research_tab_row = GridContainer.new()
-	research_tab_row.name = "ProgressionTabs"
-	research_tab_row.columns = 3
-	research_tab_row.add_theme_constant_override("h_separation", 8)
-	research_tab_row.add_theme_constant_override("v_separation", 8)
-	body.add_child(research_tab_row)
-	var research_tabs := ButtonGroup.new()
-	research_tab_button = AlveolusUIComponents.segmented_tab("FORSCHUNG", true, research_tabs)
-	research_tab_button.custom_minimum_size = Vector2(164.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	research_tab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	research_tab_button.pressed.connect(_select_research_tab.bind(&"research"))
-	research_tab_row.add_child(research_tab_button)
-	talent_tab_button = AlveolusUIComponents.segmented_tab("TALENTE", false, research_tabs)
-	talent_tab_button.custom_minimum_size = Vector2(164.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	talent_tab_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	talent_tab_button.pressed.connect(_select_research_tab.bind(&"talents"))
-	research_tab_row.add_child(talent_tab_button)
-	research_points_label = _label("Forschung 0", 18, COLOR_GOLD)
-	research_points_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	research_points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	research_tab_row.add_child(research_points_label)
-	research_content = VBoxContainer.new()
-	research_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	research_content.add_theme_constant_override("separation", 8)
-	body.add_child(research_content)
-	var research_inspector := _progression_inspector(COLOR_GOLD, &"research", "Forschung", "")
-	research_inspector_panel = research_inspector["panel"]
-	research_inspector_panel.z_index = 30
-	research_inspector_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	research_inspector_panel.hide()
-	overlay.add_child(research_inspector_panel)
-	research_inspector_icon = research_inspector["icon"]
-	research_inspector_title = research_inspector["title"]
-	research_inspector_description = research_inspector["description"]
-	research_inspector_meta = research_inspector["meta"]
-	research_scroll = ScrollContainer.new()
-	research_scroll.name = "ResearchViewport"
-	research_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	research_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	research_scroll.follow_focus = true
-	research_content.add_child(research_scroll)
-	research_grid = GridContainer.new()
-	research_grid.columns = 3
-	research_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	research_grid.add_theme_constant_override("h_separation", 8)
-	research_grid.add_theme_constant_override("v_separation", 8)
-	research_scroll.add_child(research_grid)
-	for definition in ContentCatalog.research_definitions():
-		var buy := Button.new()
-		buy.name = "Research_%s" % String(definition.id)
-		buy.custom_minimum_size = Vector2(0.0, 76.0)
-		buy.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTION_CARD
-		buy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		buy.clip_contents = true
-		buy.add_theme_stylebox_override("normal", AlveolusVisualTheme.case_card_style(COLOR_GOLD, &"normal"))
-		buy.add_theme_stylebox_override("hover", AlveolusVisualTheme.case_card_style(COLOR_GOLD, &"hover"))
-		buy.add_theme_stylebox_override("pressed", AlveolusVisualTheme.case_card_style(COLOR_GOLD, &"pressed"))
-		buy.add_theme_stylebox_override("focus", AlveolusVisualTheme.case_card_style(COLOR_GOLD, &"focus"))
-		buy.add_theme_stylebox_override("disabled", AlveolusVisualTheme.case_card_style(COLOR_MUTED, &"disabled"))
-		buy.set_meta(&"stable_focus_id", definition.id)
-		# The shared inspector is the single detail surface for mouse, keyboard, and gamepad.
-		buy.tooltip_text = ""
-		buy.pressed.connect(_emit_research_purchase.bind(definition.id))
-		buy.mouse_entered.connect(_show_research_inspector.bind(definition, buy))
-		buy.mouse_exited.connect(_hide_progression_inspector.bind(research_inspector_panel, buy))
-		buy.focus_entered.connect(_show_research_inspector.bind(definition, buy))
-		buy.focus_exited.connect(_hide_progression_inspector.bind(research_inspector_panel, buy))
-		research_grid.add_child(buy)
-		var margin := _margin(10, 8, 10, 8)
-		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		buy.add_child(margin)
-		var content := HBoxContainer.new()
-		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content.add_theme_constant_override("separation", 8)
-		margin.add_child(content)
-		var icon := SimpleIcon.new()
-		icon.custom_minimum_size = Vector2(30.0, 30.0)
-		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		icon.configure(definition.id, COLOR_GOLD)
-		content.add_child(icon)
-		var title_stack := VBoxContainer.new()
-		title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title_stack.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		content.add_child(title_stack)
-		var title_label := _label(definition.title, 14, COLOR_TEXT)
-		title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		title_stack.add_child(title_label)
-		var rank_label := _label("Rang 0 / %d" % definition.max_level, 14, COLOR_MUTED)
-		title_stack.add_child(rank_label)
-		var cost_label := _label("", 14, COLOR_GOLD)
-		cost_label.custom_minimum_size = Vector2(92.0, 0.0)
-		cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		cost_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		content.add_child(cost_label)
-		research_rank_labels[definition.id] = rank_label
-		research_buy_buttons[definition.id] = buy
-		research_cost_labels[definition.id] = cost_label
-		research_icons[definition.id] = icon
-		research_title_labels[definition.id] = title_label
-	talent_content = VBoxContainer.new()
-	talent_content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	talent_content.add_theme_constant_override("separation", 9)
-	body.add_child(talent_content)
-	var talent_inspector := _progression_inspector(COLOR_BLUE, &"plan", "Talent", "")
-	talent_inspector_panel = talent_inspector["panel"]
-	talent_inspector_panel.z_index = 30
-	talent_inspector_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	talent_inspector_panel.hide()
-	overlay.add_child(talent_inspector_panel)
-	talent_inspector_icon = talent_inspector["icon"]
-	talent_inspector_title = talent_inspector["title"]
-	talent_inspector_description = talent_inspector["description"]
-	talent_inspector_meta = talent_inspector["meta"]
-	talent_scroll = ScrollContainer.new()
-	talent_scroll.name = "TalentViewport"
-	talent_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	talent_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	talent_scroll.follow_focus = true
-	talent_content.add_child(talent_scroll)
-	var talent_stack := VBoxContainer.new()
-	talent_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	talent_stack.add_theme_constant_override("separation", 9)
-	talent_scroll.add_child(talent_stack)
-	talent_summary_grid = GridContainer.new()
-	talent_summary_grid.name = "TalentSummary"
-	talent_summary_grid.columns = 2
-	talent_summary_grid.add_theme_constant_override("h_separation", 8)
-	talent_summary_grid.add_theme_constant_override("v_separation", 8)
-	talent_stack.add_child(talent_summary_grid)
-	talent_points_label = _label("0 Talentpunkte · 0 verteilt", 14, COLOR_BLUE.lightened(0.24))
-	talent_points_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	talent_points_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	talent_points_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	talent_summary_grid.add_child(talent_points_label)
-	talent_reset_button = _secondary_button("NEU VERTEILEN · KOSTENLOS", COLOR_BLUE)
-	talent_reset_button.custom_minimum_size = Vector2(220.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	talent_reset_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	talent_reset_button.pressed.connect(func() -> void: talent_reset_requested.emit())
-	talent_summary_grid.add_child(talent_reset_button)
-	talent_grid = GridContainer.new()
-	talent_grid.columns = 3
-	talent_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	talent_grid.add_theme_constant_override("h_separation", 10)
-	talent_grid.add_theme_constant_override("v_separation", 10)
-	talent_stack.add_child(talent_grid)
-	talent_content.hide()
-	return overlay
+	progression_screen = ProgressionScreen.new()
+	progression_screen.tab_changed.connect(_on_progression_tab_changed)
+	progression_screen.research_purchase.connect(func(id: StringName) -> void: research_purchase_requested.emit(id))
+	progression_screen.talent_toggle.connect(func(id: StringName) -> void: talent_toggle_requested.emit(id))
+	progression_screen.talent_reset.connect(func() -> void: talent_reset_requested.emit())
+	progression_screen.back.connect(func() -> void: back_requested.emit())
+	_map_progression_compatibility_controls()
+	return progression_screen
 
 func _build_level_select() -> Control:
-	var page := _page("FALLARCHIV", "ZUM CAMPUS")
-	var overlay: Control = page["overlay"]
-	var body: VBoxContainer = page["body"]
-	var actions: HBoxContainer = page["actions"]
-	var replay_story := _nav_button("PROLOG", &"story", COLOR_BLUE)
-	replay_story.pressed.connect(func() -> void: navigate_requested.emit(&"story"))
-	actions.add_child(replay_story)
-	actions.move_child(replay_story, 0)
-	actions.custom_minimum_size = Vector2(300.0, 38.0)
-	var top := HBoxContainer.new()
-	body.add_child(top)
-	var hint := _label("Wähle einen dokumentierten Fall. Ein Sieg schaltet den nächsten frei.", 14, COLOR_MUTED)
-	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top.add_child(hint)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	row.custom_minimum_size = Vector2(0.0, 230.0)
-	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	var level_scroll := ScrollContainer.new()
-	level_scroll.custom_minimum_size = Vector2.ZERO
-	level_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	level_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	level_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	level_scroll.follow_focus = true
-	body.add_child(level_scroll)
-	level_scroll.add_child(row)
-	for level in ContentCatalog.level_definitions():
-		var button := Button.new()
-		button.custom_minimum_size = Vector2(292.0, 230.0)
-		button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		button.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		button.size_flags_stretch_ratio = 1.0
-		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var card_accent := _level_accent(level)
-		button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTION_CARD
-		button.add_theme_stylebox_override("normal", AlveolusVisualTheme.case_card_style(card_accent, &"normal"))
-		button.add_theme_stylebox_override("hover", AlveolusVisualTheme.case_card_style(card_accent, &"hover"))
-		button.add_theme_stylebox_override("pressed", AlveolusVisualTheme.case_card_style(card_accent, &"pressed"))
-		button.add_theme_stylebox_override("focus", AlveolusVisualTheme.case_card_style(card_accent, &"focus"))
-		button.add_theme_stylebox_override("disabled", AlveolusVisualTheme.case_card_style(COLOR_MUTED, &"disabled"))
-		button.pressed.connect(_emit_level_selected.bind(level.id))
-		row.add_child(button)
-		var card_margin := _margin(15, 13, 15, 13)
-		card_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		button.add_child(card_margin)
-		var card_content := VBoxContainer.new()
-		card_content.add_theme_constant_override("separation", 6)
-		card_content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card_margin.add_child(card_content)
-		var header := HBoxContainer.new()
-		header.custom_minimum_size = Vector2(0.0, 76.0)
-		header.add_theme_constant_override("separation", 8)
-		card_content.add_child(header)
-		var title_stack := VBoxContainer.new()
-		title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title_stack.add_theme_constant_override("separation", 5)
-		header.add_child(title_stack)
-		var status_label := _label("", 14, COLOR_GOLD if level.is_tutorial else COLOR_BLUE.lightened(0.24))
-		status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title_stack.add_child(status_label)
-		var title_label := _label(_level_card_title(level), 16, COLOR_TEXT)
-		title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		title_label.max_lines_visible = 2
-		title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		title_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		title_stack.add_child(title_label)
-		var illustration := LevelCaseIllustration.new()
-		illustration.name = "CaseIllustration"
-		illustration.custom_minimum_size = Vector2(68.0, 68.0)
-		illustration.configure(level.order, level.is_tutorial, card_accent)
-		header.add_child(illustration)
-		var separator := ColorRect.new()
-		separator.custom_minimum_size = Vector2(0.0, 1.0)
-		separator.color = Color(card_accent, 0.18)
-		separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card_content.add_child(separator)
-		var facts_label := _label("", 14, COLOR_MUTED)
-		facts_label.custom_minimum_size.y = 34.0
-		facts_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		facts_label.max_lines_visible = 2
-		facts_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card_content.add_child(facts_label)
-		var best_label := _label("", 14, COLOR_TEXT)
-		best_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card_content.add_child(best_label)
-		var record_label := _label("", 14, COLOR_MUTED)
-		record_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		record_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card_content.add_child(record_label)
-		level_buttons[level.id] = button
-		level_card_labels[level.id] = {
-			"status": status_label,
-			"title": title_label,
-			"facts": facts_label,
-			"best": best_label,
-			"record": record_label,
-		}
-		level_illustrations[level.id] = illustration
-	return overlay
+	level_screen = CaseArchiveScreen.new()
+	level_screen.case_selected.connect(_emit_level_selected)
+	level_screen.replay_story.connect(func() -> void: navigate_requested.emit(&"story"))
+	level_screen.back.connect(func() -> void: back_requested.emit())
+	return level_screen
 
 func _build_lexicon() -> Control:
 	var page := _page("Lexikon", "Zum Campus")
@@ -1126,204 +764,162 @@ func _build_lexicon() -> Control:
 	lexicon_master_detail.name = "LexiconMasterDetail"
 	lexicon_master_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lexicon_master_detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lexicon_master_detail.context_detail_source_available.connect(register_context_detail)
 	body.add_child(lexicon_master_detail)
 	return overlay
 
 func _build_story() -> Control:
-	var parts := _centered_overlay(Vector2(620.0, 252.0), COLOR_BLUE, 28, false)
-	var overlay: Control = parts["overlay"]
-	story_panel = parts["panel"]
-	# Story has no page behind it. An opaque canvas avoids exposing the partially
-	# initialized arena as a hard rectangle around the prologue sheet.
-	(overlay as ColorRect).color = AlveolusVisualTheme.PETROL_DEEP
-	var box: VBoxContainer = parts["content"]
-	story_kicker = _label("PROLOG · 1 / 3", 14, COLOR_BLUE.lightened(0.24))
-	box.add_child(story_kicker)
-	story_title = _label("Willkommen bei ALVEOLUS", 28, COLOR_TEXT)
-	box.add_child(story_title)
-	story_body = _label("", 16, COLOR_MUTED)
-	story_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(story_body)
-	var controls := HBoxContainer.new()
-	controls.add_theme_constant_override("separation", 8)
-	box.add_child(controls)
-	story_skip_button = _secondary_button("Überspringen", COLOR_MUTED)
-	story_skip_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	story_skip_button.pressed.connect(func() -> void: story_finished.emit())
-	controls.add_child(story_skip_button)
-	story_next_button = _primary_button("Weiter", COLOR_BLUE)
-	story_next_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	story_next_button.pressed.connect(_advance_story)
-	controls.add_child(story_next_button)
-	return overlay
+	story_screen = StoryScreen.new()
+	story_screen.next_requested.connect(func(_step_index: int) -> void: _advance_story())
+	story_screen.skip_requested.connect(func() -> void: story_finished.emit())
+	story_screen.back_requested.connect(func(step_index: int) -> void:
+		if step_index > 0:
+			story_index = step_index - 1
+			_refresh_story()
+		else:
+			back_requested.emit()
+	)
+	story_panel = story_screen.story_sheet()
+	story_kicker = story_screen.progress_label()
+	story_title = story_screen.title_label()
+	story_body = story_screen.body_label()
+	story_skip_button = story_screen.skip_action()
+	story_next_button = story_screen.next_action()
+	return story_screen
 
 func _build_settings() -> Control:
-	var page := _page("Einstellungen", "Zurück")
-	var overlay: Control = page["overlay"]
-	var body: VBoxContainer = page["body"]
-	settings_scroll = ScrollContainer.new()
-	settings_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	settings_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	settings_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	settings_scroll.follow_focus = true
-	body.add_child(settings_scroll)
-	var settings_stack := VBoxContainer.new()
-	settings_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	settings_stack.add_theme_constant_override("separation", 14)
-	settings_scroll.add_child(settings_stack)
+	settings_screen = SettingsScreen.new()
+	settings_screen.name = "SettingsScreen"
+	settings_screen.audio_value_changed.connect(func(setting_id: StringName, linear_value: float) -> void:
+		_on_settings_volume_changed(linear_value * 100.0, setting_id)
+	)
+	settings_screen.audio_mute_changed.connect(func(setting_id: StringName, muted: bool) -> void:
+		_on_settings_mute_changed(muted, setting_id)
+	)
+	settings_screen.option_changed.connect(_on_settings_option_changed)
+	settings_screen.toggle_changed.connect(_on_settings_toggle_changed)
+	settings_screen.binding_change_requested.connect(_begin_binding_capture)
+	settings_screen.bindings_reset_requested.connect(func() -> void: settings_reset_bindings_requested.emit())
+	settings_screen.quit_requested.connect(func() -> void: quit_requested.emit())
+	settings_screen.back.connect(func() -> void: back_requested.emit())
+	_refresh_settings_screen(true)
+	return settings_screen
 
-	settings_upper_grid = GridContainer.new()
-	settings_upper_grid.columns = 2
-	settings_upper_grid.add_theme_constant_override("h_separation", 14)
-	settings_upper_grid.add_theme_constant_override("v_separation", 14)
-	settings_stack.add_child(settings_upper_grid)
-	var audio_card := _card(COLOR_TEAL)
-	audio_card["panel"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	settings_upper_grid.add_child(audio_card["panel"])
-	audio_card["content"].add_child(_section_header("Audio", &"settings", COLOR_TEAL))
-	var master_row := _settings_slider_row("Gesamtlautstärke", &"master")
-	settings_master_slider = master_row["slider"]
-	settings_master_mute = master_row["mute"]
-	audio_card["content"].add_child(master_row["row"])
-	var ui_row := _settings_slider_row("Menü", &"ui")
-	settings_ui_slider = ui_row["slider"]
-	settings_ui_mute = ui_row["mute"]
-	audio_card["content"].add_child(ui_row["row"])
-	var effects_row := _settings_slider_row("Effekte", &"effects")
-	settings_effects_slider = effects_row["slider"]
-	settings_effects_mute = effects_row["mute"]
-	audio_card["content"].add_child(effects_row["row"])
-	var music_row := _settings_slider_row("Musik", &"music")
-	settings_music_slider = music_row["slider"]
-	settings_music_mute = music_row["mute"]
-	audio_card["content"].add_child(music_row["row"])
+func _on_settings_option_changed(setting_id: StringName, selected_index: int) -> void:
+	match setting_id:
+		&"ui_scale": _on_settings_scale_selected(selected_index)
+		&"glyph_mode": _on_settings_glyph_selected(selected_index)
 
-	var display_card := _card(COLOR_BLUE)
-	display_card["panel"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	settings_upper_grid.add_child(display_card["panel"])
-	display_card["content"].add_child(_section_header("Anzeige und Bedienung", &"settings", COLOR_BLUE))
+func _on_settings_toggle_changed(setting_id: StringName, enabled: bool) -> void:
+	match setting_id:
+		&"reduce_motion": _on_settings_reduce_motion(enabled)
+		&"run_stats": _on_run_stats_toggle(enabled)
+		&"fullscreen": _on_settings_fullscreen(enabled)
+		&"confirm_restart": _on_settings_restart_confirmation(enabled)
+
+func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
+	if settings_screen == null or current_ui_settings == null:
+		return
+	settings_show_quit = show_quit
+	settings_view_revision += 1
+	var audio_settings: Array[SettingsScreenViewModel.AudioSettingViewModel] = [
+		SettingsScreenViewModel.AudioSettingViewModel.new(&"master", "Gesamtlautstärke", current_ui_settings.master_volume, current_ui_settings.master_muted),
+		SettingsScreenViewModel.AudioSettingViewModel.new(&"ui", "Menü", current_ui_settings.ui_volume, current_ui_settings.ui_muted),
+		SettingsScreenViewModel.AudioSettingViewModel.new(&"effects", "Effekte", current_ui_settings.effects_volume, current_ui_settings.effects_muted),
+		SettingsScreenViewModel.AudioSettingViewModel.new(&"music", "Musik", current_ui_settings.music_volume, current_ui_settings.music_muted),
+	]
 	var scale_labels: Array[String] = []
 	for scale in UISettingsState.UI_SCALES:
 		scale_labels.append("%d %%" % roundi(scale * 100.0))
-	settings_scale_option = _settings_option_row(display_card["content"], "UI Größe", scale_labels)
-	settings_scale_option.item_selected.connect(_on_settings_scale_selected)
-	settings_glyph_option = _settings_option_row(display_card["content"], "Eingabesymbole", ["Automatisch", "Tastatur", "Gamepad"])
-	settings_glyph_option.item_selected.connect(_on_settings_glyph_selected)
-	settings_reduce_motion_toggle = _settings_toggle_row(display_card["content"], "Bewegung reduzieren", _on_settings_reduce_motion)
-	settings_run_stats_toggle = _settings_toggle_row(display_card["content"], "Charakterwerte im Run", _on_run_stats_toggle)
-	settings_fullscreen_toggle = _settings_toggle_row(display_card["content"], "Vollbild", _on_settings_fullscreen)
-	settings_restart_confirmation_toggle = _settings_toggle_row(display_card["content"], "Neustart bestätigen", _on_settings_restart_confirmation)
-	var restart_hint := _label("Strg+R startet die aktuelle Runde neu.", 14, COLOR_MUTED)
-	restart_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	display_card["content"].add_child(restart_hint)
+	var glyph_labels: Array[String] = ["Automatisch", "Tastatur", "Gamepad"]
+	var option_settings: Array[SettingsScreenViewModel.OptionSettingViewModel] = [
+		SettingsScreenViewModel.OptionSettingViewModel.new(
+			&"ui_scale", "UI-Größe", scale_labels,
+			maxi(UISettingsState.UI_SCALES.find(current_ui_settings.ui_scale), 0)
+		),
+		SettingsScreenViewModel.OptionSettingViewModel.new(
+			&"glyph_mode", "Eingabesymbole", glyph_labels,
+			maxi([UISettingsState.GLYPH_AUTO, UISettingsState.GLYPH_KEYBOARD, UISettingsState.GLYPH_GAMEPAD].find(current_ui_settings.glyph_mode), 0)
+		),
+	]
+	var toggle_settings: Array[SettingsScreenViewModel.ToggleSettingViewModel] = [
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Bewegung reduzieren", current_ui_settings.reduce_motion),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", run_stats_enabled),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"fullscreen", "Vollbild", current_ui_settings.fullscreen, not OS.has_feature("web")),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"confirm_restart", "Neustart bestätigen", current_ui_settings.confirm_run_restart),
+	]
+	var binding_settings: Array[SettingsScreenViewModel.BindingSettingViewModel] = []
+	for action in UISettingsState.CONFIGURABLE_ACTIONS:
+		binding_settings.append(SettingsScreenViewModel.BindingSettingViewModel.new(
+			action,
+			_binding_caption(action),
+			_binding_summary(action),
+			pending_binding_action == action
+		))
+	var model := SettingsScreenViewModel.new(
+		settings_view_revision,
+		audio_settings,
+		option_settings,
+		toggle_settings,
+		binding_settings,
+		settings_status_text,
+		settings_show_quit
+	)
+	settings_screen.apply(model)
+	_map_settings_compatibility_controls()
 
-	var controls_card := _card(COLOR_GOLD)
-	settings_stack.add_child(controls_card["panel"])
-	controls_card["content"].add_child(_section_header("Steuerung", &"ability", COLOR_GOLD))
-	settings_bindings_grid = GridContainer.new()
-	settings_bindings_grid.columns = 3
-	settings_bindings_grid.add_theme_constant_override("h_separation", 12)
-	settings_bindings_grid.add_theme_constant_override("v_separation", 7)
-	controls_card["content"].add_child(settings_bindings_grid)
-	for binding in [
-		[&"move_up", "Nach oben"], [&"move_down", "Nach unten"],
-		[&"move_left", "Nach links"], [&"move_right", "Nach rechts"],
-		[&"active_ability_1", "Fähigkeit 1"], [&"active_ability_2", "Fähigkeit 2"],
-		[&"pause_game", "Pause"], [&"ui_accept", "Bestätigen"], [&"ui_cancel", "Zurück"],
-	]:
-		var action: StringName = binding[0]
-		var caption := _label(String(binding[1]), 14, COLOR_TEXT)
-		caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		settings_bindings_grid.add_child(caption)
-		var binding_button := _secondary_button("Belegung", COLOR_GOLD)
-		binding_button.custom_minimum_size.x = 170.0
-		binding_button.pressed.connect(_begin_binding_capture.bind(action))
-		settings_bindings_grid.add_child(binding_button)
-		var device_hint := _label("Taste, Maus oder Gamepad", 14, COLOR_MUTED)
-		device_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		settings_bindings_grid.add_child(device_hint)
-		settings_binding_buttons[action] = binding_button
-	var reset_bindings := _secondary_button("Standardbelegung wiederherstellen", COLOR_MUTED)
-	UISoundService.set_sound_role(reset_bindings, UISoundService.CONFIRM)
-	reset_bindings.pressed.connect(func() -> void: settings_reset_bindings_requested.emit())
-	controls_card["content"].add_child(reset_bindings)
-	settings_status_label = _label("", 14, COLOR_MUTED)
-	settings_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	controls_card["content"].add_child(settings_status_label)
-
-	var footer := HBoxContainer.new()
-	footer.alignment = BoxContainer.ALIGNMENT_END
-	footer.add_theme_constant_override("separation", 10)
-	body.add_child(footer)
-	settings_quit_button = _secondary_button("Spiel beenden", COLOR_RED)
-	settings_quit_button.custom_minimum_size.x = 150.0
-	UISoundService.set_sound_role(settings_quit_button, UISoundService.BACK)
-	settings_quit_button.pressed.connect(func() -> void: quit_requested.emit())
-	footer.add_child(settings_quit_button)
-	var back := _primary_button("Fertig", COLOR_TEAL)
-	back.custom_minimum_size.x = 120.0
-	UISoundService.set_sound_role(back, UISoundService.CONFIRM)
-	back.pressed.connect(func() -> void: back_requested.emit())
-	footer.add_child(back)
-	settings_initial_focus = settings_master_slider
-	return overlay
+func _map_settings_compatibility_controls() -> void:
+	if settings_screen == null:
+		return
+	settings_scroll = settings_screen.get_scroll_container()
+	settings_upper_grid = settings_screen.find_child("UpperSections", true, false) as GridContainer
+	settings_bindings_grid = settings_screen.find_child("BindingsGrid", true, false) as GridContainer
+	settings_master_slider = settings_screen.control_for_setting(&"audio.master.value") as HSlider
+	settings_ui_slider = settings_screen.control_for_setting(&"audio.ui.value") as HSlider
+	settings_effects_slider = settings_screen.control_for_setting(&"audio.effects.value") as HSlider
+	settings_music_slider = settings_screen.control_for_setting(&"audio.music.value") as HSlider
+	settings_master_mute = settings_screen.control_for_setting(&"audio.master.mute") as CheckButton
+	settings_ui_mute = settings_screen.control_for_setting(&"audio.ui.mute") as CheckButton
+	settings_effects_mute = settings_screen.control_for_setting(&"audio.effects.mute") as CheckButton
+	settings_music_mute = settings_screen.control_for_setting(&"audio.music.mute") as CheckButton
+	settings_scale_option = settings_screen.control_for_setting(&"option.ui_scale") as OptionButton
+	settings_glyph_option = settings_screen.control_for_setting(&"option.glyph_mode") as OptionButton
+	settings_reduce_motion_toggle = settings_screen.control_for_setting(&"toggle.reduce_motion") as CheckButton
+	settings_run_stats_toggle = settings_screen.control_for_setting(&"toggle.run_stats") as CheckButton
+	settings_fullscreen_toggle = settings_screen.control_for_setting(&"toggle.fullscreen") as CheckButton
+	settings_restart_confirmation_toggle = settings_screen.control_for_setting(&"toggle.confirm_restart") as CheckButton
+	settings_status_label = settings_screen.find_child("StatusText", true, false) as Label
+	settings_quit_button = settings_screen.control_for_setting(&"quit") as Button
+	settings_initial_focus = settings_screen.get_default_focus_control()
+	settings_binding_buttons.clear()
+	for action in UISettingsState.CONFIGURABLE_ACTIONS:
+		var button := settings_screen.control_for_setting(StringName("binding.%s" % String(action))) as Button
+		if button != null:
+			settings_binding_buttons[action] = button
 
 func _settings_slider_row(caption: String, key: StringName) -> Dictionary:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 9)
-	var title := _label(caption, 14, COLOR_TEXT)
-	title.custom_minimum_size.x = 128.0
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(title)
-	var slider := HSlider.new()
-	slider.min_value = 0.0
-	slider.max_value = 100.0
-	slider.step = 1.0
-	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	slider.custom_minimum_size = Vector2(120.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	slider.theme_type_variation = AlveolusVisualTheme.TYPE_SLIDER_ROW
+	var parts := AlveolusUIComponents.slider_row(caption, 0.0, 100.0, 100.0, 1.0)
+	var row := parts["row"] as HBoxContainer
+	var slider := parts["control"] as HSlider
 	slider.value_changed.connect(_on_settings_volume_changed.bind(key))
-	row.add_child(slider)
-	var mute := CheckButton.new()
-	mute.text = "Stumm"
+	var mute := AlveolusUIComponents.toggle_row("Stumm")
 	mute.custom_minimum_size = Vector2(92.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	mute.theme_type_variation = AlveolusVisualTheme.TYPE_TOGGLE_ROW
 	mute.toggled.connect(_on_settings_mute_changed.bind(key))
 	row.add_child(mute)
 	return {"row": row, "slider": slider, "mute": mute}
 
 func _settings_option_row(parent: VBoxContainer, caption: String, entries: Array[String]) -> OptionButton:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	parent.add_child(row)
-	var title := _label(caption, 14, COLOR_TEXT)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(title)
-	var option := OptionButton.new()
-	option.custom_minimum_size = Vector2(176.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	option.theme_type_variation = AlveolusVisualTheme.TYPE_OPTION_ROW
-	for entry in entries:
-		option.add_item(entry)
-	row.add_child(option)
-	return option
+	var parts := AlveolusUIComponents.option_row(caption, entries)
+	parent.add_child(parts["row"])
+	return parts["control"] as OptionButton
 
 func _settings_toggle_row(parent: VBoxContainer, caption: String, callback: Callable) -> CheckButton:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
-	parent.add_child(row)
-	var title := _label(caption, 14, COLOR_TEXT)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(title)
-	var toggle := CheckButton.new()
-	toggle.text = "Aus"
+	var toggle := AlveolusUIComponents.toggle_row("Aus")
 	toggle.custom_minimum_size = Vector2(92.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	toggle.theme_type_variation = AlveolusVisualTheme.TYPE_TOGGLE_ROW
+	var parts := AlveolusUIComponents.form_control_row(caption, toggle)
+	parent.add_child(parts["panel"])
 	toggle.toggled.connect(func(enabled: bool) -> void: _update_toggle_caption(toggle, enabled))
 	toggle.toggled.connect(callback)
-	row.add_child(toggle)
 	return toggle
 
 func _update_toggle_caption(toggle: CheckButton, enabled: bool) -> void:
@@ -1394,52 +990,44 @@ func _emit_ui_settings_changed() -> void:
 func _begin_binding_capture(action: StringName) -> void:
 	pending_binding_action = action
 	pending_binding_axis_latched = false
-	settings_status_label.text = "Taste, Maustaste oder Gamepadeingabe für „%s“ drücken. Escape bricht ab." % _binding_caption(action)
-	settings_status_label.modulate = COLOR_BLUE
+	settings_status_text = "Taste, Maustaste oder Gamepadeingabe für „%s“ drücken. Escape bricht ab." % _binding_caption(action)
+	_refresh_settings_screen(settings_show_quit)
 	for button in settings_binding_buttons.values():
-		(button as Button).disabled = true
+		AlveolusUIComponents.set_button_disabled(button as Button, true)
 	if settings_binding_buttons.has(action):
 		var selected_button: Button = settings_binding_buttons[action]
-		selected_button.disabled = false
-		selected_button.text = "Eingabe erwartet"
+		AlveolusUIComponents.set_button_disabled(selected_button, false)
 
 func _cancel_binding_capture() -> void:
 	pending_binding_action = &""
 	pending_binding_axis_latched = false
-	settings_status_label.text = "Belegung nicht verändert."
-	settings_status_label.modulate = COLOR_MUTED
+	settings_status_text = "Belegung nicht verändert."
 	_play_ui_sound(UISoundService.BACK)
-	_refresh_binding_buttons()
+	if settings_overlay != null and settings_overlay.visible:
+		_refresh_binding_buttons()
 
 func _apply_binding_event(event: InputEvent) -> void:
 	var action := pending_binding_action
 	if action == &"":
 		return
 	if UISettingsState.is_reserved_quick_restart_binding(event):
-		settings_status_label.text = "Strg+R ist für den Rundenneustart reserviert."
-		settings_status_label.modulate = COLOR_RED
+		settings_status_text = "Strg+R ist für den Rundenneustart reserviert."
 		_play_ui_sound(UISoundService.ERROR)
 		_refresh_binding_buttons()
 		return
 	if current_ui_settings.set_single_binding(action, event):
 		pending_binding_action = &""
 		pending_binding_axis_latched = false
-		settings_status_label.text = "„%s“ wurde neu belegt." % _binding_caption(action)
-		settings_status_label.modulate = COLOR_TEAL
+		settings_status_text = "„%s“ wurde neu belegt." % _binding_caption(action)
 		_play_ui_sound(UISoundService.CONFIRM)
 		_emit_ui_settings_changed()
 	else:
-		settings_status_label.text = "Diese Eingabe wird bereits verwendet. Wähle eine andere."
-		settings_status_label.modulate = COLOR_RED
+		settings_status_text = "Diese Eingabe wird bereits verwendet. Wähle eine andere."
 		_play_ui_sound(UISoundService.ERROR)
 	_refresh_binding_buttons()
 
 func _refresh_binding_buttons() -> void:
-	for action_value in settings_binding_buttons:
-		var action := StringName(action_value)
-		var button: Button = settings_binding_buttons[action]
-		button.disabled = false
-		button.text = _binding_summary(action)
+	_refresh_settings_screen(settings_show_quit)
 
 func _binding_summary(action: StringName) -> String:
 	var keyboard_mouse: PackedStringArray = []
@@ -1459,17 +1047,7 @@ func _binding_summary(action: StringName) -> String:
 	return "%s  |  %s" % [" / ".join(keyboard_mouse), " / ".join(gamepad)]
 
 func _binding_caption(action: StringName) -> String:
-	match action:
-		&"move_up": return "Nach oben"
-		&"move_down": return "Nach unten"
-		&"move_left": return "Nach links"
-		&"move_right": return "Nach rechts"
-		&"active_ability_1": return "Fähigkeit 1"
-		&"active_ability_2": return "Fähigkeit 2"
-		&"pause_game": return "Pause"
-		&"ui_accept": return "Bestätigen"
-		&"ui_cancel": return "Zurück"
-	return String(action)
+	return InputGlyphService.caption_for_action(action)
 
 func _joy_button_text(index: JoyButton) -> String:
 	match index:
@@ -1490,7 +1068,10 @@ func _apply_ui_scale() -> void:
 	if root == null or root.theme == null or current_ui_settings == null:
 		return
 	var ui_scale := current_ui_settings.ui_scale
-	root.theme.default_base_scale = ui_scale
+	# Document UI uses one scaling authority: the root transform. Applying the
+	# same factor again through Theme.default_base_scale doubles theme-driven
+	# minima, paddings and controls inside the already reduced logical canvas.
+	root.theme.default_base_scale = 1.0
 	root.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	root.position = Vector2.ZERO
 	root.scale = Vector2.ONE * ui_scale
@@ -1502,42 +1083,7 @@ func _apply_ui_scale() -> void:
 		practice_columns.columns = 1 if logical_width < 920.0 else 2
 	if clinic_offers is GridContainer:
 		(clinic_offers as GridContainer).columns = 1
-	if research_grid != null:
-		research_grid.columns = 3 if logical_width >= 1000.0 else (2 if logical_width >= 680.0 else 1)
-	if research_tab_row != null:
-		research_tab_row.columns = 2 if logical_width < 620.0 else 3
-		research_points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if logical_width < 620.0 else HORIZONTAL_ALIGNMENT_RIGHT
-		research_points_label.visible = current_research_tab == &"research" and logical_width >= 620.0
-	if talent_summary_grid != null:
-		# Keeping balance and reset beside each other preserves one complete tree
-		# row even on the 480 px logical 200%-canvas.
-		talent_summary_grid.columns = 2
-	var compact_progression := logical_width < 620.0 or root.size.y < 420.0
-	if research_inspector_panel != null:
-		research_inspector_panel.custom_minimum_size.y = 48.0 if compact_progression else 70.0
-		research_inspector_icon.visible = not compact_progression
-		research_inspector_title.visible = not compact_progression
-		research_inspector_meta.visible = not compact_progression
-	if talent_inspector_panel != null:
-		talent_inspector_panel.custom_minimum_size.y = 48.0 if compact_progression else 70.0
-		talent_inspector_icon.visible = not compact_progression
-		talent_inspector_title.visible = not compact_progression
-		talent_inspector_meta.visible = not compact_progression
-	if research_content is VBoxContainer:
-		(research_content as VBoxContainer).add_theme_constant_override("separation", 2 if compact_progression else 8)
-	if talent_content is VBoxContainer:
-		(talent_content as VBoxContainer).add_theme_constant_override("separation", 2 if compact_progression else 9)
-	if talent_grid != null:
-		talent_grid.columns = 3 if logical_width >= 1080.0 else (2 if logical_width >= 760.0 else 1)
-		_configure_talent_tree_exits.call_deferred()
-	if pause_stats_grid != null:
-		pause_stats_grid.columns = 2 if logical_width >= 420.0 else 1
-		_apply_pause_stats_density()
-	if settings_upper_grid != null:
-		settings_upper_grid.columns = 1 if logical_width < 900.0 else 2
-	if settings_bindings_grid != null:
-		settings_bindings_grid.columns = 1 if logical_width < 700.0 else 3
-	if stability_panel != null and timer_panel != null:
+	if run_hud_screen == null and stability_panel != null and timer_panel != null:
 		if logical_width < 740.0:
 			var compact_top_width := minf(230.0, (logical_width - 48.0) * 0.5)
 			stability_panel.position = Vector2(16.0, 16.0)
@@ -1557,9 +1103,9 @@ func _apply_ui_scale() -> void:
 			timer_panel.offset_right = 112.0
 			timer_panel.offset_top = 16.0
 			timer_panel.offset_bottom = 52.0
-	if shield_panel != null:
+	if run_hud_screen == null and shield_panel != null:
 		shield_panel.size = Vector2(minf(250.0, logical_width * 0.45) if logical_width < 740.0 else 250.0, 28.0)
-	if run_stats_panel != null:
+	if run_hud_screen == null and run_stats_panel != null:
 		run_stats_panel.set_anchor(SIDE_LEFT, 0.0 if logical_width < 740.0 else 0.5)
 		run_stats_panel.set_anchor(SIDE_RIGHT, 1.0)
 		run_stats_panel.offset_left = 16.0 if logical_width < 740.0 else 124.0
@@ -1568,7 +1114,7 @@ func _apply_ui_scale() -> void:
 		# transparent statistics in their own row instead of painting over it.
 		run_stats_panel.offset_top = 104.0 if logical_width < 740.0 else 16.0
 		run_stats_panel.offset_bottom = run_stats_panel.offset_top + HudStatStrip.MAXIMUM_SIZE.y
-	if ability_panel != null:
+	if run_hud_screen == null and ability_panel != null:
 		if logical_width >= 900.0:
 			ability_panel.columns = 2
 			ability_panel.set_anchor(SIDE_LEFT, 1.0)
@@ -1589,7 +1135,7 @@ func _apply_ui_scale() -> void:
 			ability_panel.offset_right = -12.0
 			ability_panel.offset_top = -68.0
 			ability_panel.offset_bottom = -8.0
-	if analysis_sample_panel != null:
+	if run_hud_screen == null and analysis_sample_panel != null:
 		analysis_sample_panel.offset_top = -100.0 if logical_width < 900.0 else -32.0
 		analysis_sample_panel.offset_bottom = -76.0 if logical_width < 900.0 else -8.0
 		level_label.offset_top = -99.0 if logical_width < 900.0 else -31.0
@@ -1613,7 +1159,7 @@ func _apply_ui_scale() -> void:
 			finding_progress_panel.offset_right = 178.0
 			finding_progress_panel.offset_top = -60.0
 			finding_progress_panel.offset_bottom = -12.0
-	if boss_panel != null and logical_width < 740.0:
+	if run_hud_screen == null and boss_panel != null and logical_width < 740.0:
 		# Boss information shares the shield row on the right and temporarily
 		# replaces optional run stats. Transient alerts receive the following row.
 		var shield_right := 16.0 + shield_panel.size.x
@@ -1624,71 +1170,43 @@ func _apply_ui_scale() -> void:
 		boss_panel.offset_top = 64.0
 		boss_panel.offset_bottom = 106.0
 		boss_phase_label.visible = logical_width >= 600.0
-		alert_label.offset_left = -logical_width * 0.5 + 16.0
-		alert_label.offset_right = compact_right
-		alert_label.offset_top = 110.0
-		alert_label.offset_bottom = 144.0
-		boss_announcement.offset_left = -logical_width * 0.5 + 16.0
-		boss_announcement.offset_right = compact_right
-	elif boss_panel != null:
+		alert_panel.offset_left = -logical_width * 0.5 + 16.0
+		alert_panel.offset_right = compact_right
+		alert_panel.offset_top = 110.0
+		alert_panel.offset_bottom = 144.0
+		boss_announcement_panel.offset_left = -logical_width * 0.5 + 16.0
+		boss_announcement_panel.offset_right = compact_right
+	elif run_hud_screen == null and boss_panel != null:
 		boss_panel.offset_left = -260.0
 		boss_panel.offset_right = 260.0
 		boss_panel.offset_top = 70.0
 		boss_panel.offset_bottom = 112.0
 		boss_phase_label.show()
-		alert_label.offset_left = -260.0
-		alert_label.offset_right = 260.0
-		alert_label.offset_top = 126.0
-		alert_label.offset_bottom = 160.0
-		boss_announcement.offset_left = -300.0
-		boss_announcement.offset_right = 300.0
+		alert_panel.offset_left = -260.0
+		alert_panel.offset_right = 260.0
+		alert_panel.offset_top = 126.0
+		alert_panel.offset_bottom = 160.0
+		boss_announcement_panel.offset_left = -300.0
+		boss_announcement_panel.offset_right = 300.0
+	elif run_hud_screen != null and logical_width < 740.0:
+		var compact_right := logical_width * 0.5 - 16.0
+		alert_panel.offset_left = -logical_width * 0.5 + 16.0
+		alert_panel.offset_right = compact_right
+		alert_panel.offset_top = 110.0
+		alert_panel.offset_bottom = 144.0
+		boss_announcement_panel.offset_left = -logical_width * 0.5 + 16.0
+		boss_announcement_panel.offset_right = compact_right
+	else:
+		alert_panel.offset_left = -260.0
+		alert_panel.offset_right = 260.0
+		alert_panel.offset_top = 126.0
+		alert_panel.offset_bottom = 160.0
+		boss_announcement_panel.offset_left = -300.0
+		boss_announcement_panel.offset_right = 300.0
 	if preparation_workspace != null:
 		_apply_preparation_layout()
-	if pause_panel != null:
-		pause_panel.custom_minimum_size = _fit_modal_size(PAUSE_INTRO_PANEL_SIZE if pause_is_intro else PAUSE_PANEL_SIZE)
-	if pause_stats_panel != null:
-		pause_stats_panel.custom_minimum_size = _fit_pause_stats_size(PAUSE_STATS_PANEL_SIZE)
-	if story_panel != null:
-		story_panel.custom_minimum_size = _fit_modal_size(Vector2(620.0, 252.0))
-	if abort_panel != null:
-		abort_panel.custom_minimum_size = _fit_modal_size(ABORT_PANEL_SIZE)
-	if intro_skip_panel != null:
-		intro_skip_panel.custom_minimum_size = _fit_modal_size(INTRO_SKIP_PANEL_SIZE)
-	if end_panel != null:
-		var end_size := END_MASTERY_PANEL_SIZE if end_mastery_panel != null and end_mastery_panel.visible else _end_base_panel_size()
-		end_panel.custom_minimum_size = _fit_modal_size(end_size)
-	if finding_panel != null:
-		finding_panel.custom_minimum_size = _fit_modal_size(Vector2(820.0, 432.0))
 	if restart_panel != null:
 		restart_panel.custom_minimum_size = _fit_modal_size(Vector2(470.0, 188.0))
-	if finding_reaction_cards != null:
-		finding_reaction_cards.columns = 1 if logical_width < 760.0 else 3
-	if finding_copy_grid != null:
-		finding_copy_grid.columns = 1 if logical_width < 760.0 else 2
-	if finding_reserve_row != null:
-		finding_reserve_row.columns = 1 if logical_width < 760.0 else 4
-	_apply_upgrade_layout()
-
-func _apply_upgrade_layout() -> void:
-	if upgrade_panel == null or upgrade_cards == null or root == null:
-		return
-	var compact := root.size.x < 900.0
-	var single_choice := current_upgrade_options.size() == 1
-	var desired_width := 620.0 if single_choice and not compact else 940.0
-	var desired_height := (238.0 if single_choice else 560.0) if compact else (186.0 if single_choice else 210.0)
-	if compact and upgrade_education.visible:
-		desired_height += 60.0
-	elif not compact:
-		desired_height += 60.0 if upgrade_education.visible else 0.0
-		desired_height += 56.0 if reroll_button.visible else 0.0
-	upgrade_panel.custom_minimum_size = _fit_modal_size(Vector2(desired_width, desired_height))
-	upgrade_cards.columns = 1 if compact else 3
-	for child in upgrade_cards.get_children():
-		var card := child as Button
-		if card == null:
-			continue
-		card.custom_minimum_size.x = 0.0 if compact else (460.0 if current_upgrade_options.size() == 1 else 270.0)
-
 func _apply_campus_canvas_scale(ui_scale: float) -> void:
 	if campus_overlay == null:
 		return
@@ -1699,6 +1217,12 @@ func _apply_campus_canvas_scale(ui_scale: float) -> void:
 	campus_overlay.position = Vector2.ZERO
 	campus_overlay.scale = Vector2.ONE / maxf(ui_scale, 0.01)
 	campus_overlay.size = root.size * ui_scale
+	# The spatial campus deliberately cancels the root transform so every
+	# building remains visible. Give only its UI chrome the requested scale;
+	# sprites and authored world geometry remain untouched.
+	if campus_overlay.theme == null:
+		campus_overlay.theme = root.theme.duplicate(true)
+	campus_overlay.theme.default_base_scale = ui_scale
 
 func _apply_page_shell_layout(logical_width: float) -> void:
 	var compact := logical_width < 740.0
@@ -1710,7 +1234,7 @@ func _apply_page_shell_layout(logical_width: float) -> void:
 		var outer := shell.get("outer") as MarginContainer
 		var page := shell.get("page") as VBoxContainer
 		var header := shell.get("header") as HBoxContainer
-		var header_back := shell.get("header_back") as Panel
+		var header_back := shell.get("header_back") as Control
 		var actions := shell.get("actions") as HBoxContainer
 		var visible_action_count := 0
 		var inline_action_width := 0.0
@@ -1824,7 +1348,12 @@ func _build_preparation() -> Control:
 	preparation_scroll.name = "PreparationViewport"
 	preparation_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preparation_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	preparation_scroll.follow_focus = true
+	# The page owns deliberate dossier/editor scroll positions. Letting this
+	# outer viewport also follow every rebuilt focus target makes the same state
+	# open at a different vertical offset after slot changes. The nested catalog
+	# keeps follow_focus for controller navigation.
+	preparation_scroll.follow_focus = false
+	preparation_scroll.set_meta(&"manual_focus_scroll", true)
 	page_body.add_child(preparation_scroll)
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1940,6 +1469,8 @@ func _build_preparation() -> Control:
 		slot.pressed.connect(_on_preparation_slot_pressed.bind(slot_id))
 		slot.mouse_entered.connect(_show_preparation_slot_preview.bind(slot_id, slot, true))
 		slot.mouse_exited.connect(_hide_preparation_tooltip.bind(slot, true))
+		slot.focus_entered.connect(_ensure_preparation_focus_visible.bind(slot))
+		register_context_detail(slot, _preparation_slot_context_payload.bind(slot_id), false)
 		preparation_slots.add_child(slot)
 		preparation_slot_buttons[slot_id] = slot
 	preparation_reserve_button = _secondary_button("Reserve wählen", COLOR_GOLD)
@@ -2164,22 +1695,23 @@ func _build_preparation() -> Control:
 	var lock_center := CenterContainer.new()
 	lock_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	preparation_lock_panel.add_child(lock_center)
-	var lock_stack := VBoxContainer.new()
-	lock_stack.custom_minimum_size.x = 320.0
-	lock_stack.add_theme_constant_override("separation", 8)
-	lock_center.add_child(lock_stack)
+	preparation_lock_stack = VBoxContainer.new()
+	preparation_lock_stack.custom_minimum_size.x = 320.0
+	preparation_lock_stack.add_theme_constant_override("separation", 8)
+	lock_center.add_child(preparation_lock_stack)
 	preparation_lock_icon = SimpleIcon.new()
 	preparation_lock_icon.custom_minimum_size = Vector2(58.0, 58.0)
 	preparation_lock_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	preparation_lock_icon.configure(&"locked", COLOR_GOLD)
-	lock_stack.add_child(preparation_lock_icon)
-	var lock_title := _label("EINFÜHRUNGSPLAN", 20, COLOR_TEXT)
-	lock_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lock_stack.add_child(lock_title)
-	var lock_copy := _label("Der Plan ist für die Einführung festgelegt. Nach dem ersten Fall stellst du ihn selbst zusammen.", 14, COLOR_MUTED)
-	lock_copy.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lock_copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lock_stack.add_child(lock_copy)
+	preparation_lock_stack.add_child(preparation_lock_icon)
+	preparation_lock_title = _label("EINFÜHRUNGSPLAN", 20, COLOR_TEXT)
+	preparation_lock_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	preparation_lock_stack.add_child(preparation_lock_title)
+	preparation_lock_copy = _label("Der Plan ist für die Einführung festgelegt. Nach dem ersten Fall stellst du ihn selbst zusammen.", 14, COLOR_MUTED)
+	preparation_lock_copy.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	preparation_lock_copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	preparation_lock_stack.add_child(preparation_lock_copy)
+	preparation_lock_panel.tooltip_text = preparation_lock_copy.text
 	preparation_lock_panel.hide()
 
 	preparation_footer = HBoxContainer.new()
@@ -2205,324 +1737,143 @@ func _build_preparation() -> Control:
 	return overlay
 
 func _build_upgrade_overlay() -> Control:
-	var parts := _centered_overlay(Vector2(940.0, 560.0), COLOR_GOLD, 18, true)
-	var overlay: Control = parts["overlay"]
-	upgrade_panel = parts["panel"]
-	var box: VBoxContainer = parts["content"]
-	box.add_theme_constant_override("separation", 12)
-	var title := _label("Ausbau wählen", 22, AlveolusVisualTheme.IVORY)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-	upgrade_education = Panel.new()
-	upgrade_education.custom_minimum_size = Vector2(0.0, 48.0)
-	upgrade_education.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	upgrade_education.add_theme_stylebox_override("panel", AlveolusVisualTheme.surface_role_style(
-		AlveolusVisualTheme.SurfaceRole.DOCUMENT_INSET,
-		COLOR_GOLD,
-		AlveolusVisualTheme.CornerTreatment.CONTROL_4
-	))
-	box.add_child(upgrade_education)
-	var education_text := _label("BEHANDLUNG: direkter Schaden   ·   ABWEHR: Nahbereich   ·   ATEMHILFE: Zustand", 14, COLOR_GOLD)
-	education_text.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 12)
-	education_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	education_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	education_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	upgrade_education.add_child(education_text)
-	upgrade_cards = GridContainer.new()
-	upgrade_cards.columns = 3
-	upgrade_cards.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	upgrade_cards.clip_contents = true
-	upgrade_cards.add_theme_constant_override("separation", 12)
-	upgrade_cards.add_theme_constant_override("h_separation", 12)
-	upgrade_cards.add_theme_constant_override("v_separation", 12)
-	box.add_child(upgrade_cards)
-	reroll_button = _secondary_button("Neu wählen (einmal)", COLOR_BLUE)
-	reroll_button.custom_minimum_size = Vector2(190.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	reroll_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	reroll_button.pressed.connect(func() -> void: reroll_requested.emit())
-	box.add_child(reroll_button)
-	return overlay
+	upgrade_screen = UpgradeOverlay.new()
+	upgrade_screen.name = "UpgradeOverlay"
+	upgrade_screen.upgrade_selected.connect(_on_upgrade_id_selected)
+	upgrade_screen.reroll_requested.connect(func() -> void: reroll_requested.emit())
+	upgrade_screen.cancel_requested.connect(func() -> void: back_requested.emit())
+	upgrade_panel = upgrade_screen.modal_sheet()
+	upgrade_cards = upgrade_screen.cards_grid()
+	upgrade_education = upgrade_screen.education_panel()
+	reroll_button = upgrade_screen.reroll_action()
+	return upgrade_screen
+
+func _on_upgrade_id_selected(upgrade_id: StringName) -> void:
+	for definition in current_upgrade_options:
+		if definition != null and definition.id == upgrade_id:
+			upgrade_chosen.emit(definition)
+			return
 
 func _build_pause_overlay() -> Control:
-	var parts := _centered_overlay(PAUSE_PANEL_SIZE, COLOR_BLUE, 14, false)
-	var overlay: Control = parts["overlay"]
-	pause_panel = parts["panel"]
-	var box: VBoxContainer = parts["content"]
-	var title := _label("Behandlung pausiert", 24, COLOR_TEXT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-	var pause_rule := HSeparator.new()
-	pause_rule.add_theme_color_override("separator", Color(COLOR_BLUE, 0.30))
-	box.add_child(pause_rule)
-	pause_resume_button = _icon_action_button("Weiter", &"play", COLOR_BLUE, true)
-	UISoundService.set_sound_role(pause_resume_button, UISoundService.CONFIRM)
-	pause_resume_button.pressed.connect(func() -> void: resume_requested.emit())
-	box.add_child(pause_resume_button)
-	var action_grid := GridContainer.new()
-	action_grid.name = "PauseActionGrid"
-	action_grid.columns = 2
-	action_grid.add_theme_constant_override("h_separation", 8)
-	action_grid.add_theme_constant_override("v_separation", 8)
-	box.add_child(action_grid)
-	var settings := _icon_action_button("Einstellungen", &"settings", COLOR_MUTED)
-	settings.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UISoundService.set_sound_role(settings, UISoundService.OPEN)
-	settings.pressed.connect(func() -> void: navigate_requested.emit(&"settings"))
-	action_grid.add_child(settings)
-	var stats := _icon_action_button("Charakterwerte", &"information", COLOR_TEAL)
-	stats.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UISoundService.set_sound_role(stats, UISoundService.OPEN)
-	stats.pressed.connect(_show_pause_stats)
-	action_grid.add_child(stats)
-	pause_skip_button = _icon_action_button("Einführung überspringen", &"story", COLOR_GOLD)
-	pause_skip_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UISoundService.set_sound_role(pause_skip_button, UISoundService.OPEN)
-	pause_skip_button.pressed.connect(func() -> void: intro_skip_requested.emit())
-	action_grid.add_child(pause_skip_button)
-	var abort := _icon_action_button("Runde abbrechen", &"exit", COLOR_RED)
-	abort.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UISoundService.set_sound_role(abort, UISoundService.BACK)
-	abort.pressed.connect(func() -> void: abort_requested.emit())
-	action_grid.add_child(abort)
-	return overlay
+	pause_screen = PauseOverlay.new()
+	pause_screen.resume_requested.connect(func() -> void: resume_requested.emit())
+	pause_screen.settings_requested.connect(func() -> void: navigate_requested.emit(&"settings"))
+	pause_screen.stats_requested.connect(_show_pause_stats)
+	pause_screen.abort_requested.connect(func() -> void: abort_requested.emit())
+	pause_screen.intro_skip_requested.connect(func() -> void: intro_skip_requested.emit())
+	pause_screen.back_requested.connect(func() -> void:
+		if pause_screen.current_mode() == PauseOverlay.Mode.STATS:
+			_hide_pause_stats()
+		else:
+			resume_requested.emit()
+	)
+	pause_panel = pause_screen.modal_sheet()
+	pause_resume_button = pause_screen.resume_action()
+	pause_skip_button = pause_screen.intro_skip_action()
+	pause_stats_panel = pause_panel
+	pause_stats_grid = pause_screen.stats_grid()
+	pause_stats_scroll = pause_screen.body_scroll()
+	pause_stats_back_button = pause_screen.back_action()
+	return pause_screen
+
 
 func _build_pause_stats_overlay() -> Control:
-	var parts := _centered_overlay(PAUSE_STATS_PANEL_SIZE, COLOR_TEAL, 10, false)
-	var overlay: Control = parts["overlay"]
-	pause_stats_panel = parts["panel"]
-	var box: VBoxContainer = parts["content"]
-	box.add_theme_constant_override("separation", 5)
-	var title := _label("Charakterwerte", 22, COLOR_TEXT)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-	var value_panel := Panel.new()
-	value_panel.custom_minimum_size = Vector2.ZERO
-	value_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	value_panel.add_theme_stylebox_override("panel", _document_inset_style(COLOR_TEAL))
-	box.add_child(value_panel)
-	pause_stats_scroll = ScrollContainer.new()
-	pause_stats_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	pause_stats_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	pause_stats_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	pause_stats_scroll.follow_focus = true
-	pause_stats_scroll.resized.connect(_update_pause_stats_scroll_mode)
-	pause_stats_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pause_stats_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	value_panel.add_child(pause_stats_scroll)
-	var value_margin := _margin(8, 6, 8, 6)
-	value_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pause_stats_scroll.add_child(value_margin)
-	pause_stats_grid = GridContainer.new()
-	pause_stats_grid.name = "PauseStatsColumns"
-	pause_stats_grid.columns = 2
-	pause_stats_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pause_stats_grid.add_theme_constant_override("h_separation", 14)
-	pause_stats_grid.add_theme_constant_override("v_separation", 4)
-	value_margin.add_child(pause_stats_grid)
-	# Hidden compatibility mirrors keep automation and assistive text extraction
-	# stable while the visible UI uses structured icon groups.
-	pause_stats_label = _label("", 14, COLOR_TEXT)
-	pause_stats_label.hide()
-	value_panel.add_child(pause_stats_label)
-	pause_stats_label_right = _label("", 14, COLOR_TEXT)
-	pause_stats_label_right.hide()
-	value_panel.add_child(pause_stats_label_right)
-	pause_stats_back_button = _primary_button("Zurück", COLOR_TEAL)
-	pause_stats_back_button.pressed.connect(_hide_pause_stats)
-	box.add_child(pause_stats_back_button)
-	return overlay
+	var marker := Control.new()
+	marker.name = "PauseStatsCompatibilityState"
+	marker.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.process_mode = Node.PROCESS_MODE_DISABLED
+	marker.hide()
+	return marker
+
 
 func _build_abort_overlay() -> Control:
-	var parts := _centered_overlay(ABORT_PANEL_SIZE, COLOR_RED, 24, false)
-	var overlay: Control = parts["overlay"]
-	abort_panel = parts["panel"]
-	var box: VBoxContainer = parts["content"]
-	box.add_child(_label("LEVEL ABBRECHEN?", 22, COLOR_TEXT))
-	var text := _label("Der Fortschritt dieses Runs und die mögliche Forschungsbelohnung gehen verloren.", 14, COLOR_MUTED)
-	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(text)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	box.add_child(row)
-	var cancel := _secondary_button("ZURÜCK", COLOR_MUTED)
-	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cancel.pressed.connect(func() -> void: abort_cancelled.emit())
-	row.add_child(cancel)
-	var confirm := _primary_button("ABBRECHEN", COLOR_RED)
-	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	confirm.pressed.connect(func() -> void: abort_confirmed.emit())
-	row.add_child(confirm)
-	return overlay
+	abort_confirmation = ConfirmationOverlay.new()
+	abort_confirmation.name = "AbortConfirmation"
+	abort_confirmation.confirm.connect(func() -> void: abort_confirmed.emit())
+	abort_confirmation.cancel.connect(func() -> void: abort_cancelled.emit())
+	_apply_abort_confirmation()
+	return abort_confirmation
 
 func _build_intro_skip_overlay() -> Control:
-	var parts := _centered_overlay(INTRO_SKIP_PANEL_SIZE, COLOR_GOLD, 22, false)
-	var overlay: Control = parts["overlay"]
-	intro_skip_panel = parts["panel"]
-	var box: VBoxContainer = parts["content"]
-	box.add_child(_label("EINFÜHRUNG ÜBERSPRINGEN?", 20, COLOR_TEXT))
-	var text := _label("Fall 1 wird freigeschaltet. Es gibt keine Forschung, keinen Sieg und keinen Versuchseintrag. Die Einführung bleibt wiederholbar.", 14, COLOR_MUTED)
-	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(text)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	box.add_child(row)
-	var cancel := _secondary_button("ZURÜCK", COLOR_MUTED)
-	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cancel.pressed.connect(func() -> void: intro_skip_cancelled.emit())
-	row.add_child(cancel)
-	var confirm := _primary_button("INTRO ÜBERSPRINGEN", COLOR_GOLD)
-	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	confirm.pressed.connect(func() -> void: intro_skip_confirmed.emit())
-	row.add_child(confirm)
-	return overlay
+	intro_skip_confirmation = ConfirmationOverlay.new()
+	intro_skip_confirmation.name = "IntroSkipConfirmation"
+	intro_skip_confirmation.confirm.connect(func() -> void: intro_skip_confirmed.emit())
+	intro_skip_confirmation.cancel.connect(func() -> void: intro_skip_cancelled.emit())
+	_apply_intro_skip_confirmation()
+	return intro_skip_confirmation
 
 func _build_restart_overlay() -> Control:
-	var parts := _centered_overlay(Vector2(470.0, 188.0), COLOR_GOLD, 22, false)
-	var overlay: Control = parts["overlay"]
-	restart_panel = parts["panel"]
-	var box: VBoxContainer = parts["content"]
-	box.add_child(_label("RUNDE NEU STARTEN?", 20, COLOR_TEXT))
-	var text := _label("Der aktuelle Run beginnt sofort von vorn. Fall, Plan und Seed bleiben gleich.", 14, COLOR_MUTED)
-	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(text)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	box.add_child(row)
-	var cancel := _secondary_button("Zurück", COLOR_MUTED)
-	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cancel.pressed.connect(func() -> void: restart_cancelled.emit())
-	row.add_child(cancel)
-	var confirm := _icon_action_button("Neu starten", &"restart", COLOR_GOLD, true)
-	confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	confirm.pressed.connect(func() -> void: restart_confirmed.emit())
-	row.add_child(confirm)
-	return overlay
+	restart_confirmation = ConfirmationOverlay.new()
+	restart_confirmation.name = "RestartConfirmation"
+	restart_confirmation.confirm.connect(func() -> void: restart_confirmed.emit())
+	restart_confirmation.cancel.connect(func() -> void: restart_cancelled.emit())
+	_apply_restart_confirmation()
+	return restart_confirmation
+
+func _apply_abort_confirmation() -> void:
+	if abort_confirmation == null:
+		return
+	abort_confirmation_revision += 1
+	abort_confirmation.apply_view_model(ConfirmationOverlayViewModel.new(
+		abort_confirmation_revision,
+		"Level abbrechen?",
+		"Der Fortschritt dieses Runs und die mögliche Forschungsbelohnung gehen verloren.",
+		"Abbrechen",
+		"Zurück",
+		true
+	))
+	abort_panel = abort_confirmation.modal_sheet()
+
+func _apply_intro_skip_confirmation() -> void:
+	if intro_skip_confirmation == null:
+		return
+	intro_skip_confirmation_revision += 1
+	intro_skip_confirmation.apply_view_model(ConfirmationOverlayViewModel.new(
+		intro_skip_confirmation_revision,
+		"Einführung überspringen?",
+		"Fall 1 wird freigeschaltet. Es gibt keine Forschung, keinen Sieg und keinen Versuchseintrag. Die Einführung bleibt wiederholbar.",
+		"Intro überspringen",
+		"Zurück",
+		false
+	))
+	intro_skip_panel = intro_skip_confirmation.modal_sheet()
+
+func _apply_restart_confirmation() -> void:
+	if restart_confirmation == null:
+		return
+	restart_confirmation_revision += 1
+	restart_confirmation.apply_view_model(ConfirmationOverlayViewModel.new(
+		restart_confirmation_revision,
+		"Runde neu starten?",
+		"Der aktuelle Run beginnt sofort von vorn. Fall, Plan und Seed bleiben gleich.",
+		"Neu starten",
+		"Zurück",
+		false
+	))
+	restart_panel = restart_confirmation.modal_sheet()
 
 func _build_finding_overlay() -> Control:
-	var parts := _centered_overlay(Vector2(820.0, 432.0), COLOR_GOLD, 18, true)
-	var overlay: Control = parts["overlay"]
-	finding_panel = parts["panel"]
-	var box: VBoxContainer = parts["content"]
-	var kicker := _label("NEUER BEFUND", 14, COLOR_GOLD)
-	kicker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(kicker)
-	finding_title = _label("", 24, COLOR_TEXT)
-	finding_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	finding_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(finding_title)
-	finding_copy_grid = GridContainer.new()
-	finding_copy_grid.columns = 2
-	finding_copy_grid.add_theme_constant_override("h_separation", 8)
-	finding_copy_grid.add_theme_constant_override("v_separation", 8)
-	box.add_child(finding_copy_grid)
-	var medical_section := AlveolusUIComponents.semantic_copy_section("MEDIZINISCHER HINTERGRUND", "", &"lexicon", COLOR_BLUE)
-	finding_medical_text = medical_section["body"]
-	medical_section["panel"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	finding_copy_grid.add_child(medical_section["panel"])
-	var gameplay_section := AlveolusUIComponents.semantic_copy_section("IM SPIEL", "", &"ability", COLOR_TEAL)
-	finding_gameplay_text = gameplay_section["body"]
-	gameplay_section["panel"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	finding_copy_grid.add_child(gameplay_section["panel"])
-	finding_reaction_cards = GridContainer.new()
-	finding_reaction_cards.columns = 3
-	finding_reaction_cards.custom_minimum_size = Vector2(0.0, 112.0)
-	finding_reaction_cards.add_theme_constant_override("h_separation", 9)
-	finding_reaction_cards.add_theme_constant_override("v_separation", 9)
-	box.add_child(finding_reaction_cards)
-	var reserve_panel := Panel.new()
-	reserve_panel.custom_minimum_size = Vector2(0.0, 104.0)
-	reserve_panel.add_theme_stylebox_override("panel", _document_inset_style(COLOR_BLUE))
-	reserve_panel.hide()
-	box.add_child(reserve_panel)
-	var reserve_margin := _margin(12, 8, 12, 8)
-	reserve_panel.add_child(reserve_margin)
-	var reserve_stack := VBoxContainer.new()
-	reserve_stack.add_theme_constant_override("separation", 2)
-	reserve_margin.add_child(reserve_stack)
-	finding_reserve_row = GridContainer.new()
-	finding_reserve_row.columns = 4
-	finding_reserve_row.add_theme_constant_override("h_separation", 10)
-	finding_reserve_row.add_theme_constant_override("v_separation", 6)
-	reserve_stack.add_child(finding_reserve_row)
-	finding_swap_toggle = CheckButton.new()
-	finding_swap_toggle.theme_type_variation = AlveolusVisualTheme.TYPE_TOGGLE_ROW
-	finding_swap_toggle.text = "Reserve einwechseln"
-	finding_swap_toggle.custom_minimum_size = Vector2(190.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	finding_swap_toggle.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
-	finding_swap_toggle.add_theme_font_size_override("font_size", 16)
-	finding_swap_toggle.toggled.connect(_on_finding_swap_toggled)
-	finding_reserve_row.add_child(finding_swap_toggle)
-	finding_reserve_label = _label("Keine Reserve vorbereitet", 16, COLOR_MUTED)
-	finding_reserve_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	finding_reserve_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	finding_reserve_row.add_child(finding_reserve_label)
-	var swap_for := _label("Tauscht gegen", 14, COLOR_MUTED)
-	swap_for.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	finding_reserve_row.add_child(swap_for)
-	finding_outgoing_option = OptionButton.new()
-	finding_outgoing_option.custom_minimum_size = Vector2(210.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	_apply_secondary_button_style(finding_outgoing_option, COLOR_BLUE)
-	finding_outgoing_option.item_selected.connect(_on_finding_outgoing_selected)
-	finding_reserve_row.add_child(finding_outgoing_option)
-	finding_validation_label = _label("", 16, COLOR_RED)
-	finding_validation_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	finding_validation_label.hide()
-	reserve_stack.add_child(finding_validation_label)
-	finding_confirm_button = _primary_button("Reaktion anwenden", COLOR_GOLD)
-	finding_confirm_button.disabled = true
-	finding_confirm_button.pressed.connect(_confirm_finding)
-	box.add_child(finding_confirm_button)
-	return overlay
+	finding_screen = FindingOverlay.new()
+	finding_screen.reaction_selected.connect(func(id: StringName) -> void:
+		current_finding_reaction = id
+		finding_reaction_selected.emit(id)
+	)
+	finding_screen.swap_toggled.connect(func(_enabled: bool) -> void: _emit_finding_swap_preview_from_screen())
+	finding_screen.outgoing_selected.connect(func(_id: StringName) -> void: _emit_finding_swap_preview_from_screen())
+	finding_screen.confirm.connect(func(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName) -> void:
+		finding_confirmed.emit(reaction_id, incoming_id, outgoing_id)
+	)
+	return finding_screen
+
 
 func _build_end_overlay() -> Control:
-	var parts := _centered_overlay(END_PANEL_SIZE, COLOR_TEAL, 24, true)
-	var overlay: Control = parts["overlay"]
-	end_panel = parts["panel"]
-	var box: VBoxContainer = parts["content"]
-	end_title = _label("FALL ABGESCHLOSSEN", 26, COLOR_TEXT)
-	end_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(end_title)
-	end_reason = _label("", 14, COLOR_MUTED)
-	end_reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	end_reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(end_reason)
-	end_stats = _label("", 14, COLOR_MUTED)
-	end_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(end_stats)
-	end_reward = _label("", 18, COLOR_GOLD)
-	end_reward.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(end_reward)
-	end_unlock = _label("", 14, COLOR_BLUE.lightened(0.24))
-	end_unlock.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(end_unlock)
-	end_mastery_panel = Panel.new()
-	end_mastery_panel.custom_minimum_size = Vector2(0.0, 62.0)
-	end_mastery_panel.add_theme_stylebox_override("panel", _document_inset_style(COLOR_BLUE))
-	box.add_child(end_mastery_panel)
-	var mastery_margin := _margin(12, 8, 12, 8)
-	end_mastery_panel.add_child(mastery_margin)
-	end_mastery_label = _label("", 14, COLOR_TEXT)
-	end_mastery_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	end_mastery_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	end_mastery_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	mastery_margin.add_child(end_mastery_label)
-	end_mastery_panel.hide()
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 7)
-	box.add_child(row)
-	var retry := _secondary_button("ERNEUT BEHANDELN", COLOR_TEAL)
-	retry.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	retry.pressed.connect(func() -> void: retry_requested.emit())
-	row.add_child(retry)
-	var levels := _primary_button("FALLÜBERSICHT", COLOR_BLUE)
-	levels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	levels.pressed.connect(func() -> void: result_levels_requested.emit())
-	row.add_child(levels)
-	var campus := _secondary_button("ZUM CAMPUS", COLOR_MUTED)
-	campus.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	campus.pressed.connect(func() -> void: result_campus_requested.emit())
-	row.add_child(campus)
-	return overlay
+	result_screen = ResultOverlay.new()
+	result_screen.name = "ResultOverlay"
+	result_screen.retry.connect(func() -> void: retry_requested.emit())
+	result_screen.levels.connect(func() -> void: result_levels_requested.emit())
+	result_screen.campus.connect(func() -> void: result_campus_requested.emit())
+	return result_screen
 
 func show_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
 	_hide_all()
@@ -2560,131 +1911,270 @@ func show_practice(meta: MetaProgressionState, jobs: Dictionary) -> void:
 	_show_campus_context()
 	practice_overlay.show()
 	refresh_practice(meta, jobs)
-	_focus_first_button.call_deferred(practice_overlay)
+	var preferred := practice_screen.default_focus_control()
+	_prepare_optional_navigation_focus.call_deferred(practice_overlay, preferred)
 
 func refresh_practice(meta: MetaProgressionState, jobs: Dictionary) -> void:
-	practice_research_value.text = "Forschung  ∞" if meta.is_unlimited_test_progression() else "Forschung  %d" % meta.research_points
+	practice_view_revision += 1
 	var claimable := meta.claimable_research()
-	passive_info.text = "%s gespeichert\nKapazität: 8 Stunden" % _format_duration(floori(meta.passive_seconds), false)
-	passive_claim_button.text = "%d FORSCHUNG ABHOLEN" % claimable if claimable > 0 else "NOCH NICHTS ABHOLBAR"
-	passive_claim_button.disabled = claimable <= 0
 	var has_job := meta.active_job_id != &"" and jobs.has(meta.active_job_id)
 	var job_complete := has_job and meta.is_job_complete()
-	clinic_progress.visible = has_job and not job_complete
-	clinic_remaining.visible = has_job and not job_complete
-	clinic_finish.visible = has_job
-	clinic_reward.visible = has_job
-	clinic_offers.visible = not has_job
-	clinic_claim_button.visible = job_complete
-	if not has_job:
-		clinic_status.text = "Wähle einen zeitgesteuerten Fall"
-		for id in clinic_offer_buttons:
-			var button: Button = clinic_offer_buttons[id]
-			var definition: ClinicJobDefinition = jobs[id]
-			button.text = "%s\n%s · +%d" % [definition.title, definition.duration_text(), definition.reward]
-		return
-	var active: ClinicJobDefinition = jobs[meta.active_job_id]
-	var remaining := meta.job_seconds_remaining()
-	var elapsed := active.duration_seconds - remaining
-	clinic_status.text = "%s abgeschlossen · Belohnung bereit" % active.title if job_complete else "%s läuft" % active.title
-	clinic_progress.max_value = active.duration_seconds
-	clinic_progress.value = clampi(elapsed, 0, active.duration_seconds)
-	clinic_remaining.text = "%s verbleibend" % _format_duration(remaining, true)
-	clinic_reward.text = "+%d Forschung" % active.reward
-	clinic_finish.text = "Abgeschlossen um %s" % _local_time(meta.job_finishes_at) if job_complete else "Voraussichtlich fertig um %s" % _local_time(meta.job_finishes_at)
+	var offline := PracticeScreenViewModel.OfflineResearchViewModel.create(
+		"%s gespeichert" % _format_duration(floori(meta.passive_seconds), false),
+		"8 Stunden",
+		"%d Forschung abholen" % claimable if claimable > 0 else "Noch nichts abholbar",
+		claimable,
+		claimable > 0
+	)
+	var clinic := PracticeScreenViewModel.ClinicStatusViewModel.idle()
+	if has_job:
+		var active: ClinicJobDefinition = jobs[meta.active_job_id]
+		var remaining := meta.job_seconds_remaining()
+		var elapsed := active.duration_seconds - remaining
+		clinic = PracticeScreenViewModel.ClinicStatusViewModel.create(
+			true,
+			active.id,
+			"%s abgeschlossen · Belohnung bereit" % active.title if job_complete else "%s läuft" % active.title,
+			job_complete,
+			clampi(elapsed, 0, active.duration_seconds),
+			active.duration_seconds,
+			"%s verbleibend" % _format_duration(remaining, true),
+			"+%d Forschung" % active.reward,
+			"Abgeschlossen um %s" % _local_time(meta.job_finishes_at) if job_complete else "Voraussichtlich fertig um %s" % _local_time(meta.job_finishes_at)
+		)
+	var offers: Array[PracticeScreenViewModel.ClinicJobOfferViewModel] = []
+	for id in [&"short_review", &"follow_up", &"complex_case"]:
+		if not jobs.has(id):
+			continue
+		var definition: ClinicJobDefinition = jobs[id]
+		offers.append(PracticeScreenViewModel.ClinicJobOfferViewModel.create(
+			id,
+			definition.title,
+			definition.duration_text(),
+			"+%d Forschung" % definition.reward,
+			true
+		))
+	var model := PracticeScreenViewModel.create(
+		practice_view_revision,
+		"Forschung ∞" if meta.is_unlimited_test_progression() else "Forschung %d" % meta.research_points,
+		offline,
+		clinic,
+		offers
+	)
+	practice_screen.apply_view_model(model)
+	clinic_offer_buttons.clear()
+	for offer in offers:
+		clinic_offer_buttons[offer.id()] = practice_screen.clinic_job_action(offer.id())
 
 func show_research(meta: MetaProgressionState, definitions: Array[ResearchDefinition]) -> void:
 	_hide_all()
 	_show_campus_context()
-	research_overlay.show()
-	_select_research_tab(&"research", false)
+	current_research_tab = &"research"
 	refresh_research(meta, definitions)
-	_focus_first_button.call_deferred(research_overlay)
+	research_overlay.show()
+	_prepare_optional_navigation_focus.call_deferred(research_overlay, progression_screen.default_focus_control())
 
-# Additive entry point for the new mastery layer. `talent_view` accepts either
-# a Dictionary or any Object exposing total_points, spent_points and talents.
-# This keeps the HUD independent from the persistence/runtime implementation.
+
 func show_research_tabs(meta: MetaProgressionState, definitions: Array[ResearchDefinition], talent_view: Variant) -> void:
-	show_research(meta, definitions)
-	refresh_talents(_talent_view_from_meta(meta, talent_view) if talent_view is Array else talent_view)
+	_hide_all()
+	_show_campus_context()
+	current_research_tab = &"research"
+	_refresh_progression_research_cache(meta, definitions)
+	var resolved_talents: Variant = _talent_view_from_meta(meta, talent_view) if talent_view is Array else talent_view
+	_refresh_progression_talent_cache(resolved_talents)
+	_apply_progression_screen_model()
+	research_overlay.show()
+	_prepare_optional_navigation_focus.call_deferred(research_overlay, progression_screen.default_focus_control())
+
 
 func refresh_research(meta: MetaProgressionState, definitions: Array[ResearchDefinition]) -> void:
-	research_points_label.text = "Forschung  ∞ · Testmodus" if meta.is_unlimited_test_progression() else "Forschung  %d" % meta.research_points
-	research_points_label.tooltip_text = research_points_label.text
-	var compact_balance := root != null and root.size.x < 620.0
-	research_tab_button.text = ("FORSCHUNG · ∞" if meta.is_unlimited_test_progression() else "FORSCHUNG · %d" % meta.research_points) if compact_balance else "FORSCHUNG"
-	for definition in definitions:
-		var rank := meta.rank(definition.id)
-		var rank_label: Label = research_rank_labels[definition.id]
-		var button: Button = research_buy_buttons[definition.id]
-		var cost_label: Label = research_cost_labels[definition.id]
-		var title_label: Label = research_title_labels[definition.id]
-		var icon: SimpleIcon = research_icons[definition.id]
-		rank_label.text = "Rang %d/%d" % [rank, definition.max_level]
-		var available := false
-		if rank >= definition.max_level:
-			cost_label.text = "MAXIMUM"
-		else:
-			var cost := definition.cost_for_rank(rank)
-			cost_label.text = "%d FORSCHEN" % cost
-			available = meta.can_afford_research(cost)
-		button.disabled = false
-		button.set_meta(&"research_available", available)
-		UISoundService.set_sound_role(button, UISoundService.CONFIRM if available else UISoundService.ERROR)
-		var state_accent := COLOR_GOLD if available else COLOR_MUTED.darkened(0.20)
-		button.add_theme_stylebox_override("normal", AlveolusVisualTheme.case_card_style(state_accent, &"normal"))
-		button.add_theme_stylebox_override("hover", AlveolusVisualTheme.case_card_style(state_accent, &"hover"))
-		button.add_theme_stylebox_override("pressed", AlveolusVisualTheme.case_card_style(state_accent, &"pressed"))
-		button.add_theme_stylebox_override("focus", AlveolusVisualTheme.case_card_style(state_accent, &"focus"))
-		var content_color := COLOR_TEXT if available else COLOR_MUTED.darkened(0.16)
-		icon.configure(definition.id, COLOR_GOLD if available else content_color)
-		title_label.add_theme_color_override("font_color", content_color)
-		rank_label.add_theme_color_override("font_color", COLOR_MUTED if available else content_color)
-		cost_label.add_theme_color_override("font_color", COLOR_GOLD if available else content_color)
-		button.set_meta(&"research_rank", rank)
-	if research_inspector_panel != null:
-		research_inspector_panel.hide()
+	_refresh_progression_research_cache(meta, definitions)
+	_apply_progression_screen_model()
+
 
 func refresh_talents(talent_view: Variant) -> void:
-	var focus_return_id := &""
-	var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
-	var reset_was_focused := focus_owner == talent_reset_button
-	if focus_owner != null and talent_grid != null and talent_grid.is_ancestor_of(focus_owner):
-		focus_return_id = StringName(focus_owner.get_meta(&"stable_focus_id", &""))
-	for child in talent_grid.get_children():
-		talent_grid.remove_child(child)
-		child.queue_free()
-	talent_buttons.clear()
-	talent_tree_branches.clear()
+	_refresh_progression_talent_cache(talent_view)
+	_apply_progression_screen_model()
+
+
+func _refresh_progression_research_cache(meta: MetaProgressionState, definitions: Array[ResearchDefinition]) -> void:
+	progression_research_items.clear()
+	progression_research_balance = "Forschung  ∞ · Testmodus" if meta.is_unlimited_test_progression() else "Forschung  %d" % meta.research_points
+	for definition in definitions:
+		var rank := meta.rank(definition.id)
+		var maximum := rank >= definition.max_level
+		var cost := 0 if maximum else definition.cost_for_rank(rank)
+		var available := not maximum and meta.can_afford_research(cost)
+		var state := ProgressionScreenViewModel.ItemState.ACTIVE if maximum else (ProgressionScreenViewModel.ItemState.AVAILABLE if available else ProgressionScreenViewModel.ItemState.LOCKED)
+		var rank_text := "Rang %d/%d" % [rank, definition.max_level]
+		var cost_text := "Maximum" if maximum else "%d Forschung" % cost
+		var state_text := "Abgeschlossen" if maximum else ("Verfügbar" if available else "Nicht genug Forschung")
+		var info := ProgressionScreenViewModel.InfoViewModel.create(
+			definition.title,
+			definition.description,
+			"%s · %s" % [rank_text, state_text],
+			definition.id,
+			COLOR_GOLD
+		)
+		progression_research_items.append(ProgressionScreenViewModel.ResearchItemViewModel.create(
+			definition.id,
+			definition.title,
+			rank_text,
+			cost_text,
+			definition.id,
+			state,
+			available,
+			info
+		))
+
+
+func _refresh_progression_talent_cache(talent_view: Variant) -> void:
+	progression_talent_branches.clear()
 	var total := int(_view_value(talent_view, &"total_points", 0))
 	var spent := int(_view_value(talent_view, &"spent_points", 0))
 	var unlimited := bool(_view_value(talent_view, &"unlimited", false))
-	var available := MetaProgressionState.UNLIMITED_TEST_POINT_POOL if unlimited else maxi(0, total - spent)
+	var available_points := MetaProgressionState.UNLIMITED_TEST_POINT_POOL if unlimited else maxi(0, total - spent)
 	var refunded := bool(_view_value(talent_view, &"tree_refunded", false))
-	var balance_text := "UNBEGRENZTE TALENTPUNKTE · %d VERTEILT" % spent if unlimited else "%d TALENTPUNKTE · %d FREI · %d VERTEILT" % [total, available, spent]
-	talent_points_label.text = "TALENTBAUM ERNEUERT · PUNKTE ZURÜCK · %s" % balance_text if refunded else balance_text
-	talent_points_label.tooltip_text = talent_points_label.text
-	talent_points_label.add_theme_color_override("font_color", COLOR_GOLD if refunded else COLOR_BLUE.lightened(0.24))
-	talent_tab_button.text = "TALENTE · ∞" if unlimited else ("TALENTE · %d FREI" % available if available > 0 else "TALENTE")
-	var talents: Array = _variant_array(_view_value(talent_view, &"talents", []))
-	var talents_by_category: Dictionary = {}
-	for talent in talents:
+	var balance := "Unbegrenzte Talentpunkte · %d verteilt" % spent if unlimited else "%d Talentpunkte · %d frei · %d verteilt" % [total, available_points, spent]
+	progression_talent_balance = "Talentbaum erneuert · Punkte zurück · %s" % balance if refunded else balance
+	progression_talent_reset_enabled = spent > 0
+	var grouped: Dictionary = {}
+	for talent in _variant_array(_view_value(talent_view, &"talents", [])):
 		var category := _talent_category_text(_view_value(talent, &"category", &""))
-		var category_talents: Array = talents_by_category.get(category, [])
-		category_talents.append(talent)
-		talents_by_category[category] = category_talents
+		var category_items: Array = grouped.get(category, [])
+		category_items.append(talent)
+		grouped[category] = category_items
 	for category in ["PLANUNG", "DIAGNOSE", "EINSATZ"]:
-		if talents_by_category.has(category):
-			_add_talent_tree_branch(category, talents_by_category[category], available)
-	talent_reset_button.disabled = spent <= 0
-	if talent_inspector_panel != null:
-		talent_inspector_panel.hide()
-	_configure_focus_cycle.call_deferred(research_overlay)
-	_configure_talent_tree_exits.call_deferred()
-	if focus_return_id != &"":
-		_restore_talent_focus.call_deferred(focus_return_id)
-	elif reset_was_focused:
-		_focus_first_talent_node.call_deferred()
+		var node_models: Array = []
+		for talent in grouped.get(category, []):
+			var id := StringName(_view_value(talent, &"id", &""))
+			var title := String(_view_value(talent, &"title", "Talent"))
+			var description := String(_view_value(talent, &"description", _view_value(talent, &"effect", "")))
+			var cost := int(_view_value(talent, &"cost", 1))
+			var active := bool(_view_value(talent, &"active", false))
+			var unlocked := bool(_view_value(talent, &"unlocked", true))
+			var prerequisite_met := bool(_view_value(talent, &"prerequisite_met", true))
+			var active_dependents := PackedStringArray(_view_value(talent, &"active_dependents", PackedStringArray()))
+			var can_deactivate := active_dependents.is_empty()
+			var interactive := (active and can_deactivate) or (not active and unlocked and prerequisite_met and available_points >= cost)
+			var state := ProgressionScreenViewModel.ItemState.ACTIVE if active else (ProgressionScreenViewModel.ItemState.AVAILABLE if interactive else ProgressionScreenViewModel.ItemState.LOCKED)
+			var requirement := String(_view_value(talent, &"requirement_text", "Einstieg des Astes"))
+			if active and not can_deactivate:
+				requirement = "Zuerst deaktivieren: %s" % ", ".join(active_dependents)
+			elif not unlocked:
+				requirement = "Noch nicht freigeschaltet"
+			elif not prerequisite_met:
+				requirement = "Benötigt %s" % requirement
+			elif not active and available_points < cost:
+				requirement = "%d Talentpunkte fehlen" % (cost - available_points)
+			var accent := _talent_branch_accent(category)
+			var icon_kind := _talent_icon_kind(category)
+			var info := ProgressionScreenViewModel.InfoViewModel.create(
+				title,
+				description,
+				"%d P · %s" % [cost, requirement],
+				icon_kind,
+				accent
+			)
+			node_models.append(ProgressionScreenViewModel.TalentNodeViewModel.create(
+				id,
+				title,
+				"%dP" % cost,
+				icon_kind,
+				int(_view_value(talent, &"tree_tier", 0)),
+				int(_view_value(talent, &"tree_lane", 1)),
+				PackedStringArray(_view_value(talent, &"required_ids", PackedStringArray())),
+				state,
+				interactive,
+				info
+			))
+		if node_models.is_empty():
+			continue
+		var branch_id := &"planning" if category == "PLANUNG" else (&"diagnosis" if category == "DIAGNOSE" else &"deployment")
+		progression_talent_branches.append(ProgressionScreenViewModel.TalentBranchViewModel.create(
+			branch_id,
+			category.capitalize(),
+			_talent_icon_kind(category),
+			_talent_branch_accent(category),
+			node_models
+		))
+
+
+func _apply_progression_screen_model() -> void:
+	if progression_screen == null:
+		return
+	progression_view_revision += 1
+	var model := ProgressionScreenViewModel.create(
+		progression_view_revision,
+		current_research_tab,
+		progression_research_balance,
+		progression_talent_balance,
+		progression_talent_reset_enabled,
+		progression_research_items,
+		progression_talent_branches
+	)
+	progression_screen.apply_view_model(model)
+	_register_progression_context_sources()
+	_map_progression_compatibility_controls()
+
+
+func _register_progression_context_sources() -> void:
+	if context_detail_controller == null or progression_screen == null:
+		return
+	for source in progression_context_sources:
+		if is_instance_valid(source):
+			context_detail_controller.unregister_source(source)
+	progression_context_sources.clear()
+	for registration in progression_screen.context_detail_registrations():
+		var source := registration.get("source") as Control
+		var provider: Callable = registration.get("provider", Callable())
+		if source == null or not provider.is_valid():
+			continue
+		register_context_detail(source, provider, bool(registration.get("hover_enabled", true)))
+		progression_context_sources.append(source)
+
+
+func _map_progression_compatibility_controls() -> void:
+	if progression_screen == null:
+		return
+	research_overlay = progression_screen
+	research_tab_button = progression_screen.research_tab_action()
+	talent_tab_button = progression_screen.talent_tab_action()
+	research_tab_row = progression_screen.find_child("ProgressionTabs", true, false) as GridContainer
+	research_points_label = progression_screen.find_child("ProgressionBalance", true, false) as Label
+	talent_points_label = research_points_label
+	research_scroll = progression_screen.research_scroll()
+	talent_scroll = progression_screen.talent_scroll()
+	research_content = research_scroll
+	talent_content = talent_scroll
+	research_grid = progression_screen.find_child("ResearchGrid", true, false) as GridContainer
+	talent_grid = progression_screen.find_child("TalentBranches", true, false) as GridContainer
+	talent_reset_button = progression_screen.talent_reset_action()
+	talent_summary_grid = null
+	research_inspector_panel = null
+	talent_inspector_panel = null
+	research_buy_buttons.clear()
+	talent_buttons.clear()
+	talent_tree_branches.clear()
+	for item in progression_research_items:
+		var research_id := StringName(item.id())
+		var research_button := progression_screen.research_action(research_id)
+		if research_button != null:
+			research_buy_buttons[research_id] = research_button
+	for branch_model in progression_talent_branches:
+		var branch := progression_screen.talent_branch(branch_model.id())
+		if branch != null:
+			talent_tree_branches.append(branch)
+		for node_model in branch_model.nodes():
+			var talent_button := progression_screen.talent_action(node_model.id())
+			if talent_button != null:
+				talent_buttons[node_model.id()] = talent_button
+
+
+func _on_progression_tab_changed(tab: StringName) -> void:
+	current_research_tab = &"talents" if tab == &"talents" else &"research"
+	research_tab_changed.emit(current_research_tab)
+
 
 func _add_talent_tree_branch(category: String, talents: Array, available_points: int) -> void:
 	var accent := _talent_branch_accent(category)
@@ -2734,7 +2224,7 @@ func _add_talent_tree_branch(category: String, talents: Array, available_points:
 		button.set_meta(&"talent_selectable", selectable)
 		button.set_meta(&"talent_status", status)
 		UISoundService.set_sound_role(button, UISoundService.CONFIRM if selectable else UISoundService.ERROR)
-		# The shared inspector is the single detail surface for mouse, keyboard, and gamepad.
+		# Hover and explicit ui_info share one immutable payload. Focus alone stays quiet.
 		button.tooltip_text = ""
 		var surface_accent := accent if selectable or active else COLOR_MUTED.darkened(0.18)
 		button.add_theme_stylebox_override("normal", AlveolusVisualTheme.case_card_style(surface_accent, &"selected" if active else (&"normal" if selectable else &"disabled")))
@@ -2742,10 +2232,10 @@ func _add_talent_tree_branch(category: String, talents: Array, available_points:
 		button.add_theme_stylebox_override("pressed", AlveolusVisualTheme.case_card_style(surface_accent, &"pressed"))
 		button.add_theme_stylebox_override("focus", AlveolusVisualTheme.case_card_style(surface_accent, &"focus"))
 		button.pressed.connect(_emit_talent_toggle.bind(id))
-		button.mouse_entered.connect(_show_talent_inspector.bind(title, effect, category, cost, status, inspector_requirement, button))
-		button.mouse_exited.connect(_hide_progression_inspector.bind(talent_inspector_panel, button))
-		button.focus_entered.connect(_show_talent_inspector.bind(title, effect, category, cost, status, inspector_requirement, button))
-		button.focus_exited.connect(_hide_progression_inspector.bind(talent_inspector_panel, button))
+		register_context_detail(
+			button,
+			_talent_context_payload.bind(title, effect, category, cost, status, inspector_requirement)
+		)
 		talent_buttons[id] = button
 		var button_margin := _margin(8, 6, 8, 6)
 		button_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2840,10 +2330,9 @@ func _talent_view_from_meta(meta: MetaProgressionState, definitions: Array) -> D
 func show_level_select(meta: MetaProgressionState, levels: Array[LevelDefinition]) -> void:
 	_hide_all()
 	_show_campus_context()
+	level_view_revision += 1
+	var entries: Array[CaseArchiveViewModel.CaseEntryViewModel] = []
 	for level in levels:
-		var button: Button = level_buttons[level.id]
-		var card: Dictionary = level_card_labels[level.id]
-		var illustration: Control = level_illustrations[level.id]
 		var unlocked := meta.is_level_unlocked(level.order)
 		var record := meta.get_level_record(level.id)
 		var status := "GESPERRT" if not unlocked else ("ABGESCHLOSSEN" if record.victories > 0 else "BEREIT")
@@ -2858,19 +2347,37 @@ func show_level_select(meta: MetaProgressionState, levels: Array[LevelDefinition
 			mastery_total += 1
 			if meta.has_completed_mastery(objective.id):
 				mastery_done += 1
-		(card["status"] as Label).text = "%s  ·  %s" % ["INTRO" if level.is_tutorial else "FALL %02d" % level.order, status]
-		(card["title"] as Label).text = _level_card_title(level)
-		(card["facts"] as Label).text = "%s  ·  BOSS %s" % [level.duration_text().to_upper(), level.boss_time_text().to_upper()]
-		(card["best"] as Label).text = best
-		(card["record"] as Label).text = "%d Siege · Lv %d · %d Bakt. · Ziele %d/%d" % [record.victories, record.highest_analysis, record.best_defeats, mastery_done, mastery_total]
-		button.disabled = not unlocked
-		for label in card.values():
-			(label as Label).modulate = Color.WHITE if unlocked else Color(0.55, 0.58, 0.60, 0.72)
-		illustration.modulate = Color.WHITE if unlocked else Color(0.42, 0.48, 0.50, 0.55)
-		if illustration is LevelCaseIllustration:
-			(illustration as LevelCaseIllustration).set_locked(not unlocked)
+		entries.append(CaseArchiveViewModel.CaseEntryViewModel.new(
+			level.id,
+			level.order,
+			_level_card_title(level),
+			"%s · %s" % ["INTRO" if level.is_tutorial else "FALL %02d" % level.order, status],
+			"%s · BOSS %s" % [level.duration_text().to_upper(), level.boss_time_text().to_upper()],
+			best,
+			"%d Siege · Lv %d · %d Bakt. · Ziele %d/%d" % [record.victories, record.highest_analysis, record.best_defeats, mastery_done, mastery_total],
+			level.is_tutorial,
+			unlocked,
+			_level_accent(level)
+		))
+	level_screen.apply_view_model(CaseArchiveViewModel.new(level_view_revision, entries, &""))
+	level_buttons.clear()
+	level_card_labels.clear()
+	level_illustrations.clear()
+	for level in levels:
+		var button := level_screen.card_for_case(level.id)
+		if button == null:
+			continue
+		level_buttons[level.id] = button
+		level_card_labels[level.id] = {
+			"status": button.find_child("Status", true, false),
+			"title": button.find_child("Title", true, false),
+			"facts": button.find_child("Facts", true, false),
+			"best": button.find_child("Best", true, false),
+			"record": button.find_child("Record", true, false),
+		}
+		level_illustrations[level.id] = button.find_child("CaseIllustration", true, false)
 	level_overlay.show()
-	_focus_first_button.call_deferred(level_overlay)
+	level_screen.grab_initial_focus.call_deferred()
 
 func show_lexicon(meta: MetaProgressionState) -> void:
 	_hide_all()
@@ -2891,8 +2398,13 @@ func cancel_lexicon_step() -> bool:
 func show_story() -> void:
 	_hide_all()
 	story_index = 0
-	_refresh_story()
-	story_overlay.show()
+	if story_view_model == null:
+		story_view_model = StoryScreenViewModel.create([
+			{"id": &"welcome", "title": "Willkommen bei ALVEOLUS", "body": "Du leitest ALVEOLUS, einen kleinen Forschungscampus für schwierige Lungenfälle.", "next_label": "Weiter"},
+			{"id": &"lung_model", "title": "Das Lungenmodell", "body": "Jeder Fall wird als begehbares Lungenmodell dargestellt. Du koordinierst die Behandlung direkt im Modell.", "next_label": "Weiter"},
+			{"id": &"mission", "title": "Deine Aufgabe", "body": "Stoppe Bakterien, stärke die Abwehr und halte den Zustand stabil. Gesammelte Proben helfen dem Campus weiter.", "next_label": "Zum Campus"},
+		], 1, &"prologue", true, true, "Überspringen")
+	story_screen.present(story_view_model, story_index, false)
 	_prepare_optional_navigation_focus.call_deferred(story_overlay, story_next_button)
 
 func configure_input_glyphs(service: InputGlyphService) -> void:
@@ -2903,27 +2415,31 @@ func configure_input_glyphs(service: InputGlyphService) -> void:
 		input_glyph_service.input_method_changed.connect(_on_input_method_changed)
 	_refresh_input_glyphs()
 
+func register_context_detail(source: Control, provider: Callable, hover_enabled: bool = true) -> void:
+	if context_detail_controller != null:
+		context_detail_controller.register_source(source, provider, hover_enabled)
+
+func toggle_focused_context_detail(focus_owner: Control) -> bool:
+	return context_detail_controller != null and context_detail_controller.toggle_focused(focus_owner)
+
+func close_context_detail() -> void:
+	if context_detail_controller != null:
+		context_detail_controller.close_explicit()
+
+func close_all_context_details() -> void:
+	if context_detail_controller != null:
+		context_detail_controller.close_all()
+
+func is_context_detail_open() -> bool:
+	return context_detail_controller != null and context_detail_controller.is_open()
+
+func is_context_detail_explicit() -> bool:
+	return context_detail_controller != null and context_detail_controller.is_explicit()
+
 func configure_ui_settings(settings: UISettingsState) -> void:
 	current_ui_settings = settings.duplicate_settings() if settings != null else UISettingsState.new()
 	reduced_motion_enabled = current_ui_settings.reduce_motion
-	settings_master_slider.set_value_no_signal(current_ui_settings.master_volume * 100.0)
-	settings_ui_slider.set_value_no_signal(current_ui_settings.ui_volume * 100.0)
-	settings_effects_slider.set_value_no_signal(current_ui_settings.effects_volume * 100.0)
-	settings_music_slider.set_value_no_signal(current_ui_settings.music_volume * 100.0)
-	settings_master_mute.set_pressed_no_signal(current_ui_settings.master_muted)
-	settings_ui_mute.set_pressed_no_signal(current_ui_settings.ui_muted)
-	settings_effects_mute.set_pressed_no_signal(current_ui_settings.effects_muted)
-	settings_music_mute.set_pressed_no_signal(current_ui_settings.music_muted)
-	settings_scale_option.select(UISettingsState.UI_SCALES.find(current_ui_settings.ui_scale))
-	settings_reduce_motion_toggle.set_pressed_no_signal(current_ui_settings.reduce_motion)
-	settings_glyph_option.select([UISettingsState.GLYPH_AUTO, UISettingsState.GLYPH_KEYBOARD, UISettingsState.GLYPH_GAMEPAD].find(current_ui_settings.glyph_mode))
-	settings_fullscreen_toggle.set_pressed_no_signal(current_ui_settings.fullscreen)
-	settings_restart_confirmation_toggle.set_pressed_no_signal(current_ui_settings.confirm_run_restart)
-	_update_toggle_caption(settings_reduce_motion_toggle, current_ui_settings.reduce_motion)
-	_update_toggle_caption(settings_run_stats_toggle, run_stats_enabled)
-	_update_toggle_caption(settings_fullscreen_toggle, current_ui_settings.fullscreen)
-	_update_toggle_caption(settings_restart_confirmation_toggle, current_ui_settings.confirm_run_restart)
-	settings_fullscreen_toggle.visible = not OS.has_feature("web")
+	_refresh_settings_screen(settings_show_quit)
 	_apply_ui_scale()
 	_apply_reduced_motion()
 	_refresh_input_glyphs()
@@ -2945,6 +2461,13 @@ func _refresh_input_glyphs() -> void:
 			if slot_index < ability_key_icons.size():
 				ability_key_icons[slot_index].texture = icon
 				ability_key_icons[slot_index].visible = has_icon
+			if slot_index < run_hud_ability_rows.size():
+				var ability_row: Dictionary = run_hud_ability_rows[slot_index]
+				ability_row["key_glyph_text"] = input_glyph_service.glyph_for_action(action)
+				run_hud_ability_rows[slot_index] = ability_row
+		if run_hud_screen != null:
+			run_hud_screen.pause_action().tooltip_text = "Pause · %s" % input_glyph_service.glyph_for_action(&"pause_game")
+			_apply_run_hud_model()
 		if pause_resume_button != null:
 			# The pause action already owns the screen. Repeating a large ESC/Menu
 			# glyph inside the primary button duplicated its caption and broke its
@@ -2954,25 +2477,32 @@ func _refresh_input_glyphs() -> void:
 			if pause_resume_button is IconTextButton:
 				(pause_resume_button as IconTextButton).set_caption("Weiter")
 			pause_resume_button.tooltip_text = "Weiter · %s" % input_glyph_service.glyph_for_action(&"pause_game")
-	_refresh_binding_buttons()
+	if settings_overlay != null and settings_overlay.visible:
+		_refresh_binding_buttons()
 
 func show_settings(show_quit: bool = true, campus_context: bool = true) -> void:
 	_hide_all()
-	settings_run_stats_toggle.set_pressed_no_signal(run_stats_enabled)
-	_update_toggle_caption(settings_run_stats_toggle, run_stats_enabled)
 	if campus_context:
 		_show_campus_context()
 	else:
 		gameplay_hud.show()
-	settings_quit_button.visible = show_quit
+	_refresh_settings_screen(show_quit)
 	if settings_scroll != null:
 		settings_scroll.scroll_horizontal = 0
 		settings_scroll.scroll_vertical = 0
 	settings_overlay.show()
-	_refresh_binding_buttons()
 	_configure_focus_cycle.call_deferred(settings_overlay)
 	if settings_initial_focus != null:
-		settings_initial_focus.grab_focus.call_deferred()
+		_grab_focus_if_valid.call_deferred(settings_initial_focus)
+	# Focus restoration and ScrollContainer.follow_focus are both deferred. Run
+	# the opening position last so Settings always begins with Gesamtlautstärke
+	# instead of inheriting a construction- or binding-row offset.
+	_reset_settings_scroll_to_start.call_deferred()
+
+func _reset_settings_scroll_to_start() -> void:
+	if settings_overlay != null and settings_overlay.visible and settings_scroll != null:
+		settings_scroll.scroll_horizontal = 0
+		settings_scroll.scroll_vertical = 0
 
 # UI view contract for preparation:
 # trait{title,effect}, slots[{id,title,kind,cost}], catalog[...] plus
@@ -3085,6 +2615,7 @@ func refresh_preparation(view_model: Variant, catalog: Array = [], loadout: Vari
 	var validation := default_validation if valid else String(_view_value(source_loadout, &"validation_message", _view_value(view_model, &"validation_message", default_validation)))
 	_set_preparation_validation(validation, COLOR_TEAL.lightened(0.22) if valid else COLOR_RED.lightened(0.14))
 	preparation_start_button.disabled = not valid or planning_snapshot.mode == PlanningSnapshot.Mode.REPLACE_CONFIRM
+	AlveolusUIComponents.refresh_button_state(preparation_start_button)
 	_apply_preparation_editor_state(preparation_locked)
 	_apply_preparation_layout()
 
@@ -3177,8 +2708,15 @@ func show_running_hud() -> void:
 	_hide_all()
 	upgrade_target_preview.clear()
 	gameplay_hud.show()
+	alert_time = 0.0
+	boss_announcement_time = 0.0
+	alert_panel.hide()
+	boss_announcement_panel.hide()
+	finding_progress_panel.hide()
+	set_process(false)
 	boss_hud_active = false
-	boss_panel.hide()
+	run_hud_vitals["boss_visible"] = false
+	_apply_run_hud_model()
 	_refresh_run_stats()
 
 func set_run_stats_visibility(enabled: bool) -> void:
@@ -3199,14 +2737,28 @@ func _refresh_run_stats() -> void:
 		return
 	var available := current_player_stats != null
 	var compact_critical_overlay := root != null and root.size.x < 740.0 and (boss_hud_active or alert_time > 0.0)
-	run_stats_panel.visible = run_stats_enabled and available and not compact_critical_overlay
+	var should_show := run_stats_enabled and available and not compact_critical_overlay
 	if not available:
+		run_hud_stat_rows.clear()
+		_apply_run_hud_model()
 		return
 	var current := current_run_state.stability if current_run_state != null else -1.0
 	var maximum := current_run_state.max_stability if current_run_state != null else -1.0
-	run_stats_label.text = current_player_stats.compact_stat_text(current, maximum)
-	if run_stats_strip != null:
-		run_stats_strip.set_descriptors(_run_stat_descriptors(current, maximum))
+	if run_stats_label != null:
+		run_stats_label.text = current_player_stats.compact_stat_text(current, maximum)
+	run_hud_stat_rows.clear()
+	if should_show:
+		var descriptors := _run_stat_descriptors(current, maximum)
+		for index in range(descriptors.size()):
+			var descriptor := descriptors[index] as HudStatDescriptor
+			run_hud_stat_rows.append({
+				"id": StringName("%s_%d" % [String(descriptor.icon_id), index]),
+				"icon_id": descriptor.icon_id,
+				"value": descriptor.formatted_value,
+				"accessible_name": descriptor.accessible_name,
+				"priority": descriptor.priority,
+			})
+	_apply_run_hud_model()
 
 func _run_stat_descriptors(current_stability: float, maximum_stability: float) -> Array:
 	var descriptors: Array = []
@@ -3385,28 +2937,15 @@ func _on_run_stats_toggle(enabled: bool) -> void:
 	run_stats_visibility_changed.emit(enabled)
 
 func update_stability(current: float, maximum: float) -> void:
-	stability_bar.max_value = maximum
-	stability_bar.value = current
-	stability_value.text = "%d / %d" % [roundi(current), roundi(maximum)]
-	var fraction := current / maxf(maximum, 1.0)
-	var fill_color := COLOR_TEAL
-	if fraction < 0.30:
-		fill_color = COLOR_RED
-	elif fraction < 0.58:
-		fill_color = COLOR_GOLD
-	stability_bar.add_theme_stylebox_override("fill", _bar_style(fill_color, 3))
+	run_hud_vitals["stability_current"] = current
+	run_hud_vitals["stability_maximum"] = maximum
+	_apply_run_hud_model()
 	_refresh_run_stats()
 
 func update_shield(current: float, maximum: float) -> void:
-	if shield_panel == null:
-		return
-	var visible_shield := current > 0.001 and maximum > 0.001
-	shield_panel.visible = visible_shield
-	if not visible_shield:
-		return
-	shield_bar.max_value = maximum
-	shield_bar.value = current
-	shield_value.text = "%d" % ceili(current)
+	run_hud_vitals["shield_current"] = current
+	run_hud_vitals["shield_maximum"] = maximum
+	_apply_run_hud_model()
 
 func show_patient_hit() -> void:
 	# Kept for API compatibility. Patient damage feedback now lives solely on
@@ -3414,55 +2953,81 @@ func show_patient_hit() -> void:
 	pass
 
 func update_analysis(current: int, target: int, level: int) -> void:
-	analysis_bar.max_value = maxi(target, 1)
-	analysis_bar.value = current
-	level_label.text = "PROBEN · LEVEL %d · %d/%d" % [level, current, target]
+	run_hud_vitals["analysis_current"] = current
+	run_hud_vitals["analysis_target"] = target
+	run_hud_vitals["analysis_level"] = level
+	_apply_run_hud_model()
 
 func configure_active_abilities(abilities: Array) -> void:
 	for slot_index in range(2):
 		if slot_index >= abilities.size() or abilities[slot_index] == null:
-			update_active_ability(slot_index, "", 0.0, 0.0, false)
+			run_hud_ability_rows[slot_index] = _empty_run_hud_ability(slot_index)
 			continue
 		var ability: Variant = abilities[slot_index]
-		update_active_ability(
-			slot_index,
-			String(_view_value(ability, &"title", _view_value(ability, &"display_name", "AKTIVE FÄHIGKEIT"))),
-			float(_view_value(ability, &"cooldown_remaining", 0.0)),
-			float(_view_value(ability, &"cooldown_total", _view_value(ability, &"cooldown_seconds", 1.0))),
-			bool(_view_value(ability, &"ready", true))
-		)
+		var ability_id := StringName(String(_view_value(ability, &"id", "ability")))
+		if ability_id == &"" or not SimpleIcon.supports(ability_id):
+			ability_id = &"ability"
+		run_hud_ability_rows[slot_index] = {
+			"slot": slot_index,
+			"title": String(_view_value(ability, &"title", _view_value(ability, &"display_name", "Aktive Fähigkeit"))),
+			"icon_id": ability_id,
+			"occupied": true,
+			"ready": bool(_view_value(ability, &"ready", true)),
+			"cooldown_remaining": float(_view_value(ability, &"cooldown_remaining", 0.0)),
+			"cooldown_total": float(_view_value(ability, &"cooldown_total", _view_value(ability, &"cooldown_seconds", 1.0))),
+			"targeting": false,
+			"key_glyph_text": _ability_glyph(slot_index),
+		}
+	_apply_run_hud_model()
 
 func clear_active_abilities() -> void:
-	for slot_index in range(ability_cards.size()):
-		ability_cards[slot_index].hide()
-	ability_panel.hide()
+	for slot_index in range(2):
+		run_hud_ability_rows[slot_index] = _empty_run_hud_ability(slot_index)
+	_apply_run_hud_model()
 
 func update_active_ability(slot_index: int, title: String, remaining: float, total: float, ready: bool) -> void:
-	if slot_index < 0 or slot_index >= ability_cards.size():
+	if slot_index < 0 or slot_index >= 2:
 		return
 	var occupied := not title.is_empty()
-	var card := ability_cards[slot_index]
-	card.visible = occupied
 	if not occupied:
-		ability_panel.visible = ability_cards.any(func(item: Panel) -> bool: return item.visible)
+		run_hud_ability_rows[slot_index] = _empty_run_hud_ability(slot_index)
+		_apply_run_hud_model()
 		return
-	ability_title_labels[slot_index].text = title.to_upper()
-	ability_title_labels[slot_index].modulate = COLOR_TEXT if ready else COLOR_MUTED
-	ability_cooldown_bars[slot_index].max_value = maxf(total, 0.01)
-	ability_cooldown_bars[slot_index].value = total if ready else clampf(total - remaining, 0.0, total)
-	ability_cooldown_bars[slot_index].add_theme_stylebox_override("fill", _bar_style(COLOR_TEAL if ready else COLOR_BLUE, 3))
-	ability_cooldown_labels[slot_index].text = "BEREIT" if ready else "%.1f s" % maxf(remaining, 0.0)
-	ability_cooldown_labels[slot_index].modulate = COLOR_TEAL if ready else COLOR_BLUE
-	ability_panel.show()
+	var previous: Dictionary = run_hud_ability_rows[slot_index]
+	previous["title"] = title
+	previous["occupied"] = true
+	previous["ready"] = ready
+	previous["cooldown_remaining"] = remaining
+	previous["cooldown_total"] = total
+	previous["key_glyph_text"] = _ability_glyph(slot_index)
+	run_hud_ability_rows[slot_index] = previous
+	_apply_run_hud_model()
 
 func set_ability_targeting(slot_index: int, targeting: bool) -> void:
-	if slot_index < 0 or slot_index >= ability_cards.size():
+	if slot_index < 0 or slot_index >= 2:
 		return
-	var accent := COLOR_TEAL if targeting else COLOR_BLUE
-	var style := _hud_panel_style(accent, 0.90 if targeting else 0.80, 6)
-	style.set_border_width_all(2 if targeting else 1)
-	ability_cards[slot_index].add_theme_stylebox_override("panel", style)
-	ability_hit_buttons[slot_index].tooltip_text = "Ziel bestätigen" if targeting else "Fähigkeit auswählen oder zielen"
+	var ability: Dictionary = run_hud_ability_rows[slot_index]
+	ability["targeting"] = targeting
+	run_hud_ability_rows[slot_index] = ability
+	_apply_run_hud_model()
+
+func _empty_run_hud_ability(slot_index: int) -> Dictionary:
+	return {
+		"slot": slot_index,
+		"title": "Nicht belegt",
+		"icon_id": &"ability",
+		"occupied": false,
+		"ready": false,
+		"cooldown_remaining": 0.0,
+		"cooldown_total": 0.0,
+		"targeting": false,
+		"key_glyph_text": _ability_glyph(slot_index),
+	}
+
+func _ability_glyph(slot_index: int) -> String:
+	if input_glyph_service != null:
+		return input_glyph_service.glyph_for_action(&"active_ability_1" if slot_index == 0 else &"active_ability_2")
+	return "Q" if slot_index == 0 else "E"
 
 func _on_ability_slot_pressed(slot_index: int) -> void:
 	ability_slot_requested.emit(slot_index)
@@ -3473,108 +3038,116 @@ func update_finding_progress(current: int, target: int, revealed: bool = false) 
 	finding_progress_bar.value = target if revealed else clampi(current, 0, target)
 	finding_progress_label.text = "BEFUND · AUFGEDECKT" if revealed else "BEFUND · %d / %d" % [current, target]
 	finding_progress_label.modulate = COLOR_TEAL if revealed else COLOR_GOLD
-	finding_progress_bar.add_theme_stylebox_override("fill", _bar_style(COLOR_TEAL if revealed else COLOR_GOLD, 4))
+	AlveolusUIComponents.apply_progress_accent(finding_progress_bar, COLOR_TEAL if revealed else COLOR_GOLD)
 
 func hide_finding_progress() -> void:
 	finding_progress_panel.hide()
 
 func update_timer(elapsed: float, boss_spawn_seconds: float, deadline_seconds: float, boss_active: bool) -> void:
 	var remaining := maxf(0.0, (deadline_seconds if boss_active else boss_spawn_seconds) - elapsed)
-	var next_text := "%s %s" % ["BOSS AKTIV ·" if boss_active else "BOSS IN", _clock_text(remaining)]
-	if timer_label.text != next_text:
-		timer_label.text = next_text
-	var next_color := COLOR_RED if boss_active else COLOR_TEXT
-	if timer_label.modulate != next_color:
-		timer_label.modulate = next_color
+	var timer_text := "%s %s" % ["BOSS AKTIV ·" if boss_active else "BOSS IN", _clock_text(remaining)]
+	var timer_tone := &"danger" if boss_active else &"neutral"
+	if run_hud_vitals.get("timer_text", "") == timer_text and run_hud_vitals.get("timer_tone", &"") == timer_tone:
+		return
+	run_hud_vitals["timer_text"] = timer_text
+	run_hud_vitals["timer_tone"] = timer_tone
+	_apply_run_hud_model()
 
 func update_intro_timer(lesson: int, phase: StringName, boss_active: bool) -> void:
-	if boss_active:
-		timer_label.text = "EINFÜHRUNG · MINI-BOSS"
-		timer_label.modulate = COLOR_RED
+	var timer_text := "EINFÜHRUNG · MINI-BOSS" if boss_active else "EINFÜHRUNG · LEKTION %d/3" % clampi(lesson, 1, 3)
+	var timer_tone := &"danger" if boss_active else (&"attention" if phase != &"" else &"neutral")
+	if run_hud_vitals.get("timer_text", "") == timer_text and run_hud_vitals.get("timer_tone", &"") == timer_tone:
 		return
-	timer_label.text = "EINFÜHRUNG · LEKTION %d/3" % clampi(lesson, 1, 3)
-	timer_label.modulate = COLOR_GOLD if phase != &"" else COLOR_TEXT
+	run_hud_vitals["timer_text"] = timer_text
+	run_hud_vitals["timer_tone"] = timer_tone
+	if boss_active:
+		_apply_run_hud_model()
+		return
+	_apply_run_hud_model()
 
 func show_boss(maximum: float, phase_count: int) -> void:
-	boss_bar.max_value = maximum
-	boss_bar.value = maximum
-	boss_phase_label.text = "PHASEN 70 % · 40 %" if phase_count > 0 else "EINFÜHRUNGSBOSS"
+	run_hud_vitals["boss_visible"] = true
+	run_hud_vitals["boss_current"] = maximum
+	run_hud_vitals["boss_maximum"] = maximum
+	run_hud_vitals["boss_phase"] = "Phasen 70 % · 40 %" if phase_count > 0 else "Einführungsboss"
 	boss_hud_active = true
-	boss_panel.show()
+	_apply_run_hud_model()
 	_refresh_run_stats()
-	boss_announcement.show()
+	boss_announcement_panel.show()
 	boss_announcement_time = 1.2
+	set_process(true)
 
 func update_boss_health(current: float, maximum: float) -> void:
-	boss_bar.max_value = maximum
-	boss_bar.value = current
-	var caption := "HERD" if root != null and root.size.x < 600.0 else "INFEKTIONSHERD"
-	boss_value.text = "%s · %d %%" % [caption, roundi(100.0 * current / maxf(maximum, 1.0))]
+	run_hud_vitals["boss_current"] = current
+	run_hud_vitals["boss_maximum"] = maximum
+	_apply_run_hud_model()
 
 func show_boss_phase(phase: int) -> void:
-	boss_phase_label.text = "PHASE %d AKTIV" % (phase + 1)
+	run_hud_vitals["boss_phase"] = "Phase %d aktiv" % (phase + 1)
+	_apply_run_hud_model()
 
 func show_alert(text: String, color: Color = COLOR_TEAL, duration: float = 2.8) -> void:
 	alert_label.text = text
-	alert_label.modulate = color
-	alert_label.show()
+	alert_label.modulate = Color.WHITE
+	alert_label.add_theme_color_override("font_color", color.lightened(0.16))
+	AlveolusUIComponents.apply_surface_role(alert_panel, AlveolusVisualTheme.SurfaceRole.HUD_ALERT, color)
+	alert_panel.show()
 	alert_time = duration
+	set_process(true)
 	_refresh_run_stats()
 
 func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats, can_reroll: bool, show_education: bool = false, scripted_intro: bool = false) -> void:
 	current_upgrade_options = options.duplicate()
-	for child in upgrade_cards.get_children():
-		child.queue_free()
-	for index in range(options.size()):
-		var definition: UpgradeDefinition = options[index]
+	upgrade_view_revision += 1
+	var rows: Array = []
+	for definition in options:
+		if definition == null:
+			continue
 		var preview := stats.preview_upgrade(definition)
-		# Dauerhafter Kartenvertrag: Name, exakter Effekt und Vorher/Nachher – keine Beschreibungstexte.
-		var card := Button.new()
-		card.custom_minimum_size = Vector2(460.0, 104.0) if scripted_intro else Vector2(270.0, 132.0)
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card.clip_contents = true
-		card.add_theme_stylebox_override("normal", AlveolusVisualTheme.button_style(definition.accent_color(), &"normal"))
-		card.add_theme_stylebox_override("hover", AlveolusVisualTheme.button_style(definition.accent_color(), &"hover"))
-		card.add_theme_stylebox_override("pressed", AlveolusVisualTheme.button_style(definition.accent_color(), &"pressed"))
-		card.add_theme_stylebox_override("focus", AlveolusVisualTheme.button_style(definition.accent_color(), &"focus"))
-		card.add_theme_stylebox_override("disabled", AlveolusVisualTheme.button_style(definition.accent_color(), &"disabled"))
-		card.pressed.connect(_on_upgrade_pressed.bind(definition))
-		upgrade_cards.add_child(card)
-		var margin := _margin(15, 12, 15, 12)
-		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card.add_child(margin)
-		var content := VBoxContainer.new()
-		content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		content.add_theme_constant_override("separation", 7)
-		margin.add_child(content)
-		var heading := HBoxContainer.new()
-		heading.add_theme_constant_override("separation", 8)
-		content.add_child(heading)
-		var path_icon := SimpleIcon.new()
-		path_icon.custom_minimum_size = Vector2(26.0, 26.0)
-		path_icon.configure(_upgrade_icon_kind(definition), definition.accent_color())
-		heading.add_child(path_icon)
-		var card_title := _label(definition.title, 14, COLOR_TEXT)
-		card_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		heading.add_child(card_title)
-		var effect_copy := _intro_upgrade_copy(definition.id) if scripted_intro else preview.effect_text
-		var effect := _label(effect_copy, 17, definition.accent_color())
-		effect.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		effect.max_lines_visible = 2 if scripted_intro else 1
-		content.add_child(effect)
-		if not scripted_intro:
-			var comparison := _label(preview.before_after_text, 14, COLOR_TEXT)
-			comparison.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			comparison.max_lines_visible = 2
-			content.add_child(comparison)
-	upgrade_education.visible = show_education and not scripted_intro
-	reroll_button.visible = can_reroll
-	_apply_upgrade_layout()
-	upgrade_overlay.show()
-	_prepare_optional_navigation_focus.call_deferred(upgrade_overlay)
+		rows.append({
+			"id": definition.id,
+			"title": definition.title,
+			"effect": _intro_upgrade_copy(definition.id) if scripted_intro else preview.effect_text,
+			"before": "",
+			"after": "" if scripted_intro else preview.before_after_text,
+			"icon_id": _upgrade_icon_kind(definition),
+			"accent_role": _upgrade_accent_role(definition),
+		})
+	var education_copy := ""
+	if scripted_intro:
+		education_copy = "Diese Auswahl erklärt den nächsten Behandlungsschritt."
+	elif show_education:
+		# Legacy callers may still request the former legend. Keeping the branch
+		# explicit documents that this no longer creates a second text block.
+		education_copy = ""
+	# show_education is retained in the public facade for compatibility. The
+	# central overlay deliberately renders education only for an explicit
+	# scripted intro; option count or a generic hint never changes the mode.
+	var model := UpgradeOverlayViewModel.create(
+		rows,
+		upgrade_view_revision,
+		scripted_intro,
+		education_copy,
+		can_reroll,
+		false
+	)
+	var request_focus := input_glyph_service != null and input_glyph_service.current_method == InputGlyphService.GAMEPAD
+	upgrade_screen.present(model, request_focus)
+	upgrade_panel = upgrade_screen.modal_sheet()
+	upgrade_cards = upgrade_screen.cards_grid()
+	upgrade_education = upgrade_screen.education_panel()
+	reroll_button = upgrade_screen.reroll_action()
 	if upgrade_target_preview != null:
 		upgrade_target_preview.clear()
+
+func _upgrade_accent_role(definition: UpgradeDefinition) -> StringName:
+	match definition.path:
+		UpgradeDefinition.Path.IMMUNE:
+			return &"coral"
+		UpgradeDefinition.Path.SUPPORT:
+			return &"turquoise"
+		_:
+			return &"teal"
 
 func _intro_upgrade_copy(id: StringName) -> String:
 	match id:
@@ -3596,55 +3169,83 @@ func show_pause(is_intro: bool = false, player_stats: PlayerStats = null, run_st
 	if player_stats != null:
 		update_run_stats(player_stats, run_state)
 	pause_is_intro = is_intro
-	pause_skip_button.visible = is_intro
-	if pause_panel != null:
-		pause_panel.custom_minimum_size = _fit_modal_size(PAUSE_INTRO_PANEL_SIZE if is_intro else PAUSE_PANEL_SIZE)
 	pause_stats_overlay.hide()
-	pause_overlay.show()
-	_focus_first_button.call_deferred(pause_overlay)
+	pause_view_revision += 1
+	pause_screen.present(_pause_view_model(), PauseOverlay.Mode.MENU, true)
 
 func hide_pause() -> void:
-	pause_overlay.hide()
+	pause_screen.dismiss()
 	pause_stats_overlay.hide()
 
 func is_pause_stats_open() -> bool:
-	return pause_stats_overlay != null and pause_stats_overlay.visible
+	return pause_screen != null and pause_screen.visible and pause_screen.current_mode() == PauseOverlay.Mode.STATS
 
 func return_to_pause_menu() -> void:
 	_hide_pause_stats()
 
 func _show_pause_stats() -> void:
-	_refresh_pause_stats()
-	pause_overlay.hide()
+	pause_view_revision += 1
+	pause_screen.apply_view_model(_pause_view_model(), PauseOverlay.Mode.STATS)
+	pause_screen.show()
 	pause_stats_overlay.show()
-	_focus_first_button.call_deferred(pause_stats_overlay)
+	pause_screen.grab_initial_focus.call_deferred()
 
 func _hide_pause_stats() -> void:
 	pause_stats_overlay.hide()
-	pause_overlay.show()
-	_focus_first_button.call_deferred(pause_overlay)
+	pause_screen.set_mode(PauseOverlay.Mode.MENU, true)
+	pause_screen.show()
+
+
+func _pause_view_model() -> PauseOverlayViewModel:
+	var rows: Array = []
+	if current_player_stats != null:
+		var current := current_run_state.stability if current_run_state != null else -1.0
+		var maximum := current_run_state.max_stability if current_run_state != null else -1.0
+		var index := 0
+		for row_value in current_player_stats.stat_rows(current, maximum, TherapyAvatar.MOVE_SPEED):
+			var row := row_value as Dictionary
+			var group := String(row.get("group", "ALLGEMEIN"))
+			rows.append({
+				"id": StringName("%s_%d" % [group.to_lower(), index]),
+				"group": StringName(group.to_lower()),
+				"label": String(row.get("label", "")),
+				"value": String(row.get("value", "")),
+				"icon_id": _pause_stat_group_icon(group),
+				"accent_role": _pause_stat_group_role(group),
+			})
+			index += 1
+	return PauseOverlayViewModel.create(rows, pause_view_revision, pause_is_intro)
+
+
+func _pause_stat_group_role(group: String) -> StringName:
+	match group:
+		"BEHANDLUNG": return &"teal"
+		"AKTIV", "PROBEN": return &"cobalt"
+		"ABWEHR": return &"coral"
+		"ATEMHILFE": return &"turquoise"
+	return &"gold"
 
 func show_abort_confirmation() -> void:
 	pause_overlay.hide()
-	abort_overlay.show()
-	_focus_first_button.call_deferred(abort_overlay)
+	_apply_abort_confirmation()
+	abort_confirmation.present(abort_confirmation.view_model(), true)
 
 func show_intro_skip_confirmation() -> void:
 	pause_overlay.hide()
-	intro_skip_overlay.show()
-	_focus_first_button.call_deferred(intro_skip_overlay)
+	_apply_intro_skip_confirmation()
+	intro_skip_confirmation.present(intro_skip_confirmation.view_model(), true)
 
 func show_restart_confirmation() -> void:
 	pause_overlay.hide()
 	pause_stats_overlay.hide()
-	restart_overlay.show()
-	_focus_first_button.call_deferred(restart_overlay)
+	_apply_restart_confirmation()
+	restart_confirmation.present(restart_confirmation.view_model(), true)
 
 func hide_restart_confirmation() -> void:
-	restart_overlay.hide()
+	restart_confirmation.dismiss()
 
 func hide_intro_skip_confirmation() -> void:
-	intro_skip_overlay.hide()
+	intro_skip_confirmation.dismiss()
 
 # `definition` and reactions are intentionally duck-typed so data resources
 # can evolve without turning this view into a second source of game rules.
@@ -3653,90 +3254,139 @@ func show_finding(definition: Variant, reactions: Array, reserve: Variant = null
 	gameplay_hud.show()
 	current_finding_reaction = &""
 	current_finding_reserve = StringName(reserve) if reserve is String or reserve is StringName else StringName(_view_value(reserve, &"id", &""))
-	finding_title.text = String(_view_value(definition, &"title", "NEUER BEFUND"))
-	finding_medical_text.text = String(_view_value(definition, &"medical_text", _view_value(definition, &"description", "")))
-	finding_gameplay_text.text = String(_view_value(definition, &"gameplay_text", _view_value(definition, &"effect", "")))
-	for child in finding_reaction_cards.get_children():
-		child.queue_free()
-	finding_reaction_group = ButtonGroup.new()
-	for reaction in reactions:
-		var id := StringName(_view_value(reaction, &"id", &""))
+	finding_id = StringName(_view_value(definition, &"id", &"finding"))
+	finding_title_text = String(_view_value(definition, &"title", "Neuer Befund"))
+	finding_medical_copy = String(_view_value(definition, &"medical_text", _view_value(definition, &"description", "")))
+	finding_gameplay_copy = String(_view_value(definition, &"gameplay_text", _view_value(definition, &"effect", "")))
+	finding_reaction_models.clear()
+	for index in range(reactions.size()):
+		var reaction: Variant = reactions[index]
+		var reaction_id := StringName(_view_value(reaction, &"id", &""))
 		var title := String(_view_value(reaction, &"title", "Reaktion"))
 		var effect := String(_view_value(reaction, &"description", _view_value(reaction, &"effect", "")))
-		var button := Button.new()
-		button.custom_minimum_size = Vector2(0.0, 104.0)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.toggle_mode = true
-		button.button_group = finding_reaction_group
-		button.add_theme_stylebox_override("normal", AlveolusVisualTheme.case_card_style(COLOR_GOLD, &"normal"))
-		button.add_theme_stylebox_override("hover", AlveolusVisualTheme.case_card_style(COLOR_GOLD, &"hover"))
-		button.add_theme_stylebox_override("pressed", AlveolusVisualTheme.case_card_style(COLOR_TEAL, &"pressed"))
-		button.add_theme_stylebox_override("focus", AlveolusVisualTheme.case_card_style(COLOR_GOLD, &"focus"))
-		button.pressed.connect(_on_finding_reaction.bind(id))
-		finding_reaction_cards.add_child(button)
-		var margin := _margin(12, 10, 12, 10)
-		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		button.add_child(margin)
-		var card_copy := VBoxContainer.new()
-		card_copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card_copy.add_theme_constant_override("separation", 5)
-		margin.add_child(card_copy)
-		var title_label := _label(title, 17, COLOR_TEXT)
-		title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		title_label.max_lines_visible = 2
-		card_copy.add_child(title_label)
-		var effect_label := _label(effect, 16, COLOR_MUTED)
-		effect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		effect_label.max_lines_visible = 3
-		card_copy.add_child(effect_label)
+		var accent := COLOR_TEAL if index % 2 == 0 else COLOR_GOLD
+		var info := FindingOverlayViewModel.InfoViewModel.new(title, effect, "Reaktion auf den Befund", &"ability", accent)
+		finding_reaction_models.append(FindingOverlayViewModel.ReactionViewModel.new(
+			reaction_id,
+			title,
+			effect,
+			&"ability",
+			accent,
+			true,
+			info
+		))
 	current_finding_outgoing_ids.clear()
-	finding_outgoing_option.clear()
+	var outgoing_models: Array[FindingOverlayViewModel.OutgoingOptionViewModel] = []
 	for passive in swappable_passives:
 		var passive_id := StringName(passive) if passive is String or passive is StringName else StringName(_view_value(passive, &"id", &""))
 		var passive_title := String(_view_value(passive, &"title", String(passive_id)))
-		finding_outgoing_option.add_item(passive_title)
 		current_finding_outgoing_ids.append(passive_id)
+		outgoing_models.append(FindingOverlayViewModel.OutgoingOptionViewModel.new(passive_id, passive_title))
 	var reserve_title := String(_view_value(reserve, &"title", String(current_finding_reserve)))
-	var can_swap := current_finding_reserve != &"" and not current_finding_outgoing_ids.is_empty()
-	finding_reserve_label.text = "Reserve: %s" % reserve_title if can_swap else "Keine austauschbare passive Reserve"
-	finding_swap_toggle.set_pressed_no_signal(false)
-	finding_swap_toggle.disabled = not can_swap
-	finding_outgoing_option.disabled = true
-	finding_outgoing_option.visible = can_swap
+	# Reserve remains save-compatible but dormant in the current product UI.
+	finding_reserve_model = FindingOverlayViewModel.ReserveSwapViewModel.new(
+		false,
+		current_finding_reserve,
+		reserve_title,
+		false,
+		false,
+		outgoing_models,
+		current_finding_outgoing_ids[0] if not current_finding_outgoing_ids.is_empty() else &""
+	)
 	finding_swap_valid = true
-	finding_validation_label.hide()
-	finding_confirm_button.disabled = true
-	if finding_panel != null:
-		finding_panel.custom_minimum_size = _fit_modal_size(Vector2(820.0, 432.0))
-	finding_overlay.show()
-	_configure_focus_cycle.call_deferred(finding_overlay)
-	if finding_reaction_cards.get_child_count() > 0:
-		(finding_reaction_cards.get_child(0) as Button).grab_focus()
+	finding_validation_text = ""
+	_apply_finding_screen_model(true)
+
 
 func hide_finding() -> void:
-	finding_overlay.hide()
+	if finding_screen != null:
+		finding_screen.dismiss()
+
 
 func set_finding_swap_validation(valid: bool, message: String = "") -> void:
 	finding_swap_valid = valid
-	finding_validation_label.text = message
-	finding_validation_label.visible = not message.is_empty()
-	finding_validation_label.modulate = COLOR_TEAL if valid else COLOR_RED
-	finding_confirm_button.disabled = current_finding_reaction == &"" or not valid
+	finding_validation_text = message
+	if finding_screen != null:
+		current_finding_reaction = finding_screen.selected_reaction_id()
+	_apply_finding_screen_model(false)
+
+
+func _apply_finding_screen_model(request_focus: bool) -> void:
+	if finding_screen == null:
+		return
+	finding_view_revision += 1
+	var model := FindingOverlayViewModel.new(
+		finding_view_revision,
+		finding_id,
+		finding_title_text,
+		finding_medical_copy,
+		finding_gameplay_copy,
+		finding_reaction_models,
+		current_finding_reaction,
+		finding_reserve_model,
+		finding_swap_valid,
+		finding_validation_text
+	)
+	finding_screen.present(model, request_focus)
+	_register_finding_context_sources()
+	_map_finding_compatibility_controls()
+
+
+func _register_finding_context_sources() -> void:
+	if context_detail_controller == null or finding_screen == null:
+		return
+	for source in finding_context_sources:
+		if is_instance_valid(source):
+			context_detail_controller.unregister_source(source)
+	finding_context_sources.clear()
+	for registration in finding_screen.context_detail_registrations():
+		var source := registration.get("source") as Control
+		var provider: Callable = registration.get("provider", Callable())
+		if source == null or not provider.is_valid():
+			continue
+		register_context_detail(source, provider, bool(registration.get("hover_enabled", true)))
+		finding_context_sources.append(source)
+
+
+func _map_finding_compatibility_controls() -> void:
+	if finding_screen == null:
+		return
+	finding_overlay = finding_screen
+	finding_panel = finding_screen.modal_sheet()
+	finding_title = finding_screen.find_child("FindingTitle", true, false) as Label
+	finding_copy_grid = finding_screen.copy_grid()
+	finding_reaction_cards = finding_screen.reaction_grid()
+	finding_confirm_button = finding_screen.confirm_action()
+	finding_swap_toggle = finding_screen.swap_action()
+	finding_outgoing_option = finding_screen.outgoing_action()
+	finding_validation_label = finding_screen.validation_label()
+	finding_reserve_row = finding_screen.reserve_panel()
+
+
+func _emit_finding_swap_preview_from_screen() -> void:
+	if finding_screen == null:
+		return
+	var enabled := finding_screen.is_swap_enabled()
+	var incoming := current_finding_reserve if enabled else &""
+	var outgoing := finding_screen.selected_outgoing_id() if enabled else &""
+	finding_reserve_swap_requested.emit(incoming, outgoing)
+
 
 func show_end_mastery(new_objectives: Array, earned_points: int, total_points: int) -> void:
-	if end_mastery_panel == null:
-		return
 	if new_objectives.is_empty() and earned_points <= 0:
-		end_mastery_panel.hide()
-		end_panel.custom_minimum_size = _fit_modal_size(_end_base_panel_size())
+		result_mastery_text = ""
+		_refresh_result_screen()
 		return
 	var names := PackedStringArray()
 	for objective in new_objectives:
 		names.append(String(_view_value(objective, &"title", objective)))
 	var detail := " · ".join(names)
-	end_mastery_label.text = "MEISTERSCHAFT · +%d TALENTPUNKTE · GESAMT %d\n%s" % [earned_points, total_points, detail]
-	end_mastery_panel.show()
-	end_panel.custom_minimum_size = _fit_modal_size(END_MASTERY_PANEL_SIZE)
+	result_mastery_text = "+%d Talentpunkte · Gesamt %d%s" % [
+		earned_points,
+		total_points,
+		" · %s" % detail if not detail.is_empty() else "",
+	]
+	_refresh_result_screen()
 
 func show_discovery(definition: DiscoveryDefinition, gameplay_target: Variant, gameplay_override: String = "") -> void:
 	var resolved_target: Variant = gameplay_target
@@ -3747,7 +3397,7 @@ func show_discovery(definition: DiscoveryDefinition, gameplay_target: Variant, g
 			&"boss_bar":
 				resolved_target = boss_bar
 			&"reward":
-				resolved_target = end_reward
+				resolved_target = end_reward if end_reward != null else end_panel
 	discovery_tooltip.present(definition, resolved_target, gameplay_override)
 
 func hide_discovery() -> void:
@@ -3761,19 +3411,51 @@ func show_end(level: LevelDefinition, success: bool, reason: String, elapsed: fl
 	gameplay_hud.show()
 	ability_panel.hide()
 	finding_progress_panel.hide()
-	end_mastery_panel.hide()
-	end_mastery_label.text = ""
-	end_title.text = "HERD KONTROLLIERT" if success else "ZUSTAND ERSCHÖPFT"
-	end_title.modulate = COLOR_TEAL if success else COLOR_RED
-	end_reason.text = "%s\n%s" % [reason, level.victory_text if success else level.failure_text]
-	end_stats.text = "Zeit %s · Level %d · Bakterien %d" % [_clock_text(elapsed), analysis_level, defeats]
-	end_reward.text = "+%d Forschung" % reward
-	end_unlock.text = "NEUER FALL FREIGESCHALTET" if unlocked_new else ""
-	end_reward.visible = reward > 0
-	end_unlock.visible = unlocked_new
-	end_panel.custom_minimum_size = _fit_modal_size(_end_base_panel_size())
+	result_success = success
+	result_title_text = "Herd kontrolliert" if success else "Zustand erschöpft"
+	result_reason_text = reason
+	result_detail_text = level.victory_text if success else level.failure_text
+	result_stats_data = [
+		ResultOverlayViewModel.StatViewModel.new(&"time", "Zeit", _clock_text(elapsed), false),
+		ResultOverlayViewModel.StatViewModel.new(&"analysis", "Analyselevel", str(analysis_level), true),
+		ResultOverlayViewModel.StatViewModel.new(&"defeats", "Bakterien", str(defeats), false),
+	]
+	result_reward_text = "+%d Forschung" % reward if reward > 0 else ""
+	result_unlock_text = "Neuer Fall freigeschaltet" if unlocked_new else ""
+	result_mastery_text = ""
+	_refresh_result_screen()
 	end_overlay.show()
-	_focus_first_button.call_deferred(end_overlay)
+	result_screen.grab_initial_focus.call_deferred()
+
+func _refresh_result_screen() -> void:
+	if result_screen == null:
+		return
+	result_view_revision += 1
+	result_screen.apply(ResultOverlayViewModel.new(
+		result_view_revision,
+		result_success,
+		result_title_text,
+		result_reason_text,
+		result_detail_text,
+		result_stats_data,
+		result_reward_text,
+		result_unlock_text,
+		result_mastery_text
+	))
+	_map_result_compatibility_controls()
+
+func _map_result_compatibility_controls() -> void:
+	if result_screen == null:
+		return
+	end_panel = result_screen.get_modal()
+	end_title = result_screen.find_child("OutcomeTitle", true, false) as Label
+	end_reason = result_screen.find_child("Reason", true, false) as Label
+	var time_row := result_screen.find_child("Stat_time", true, false) as Control
+	end_stats = time_row.find_child("Value", true, false) as Label if time_row != null else null
+	end_reward = result_screen.find_child("Optional_reward_Body", true, false) as Label
+	end_unlock = result_screen.find_child("Optional_unlock_Body", true, false) as Label
+	end_mastery_panel = result_screen.find_child("Optional_mastery", true, false) as Control
+	end_mastery_label = result_screen.find_child("Optional_mastery_Body", true, false) as Label
 
 func _end_base_panel_size() -> Vector2:
 	if (end_reward != null and end_reward.visible) or (end_unlock != null and end_unlock.visible):
@@ -3788,16 +3470,8 @@ func _advance_story() -> void:
 	_refresh_story()
 
 func _refresh_story() -> void:
-	var titles := ["Willkommen bei ALVEOLUS", "Das Lungenmodell", "Deine Aufgabe"]
-	var texts := [
-		"Du leitest ALVEOLUS, einen kleinen Forschungscampus für schwierige Lungenfälle.",
-		"Jeder Fall wird als begehbares Lungenmodell dargestellt. Du koordinierst die Behandlung direkt im Modell.",
-		"Stoppe Bakterien, stärke die Abwehr und halte den Zustand stabil. Gesammelte Proben helfen dem Campus weiter."
-	]
-	story_kicker.text = "PROLOG · %d / 3" % (story_index + 1)
-	story_title.text = titles[story_index]
-	story_body.text = texts[story_index]
-	story_next_button.text = "Zum Campus" if story_index == 2 else "Weiter"
+	if story_screen != null:
+		story_screen.set_step_index(story_index)
 
 func _show_lexicon_entry(definition: DiscoveryDefinition) -> void:
 	var medical_title := definition.medical_name if not definition.medical_name.is_empty() else definition.title
@@ -3820,6 +3494,7 @@ func _all_overlays() -> Array[Control]:
 
 func _hide_all() -> void:
 	gameplay_hud.hide()
+	close_all_context_details()
 	if upgrade_target_preview != null:
 		upgrade_target_preview.clear()
 	if discovery_tooltip != null:
@@ -3831,6 +3506,11 @@ func _focus_first_button(scope: Control) -> void:
 	var focusable := _configure_focus_cycle(scope)
 	if not focusable.is_empty():
 		focusable[0].grab_focus()
+
+
+func _grab_focus_if_valid(control: Control) -> void:
+	if control != null and is_instance_valid(control) and control.is_inside_tree() and control.is_visible_in_tree():
+		control.grab_focus()
 
 
 func _prepare_optional_navigation_focus(scope: Control, preferred: Control = null) -> void:
@@ -3905,24 +3585,10 @@ func _emit_research_purchase(id: StringName) -> void:
 	research_purchase_requested.emit(id)
 
 func _select_research_tab(tab: StringName, emit_change: bool = true) -> void:
-	current_research_tab = tab
-	var show_talents := tab == &"talents"
-	research_content.visible = not show_talents
-	talent_content.visible = show_talents
-	research_points_label.visible = not show_talents and (root == null or root.size.x >= 620.0)
-	research_tab_button.set_pressed_no_signal(not show_talents)
-	talent_tab_button.set_pressed_no_signal(show_talents)
-	research_tab_button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB if not show_talents else AlveolusVisualTheme.TYPE_SEGMENTED_TAB
-	talent_tab_button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB if show_talents else AlveolusVisualTheme.TYPE_SEGMENTED_TAB
+	current_research_tab = &"talents" if tab == &"talents" else &"research"
+	_apply_progression_screen_model()
 	if emit_change:
-		research_tab_changed.emit(tab)
-	# Tabs are built while one content branch is hidden. Re-applying the compact
-	# contracts after the visibility swap makes Godot sort the newly visible
-	# branch inside the fixed PageViewport instead of temporarily placing its
-	# body over the header at high UI scales.
-	if root != null:
-		_apply_ui_scale()
-	_configure_focus_cycle.call_deferred(research_overlay)
+		research_tab_changed.emit(current_research_tab)
 
 func _restore_talent_focus(id: StringName) -> void:
 	if current_research_tab != &"talents":
@@ -4177,6 +3843,9 @@ func _refresh_preparation_slot_styles() -> void:
 		var button := preparation_slot_buttons[slot_id] as Button
 		var selected := planning_snapshot.mode != PlanningSnapshot.Mode.BROWSE and planning_snapshot.selected_slot_id == slot_id
 		button.set_meta(&"selected_slot", selected)
+		var membrane := button.get_node_or_null("MembraneFill") as PreparationBioLumenSurfaceFill
+		if membrane != null:
+			membrane.set_selected(selected)
 		# Height is the persistent selected-target cue for every editable plan slot.
 		# Hover and focus remain geometry-neutral.
 		var expanded_selection := selected \
@@ -4201,6 +3870,23 @@ func _show_preparation_slot_preview(slot_id: StringName, source: Control = null,
 	preparation_inspector_meta.text = ""
 	preparation_inspector_meta.hide()
 	_show_preparation_tooltip(source, from_hover)
+
+
+func _preparation_slot_context_payload(slot_id: StringName) -> Dictionary:
+	var component_id := _preparation_component_at(slot_id)
+	var entry: Variant = current_preparation_catalog_by_id.get(component_id, null)
+	var title := String(_view_value(entry, &"title", "Leer")) if component_id != &"" else "Leer"
+	var description := String(_view_value(entry, &"description", _view_value(entry, &"effect", "Noch nicht belegt."))) if component_id != &"" else "Noch nicht belegt."
+	var kind_value: Variant = _view_value(entry, &"kind", LoadoutSlotId.expected_kind(slot_id))
+	var visual_id := StringName(_view_value(entry, &"visual_id", component_id))
+	var icon_kind := visual_id if component_id != &"" and SimpleIcon.supports(visual_id) else (_component_icon_kind(kind_value) if component_id != &"" else &"plus")
+	return {
+		"title": "%s · %s" % [_loadout_slot_caption(slot_id), title],
+		"body": description,
+		"meta": "Belegt" if component_id != &"" else "Freier Planplatz",
+		"accent": COLOR_GOLD if planning_snapshot.selected_slot_id == slot_id else COLOR_TEAL,
+		"icon_kind": icon_kind,
+	}
 
 func _loadout_slot_caption(slot_id: StringName) -> String:
 	match slot_id:
@@ -4247,7 +3933,7 @@ func show_preparation_replacement(component_id: StringName, compatible_slots: Ar
 func focus_preparation_slot(slot_id: StringName) -> void:
 	if preparation_slot_buttons.has(slot_id):
 		var button: Button = preparation_slot_buttons[slot_id]
-		button.grab_focus.call_deferred()
+		_grab_focus_if_valid.call_deferred(button)
 
 func show_preparation_error(message: String) -> void:
 	_set_preparation_validation(message if not message.is_empty() else "Diese Änderung ist nicht möglich.", COLOR_RED)
@@ -4388,6 +4074,8 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	button.pressed.connect(_on_preparation_component.bind(id, _component_is_passive(kind_value)))
 	button.mouse_entered.connect(_show_preparation_component_inspector.bind(id, button, true))
 	button.mouse_exited.connect(_hide_preparation_tooltip.bind(button, true))
+	button.focus_entered.connect(_ensure_preparation_focus_visible.bind(button))
+	register_context_detail(button, _preparation_component_context_payload.bind(id), false)
 	preparation_catalog.add_child(button)
 	preparation_component_buttons[id] = button
 	var margin := _margin(10, 6, 10, 6)
@@ -4489,6 +4177,35 @@ func _show_preparation_component_inspector(id: StringName, source: Control = nul
 	preparation_inspector_meta.visible = not preparation_inspector_meta.text.is_empty()
 	_show_preparation_tooltip(source, from_hover)
 
+
+func _preparation_component_context_payload(id: StringName) -> Dictionary:
+	var entry: Variant = current_preparation_catalog_by_id.get(id, null)
+	if entry == null:
+		return {}
+	var title := String(_view_value(entry, &"title", String(id)))
+	var description := String(_view_value(entry, &"description", _view_value(entry, &"effect", "Keine Beschreibung verfügbar.")))
+	var cost := int(_view_value(entry, &"capacity_cost", _view_value(entry, &"cost", 0)))
+	var kind_value: Variant = _view_value(entry, &"kind", &"")
+	var visual_id := StringName(_view_value(entry, &"visual_id", id))
+	var icon_kind := visual_id if SimpleIcon.supports(visual_id) else _component_icon_kind(kind_value)
+	var button := preparation_component_buttons.get(id, null) as Button
+	var state := StringName(button.get_meta(&"catalog_state", &"available")) if button != null else &"available"
+	var meta := "%d K" % cost
+	match state:
+		&"locked": meta = "%d K · Gesperrt · Forschung" % cost
+		&"assigned": meta = "%d K · In anderem Planplatz" % cost
+		&"current": meta = "%d K · Aktueller Inhalt" % cost
+		_:
+			if planning_snapshot.mode == PlanningSnapshot.Mode.RESERVE_PICK:
+				meta = "Ohne Plankapazität"
+	return {
+		"title": title,
+		"body": _preparation_comparison_copy(_preparation_component_at(planning_snapshot.selected_slot_id), id, description),
+		"meta": meta,
+		"accent": COLOR_MUTED if state in [&"locked", &"assigned", &"current"] else COLOR_TEAL,
+		"icon_kind": icon_kind,
+	}
+
 func _preparation_comparison_copy(current_id: StringName, candidate_id: StringName, fallback: String) -> String:
 	if current_id in [&"precise", &"treatment_precision"]:
 		match candidate_id:
@@ -4548,21 +4265,22 @@ func _apply_preparation_editor_state(tutorial_locked: bool = false) -> void:
 	var modal_edit := mode == PlanningSnapshot.Mode.REPLACE_CONFIRM
 	for slot_id in preparation_slot_buttons:
 		var slot_button: Button = preparation_slot_buttons[slot_id]
-		slot_button.disabled = tutorial_locked or modal_edit
+		AlveolusUIComponents.set_button_disabled(slot_button, tutorial_locked or modal_edit)
 	preparation_reserve_button.disabled = true
 	preparation_intro_skip_button.disabled = modal_edit
 	if preparation_header_back_button != null:
-		preparation_header_back_button.disabled = modal_edit
+		AlveolusUIComponents.set_button_disabled(preparation_header_back_button, modal_edit)
 	for component_button in preparation_component_buttons.values():
 		var button := component_button as Button
-		button.disabled = tutorial_locked or modal_edit
+		AlveolusUIComponents.set_button_disabled(button, tutorial_locked or modal_edit)
 	var selected_current := _preparation_component_at(planning_snapshot.selected_slot_id)
 	var can_remove := mode == PlanningSnapshot.Mode.COMPONENT_PICK and selected_current != &"" and planning_snapshot.selected_slot_id != LoadoutSlotId.TREATMENT and not tutorial_locked
 	preparation_remove_button.visible = can_remove
-	preparation_remove_button.disabled = modal_edit
+	AlveolusUIComponents.set_button_disabled(preparation_remove_button, modal_edit)
 	if tutorial_locked:
 		_show_preparation_slot_context()
 	preparation_start_button.disabled = preparation_start_button.disabled or modal_edit
+	AlveolusUIComponents.refresh_button_state(preparation_start_button)
 	preparation_lock_panel.visible = tutorial_locked
 	preparation_editor_back_button.hide()
 	_refresh_preparation_slot_styles()
@@ -4583,21 +4301,41 @@ func _apply_preparation_layout() -> void:
 	preparation_case_facts.custom_minimum_size.x = 320.0 if preparation_case_row.columns == 2 else 0.0
 	preparation_trait_panel.custom_minimum_size.y = 118.0 if preparation_case_row.columns == 1 else 84.0
 	preparation_trait_panel.show()
+	if preparation_lock_stack != null:
+		preparation_lock_stack.custom_minimum_size.x = 220.0 if compact else 320.0
+		preparation_lock_stack.add_theme_constant_override("separation", 4 if compact else 8)
+	if preparation_lock_icon != null:
+		preparation_lock_icon.custom_minimum_size = Vector2(34.0, 34.0) if compact else Vector2(58.0, 58.0)
+	if preparation_lock_copy != null:
+		preparation_lock_copy.visible = not compact
+	if preparation_lock_title != null:
+		preparation_lock_title.text = "EINFÜHRUNGSPLAN FESTGELEGT" if compact else "EINFÜHRUNGSPLAN"
 	preparation_trait_row.custom_minimum_size.x = 0.0
 	var compact_plan_height := 250.0 if logical_width >= 620.0 else 386.0
 	var planning_view_width := preparation_scroll.size.x if preparation_scroll != null and preparation_scroll.size.x > logical_width * 0.5 else logical_width - float(AlveolusVisualTheme.SCREEN_MARGIN * 2)
 	var desktop_plan_width := maxf(0.0, (planning_view_width - 14.0) * 0.44)
+	# Compact planning has one scroll authority: the outer document viewport.
+	# Let the dense two-column catalog expose its full content height instead of
+	# nesting a second vertical scroll area inside the editor.
+	var catalog_columns := 2 if logical_width >= 480.0 else 1
+	preparation_catalog.columns = catalog_columns
+	var catalog_rows := ceili(float(preparation_catalog.get_child_count()) / float(catalog_columns))
+	var catalog_content_height := float(catalog_rows * 56 + maxi(0, catalog_rows - 1) * 8)
+	if preparation_catalog_scroll != null:
+		preparation_catalog_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if compact else ScrollContainer.SCROLL_MODE_AUTO
+		preparation_catalog_scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN if compact else Control.SIZE_EXPAND_FILL
+		preparation_catalog_scroll.custom_minimum_size.y = catalog_content_height if compact else 0.0
 	preparation_plan_panel.custom_minimum_size = Vector2(0.0 if compact else desktop_plan_width, compact_plan_height if compact else PREPARATION_PANEL_HEIGHT)
 	preparation_plan_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if compact else Control.SIZE_SHRINK_BEGIN
 	preparation_catalog_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var confirm_height := 300.0 if logical_width >= 760.0 else PREPARATION_PANEL_HEIGHT
 	var editor_height := confirm_height if planning_snapshot.mode == PlanningSnapshot.Mode.REPLACE_CONFIRM else PREPARATION_PANEL_HEIGHT
+	if compact and planning_snapshot.mode != PlanningSnapshot.Mode.REPLACE_CONFIRM:
+		editor_height = maxf(editor_height, catalog_content_height + 112.0)
 	preparation_catalog_panel.custom_minimum_size = Vector2(0.0, editor_height)
 	if preparation_workspace_host != null:
 		var workspace_height := PREPARATION_PANEL_HEIGHT
-		if preparation_locked:
-			workspace_height = 220.0
-		elif compact:
+		if compact and not preparation_locked:
 			workspace_height = compact_plan_height + editor_height + 14.0
 		preparation_workspace_host.custom_minimum_size.y = workspace_height
 		preparation_workspace_host.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -4609,7 +4347,6 @@ func _apply_preparation_layout() -> void:
 	preparation_catalog_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	# Compact cards remain readable in two columns down to the smallest required
 	# 960x540 viewport at 200 %, exposing up to eight options before scrolling.
-	preparation_catalog.columns = 2 if logical_width >= 480.0 else 1
 	preparation_confirm_compare.columns = 2 if logical_width >= 760.0 else 1
 	preparation_plan_panel.show()
 	preparation_catalog_panel.show()
@@ -4638,16 +4375,37 @@ func _scroll_preparation_to_editor() -> void:
 	if preparation_scroll == null or preparation_catalog_panel == null or preparation_workspace == null:
 		return
 	if preparation_workspace.columns == 1:
-		# The editor is taller than the remaining viewport at 200 %. Scrolling a
-		# large panel into view aligns its far edge and can hide the actual entry
-		# point; target the first actionable row so the picker, not only its title,
-		# becomes immediately usable after selecting a plan slot.
-		var first_candidate := _first_available_preparation_component()
-		preparation_scroll.ensure_control_visible(first_candidate if first_candidate != null else (preparation_editor_title if preparation_editor_title != null else preparation_catalog_panel))
+		# Align the editor itself, not a rebuilt child. ensure_control_visible on a
+		# tall panel or candidate can choose either edge and caused compact captures
+		# to jump between the plan, middle rows and the footer.
+		var editor_top := preparation_catalog_panel.position.y
+		if preparation_workspace_host != null:
+			editor_top += preparation_workspace_host.position.y
+		preparation_scroll.scroll_vertical = maxi(0, roundi(editor_top))
 	else:
 		preparation_scroll.scroll_vertical = 0
 
+
+func _scroll_preparation_to_intro_lock() -> void:
+	if preparation_scroll == null or preparation_workspace_host == null:
+		return
+	preparation_scroll.scroll_horizontal = 0
+	if preparation_lock_stack != null:
+		# The lock surface deliberately matches the full desktop workspace. On a
+		# short 200-percent viewport its centered explanation would otherwise sit
+		# below the first scrollful even when the panel top is aligned.
+		preparation_scroll.ensure_control_visible(preparation_lock_stack)
+	else:
+		preparation_scroll.scroll_vertical = maxi(0, roundi(preparation_workspace_host.position.y))
+
 func _prepare_initial_preparation_view(preferred: Control, tutorial_locked: bool) -> void:
+	if tutorial_locked and preparation_workspace != null and preparation_workspace.columns == 1:
+		# On the 200-percent compact canvas the dossier and the full lock surface
+		# cannot fit simultaneously. Open on the lock explanation so the read-only
+		# state is immediately clear instead of showing an apparently empty plan.
+		_scroll_preparation_to_intro_lock.call_deferred()
+		_prepare_optional_navigation_focus(preparation_overlay, preferred)
+		return
 	var compact_gamepad := preparation_workspace != null \
 		and preparation_workspace.columns == 1 \
 		and input_glyph_service != null \
@@ -4789,6 +4547,13 @@ func _configure_preparation_catalog_focus() -> void:
 		return_control.focus_neighbor_bottom = return_control.get_path_to(first)
 		first.focus_neighbor_left = first.get_path_to(return_control)
 
+
+func _ensure_preparation_focus_visible(control: Control) -> void:
+	if preparation_scroll == null or control == null or preparation_workspace == null:
+		return
+	if preparation_workspace.columns == 1 and preparation_scroll.is_ancestor_of(control):
+		preparation_scroll.ensure_control_visible(control)
+
 func _preparation_catalog_neighbor(cells: Array[Button], index: int, delta_x: int, delta_y: int, columns: int) -> Button:
 	var column := index % columns
 	var row := index / columns
@@ -4813,6 +4578,16 @@ func _restore_preparation_focus() -> void:
 		if component_button != null and component_button.is_visible_in_tree() and not component_button.disabled:
 			component_button.grab_focus()
 			return
+	# Direct replacement keeps the chosen component visible but marks it as the
+	# current, non-actionable entry. Stay in the editor instead of falling back
+	# to the plan slot and pulling the outer page back up.
+	if planning_snapshot.mode == PlanningSnapshot.Mode.COMPONENT_PICK and preparation_catalog_panel.visible:
+		_scroll_preparation_to_editor()
+		if input_glyph_service != null and input_glyph_service.method() == InputGlyphService.GAMEPAD:
+			var first_available := _first_available_preparation_component()
+			if first_available != null:
+				first_available.grab_focus()
+		return
 	if focus_id == LoadoutSlotId.RESERVE and preparation_reserve_button.is_visible_in_tree():
 		preparation_reserve_button.grab_focus()
 		return
@@ -4875,7 +4650,7 @@ func complete_preparation_change(slot_id: StringName) -> void:
 
 func _on_finding_reaction(id: StringName) -> void:
 	current_finding_reaction = id
-	finding_confirm_button.disabled = not finding_swap_valid
+	AlveolusUIComponents.set_button_disabled(finding_confirm_button, not finding_swap_valid)
 	finding_reaction_selected.emit(id)
 
 func _on_finding_swap_toggled(enabled: bool) -> void:
@@ -4983,6 +4758,26 @@ func _show_research_inspector(definition: ResearchDefinition, source: Control = 
 	_position_progression_inspector(research_inspector_panel, source)
 
 
+func _research_context_payload(definition: ResearchDefinition) -> Dictionary:
+	if definition == null:
+		return {}
+	var button := research_buy_buttons.get(definition.id) as Button
+	var rank := int(button.get_meta(&"research_rank", 0)) if button != null else 0
+	var status := "MAXIMUM" if rank >= definition.max_level else "%d FORSCHEN" % definition.cost_for_rank(rank)
+	return {
+		"title": definition.title,
+		"body": definition.description,
+		"meta": "%s · Rang %d/%d · %s" % [
+			_research_category_text(definition.category),
+			rank,
+			definition.max_level,
+			status,
+		],
+		"accent": COLOR_GOLD,
+		"icon_kind": definition.id,
+	}
+
+
 func _show_talent_inspector(
 	title: String,
 	effect: String,
@@ -5000,6 +4795,29 @@ func _show_talent_inspector(
 	var compact := root != null and (root.size.x < 620.0 or root.size.y < 420.0)
 	talent_inspector_meta.text = "%d P · %s" % [cost, status] if compact else "%s · %d P · %s · Voraussetzung: %s" % [category, cost, status, requirement_text]
 	_position_progression_inspector(talent_inspector_panel, source)
+
+
+func _talent_context_payload(
+	title: String,
+	effect: String,
+	category: String,
+	cost: int,
+	status: String,
+	requirement_text: String = "Einstieg des Astes"
+) -> Dictionary:
+	var accent := COLOR_TEAL if status.contains("AKTIV") else _talent_branch_accent(category)
+	return {
+		"title": title,
+		"body": effect,
+		"meta": "%s · %d P · %s\nVoraussetzung: %s" % [
+			category,
+			cost,
+			status,
+			requirement_text,
+		],
+		"accent": accent,
+		"icon_kind": _talent_icon_kind(category),
+	}
 
 func _position_progression_inspector(panel: Control, source: Control) -> void:
 	if panel == null or source == null or not is_instance_valid(source) or panel.get_parent() == null:
@@ -5092,23 +4910,10 @@ func _page(title: String, back_text: String) -> Dictionary:
 	bio_backdrop.name = "BioLumenBackdrop"
 	bio_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(bio_backdrop)
-	var header_back := Panel.new()
+	var header_back := AlveolusUIComponents.surface(AlveolusVisualTheme.SurfaceRole.PAGE_HEADER)
 	header_back.name = "PageHeaderSurface"
-	header_back.theme_type_variation = AlveolusVisualTheme.TYPE_PANEL_HEADER
 	header_back.set_anchor(SIDE_RIGHT, 1.0)
 	header_back.offset_bottom = AlveolusVisualTheme.HEADER_HEIGHT
-	var header_style := AlveolusVisualTheme.surface_role_style(
-		AlveolusVisualTheme.SurfaceRole.SECTION_GROUP,
-		COLOR_TEAL,
-		AlveolusVisualTheme.CornerTreatment.NONE
-	)
-	header_style.bg_color = Color(AlveolusVisualTheme.PETROL_WASH, 0.96)
-	header_style.border_width_left = 0
-	header_style.border_width_top = 0
-	header_style.border_width_right = 0
-	header_style.border_width_bottom = 1
-	header_style.border_color = Color(COLOR_TEAL, 0.34)
-	header_back.add_theme_stylebox_override("panel", header_style)
 	header_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(header_back)
 	var outer := _margin(AlveolusVisualTheme.SCREEN_MARGIN, 0, AlveolusVisualTheme.SCREEN_MARGIN, 16)
@@ -5136,10 +4941,9 @@ func _page(title: String, back_text: String) -> Dictionary:
 	header.custom_minimum_size = Vector2(0.0, AlveolusVisualTheme.HEADER_HEIGHT)
 	header.add_theme_constant_override("separation", 16)
 	page.add_child(header)
-	var medallion := Panel.new()
+	var medallion := AlveolusUIComponents.surface(AlveolusVisualTheme.SurfaceRole.DOCUMENT_INSET, COLOR_TEAL)
 	medallion.custom_minimum_size = Vector2(44.0, 44.0)
 	medallion.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	medallion.add_theme_stylebox_override("panel", _document_inset_style(COLOR_TEAL))
 	header.add_child(medallion)
 	var page_icon := SimpleIcon.new()
 	page_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 8)
@@ -5182,10 +4986,14 @@ func _page(title: String, back_text: String) -> Dictionary:
 	return {"overlay": overlay, "body": body, "actions": actions, "back": back, "header": header}
 
 func _nav_button(text: String, kind: StringName, accent: Color) -> Button:
-	var button = IconTextButtonComponent.new()
-	_apply_secondary_button_style(button, accent)
-	button.custom_minimum_size = Vector2(146.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	button.configure(text, kind, accent, 22.0, 8)
+	var button := AlveolusUIComponents.action_button(
+		text,
+		AlveolusUIComponents.ACTION_NAVIGATION,
+		kind,
+		accent
+	)
+	button.custom_minimum_size.x = maxf(button.custom_minimum_size.x, 146.0)
+	button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
 	button.set_meta(&"preferred_inline_width", button.custom_minimum_size.x)
 	UISoundService.set_sound_role(button, UISoundService.BACK if kind in [&"back", &"return"] else UISoundService.OPEN)
 	return button
@@ -5254,38 +5062,28 @@ func _centered_overlay(panel_size: Vector2, accent: Color, padding: int = 24, sc
 	var center := CenterContainer.new()
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	overlay.add_child(center)
-	var panel := Panel.new()
-	panel.custom_minimum_size = panel_size
-	panel.clip_contents = true
-	panel.theme_type_variation = AlveolusVisualTheme.TYPE_PANEL_MODAL
-	panel.add_theme_stylebox_override("panel", AlveolusVisualTheme.surface_role_style(
-		AlveolusVisualTheme.SurfaceRole.MODAL_SHEET,
-		accent,
-		AlveolusVisualTheme.CornerTreatment.SIGNATURE_6
-	))
-	center.add_child(panel)
-	var margin := _margin(padding, padding, padding, padding)
-	panel.add_child(margin)
 	var content := VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 9)
+	var body: Control = content
 	if scrollable:
 		var scroll := ScrollContainer.new()
 		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		scroll.follow_focus = true
 		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		margin.add_child(scroll)
 		scroll.add_child(content)
-	else:
-		margin.add_child(content)
+		body = scroll
+	var sheet_parts := AlveolusUIComponents.modal_sheet("", body, [], padding, accent)
+	var panel := sheet_parts["panel"] as PanelContainer
+	panel.custom_minimum_size = panel_size
+	panel.clip_contents = true
+	center.add_child(panel)
 	return {"overlay": overlay, "panel": panel, "content": content}
 
 func _card(accent: Color) -> Dictionary:
-	var panel := PanelContainer.new()
+	var panel := AlveolusUIComponents.surface(AlveolusVisualTheme.SurfaceRole.ACTION_CARD, accent)
 	panel.clip_contents = false
-	panel.theme_type_variation = AlveolusVisualTheme.TYPE_SECTION_GROUP
-	panel.add_theme_stylebox_override("panel", _section_surface_style(accent))
 	var margin := _margin(15, 12, 15, 12)
 	panel.add_child(margin)
 	var content := VBoxContainer.new()
@@ -5303,68 +5101,33 @@ func _margin(left: int, top: int, right: int, bottom: int) -> MarginContainer:
 	return margin
 
 func _label(text: String, font_size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
+	var variation: StringName = AlveolusVisualTheme.TYPE_TITLE_LABEL if font_size >= 24 else (AlveolusVisualTheme.TYPE_SECTION_LABEL if font_size >= 18 else AlveolusVisualTheme.TYPE_BODY_LABEL)
+	var label := AlveolusUIComponents.label(text, variation)
 	label.add_theme_font_override("font", AlveolusVisualTheme.heading_font() if font_size >= 18 else AlveolusVisualTheme.body_font())
 	label.add_theme_font_size_override("font_size", font_size)
 	label.add_theme_color_override("font_color", color)
 	return label
 
 func _primary_button(text: String, accent: Color) -> Button:
-	var button := Button.new()
-	button.text = text
-	_apply_primary_button_style(button, accent)
-	return button
+	return AlveolusUIComponents.action_button(text, AlveolusUIComponents.ACTION_PRIMARY)
 
 func _apply_primary_button_style(button: Button, accent: Color) -> void:
-	button.theme_type_variation = AlveolusVisualTheme.TYPE_PRIMARY_BUTTON
-	button.custom_minimum_size = Vector2(0.0, AlveolusVisualTheme.BUTTON_HEIGHT_PRIMARY)
-	button.add_theme_font_size_override("font_size", AlveolusVisualTheme.TEXT_ACTION)
-	button.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
-	button.add_theme_color_override("font_color", COLOR_BG)
-	button.add_theme_color_override("font_hover_color", COLOR_BG)
-	button.add_theme_color_override("font_pressed_color", COLOR_BG)
-	button.add_theme_color_override("font_focus_color", COLOR_BG)
-	button.add_theme_stylebox_override("normal", AlveolusVisualTheme.button_style(accent, &"normal", true))
-	button.add_theme_stylebox_override("hover", AlveolusVisualTheme.button_style(accent, &"hover", true))
-	button.add_theme_stylebox_override("pressed", AlveolusVisualTheme.button_style(accent, &"pressed", true))
-	button.add_theme_stylebox_override("focus", AlveolusVisualTheme.button_style(accent, &"focus", true))
-	button.add_theme_stylebox_override("disabled", AlveolusVisualTheme.button_style(accent, &"disabled", true))
-	BioLumenButtonFill.attach(button, accent)
-	UISoundService.set_sound_role(button, UISoundService.CONFIRM)
+	# Primary is a semantic role, not a caller-selected color. The only warm-gold
+	# endpoint in the product remains the dedicated planning start action.
+	AlveolusUIComponents.apply_action_role(button, AlveolusUIComponents.ACTION_PRIMARY, COLOR_TEAL)
 	_decorate_button_motion(button)
 
 func _secondary_button(text: String, accent: Color) -> Button:
-	var button := Button.new()
-	button.text = text
-	_apply_secondary_button_style(button, accent)
-	return button
+	var role := AlveolusUIComponents.ACTION_DANGER if accent == COLOR_RED else AlveolusUIComponents.ACTION_SECONDARY
+	return AlveolusUIComponents.action_button(text, role, &"", accent)
 
 func _icon_action_button(text: String, icon_id: StringName, accent: Color, primary: bool = false) -> Button:
-	var button = IconTextButtonComponent.new()
-	if primary:
-		_apply_primary_button_style(button, accent)
-	else:
-		_apply_secondary_button_style(button, accent)
-	button.configure(text, icon_id, accent, 20.0, 8)
-	button.set_content_on_light(primary)
-	return button
+	var role := AlveolusUIComponents.ACTION_PRIMARY if primary else (AlveolusUIComponents.ACTION_DANGER if accent == COLOR_RED else AlveolusUIComponents.ACTION_SECONDARY)
+	return AlveolusUIComponents.action_button(text, role, icon_id, accent)
 
 func _apply_secondary_button_style(button: Button, accent: Color) -> void:
-	button.theme_type_variation = AlveolusVisualTheme.TYPE_DANGER_BUTTON if accent == COLOR_RED else AlveolusVisualTheme.TYPE_SECONDARY_BUTTON
-	button.custom_minimum_size = Vector2(0.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	button.add_theme_font_size_override("font_size", AlveolusVisualTheme.TEXT_ACTION)
-	button.add_theme_color_override("font_color", COLOR_TEXT)
-	button.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
-	button.add_theme_color_override("font_hover_color", COLOR_TEXT)
-	button.add_theme_color_override("font_pressed_color", COLOR_TEXT)
-	button.add_theme_color_override("font_focus_color", COLOR_TEXT)
-	button.add_theme_stylebox_override("normal", AlveolusVisualTheme.button_style(accent, &"normal"))
-	button.add_theme_stylebox_override("hover", AlveolusVisualTheme.button_style(accent, &"hover"))
-	button.add_theme_stylebox_override("pressed", AlveolusVisualTheme.button_style(accent, &"pressed"))
-	button.add_theme_stylebox_override("focus", AlveolusVisualTheme.button_style(accent, &"focus"))
-	button.add_theme_stylebox_override("disabled", AlveolusVisualTheme.button_style(accent, &"disabled"))
-	UISoundService.set_sound_role(button, UISoundService.PRESS)
+	var role := AlveolusUIComponents.ACTION_DANGER if accent == COLOR_RED else AlveolusUIComponents.ACTION_SECONDARY
+	AlveolusUIComponents.apply_action_role(button, role, accent)
 	_decorate_button_motion(button)
 
 func _panel_style(background: Color, border: Color, border_width: int = 1, radius: int = 10) -> StyleBoxFlat:
@@ -5410,18 +5173,12 @@ func _bar_style(color: Color, radius: int) -> StyleBoxFlat:
 	return AlveolusVisualTheme.bar_style(color, radius, luminance < 0.38)
 
 func _decorate_button_motion(button: Button) -> void:
-	button.resized.connect(func() -> void: button.pivot_offset = button.size * 0.5)
-	# Focus and hover are painted inside the allocated rect by the theme. Scaling
-	# interactive controls made their gold focus border escape modal and grid bounds.
-	button.mouse_entered.connect(func() -> void: _animate_button(button, Vector2.ONE))
-	button.mouse_exited.connect(func() -> void: _animate_button(button, Vector2.ONE))
-	button.focus_entered.connect(func() -> void: _animate_button(button, Vector2.ONE))
-	button.focus_exited.connect(func() -> void: _animate_button(button, Vector2.ONE))
-	button.button_down.connect(func() -> void:
-		var target := Vector2.ONE if bool(button.get_meta(&"disable_motion_scale", false)) else Vector2.ONE * 0.99
-		_animate_button(button, target, 0.06)
-	)
-	button.button_up.connect(func() -> void: _animate_button(button, Vector2.ONE, 0.08))
+	# Hover, focus and press are represented entirely by semantic surfaces. Even a
+	# short fractional transform softens browser text and can paint outside the
+	# container allocation, so controls remain pixel-stable in every state.
+	_stop_button_motion(button)
+	button.scale = Vector2.ONE
+	button.set_meta(&"disable_motion_scale", true)
 
 func _animate_button(button: Button, target_scale: Vector2, duration: float = 0.10) -> void:
 	if not is_instance_valid(button):

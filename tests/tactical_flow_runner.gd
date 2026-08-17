@@ -144,11 +144,10 @@ func _test_quick_restart_contract(game: Node) -> void:
 	game._set_flow(GameFlowState.State.RUNNING)
 
 func _test_run_abilities_finding_and_mastery(game: Node) -> void:
-	var q_event := InputEventAction.new()
-	q_event.action = &"active_ability_1"
-	q_event.pressed = true
-	game._unhandled_input(q_event)
-	_check(game.targeting_ability_slot == AbilityController.SLOT_Q, "Q öffnet für das Fokusfeld zuerst die Zielvorschau")
+	var ability_buttons: Array[Button] = game.hud.run_hud_screen.ability_buttons()
+	_check(ability_buttons.size() == 2 and not ability_buttons[0].disabled and not ability_buttons[1].disabled, "Das RunHUDOverlay exponiert beide belegten Fähigkeiten als aktive UI-Aktionen")
+	ability_buttons[0].pressed.emit()
+	_check(game.targeting_ability_slot == AbilityController.SLOT_Q, "Die erste Run-HUD-Aktion öffnet für das Fokusfeld die Zielvorschau")
 	_check(game.ability_target_preview.is_targeting(), "Die gezielte Fähigkeit besitzt eine sichtbare Vorschaugeometrie")
 	var q_echo := InputEventKey.new()
 	q_echo.physical_keycode = KEY_Q
@@ -156,13 +155,10 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	q_echo.echo = true
 	game._unhandled_input(q_echo)
 	_check(game.ability_controller.queued_command_count() == 0 and game.targeting_ability_slot == AbilityController.SLOT_Q, "Tastenwiederholung erzeugt keinen zweiten Fähigkeitsbefehl")
-	# Fokusfeld ist eine gezielte Fähigkeit: Drücken öffnet die Vorschau,
-	# Loslassen bestätigt sie und reiht den deterministischen Command ein.
-	var q_release := InputEventAction.new()
-	q_release.action = &"active_ability_1"
-	q_release.pressed = false
-	game._unhandled_input(q_release)
-	_check(game.targeting_ability_slot == -1 and game.ability_controller.queued_command_count() == 1, "Loslassen bestätigt das Ziel und reiht genau einen Q-Command ein")
+	# Fokusfeld ist eine gezielte Fähigkeit: Die erste Aktivierung öffnet die
+	# Vorschau, dieselbe UI-Aktion bestätigt sie anschließend deterministisch.
+	ability_buttons[0].pressed.emit()
+	_check(game.targeting_ability_slot == -1 and game.ability_controller.queued_command_count() == 1, "Die zweite Aktivierung bestätigt das Ziel und reiht genau einen Q-Command ein")
 	var e_event := InputEventAction.new()
 	e_event.action = &"active_ability_2"
 	e_event.pressed = true
@@ -183,8 +179,8 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	var pause_event := InputEventAction.new()
 	pause_event.action = &"pause_game"
 	pause_event.pressed = true
-	game._unhandled_input(pause_event)
-	_check(game.flow_state == GameFlowState.State.MANUAL_PAUSE and paused, "Escape pausiert den laufenden Run vollständig")
+	game.hud.run_hud_screen.pause_action().pressed.emit()
+	_check(game.flow_state == GameFlowState.State.MANUAL_PAUSE and paused, "Die Pauseaktion des RunHUDOverlay pausiert den laufenden Run vollständig")
 	await process_frame
 	await process_frame
 	_check(is_equal_approx(game.state.elapsed, elapsed_before_pause), "Runzeit friert in manueller Pause ein")
@@ -200,8 +196,12 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	var finding: FindingDefinition = game.finding_controller.definition
 	var reaction_id: StringName = finding.reaction_ids[0]
 	var passive_ids_before_finding: Array[StringName] = game.active_loadout.passive_ids.duplicate()
-	_check(not game.hud.finding_reserve_row.is_visible_in_tree() and game.hud.finding_swap_toggle.disabled, "Der Befund blendet die ruhende Reservebedienung vollständig aus")
-	game._on_finding_confirmed(reaction_id, &"", &"")
+	_check(game.hud.finding_screen.reserve_panel() == null and game.hud.finding_screen.swap_action() == null, "Der Befund baut die ruhende Reservebedienung nicht auf")
+	var reaction_action: Button = game.hud.finding_screen.reaction_action(reaction_id)
+	_check(reaction_action != null and game.hud.finding_screen.confirm_action().disabled, "Der Befund wartet auf eine ausdrückliche Reaktionswahl")
+	reaction_action.pressed.emit()
+	_check(game.hud.finding_screen.selected_reaction_id() == reaction_id and not game.hud.finding_screen.confirm_action().disabled, "Die gewählte Reaktion aktiviert die neue Bestätigungsaktion")
+	game.hud.finding_screen.confirm_action().pressed.emit()
 	_check(game.flow_state == GameFlowState.State.RUNNING and not paused, "Reaktionswahl setzt den Run fort")
 	_check(game.finding_controller.resolved and game.active_reaction.id == reaction_id, "Die gewählte Befundreaktion wird exakt angewendet")
 	_check(game.active_loadout.passive_ids == passive_ids_before_finding and game.active_loadout.reserve_id == &"", "Eine Befundreaktion verändert den reservefreien Plan nicht versteckt")
@@ -216,6 +216,7 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	_check(game.meta.has_completed_mastery(&"fall_1_healthy_win"), "Ein stabiler Abschluss wird am Ergebnis ausgewertet")
 	_check(game.meta.talent_points_earned() >= points_before + 3, "Neue Meisterschaft vergibt getrennte Talentpunkte")
 	_check(game.hud.end_mastery_panel.visible, "Das Ergebnis zeigt neue Meisterschaft sichtbar an")
+	_check(game.hud.end_mastery_label.text.to_lower().contains("talentpunkte"), "Das Ergebnis benennt die Meisterschaftsbelohnung unabhängig von ihrer Sentence-Case-Darstellung")
 
 func _test_pause_abort_and_intro_regression(game: Node) -> void:
 	var research_before_abort: int = game.meta.research_points

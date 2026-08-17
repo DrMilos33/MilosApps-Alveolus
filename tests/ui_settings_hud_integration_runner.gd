@@ -48,14 +48,17 @@ func _run() -> void:
 func _test_prompt_icons_and_text_fallback(hud: GameHUD, glyphs: InputGlyphService) -> void:
 	glyphs.configure(UISettingsState.GLYPH_KEYBOARD)
 	hud.configure_ui_settings(UISettingsState.new())
-	_true(hud.ability_key_icons[0].texture != null and hud.ability_key_icons[0].visible, "Q verwendet im HUD die Kenney-Promptgrafik")
-	_true(hud.ability_key_icons[1].texture != null and hud.ability_key_icons[1].visible, "E verwendet im HUD die Kenney-Promptgrafik")
-	_equal(hud.ability_key_icons[0].stretch_mode, TextureRect.STRETCH_KEEP_ASPECT_CENTERED, "Promptgrafiken sind rechnerisch und optisch zentriert")
-	_true(not hud.ability_key_labels[0].visible, "Bei einer Promptgrafik wird kein doppelter Text gezeichnet")
+	_true(hud.run_hud_screen != null, "Das zentrale RunHUDOverlay ist für Eingabeglyphen verfügbar")
+	_equal(hud.ability_key_icons.size(), 0, "Das RunHUDOverlay erzeugt keine alten TextureRect-Promptbilder")
+	_equal(hud.ability_key_containers.size(), 0, "Das RunHUDOverlay benötigt keine separaten Promptbild-Container")
+	_equal(hud.ability_key_labels.size(), 2, "Das RunHUDOverlay besitzt genau zwei textbasierte Fähigkeitsglyphen")
+	_true(hud.ability_key_labels[0].visible and hud.ability_key_labels[0].text == "Q", "Fähigkeit 1 zeigt die scharfe Tastaturglyphe Q als Text")
+	_true(hud.ability_key_labels[1].visible and hud.ability_key_labels[1].text == "E", "Fähigkeit 2 zeigt die scharfe Tastaturglyphe E als Text")
 
 	glyphs.configure(UISettingsState.GLYPH_GAMEPAD)
-	_true(hud.ability_key_icons[0].texture != null and hud.ability_key_icons[0].visible, "LB verwendet im HUD die Xbox-Promptgrafik")
-	_true(hud.ability_key_icons[1].texture != null and hud.ability_key_icons[1].visible, "RB verwendet im HUD die Xbox-Promptgrafik")
+	_true(hud.ability_key_labels[0].visible and hud.ability_key_labels[0].text == "LB", "Fähigkeit 1 zeigt die Gamepadglyphe LB als Text")
+	_true(hud.ability_key_labels[1].visible and hud.ability_key_labels[1].text == "RB", "Fähigkeit 2 zeigt die Gamepadglyphe RB als Text")
+	_true(not hud.run_hud_screen.pause_action().tooltip_text.is_empty(), "Die Run-HUD-Pauseaktion hält ihre aktuelle Belegung im Tooltip auffindbar")
 	var pause_action := hud.pause_resume_button as IconTextButton
 	_true(pause_action != null and pause_action.caption.text == "Weiter", "Das Pausemenü zeichnet die Hauptaktion genau einmal als zentrierte Icon-Text-Einheit")
 	_true(hud.pause_resume_button.icon == null and hud.pause_resume_button.text.is_empty(), "Das Pausemenü bläht die Hauptaktion nicht mit einem zweiten Menu-Prompt auf")
@@ -65,8 +68,7 @@ func _test_prompt_icons_and_text_fallback(hud: GameHUD, glyphs: InputGlyphServic
 	_true(settings.set_single_binding(&"active_ability_1", _key(KEY_F)), "Freie Remap-Taste kann für die HUD-Prüfung gesetzt werden")
 	glyphs.configure(UISettingsState.GLYPH_KEYBOARD)
 	hud.configure_ui_settings(settings)
-	_true(not hud.ability_key_icons[0].visible, "Eine frei remappte Taste verwendet keine falsche Standardgrafik")
-	_true(hud.ability_key_labels[0].visible and hud.ability_key_labels[0].text == "F", "Freie Remaps besitzen einen zentrierten Textfallback")
+	_true(hud.ability_key_labels[0].visible and hud.ability_key_labels[0].text == "F", "Freie Remaps aktualisieren die sichtbare Textglyphe unmittelbar")
 
 
 func _test_mouse_and_axis_capture(hud: GameHUD, glyphs: InputGlyphService) -> void:
@@ -87,8 +89,8 @@ func _test_mouse_and_axis_capture(hud: GameHUD, glyphs: InputGlyphService) -> vo
 	_true(hud.pending_binding_action == &"", "Eine deutliche Stickbewegung kann als Gamepadeingabe belegt werden")
 	_true(hud._binding_summary(&"active_ability_2").contains("RS X+"), "Die Achsenbelegung wird mit Stick und Richtung benannt")
 	glyphs.configure(UISettingsState.GLYPH_GAMEPAD)
-	_true(not hud.ability_key_icons[1].visible and hud.ability_key_labels[1].text == "RS X+", "Eine remappte Achse fällt im Fähigkeiten-HUD auf Text zurück")
-	_true(hud.ability_key_containers[1].custom_minimum_size.x > 28.0, "Längere Textfallbacks erhalten genug Breite und bleiben zentriert")
+	_true(hud.ability_key_labels[1].visible and hud.ability_key_labels[1].text == "RS X+", "Eine remappte Achse erscheint vollständig als Textglyphe im Fähigkeiten-HUD")
+	_equal(hud.ability_key_labels[1].text_overrun_behavior, TextServer.OVERRUN_TRIM_ELLIPSIS, "Lange Fähigkeitsglyphen bleiben auf den kompakten HUD-Platz begrenzt")
 
 
 func _test_scale_and_reduced_motion(hud: GameHUD) -> void:
@@ -98,16 +100,22 @@ func _test_scale_and_reduced_motion(hud: GameHUD) -> void:
 	_equal(hud.settings_scale_option.get_item_text(1), "90 %", "90 Prozent ist als zweite kompakte UI-Stufe auswählbar")
 	settings.ui_scale = 0.75
 	hud.configure_ui_settings(settings)
-	_near(hud.root.theme.default_base_scale, 0.75, 0.001, "75 Prozent UI-Skalierung erreicht das zentrale Theme")
+	_near(hud.root.scale.x, 0.75, 0.001, "75 Prozent UI-Skalierung erreicht den gemeinsamen UI-Root")
+	_near(hud.root.theme.default_base_scale, 1.0, 0.001, "Dokumente besitzen keine zweite Theme-Skalierung")
+	_near(hud.campus_overlay.theme.default_base_scale, 0.75, 0.001, "Campus-Chrome bewahrt seine unabhängige Skalierung")
 	_equal(hud.settings_scale_option.selected, 0, "Die Anzeigeoption markiert die aktive 75-Prozent-Stufe")
 	settings.ui_scale = 0.90
 	hud.configure_ui_settings(settings)
-	_near(hud.root.theme.default_base_scale, 0.90, 0.001, "90 Prozent UI-Skalierung erreicht das zentrale Theme")
+	_near(hud.root.scale.x, 0.90, 0.001, "90 Prozent UI-Skalierung erreicht den gemeinsamen UI-Root")
+	_near(hud.root.theme.default_base_scale, 1.0, 0.001, "Das zentrale Theme bleibt bei genau einer Skalierungsautorität")
+	_near(hud.campus_overlay.theme.default_base_scale, 0.90, 0.001, "Campus-Chrome folgt der 90-Prozent-Stufe")
 	_equal(hud.settings_scale_option.selected, 1, "Die Anzeigeoption markiert die aktive 90-Prozent-Stufe")
 	settings.ui_scale = 2.0
 	settings.reduce_motion = true
 	hud.configure_ui_settings(settings)
-	_near(hud.root.theme.default_base_scale, 2.0, 0.001, "200 Prozent UI-Skalierung erreicht das zentrale Theme")
+	_near(hud.root.scale.x, 2.0, 0.001, "200 Prozent UI-Skalierung erreicht den gemeinsamen UI-Root")
+	_near(hud.root.theme.default_base_scale, 1.0, 0.001, "200 Prozent werden nicht über Theme und Root doppelt angewendet")
+	_near(hud.campus_overlay.theme.default_base_scale, 2.0, 0.001, "Nur Campus-Chrome erhält die Theme-Skalierung")
 	_true(hud.reduced_motion_enabled, "Reduzierte Bewegung wird im HUD unmittelbar aktiviert")
 	hud.settings_quit_button.scale = Vector2.ONE * 1.02
 	hud._animate_button(hud.settings_quit_button, Vector2.ONE * 1.02)
@@ -191,6 +199,7 @@ func _prepare_actions() -> void:
 		&"pause_game": [_key(KEY_ESCAPE), _joy(JOY_BUTTON_START)],
 		&"ui_accept": [_key(KEY_ENTER), _joy(JOY_BUTTON_A)],
 		&"ui_cancel": [_key(KEY_BACKSPACE), _joy(JOY_BUTTON_B)],
+		&"ui_info": [_key(KEY_I), _joy(JOY_BUTTON_Y)],
 	}
 	for action in UISettingsState.CONFIGURABLE_ACTIONS:
 		original_actions[action] = {"existed": InputMap.has_action(action), "events": InputMap.action_get_events(action) if InputMap.has_action(action) else []}

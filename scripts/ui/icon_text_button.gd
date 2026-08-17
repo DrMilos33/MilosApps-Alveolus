@@ -12,20 +12,18 @@ var icon_view: SimpleIcon
 var caption: Label
 var accent := AlveolusVisualTheme.TEAL
 var content_on_light_surface := false
+var _configured_icon_size := 22.0
+var _configured_gap := 8
 
 func configure(caption_text: String, icon_kind: StringName, color: Color, icon_size: float = 22.0, gap: int = 8) -> void:
 	if content_inset != null:
 		content_inset.queue_free()
 	text = ""
 	accent = color
+	_configured_icon_size = icon_size
+	_configured_gap = gap
 	custom_minimum_size.y = maxf(custom_minimum_size.y, AlveolusVisualTheme.BUTTON_HEIGHT_SECONDARY)
-	var caption_width := AlveolusVisualTheme.heading_font().get_string_size(
-		caption_text,
-		HORIZONTAL_ALIGNMENT_LEFT,
-		-1.0,
-		AlveolusVisualTheme.TEXT_ACTION
-	).x
-	custom_minimum_size.x = maxf(custom_minimum_size.x, ceilf(caption_width + icon_size + float(gap) + 36.0))
+	custom_minimum_size.x = maxf(custom_minimum_size.x, _minimum_width_for_caption(caption_text))
 	content_inset = MarginContainer.new()
 	content_inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	content_inset.add_theme_constant_override("margin_left", 18)
@@ -56,26 +54,42 @@ func configure(caption_text: String, icon_kind: StringName, color: Color, icon_s
 	caption.add_theme_color_override("font_color", AlveolusVisualTheme.IVORY)
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content_row.add_child(caption)
-	set_process(true)
+	set_process(false)
+	refresh_state()
 
-func set_caption(value: String) -> void:
+func set_caption(value: String, shrink_to_content: bool = false) -> void:
 	if caption != null:
 		caption.text = value
+		if shrink_to_content:
+			custom_minimum_size.x = _minimum_width_for_caption(value)
+		else:
+			custom_minimum_size.x = maxf(custom_minimum_size.x, _minimum_width_for_caption(value))
 
 func set_content_on_light(enabled: bool) -> void:
 	content_on_light_surface = enabled
 	if icon_view != null:
 		icon_view.configure(icon_view.kind, AlveolusVisualTheme.PETROL if enabled else accent, icon_view.framed)
+	refresh_state()
+
+func refresh_state() -> void:
+	if caption == null or icon_view == null:
+		return
+	var enabled_color := AlveolusVisualTheme.PETROL if content_on_light_surface else AlveolusVisualTheme.IVORY
+	caption.modulate = Color(AlveolusVisualTheme.SKY_DEEP, 0.50) if disabled else enabled_color
+	icon_view.modulate = Color(1.0, 1.0, 1.0, 0.45) if disabled else Color.WHITE
 
 func content_center_error() -> Vector2:
 	if content_row == null:
 		return Vector2.INF
 	return content_row.get_global_rect().get_center() - get_global_rect().get_center()
 
-func _process(_delta: float) -> void:
-	if caption == null:
-		return
-	var enabled_color := AlveolusVisualTheme.PETROL if content_on_light_surface else AlveolusVisualTheme.IVORY
-	var target := Color(AlveolusVisualTheme.SKY_DEEP, 0.50) if disabled else enabled_color
-	caption.modulate = target
-	icon_view.modulate = Color(1.0, 1.0, 1.0, 0.45) if disabled else Color.WHITE
+
+func _minimum_width_for_caption(value: String) -> float:
+	var caption_width := AlveolusVisualTheme.heading_font().get_string_size(
+		value,
+		HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0,
+		AlveolusVisualTheme.TEXT_ACTION
+	).x
+	var gap_width := float(_configured_gap) if not value.is_empty() else 0.0
+	return ceilf(caption_width + _configured_icon_size + gap_width + 36.0)

@@ -26,7 +26,7 @@ func push_screen(
 	if screen_id == &"" or not _modals.is_empty():
 		return false
 	_remember_active_focus(current_focus)
-	_screens.append(_entry(screen_id, default_focus))
+	_screens.append(_entry(screen_id, default_focus, current_focus))
 	_emit_route_and_focus()
 	return true
 
@@ -49,24 +49,32 @@ func replace_screen(
 func open_modal(
 	modal_id: StringName,
 	default_focus: Variant = null,
-	current_focus: Variant = null
+	current_focus: Variant = null,
+	request_focus_on_open: bool = true
 ) -> bool:
 	if modal_id == &"" or _screens.is_empty():
 		return false
 	if not _modals.is_empty() and current_modal_id() == modal_id:
 		return false
 	_remember_active_focus(current_focus)
-	_modals.append(_entry(modal_id, default_focus))
-	_emit_route_and_focus()
+	_modals.append(_entry(modal_id, default_focus, current_focus, request_focus_on_open))
+	_emit_route_and_focus(null, request_focus_on_open)
 	return true
+
+
+func open_context_detail(
+	detail_id: StringName = &"context_detail",
+	current_focus: Variant = null
+) -> bool:
+	return open_modal(detail_id, null, current_focus, false)
 
 
 func close_modal(current_focus: Variant = null) -> bool:
 	if _modals.is_empty():
 		return false
 	_remember_active_focus(current_focus)
-	_modals.pop_back()
-	_emit_route_and_focus()
+	var closed_entry: Dictionary = _modals.pop_back()
+	_emit_route_and_focus(_valid_entry_target(closed_entry, "trigger_focus"))
 	return true
 
 
@@ -76,8 +84,8 @@ func back(current_focus: Variant = null) -> bool:
 	if _screens.size() <= 1:
 		return false
 	_remember_active_focus(current_focus)
-	_screens.pop_back()
-	_emit_route_and_focus()
+	var closed_entry: Dictionary = _screens.pop_back()
+	_emit_route_and_focus(_valid_entry_target(closed_entry, "trigger_focus"))
 	return true
 
 
@@ -85,6 +93,20 @@ func remember_focus(target: Variant) -> bool:
 	if not _valid_focus_target(target) or (_screens.is_empty() and _modals.is_empty()):
 		return false
 	_remember_active_focus(target)
+	return true
+
+
+func set_default_focus(route_id: StringName, target: Variant) -> bool:
+	if route_id == &"" or not _valid_focus_target(target):
+		return false
+	var route_ref := _find_route_ref(route_id)
+	if route_ref.is_empty():
+		return false
+	var entry_data := _entry_at(route_ref)
+	entry_data["default_focus"] = _focus_token(target)
+	_set_entry_at(route_ref, entry_data)
+	if _same_route_ref(route_ref, _active_focus_route_ref()):
+		_emit_focus_request(target)
 	return true
 
 
@@ -104,8 +126,19 @@ func current_input_owner_id() -> StringName:
 	return current_modal_id() if not _modals.is_empty() else current_screen_id()
 
 
+func current_focus_owner_id() -> StringName:
+	var route_ref := _active_focus_route_ref()
+	if route_ref.is_empty():
+		return &""
+	return StringName(_entry_at(route_ref).get("id", &""))
+
+
 func is_input_owner(route_id: StringName) -> bool:
 	return route_id != &"" and current_input_owner_id() == route_id
+
+
+func is_focus_owner(route_id: StringName) -> bool:
+	return route_id != &"" and current_focus_owner_id() == route_id
 
 
 func can_go_back() -> bool:
@@ -131,62 +164,131 @@ func route_snapshot() -> Dictionary:
 		"screens": screen_ids,
 		"modals": modal_ids,
 		"input_owner": current_input_owner_id(),
+		"focus_owner": current_focus_owner_id(),
 	}
 
 
-func _entry(route_id: StringName, default_focus: Variant) -> Dictionary:
+func _entry(
+	route_id: StringName,
+	default_focus: Variant,
+	trigger_focus: Variant = null,
+	requests_focus: bool = true
+) -> Dictionary:
 	return {
 		"id": route_id,
-		"default_focus": default_focus,
+		"default_focus": _focus_token(default_focus) if _valid_focus_target(default_focus) else null,
 		"last_focus": null,
+		"trigger_focus": _focus_token(trigger_focus) if _valid_focus_target(trigger_focus) else null,
+		"requests_focus": requests_focus,
 	}
 
 
 func _remember_active_focus(target: Variant) -> void:
 	if not _valid_focus_target(target):
 		return
-	if not _modals.is_empty():
-		var modal_index := _modals.size() - 1
-		var modal_entry: Dictionary = _modals[modal_index]
-		modal_entry["last_focus"] = target
-		_modals[modal_index] = modal_entry
+	var route_ref := _active_focus_route_ref()
+	if route_ref.is_empty():
 		return
-	if not _screens.is_empty():
-		var screen_index := _screens.size() - 1
-		var screen_entry: Dictionary = _screens[screen_index]
-		screen_entry["last_focus"] = target
-		_screens[screen_index] = screen_entry
+	var entry_data := _entry_at(route_ref)
+	entry_data["last_focus"] = _focus_token(target)
+	_set_entry_at(route_ref, entry_data)
 
 
-func _emit_route_and_focus() -> void:
+func _emit_route_and_focus(preferred_target: Variant = null, request_focus: bool = true) -> void:
 	route_changed.emit(current_screen_id(), current_modal_id())
-	var target: Variant = _active_focus_target()
-	last_focus_request = target
-	if _valid_focus_target(target):
-		focus_requested.emit(target)
+	if not request_focus:
+		return
+	var target: Variant = preferred_target
+	if not _valid_focus_target(target):
+		target = _active_focus_target()
+	_emit_focus_request(target)
+
+
+func _emit_focus_request(target: Variant) -> void:
+	last_focus_request = target if _valid_focus_target(target) else null
+	if last_focus_request != null:
+		focus_requested.emit(last_focus_request)
 
 
 func _active_focus_target() -> Variant:
-	var entry_data: Dictionary
-	if not _modals.is_empty():
-		entry_data = _modals[_modals.size() - 1]
-	elif not _screens.is_empty():
-		entry_data = _screens[_screens.size() - 1]
-	else:
+	var route_ref := _active_focus_route_ref()
+	if route_ref.is_empty():
 		return null
-	var previous: Variant = entry_data.get("last_focus")
-	if _valid_focus_target(previous):
+	var entry_data := _entry_at(route_ref)
+	var previous: Variant = _valid_entry_target(entry_data, "last_focus")
+	if previous != null:
 		return previous
-	var fallback: Variant = entry_data.get("default_focus")
-	return fallback if _valid_focus_target(fallback) else null
+	return _valid_entry_target(entry_data, "default_focus")
+
+
+func _active_focus_route_ref() -> Dictionary:
+	for modal_index in range(_modals.size() - 1, -1, -1):
+		if bool(_modals[modal_index].get("requests_focus", true)):
+			return {"stack": &"modal", "index": modal_index}
+	if not _screens.is_empty():
+		return {"stack": &"screen", "index": _screens.size() - 1}
+	return {}
+
+
+func _find_route_ref(route_id: StringName) -> Dictionary:
+	for modal_index in range(_modals.size() - 1, -1, -1):
+		if StringName(_modals[modal_index].get("id", &"")) == route_id:
+			return {"stack": &"modal", "index": modal_index}
+	for screen_index in range(_screens.size() - 1, -1, -1):
+		if StringName(_screens[screen_index].get("id", &"")) == route_id:
+			return {"stack": &"screen", "index": screen_index}
+	return {}
+
+
+func _entry_at(route_ref: Dictionary) -> Dictionary:
+	var index := int(route_ref.get("index", -1))
+	if route_ref.get("stack", &"") == &"modal":
+		return _modals[index]
+	return _screens[index]
+
+
+func _set_entry_at(route_ref: Dictionary, entry_data: Dictionary) -> void:
+	var index := int(route_ref.get("index", -1))
+	if route_ref.get("stack", &"") == &"modal":
+		_modals[index] = entry_data
+	else:
+		_screens[index] = entry_data
+
+
+func _same_route_ref(left: Dictionary, right: Dictionary) -> bool:
+	return (
+		not left.is_empty()
+		and not right.is_empty()
+		and left.get("stack", &"") == right.get("stack", &"")
+		and int(left.get("index", -1)) == int(right.get("index", -1))
+	)
+
+
+func _valid_entry_target(entry_data: Dictionary, key: String) -> Variant:
+	return _resolve_focus_token(entry_data.get(key))
 
 
 func _valid_focus_target(target: Variant) -> bool:
+	return _resolve_focus_token(target) != null
+
+
+func _focus_token(target: Variant) -> Variant:
+	if typeof(target) == TYPE_OBJECT:
+		return weakref(target)
+	return target
+
+
+func _resolve_focus_token(token: Variant) -> Variant:
+	if typeof(token) == TYPE_OBJECT and not is_instance_valid(token):
+		return null
+	var target: Variant = token
+	if token is WeakRef:
+		target = (token as WeakRef).get_ref()
 	if target == null:
-		return false
-	if target is Object:
+		return null
+	if typeof(target) == TYPE_OBJECT:
 		if not is_instance_valid(target):
-			return false
+			return null
 		if target is Node and target.is_queued_for_deletion():
-			return false
-	return true
+			return null
+	return target

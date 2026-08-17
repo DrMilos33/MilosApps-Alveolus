@@ -16,6 +16,7 @@ const CONFIGURABLE_ACTIONS: Array[StringName] = [
 	&"pause_game",
 	&"ui_accept",
 	&"ui_cancel",
+	&"ui_info",
 ]
 
 var master_volume: float = 0.80

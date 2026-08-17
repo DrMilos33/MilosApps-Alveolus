@@ -301,15 +301,25 @@ func _run() -> void:
 	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 15, "Forschung nutzt bei 1280 Pixeln ein kompaktes Dreispaltenbrett")
 	_check((hud.research_grid.get_child(0) as Control).custom_minimum_size.y <= 76.0, "Forschungskarten bleiben kompakt")
 	for research_button in hud.research_buy_buttons.values():
-		_check((research_button as Button).tooltip_text.is_empty(), "Forschung nutzt ausschließlich den gemeinsamen Hover- und Fokusinspektor")
-	_check(_subtree_ignores_mouse(hud.research_inspector_panel), "Der Forschungsinspektor blockiert oder flackert nicht über den Karten")
-	(hud.research_buy_buttons[&"therapy_precision"] as Button).mouse_entered.emit()
-	_check(hud.research_inspector_title.text == "Ruhige Hand" and hud.research_inspector_description.text.contains("Basiswirkung"), "Der Forschungsinspektor erklärt die überfahrene Karte")
+		_check((research_button as Button).tooltip_text.is_empty(), "Forschung nutzt ausschließlich die gemeinsame Kontextkarte")
+	var research_source := hud.research_buy_buttons[&"therapy_precision"] as Button
+	research_source.mouse_entered.emit()
+	await process_frame
+	var research_payload := hud.context_detail_controller.current_payload()
+	_check(hud.context_detail_controller.is_open() and not hud.context_detail_controller.is_explicit(), "Mouseover öffnet die kompakte Forschungs-Kontextkarte")
+	_check(research_payload.get("title", "") == "Ruhige Hand" and String(research_payload.get("body", "")).contains("Basiswirkung"), "Die Forschungs-Kontextkarte erklärt die überfahrene Karte")
+	research_source.mouse_exited.emit()
+	await process_frame
+	_check(not hud.context_detail_controller.is_open(), "Die Forschungs-Kontextkarte schließt beim Verlassen der Karte")
 	var unavailable_research := hud.research_buy_buttons[&"therapy_precision"] as Button
-	var unavailable_title := hud.research_title_labels[&"therapy_precision"] as Label
-	var unavailable_cost := hud.research_cost_labels[&"therapy_precision"] as Label
-	_check(not unavailable_research.disabled and not bool(unavailable_research.get_meta(&"research_available", true)), "Unbezahlbare Forschung bleibt für Fokusinformationen erreichbar, aber semantisch gesperrt")
-	_check(unavailable_title.get_theme_color("font_color") == unavailable_cost.get_theme_color("font_color") and unavailable_cost.get_theme_color("font_color") != AlveolusVisualTheme.GOLD, "Gesperrte Forschung entsättigt Titel und Kosten gemeinsam")
+	_check(
+		not unavailable_research.disabled
+		and unavailable_research.get_meta(&"item_state", &"") == &"locked"
+		and not bool(unavailable_research.get_meta(&"item_interactive", true)),
+		"Unbezahlbare Forschung bleibt für Fokusinformationen erreichbar, aber semantisch gesperrt"
+	)
+	var unavailable_state_icon := unavailable_research.find_child("StateIcon", true, false) as SimpleIcon
+	_check(unavailable_state_icon != null and unavailable_state_icon.kind == &"locked", "Gesperrte Forschung kennzeichnet ihren Zustand mit dem zentralen Schloss-Icon")
 	var sound_before_locked_research := sound_service.next_player
 	unavailable_research.pressed.emit()
 	_check(research_events.is_empty(), "Bestätigen einer fokussierbaren Forschungssperre gibt keinen Kauf aus")
@@ -318,8 +328,7 @@ func _run() -> void:
 	_check(hud.talent_content.visible and not hud.research_content.visible, "Talenttab ersetzt Forschung ohne neue Seite")
 	_check(hud.talent_buttons.size() == 12 and hud.talent_grid.get_child_count() == 3, "Talentbaum baut zwölf Talente in genau drei fachlichen Ästen auf")
 	for talent_button in hud.talent_buttons.values():
-		_check((talent_button as Button).tooltip_text.is_empty(), "Talente nutzen ausschließlich den gemeinsamen Hover- und Fokusinspektor")
-	_check(_subtree_ignores_mouse(hud.talent_inspector_panel), "Der Talentinspektor blockiert oder flackert nicht über den Baumknoten")
+		_check((talent_button as Button).tooltip_text.is_empty(), "Talente nutzen ausschließlich die gemeinsame Kontextkarte")
 	for branch_panel in hud.talent_grid.get_children():
 		var branch := (branch_panel as Control).find_child("Tree", true, false) as TalentTreeBranch
 		_check(branch != null and branch.node_count() == 4 and branch.edge_count() == 3, "Jeder Talentast besitzt Einstieg, Voraussetzung und eine sichtbare Verzweigung")
@@ -346,12 +355,21 @@ func _run() -> void:
 	hud.talent_grid.columns = 3
 	hud._configure_talent_tree_exits()
 	_check((hud.talent_buttons[&"organization_1"] as Control).custom_minimum_size.y <= 76.0, "Talentknoten bleiben auf die kompakte Baumdichte begrenzt")
-	(hud.talent_buttons[&"rapid_evaluation"] as Button).focus_entered.emit()
-	_check(hud.talent_inspector_title.text == "Schnellauswertung" and hud.talent_inspector_description.text.contains("Befund"), "Der Talentinspektor ist auch per Fokus vollständig")
-	_check(hud.talent_inspector_meta.text.contains("Frühe Einordnung"), "Der Talentinspektor nennt die konkrete Voraussetzung des Knotens")
-	_check(hud.talent_points_label.text.contains("0 FREI"), "Freie Talentpunkte werden gezeigt")
-	_check(hud.talent_reset_button.text.contains("KOSTENLOS"), "Umskillen ist ausdrücklich kostenlos")
+	var rapid_evaluation := hud.talent_buttons[&"rapid_evaluation"] as Button
+	rapid_evaluation.grab_focus()
+	await process_frame
+	_check(not hud.context_detail_controller.is_open(), "Reiner Tastatur- oder Gamepadfokus öffnet keine Tooltipkarte")
+	_check(hud.toggle_focused_context_detail(rapid_evaluation), "ui_info öffnet die Detailkarte des fokussierten Talentknotens")
+	await process_frame
+	var talent_payload := hud.context_detail_controller.current_payload()
+	_check(hud.context_detail_controller.is_explicit() and talent_payload.get("title", "") == "Schnellauswertung" and String(talent_payload.get("body", "")).contains("Befund"), "Die ausdrückliche Talentdetailkarte ist vollständig")
+	_check(String(talent_payload.get("meta", "")).contains("Frühe Einordnung"), "Die Talentdetailkarte nennt die konkrete Voraussetzung des Knotens")
+	hud.close_context_detail()
+	_check(hud.talent_points_label.text.to_lower().contains("0 frei"), "Freie Talentpunkte werden in Sentence Case gezeigt")
+	var reset_caption := (hud.talent_reset_button as IconTextButton).caption.text
+	_check(reset_caption.to_lower().contains("kostenlos"), "Umskillen ist in Sentence Case ausdrücklich kostenlos")
 	var locked_talent := hud.talent_buttons[&"organization_1"] as Button
+	_check(locked_talent.get_meta(&"item_state", &"") == &"locked" and not bool(locked_talent.get_meta(&"item_interactive", true)), "Talentknoten exponieren Sperrstatus und Interaktivität semantisch")
 	var sound_before_locked_talent := sound_service.next_player
 	locked_talent.pressed.emit()
 	_check(sound_service.next_player == (sound_before_locked_talent + 1) % UISoundService.PLAYER_COUNT, "Ein gesperrtes Talent erzeugt genau einen Fehler-Cue")
@@ -374,8 +392,16 @@ func _run() -> void:
 		{"title": "Fokusfeld", "cooldown_remaining": 0.0, "cooldown_total": 16.0, "ready": true},
 		{"title": "Notfallhilfe", "cooldown_remaining": 7.2, "cooldown_total": 28.0, "ready": false}
 	])
+	hud.show_running_hud()
+	hud.set_run_stats_visibility(true)
+	hud.update_run_stats(PlayerStats.new())
+	_check(hud.run_hud_screen != null and hud.run_hud_screen.is_visible_in_tree(), "Das neue RunHUDOverlay ist im laufenden Run sichtbar")
+	_check(hud.run_hud_screen.stat_rows().size() == 5 and hud.run_stats_strip.visible, "Das RunHUDOverlay zeigt die fünf priorisierten Statzeilen")
+	for stat_row in hud.run_hud_screen.stat_rows():
+		_check(stat_row.get_child_count() == 2 and stat_row.get_child(0) is SimpleIcon and stat_row.get_child(1) is Label, "Jede sichtbare Statzeile besteht kompakt aus Icon und Wert")
 	_check(hud.ability_panel.visible, "Q/E-Anzeige erscheint für vorbereitete Fähigkeiten")
-	_check(hud.ability_cooldown_labels[0].text == "BEREIT", "Bereite Fähigkeit wird klar markiert")
+	_check(hud.ability_key_labels[0].text == "Q" and hud.ability_key_labels[1].text == "E", "Das RunHUDOverlay zeigt Fähigkeitsbelegungen als scharfen Glyph-Text")
+	_check(hud.ability_cooldown_labels[0].text == "Bereit", "Bereite Fähigkeit wird in Sentence Case klar markiert")
 	_check(hud.ability_cooldown_labels[1].text == "7.2 s", "Restzeit wird sekundengenau gezeigt")
 	hud.update_finding_progress(18, 30)
 	_check(hud.finding_progress_label.text == "BEFUND · 18 / 30", "Befundleiste zeigt exakten Fortschritt")
@@ -392,17 +418,20 @@ func _run() -> void:
 		null,
 		[]
 	)
-	_check(hud.finding_reaction_cards.get_child_count() == 3, "Befund bietet drei Reaktionen")
-	_check(not hud.finding_reserve_row.is_visible_in_tree() and hud.finding_swap_toggle.disabled, "Der Befund zeigt keine Reservebedienung, solange das System ruht")
-	hud._on_finding_reaction(&"area")
-	hud._confirm_finding()
+	_check(hud.finding_screen.reaction_grid().get_child_count() == 3, "Befund bietet drei Reaktionen")
+	_check(hud.finding_screen.reserve_panel() == null and hud.finding_screen.swap_action() == null, "Der Befund baut keine Reservebedienung, solange das System ruht")
+	var area_reaction := hud.finding_screen.reaction_action(&"area")
+	_check(area_reaction != null and hud.finding_screen.confirm_action().disabled, "Die neue Befundaktion beginnt ohne versteckte Vorauswahl")
+	area_reaction.pressed.emit()
+	_check(hud.finding_screen.selected_reaction_id() == &"area" and not hud.finding_screen.confirm_action().disabled, "Die Reaktionswahl aktiviert genau die ausdrückliche Befundbestätigung")
+	hud.finding_screen.confirm_action().pressed.emit()
 	_check(confirmed == [[&"area", &"", &""]], "Befund meldet die Reaktion ohne versteckten Reservetausch")
 
 	var level := ContentCatalog.level_definitions()[1]
 	hud.show_end(level, true, "Kontrolliert", 120.0, 4, 50, 20, false)
 	hud.show_end_mastery([{"title": "Erster Sieg"}], 1, 4)
 	_check(hud.end_mastery_panel.visible, "Ergebnis zeigt neue Meisterschaft")
-	_check(hud.end_mastery_label.text.contains("+1 TALENTPUNKTE"), "Talentbelohnung ist getrennt ausgewiesen")
+	_check(hud.end_mastery_label.text.to_lower().contains("+1 talentpunkte"), "Talentbelohnung ist unabhängig von der Sentence-Case-Darstellung getrennt ausgewiesen")
 
 	for viewport_size in [Vector2i(1280, 720), Vector2i(1024, 576), Vector2i(960, 540)]:
 		get_root().size = viewport_size

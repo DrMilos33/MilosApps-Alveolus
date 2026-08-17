@@ -54,6 +54,20 @@ func glyph_for_action(action: StringName) -> String:
 		return _gamepad_glyph(action)
 	return _keyboard_glyph(action)
 
+static func caption_for_action(action: StringName) -> String:
+	match action:
+		&"move_up": return "Nach oben"
+		&"move_down": return "Nach unten"
+		&"move_left": return "Nach links"
+		&"move_right": return "Nach rechts"
+		&"active_ability_1": return "Fähigkeit 1"
+		&"active_ability_2": return "Fähigkeit 2"
+		&"pause_game": return "Pause"
+		&"ui_accept": return "Bestätigen"
+		&"ui_cancel": return "Zurück"
+		&"ui_info": return "Informationen"
+	return String(action)
+
 func icon_for_action(action: StringName) -> Texture2D:
 	for event in InputMap.action_get_events(action):
 		if current_method == GAMEPAD and (event is InputEventJoypadButton or event is InputEventJoypadMotion):
@@ -122,6 +136,7 @@ func _keyboard_glyph(action: StringName) -> String:
 		&"active_ability_2": return "E"
 		&"pause_game", &"ui_cancel": return "Esc"
 		&"ui_accept": return "Enter"
+		&"ui_info": return "I"
 	return ""
 
 func _gamepad_glyph(action: StringName) -> String:
@@ -136,6 +151,7 @@ func _gamepad_glyph(action: StringName) -> String:
 		&"pause_game": return "Menu"
 		&"ui_accept": return "A"
 		&"ui_cancel": return "B"
+		&"ui_info": return "Y"
 	return ""
 
 static func _key_text(key: InputEventKey) -> String:

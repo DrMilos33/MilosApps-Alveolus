@@ -65,6 +65,11 @@ enum SurfaceRole {
 	HUD_OBJECTIVE,
 	HUD_ABILITY,
 	HUD_ALERT,
+	PAGE_HEADER,
+	FORM_CONTROL,
+	VALUE_ROW,
+	TOOLTIP_CARD,
+	DETAIL_CARD,
 }
 
 enum CornerTreatment {
@@ -78,10 +83,13 @@ const TYPE_PRIMARY_BUTTON := &"PrimaryButton"
 const TYPE_SECONDARY_BUTTON := &"SecondaryButton"
 const TYPE_DANGER_BUTTON := &"DangerButton"
 const TYPE_QUIET_BUTTON := &"QuietButton"
+const TYPE_NAVIGATION_BUTTON := &"NavigationButton"
 const TYPE_TAB_BUTTON := &"TabButton"
 const TYPE_SELECTED_TAB_BUTTON := &"SelectedTabButton"
 const TYPE_SELECTION_CARD := &"SelectionCard"
 const TYPE_SELECTED_CARD := &"SelectedCard"
+const TYPE_CHOICE_ROW := &"ChoiceRow"
+const TYPE_SELECTED_CHOICE_ROW := &"SelectedChoiceRow"
 const TYPE_PANEL_CARD := &"PanelCard"
 const TYPE_PANEL_ELEVATED := &"PanelElevated"
 const TYPE_PANEL_INSET := &"PanelInset"
@@ -97,6 +105,11 @@ const TYPE_HUD_VITAL := &"HudVital"
 const TYPE_HUD_OBJECTIVE := &"HudObjective"
 const TYPE_HUD_ABILITY := &"HudAbility"
 const TYPE_HUD_ALERT := &"HudAlert"
+const TYPE_PAGE_HEADER := &"PageHeader"
+const TYPE_FORM_CONTROL := &"FormControl"
+const TYPE_VALUE_ROW := &"ValueRow"
+const TYPE_TOOLTIP_CARD := &"TooltipCard"
+const TYPE_DETAIL_CARD := &"DetailCard"
 const TYPE_SEGMENTED_TAB := &"SegmentedTab"
 const TYPE_SELECTED_SEGMENTED_TAB := &"SelectedSegmentedTab"
 const TYPE_TOGGLE_ROW := &"ToggleRow"
@@ -139,6 +152,7 @@ static func create_theme() -> Theme:
 	theme.set_color("font_hover_color", "Button", PAPER_LIGHT)
 	theme.set_color("font_pressed_color", "Button", IVORY)
 	theme.set_color("font_focus_color", "Button", PAPER_LIGHT)
+	theme.set_color("font_hover_pressed_color", "Button", IVORY)
 	theme.set_color("font_disabled_color", "Button", Color(SKY_DEEP, 0.54))
 	theme.set_constant("outline_size", "Button", 0)
 	_configure_button_variant(theme, &"Button", TEAL, false, false, BUTTON_HEIGHT_SECONDARY)
@@ -150,8 +164,9 @@ static func create_theme() -> Theme:
 
 	theme.set_font("font", "LineEdit", body_font())
 	theme.set_font_size("font_size", "LineEdit", TEXT_BODY)
-	theme.set_color("font_color", "LineEdit", PETROL)
-	theme.set_color("font_placeholder_color", "LineEdit", MUTED)
+	theme.set_color("font_color", "LineEdit", IVORY)
+	theme.set_color("font_placeholder_color", "LineEdit", SKY_DEEP)
+	theme.set_color("font_uneditable_color", "LineEdit", Color(SKY_DEEP, 0.62))
 	theme.set_stylebox("normal", "LineEdit", input_style(&"normal"))
 	theme.set_stylebox("focus", "LineEdit", input_style(&"focus"))
 	theme.set_stylebox("read_only", "LineEdit", input_style(&"disabled"))
@@ -164,7 +179,7 @@ static func create_theme() -> Theme:
 	# requested explicitly through ACTION_CARD or MODAL_SHEET.
 	theme.set_stylebox("panel", "Panel", surface_role_style(SurfaceRole.SECTION_GROUP))
 	theme.set_stylebox("panel", "PanelContainer", surface_role_style(SurfaceRole.SECTION_GROUP))
-	theme.set_stylebox("panel", "TooltipPanel", surface_role_style(SurfaceRole.MODAL_SHEET, GOLD, CornerTreatment.CONTROL_4))
+	theme.set_stylebox("panel", "TooltipPanel", surface_role_style(SurfaceRole.TOOLTIP_CARD, TURQUOISE, CornerTreatment.CONTROL_4))
 	theme.set_font("font", "TooltipLabel", body_font())
 	theme.set_font_size("font_size", "TooltipLabel", TEXT_CAPTION)
 	theme.set_color("font_color", "TooltipLabel", IVORY)
@@ -184,8 +199,12 @@ static func _configure_variations(theme: Theme) -> void:
 	_register_button_variation(theme, TYPE_SECONDARY_BUTTON, COBALT, false, false, BUTTON_HEIGHT_SECONDARY)
 	_register_button_variation(theme, TYPE_DANGER_BUTTON, CORAL, false, true, BUTTON_HEIGHT_SECONDARY)
 	_register_button_variation(theme, TYPE_QUIET_BUTTON, MUTED, false, false, BUTTON_HEIGHT_SECONDARY)
+	_register_button_variation(theme, TYPE_NAVIGATION_BUTTON, TEAL, false, false, BUTTON_HEIGHT_SECONDARY)
+	theme.set_font("font", TYPE_NAVIGATION_BUTTON, body_font())
 	_register_button_variation(theme, TYPE_SELECTION_CARD, COBALT, false, false, 88, false, true)
 	_register_button_variation(theme, TYPE_SELECTED_CARD, TEAL, false, false, 88, true, true)
+	_register_button_variation(theme, TYPE_CHOICE_ROW, COBALT, false, false, 64, false, true)
+	_register_button_variation(theme, TYPE_SELECTED_CHOICE_ROW, TEAL, false, false, 64, true, true)
 	_register_segmented_tab_variation(theme, TYPE_SEGMENTED_TAB, false)
 	_register_segmented_tab_variation(theme, TYPE_SELECTED_SEGMENTED_TAB, true)
 	_register_segmented_tab_variation(theme, TYPE_TAB_BUTTON, false)
@@ -201,6 +220,11 @@ static func _configure_variations(theme: Theme) -> void:
 	_register_panel_variation(theme, TYPE_HUD_OBJECTIVE, surface_role_style(SurfaceRole.HUD_OBJECTIVE, COBALT))
 	_register_panel_variation(theme, TYPE_HUD_ABILITY, surface_role_style(SurfaceRole.HUD_ABILITY, TURQUOISE))
 	_register_panel_variation(theme, TYPE_HUD_ALERT, surface_role_style(SurfaceRole.HUD_ALERT, CORAL))
+	_register_panel_variation(theme, TYPE_PAGE_HEADER, surface_role_style(SurfaceRole.PAGE_HEADER))
+	_register_panel_variation(theme, TYPE_FORM_CONTROL, surface_role_style(SurfaceRole.FORM_CONTROL, COBALT))
+	_register_panel_variation(theme, TYPE_VALUE_ROW, surface_role_style(SurfaceRole.VALUE_ROW))
+	_register_panel_variation(theme, TYPE_TOOLTIP_CARD, surface_role_style(SurfaceRole.TOOLTIP_CARD, TURQUOISE))
+	_register_panel_variation(theme, TYPE_DETAIL_CARD, surface_role_style(SurfaceRole.DETAIL_CARD, COBALT))
 
 	# Compatibility aliases retain their public names while following the new
 	# semantic surface hierarchy.
@@ -234,7 +258,7 @@ static func _register_button_variation(
 	theme.set_type_variation(variation, &"Button")
 	_configure_button_variant(theme, variation, accent, primary, danger, minimum_height, selected, card)
 	if primary:
-		for color_name in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color"]:
+		for color_name in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color", &"font_hover_pressed_color"]:
 			theme.set_color(color_name, variation, PETROL)
 
 static func _configure_button_variant(
@@ -248,8 +272,11 @@ static func _configure_button_variant(
 	card: bool = false
 ) -> void:
 	var normal_state := &"selected" if selected else &"normal"
-	for state in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
-		var visual_state: StringName = normal_state if state == &"normal" else state
+	for color_name in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color", &"font_hover_pressed_color"]:
+		if not theme.has_color(color_name, theme_type):
+			theme.set_color(color_name, theme_type, IVORY)
+	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+		var visual_state: StringName = normal_state if state == &"normal" else (&"hover_selected" if state == &"hover_pressed" and selected else state)
 		var style := case_card_style(accent, visual_state) if card else button_style(accent, visual_state, primary, danger)
 		style.content_margin_left = 18.0
 		style.content_margin_right = 18.0
@@ -267,9 +294,11 @@ static func _register_segmented_tab_variation(theme: Theme, variation: StringNam
 	var text_color := IVORY if selected else SKY_DEEP
 	for color_name in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color"]:
 		theme.set_color(color_name, variation, text_color)
+	theme.set_color("font_hover_pressed_color", variation, text_color)
 	theme.set_color("font_disabled_color", variation, Color(MUTED, 0.78))
-	for state in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
-		var style := segmented_tab_style(state, selected)
+	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+		var visual_state: StringName = &"hover" if state == &"hover_pressed" else state
+		var style := segmented_tab_style(visual_state, selected)
 		style.content_margin_left = 16.0
 		style.content_margin_right = 16.0
 		style.content_margin_top = 12.0
@@ -290,25 +319,14 @@ static func _register_row_control_variations(theme: Theme) -> void:
 		theme.set_color("font_hover_color", variation, PAPER_LIGHT)
 		theme.set_color("font_pressed_color", variation, IVORY)
 		theme.set_color("font_focus_color", variation, PAPER_LIGHT)
-		if base_type == &"CheckButton":
-			theme.set_color("font_hover_pressed_color", variation, PAPER_LIGHT)
-		for state in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
-			var style := button_style(COBALT, state)
+		theme.set_color("font_hover_pressed_color", variation, PAPER_LIGHT)
+		for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+			var style := button_style(COBALT, &"hover" if state == &"hover_pressed" else state)
 			style.content_margin_left = 12.0
 			style.content_margin_right = 12.0
 			style.content_margin_top = 12.0
 			style.content_margin_bottom = 12.0
 			theme.set_stylebox(state, variation, style)
-		# An enabled CheckButton requests the dedicated `hover_pressed` state.
-		# Without it Godot falls back to an unstyled transparent surface while the
-		# pointer is over an active switch.
-		if base_type == &"CheckButton":
-			var hover_pressed := button_style(COBALT, &"hover")
-			hover_pressed.content_margin_left = 12.0
-			hover_pressed.content_margin_right = 12.0
-			hover_pressed.content_margin_top = 12.0
-			hover_pressed.content_margin_bottom = 12.0
-			theme.set_stylebox("hover_pressed", variation, hover_pressed)
 	theme.set_type_variation(TYPE_SLIDER_ROW, &"HSlider")
 	var slider_track := bar_style(Color(SKY_DEEP, 0.30), 3, true)
 	slider_track.content_margin_top = 3.0
@@ -425,10 +443,51 @@ static func surface_role_style(
 			style.shadow_offset = Vector2.ZERO
 			border_width = 2
 			default_corner = CornerTreatment.CARD_6
+		SurfaceRole.PAGE_HEADER:
+			style.bg_color = Color(PETROL_WASH, 0.96)
+			style.border_color = Color(TURQUOISE, 0.34)
+			border_width = 1
+			style.shadow_color = Color(PETROL_DEEP, 0.18)
+			style.shadow_size = 4
+			style.shadow_offset = Vector2(0.0, 2.0)
+			default_corner = CornerTreatment.NONE
+		SurfaceRole.FORM_CONTROL:
+			style.bg_color = Color(PETROL_DEEP, 0.88)
+			style.border_color = Color(accent, 0.42)
+			border_width = 1
+			default_corner = CornerTreatment.CONTROL_4
+		SurfaceRole.VALUE_ROW:
+			style.bg_color = Color(PETROL_DEEP, 0.62)
+			style.border_color = Color(SKY_DEEP, 0.20)
+			border_width = 1
+			default_corner = CornerTreatment.CONTROL_4
+		SurfaceRole.TOOLTIP_CARD:
+			style.bg_color = Color("061e25")
+			style.border_color = Color(accent, 0.66)
+			style.shadow_color = Color(PETROL_DEEP, 0.34)
+			style.shadow_size = 8
+			style.shadow_offset = Vector2(0.0, 4.0)
+			border_width = 1
+			default_corner = CornerTreatment.CONTROL_4
+		SurfaceRole.DETAIL_CARD:
+			style.bg_color = Color(PETROL_WASH, 0.98)
+			style.border_color = Color(accent, 0.58)
+			style.shadow_color = Color(PETROL_DEEP, 0.24)
+			style.shadow_size = 6
+			style.shadow_offset = Vector2(0.0, 3.0)
+			border_width = 1
+			default_corner = CornerTreatment.CARD_6
 		_:
 			style.bg_color = Color.TRANSPARENT
 			style.border_color = Color.TRANSPARENT
 	style.set_border_width_all(border_width)
+	if role == SurfaceRole.PAGE_HEADER:
+		style.border_width_left = 0
+		style.border_width_top = 0
+		style.border_width_right = 0
+		style.border_width_bottom = 1
+		style.shadow_size = 0
+		style.shadow_offset = Vector2.ZERO
 	style.corner_detail = 8
 	style.anti_aliasing = true
 	apply_corner_treatment(style, default_corner if corner_treatment < 0 else corner_treatment)
@@ -555,7 +614,7 @@ static func button_style(accent: Color, state: StringName, primary: bool = false
 			background = PETROL_WASH.lerp(active_accent, 0.28)
 			border = active_accent
 			shadow_size = 5
-		&"hover":
+		&"hover", &"hover_pressed", &"hover_selected":
 			background = Color(active_accent, 0.11) if primary else PETROL_SOFT.lerp(active_accent, 0.14)
 			border = active_accent
 			shadow_size = 6
@@ -591,9 +650,13 @@ static func case_card_style(accent: Color, state: StringName) -> StyleBoxFlat:
 			background = PETROL_WASH.lerp(accent, 0.24)
 			border = accent
 			shadow_size = 5
-		&"hover":
+		&"hover", &"hover_pressed":
 			background = PETROL_SOFT.lerp(accent, 0.12)
 			border = Color(accent, 0.72)
+			shadow_size = 6
+		&"hover_selected":
+			background = PETROL_WASH.lerp(accent, 0.30)
+			border = accent.lightened(0.12)
 			shadow_size = 6
 		&"pressed":
 			background = PETROL_DEEP.lerp(accent, 0.18)
@@ -630,7 +693,7 @@ static func case_card_style(accent: Color, state: StringName) -> StyleBoxFlat:
 	return style
 
 static func input_style(state: StringName) -> StyleBoxFlat:
-	var style := surface_style(PAPER_LIGHT, COBALT, &"flat")
+	var style := surface_role_style(SurfaceRole.FORM_CONTROL, COBALT, CornerTreatment.CONTROL_4)
 	style.content_margin_left = 14.0
 	style.content_margin_right = 14.0
 	style.content_margin_top = 10.0
@@ -640,7 +703,7 @@ static func input_style(state: StringName) -> StyleBoxFlat:
 			style.border_color = FOCUS_RING
 			style.set_border_width_all(3)
 		&"disabled":
-			style.bg_color = Color("e5e2dc")
+			style.bg_color = Color(PETROL_WASH, 0.42)
 			style.border_color = Color(MUTED, 0.20)
 	return style
 

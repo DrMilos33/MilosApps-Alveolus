@@ -10,6 +10,8 @@ func _init() -> void:
 
 func _run() -> void:
 	_test_screen_and_modal_navigation()
+	_test_context_detail_focus_contract()
+	_test_late_default_focus_and_invalid_targets()
 	_test_planning_starts_at_treatment()
 	_test_atomic_fixed_slot_changes()
 	_test_dormant_reserve_backend_compatibility()
@@ -45,6 +47,64 @@ func _test_screen_and_modal_navigation() -> void:
 	_equal(router.last_focus_request, &"case_one", "Die zuvor gewählte Fallkarte erhält den Fokus zurück")
 	_true(router.back(&"case_one"), "Zurück verlässt die Fallauswahl")
 	_true(not router.back(), "Die Campuswurzel kann nicht versehentlich entfernt werden")
+
+
+func _test_context_detail_focus_contract() -> void:
+	var router := UIScreenRouter.new()
+	var focus_requests: Array = []
+	router.focus_requested.connect(func(target: Variant) -> void: focus_requests.append(target))
+	var campus_default := Button.new()
+	var modal_trigger := Button.new()
+	var modal_default := Button.new()
+	var detail_trigger := Button.new()
+	_true(router.reset(&"campus", campus_default), "Der Fokusstack startet am Campus")
+	_true(router.open_modal(&"pause", modal_default, modal_trigger), "Das Pausenmodal wird über seinem Auslöser geöffnet")
+	_equal(router.current_modal_id(), &"pause", "Das Pausenmodal ist eindeutig die oberste Modalroute")
+	_equal(router.current_focus_owner_id(), &"pause", "Ein interaktives Modal übernimmt den Fokus")
+	_true(router.remember_focus(detail_trigger), "Das Modal merkt sich den Auslöser der Detailkarte")
+	var requests_before_detail := focus_requests.size()
+	_true(router.open_context_detail(&"context_detail", detail_trigger), "Eine Kontextkarte kann modal verschachtelt werden")
+	_equal(router.current_modal_id(), &"context_detail", "Die Kontextkarte ist eindeutig das oberste Modal")
+	_equal(router.current_input_owner_id(), &"context_detail", "Die Kontextkarte verarbeitet ihre Schließaktion selbst")
+	_equal(router.current_focus_owner_id(), &"pause", "Die passive Kontextkarte stiehlt dem Dialog keinen Fokus")
+	_equal(focus_requests.size(), requests_before_detail, "Das Öffnen der Kontextkarte fordert keinen neuen Fokus an")
+	_true(router.close_modal(), "Das erste Schließen entfernt nur die Kontextkarte")
+	_equal(router.current_modal_id(), &"pause", "Das darunterliegende Modal bleibt nach dem Detailschließen aktiv")
+	_equal(router.last_focus_request, detail_trigger, "Der Fokus kehrt zum Auslöser der Kontextkarte zurück")
+	_true(router.close_modal(), "Das zweite Schließen entfernt das Pausenmodal")
+	_equal(router.current_modal_id(), &"", "Nach zwei Schließaktionen ist der Modalstack leer")
+	_equal(router.last_focus_request, modal_trigger, "Der Fokus kehrt zum Auslöser des Pausenmodals zurück")
+	campus_default.free()
+	modal_trigger.free()
+	modal_default.free()
+	detail_trigger.free()
+
+
+func _test_late_default_focus_and_invalid_targets() -> void:
+	var router := UIScreenRouter.new()
+	var focus_requests: Array = []
+	router.focus_requested.connect(func(target: Variant) -> void: focus_requests.append(target))
+	var screen_default := Button.new()
+	var modal_trigger := Button.new()
+	var late_modal_default := Button.new()
+	_true(router.reset(&"campus", screen_default), "Ein gültiger Screen-Default wird registriert")
+	_true(router.open_modal(&"settings", null, modal_trigger), "Ein Modal darf vor seinem sichtbaren Default geöffnet werden")
+	_equal(router.last_focus_request, null, "Ohne registrierten Modal-Default wird kein fremder Fokus angefordert")
+	_true(router.set_default_focus(&"settings", late_modal_default), "Der Defaultfokus kann nach dem Öffnen registriert werden")
+	_equal(router.last_focus_request, late_modal_default, "Ein nachgereichter Default des Fokusowners wird sofort angefordert")
+	_equal(focus_requests[focus_requests.size() - 1], late_modal_default, "Die Fassade erhält dafür ein eindeutiges Fokussignal")
+
+	var freed_default := Button.new()
+	freed_default.free()
+	_true(not router.set_default_focus(&"settings", freed_default), "Ein bereits freigegebenes Control wird als Default verworfen")
+	_true(not router.remember_focus(freed_default), "Ein freigegebenes Control wird nicht als letzter Fokus gespeichert")
+	_true(not router.set_default_focus(&"missing", screen_default), "Ein unbekannter Routename nimmt keinen Default an")
+
+	modal_trigger.free()
+	_true(router.close_modal(), "Das Modal lässt sich trotz freigegebenem Auslöser schließen")
+	_equal(router.last_focus_request, screen_default, "Ein ungültiger Auslöser fällt auf den gültigen Screen-Default zurück")
+	late_modal_default.free()
+	screen_default.free()
 
 
 func _test_planning_starts_at_treatment() -> void:

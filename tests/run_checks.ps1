@@ -15,6 +15,8 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 
 $tests = [ordered]@{
+    game_hud_facade_contract = @{ script = 'res://tests/game_hud_facade_contract_runner.gd'; args = @() }
+    ui_screen_dependency = @{ script = 'res://tests/ui_screen_dependency_guard_runner.gd'; args = @() }
     core = @{ script = 'res://tests/test_runner.gd'; args = @() }
     flow = @{ script = 'res://tests/flow_runner.gd'; args = @('--quick-run') }
     intro = @{ script = 'res://tests/intro_runner.gd'; args = @('--quick-run') }
@@ -22,9 +24,25 @@ $tests = [ordered]@{
     meta_save = @{ script = 'res://tests/meta_loadout_v4_runner.gd'; args = @() }
     loadout_navigation = @{ script = 'res://tests/ui_navigation_loadout_runner.gd'; args = @() }
     style_gallery = @{ script = 'res://tests/style_gallery_runner.gd'; args = @() }
+    context_detail = @{ script = 'res://tests/context_detail_controller_runner.gd'; args = @() }
+    ui_screen_host = @{ script = 'res://tests/ui_screen_host_runner.gd'; args = @() }
+    story_screen = @{ script = 'res://tests/story_screen_module_runner.gd'; args = @() }
+    practice_screen = @{ script = 'res://tests/practice_screen_module_runner.gd'; args = @() }
+    case_archive_screen = @{ script = 'res://tests/case_archive_screen_module_runner.gd'; args = @() }
+    settings_screen = @{ script = 'res://tests/settings_screen_module_runner.gd'; args = @() }
+    progression_screen = @{ script = 'res://tests/progression_screen_module_runner.gd'; args = @() }
+    pause_overlay = @{ script = 'res://tests/pause_overlay_module_runner.gd'; args = @() }
+    confirmation_overlay = @{ script = 'res://tests/confirmation_overlay_module_runner.gd'; args = @() }
+    result_overlay = @{ script = 'res://tests/result_overlay_module_runner.gd'; args = @() }
+    upgrade_overlay = @{ script = 'res://tests/upgrade_overlay_module_runner.gd'; args = @() }
+    finding_overlay = @{ script = 'res://tests/finding_overlay_module_runner.gd'; args = @() }
+    run_hud_overlay = @{ script = 'res://tests/run_hud_overlay_module_runner.gd'; args = @() }
+    discovery_modal = @{ script = 'res://tests/discovery_modal_biolumen_runner.gd'; args = @() }
+    ui_component_churn = @{ script = 'res://tests/ui_component_churn_runner.gd'; args = @() }
     ui_polish = @{ script = 'res://tests/ui_polish_runner.gd'; args = @() }
     ui_accessibility = @{ script = 'res://tests/ui_accessibility_layout_runner.gd'; args = @() }
     campus = @{ script = 'res://tests/campus_layout_runner.gd'; args = @() }
+    campus_building_chrome = @{ script = 'res://tests/campus_building_card_biolumen_runner.gd'; args = @() }
     lexicon_catalog = @{ script = 'res://tests/lexicon_catalog_runner.gd'; args = @() }
     lexicon_stats = @{ script = 'res://tests/lexicon_stats_runner.gd'; args = @() }
     lexicon_view = @{ script = 'res://tests/lexicon_master_detail_runner.gd'; args = @() }
@@ -54,7 +72,7 @@ $tests = [ordered]@{
 $groups = [ordered]@{
     Quick = @('core')
     Flow = @('core', 'flow', 'intro', 'tactical_flow', 'meta_save', 'loadout_navigation', 'ui_audio_settings')
-    UI = @('style_gallery', 'ui_polish', 'ui_accessibility', 'campus', 'lexicon_catalog', 'lexicon_stats', 'lexicon_view', 'tactical_ui', 'loadout_navigation', 'ui_audio_settings', 'ui_settings_hud')
+    UI = @('game_hud_facade_contract', 'ui_screen_dependency', 'style_gallery', 'context_detail', 'ui_screen_host', 'story_screen', 'practice_screen', 'case_archive_screen', 'settings_screen', 'progression_screen', 'pause_overlay', 'confirmation_overlay', 'result_overlay', 'upgrade_overlay', 'finding_overlay', 'run_hud_overlay', 'discovery_modal', 'ui_component_churn', 'ui_polish', 'ui_accessibility', 'campus', 'campus_building_chrome', 'lexicon_catalog', 'lexicon_stats', 'lexicon_view', 'tactical_ui', 'loadout_navigation', 'ui_audio_settings', 'ui_settings_hud')
     Combat = @('core', 'combat', 'upgrades', 'passives_talents', 'ability_pipeline', 'tactical_flow', 'determinism')
     Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'spawn_lifecycle', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
     Performance = @('ability_stress', 'performance', 'performance_soak')

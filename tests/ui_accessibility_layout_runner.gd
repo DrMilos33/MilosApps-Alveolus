@@ -110,7 +110,7 @@ func _run() -> void:
 			{"id": "run", "overlay": hud.gameplay_hud, "show": show_run_screen},
 			{"id": "upgrade", "overlay": hud.upgrade_overlay, "show": show_upgrade_screen},
 			{"id": "pause", "overlay": hud.pause_overlay, "show": func() -> void: hud.show_pause(false, PlayerStats.new(), RunState.new())},
-			{"id": "pause_stats", "overlay": hud.pause_stats_overlay, "show": show_pause_stats_screen},
+			{"id": "pause_stats", "overlay": hud.pause_overlay, "show": show_pause_stats_screen},
 			{"id": "abort", "overlay": hud.abort_overlay, "show": show_abort_screen},
 			{"id": "intro_skip", "overlay": hud.intro_skip_overlay, "show": show_intro_skip_screen},
 			{"id": "restart", "overlay": hud.restart_overlay, "show": show_restart_screen},
@@ -124,14 +124,10 @@ func _run() -> void:
 			_check(overlay.visible, "%s ist sichtbar" % context)
 			_check(_inside_viewport(overlay, canvas_size), "%s füllt den Viewport ohne Überlauf" % context)
 			if screen["id"] in ["practice", "research", "talents", "levels", "preparation", "preparation_picker", "preparation_intro_locked", "lexicon", "settings"]:
-				var matched_page_shell := false
-				for shell in hud.page_shells:
-					if shell.get("overlay") != overlay:
-						continue
-					matched_page_shell = true
-					var document_header := shell.get("header") as HBoxContainer
-					_check(document_header.is_visible_in_tree() and _inside_viewport(document_header, canvas_size), "%s hält seinen Dokumentheader sichtbar im Viewport" % context)
-				_check(matched_page_shell, "%s besitzt einen registrierten Dokumentheader" % context)
+				var page_parts := _document_page_parts(hud, overlay)
+				var document_header := page_parts.get("header") as Control
+				_check(not page_parts.is_empty(), "%s besitzt eine semantische oder kompatibel registrierte PageShell" % context)
+				_check(document_header != null and document_header.is_visible_in_tree() and _inside_viewport(document_header, canvas_size), "%s hält seinen Dokumentheader sichtbar im Viewport" % context)
 			var minimum_text_size := COMPACT_PLANNING_TEXT_SIZE \
 				if screen["id"] in ["preparation", "preparation_picker", "preparation_intro_locked"] \
 				else MIN_TEXT_SIZE
@@ -150,13 +146,26 @@ func _run() -> void:
 				_check(focused == null or focused.scale.is_equal_approx(Vector2.ONE), "%s zeichnet Fokus ohne geometrischen Überlauf" % context)
 			if screen["id"] == "story":
 				_check(get_root().gui_get_focus_owner() == hud.story_next_button, "%s fokussiert beim Gamepad-Smoke die primäre Fortsetzen-Aktion statt Überspringen" % context)
+			if screen["id"] in ["research", "talents"]:
+				var progression_sources: Array = hud.research_buy_buttons.values() if screen["id"] == "research" else hud.talent_buttons.values()
+				var progression_source := _first_focusable_control(progression_sources)
+				_check(progression_source != null, "%s besitzt mindestens eine fokussierbare Informationsquelle" % context)
+				if progression_source != null:
+					hud.close_all_context_details()
+					progression_source.grab_focus()
+					await _settle()
+					var hover_provider := hud.progression_screen.tooltip_provider_for(progression_source)
+					var info_provider := hud.progression_screen.ui_info_provider_for(progression_source)
+					var info_payload := hud.progression_screen.info_payload_for(progression_source)
+					_check(not hud.is_context_detail_open(), "%s öffnet Detailinformationen nicht allein durch Fokus" % context)
+					_check(hover_provider.is_valid() and info_provider.is_valid() and hover_provider == info_provider, "%s verwendet für Hover und ui_info dieselbe Informationsquelle" % context)
+					_check(not String(info_payload.get("title", "")).is_empty() and not String(info_payload.get("body", "")).is_empty(), "%s liefert eine kompakte, vollständige Detailkarte" % context)
+					_check(hud.toggle_focused_context_detail(progression_source), "%s lässt sich ausdrücklich über ui_info öffnen" % context)
+					await _settle()
+					_check(hud.is_context_detail_open() and hud.is_context_detail_explicit(), "%s kennzeichnet die ui_info-Karte als ausdrückliche Detailansicht" % context)
+					hud.close_context_detail()
+					await _settle()
 			if screen["id"] == "talents" and (hud.root.size.x < 620.0 or hud.root.size.y < 420.0):
-				var long_effect_node := hud.talent_buttons[&"immediate_measure"] as Button
-				long_effect_node.grab_focus()
-				await _settle()
-				_check(not hud.talent_inspector_title.visible and not hud.talent_inspector_meta.visible, "%s gibt der Wirkung im kompakten Fokusinspektor die volle Breite" % context)
-				_check(hud.talent_inspector_description.max_lines_visible == 2 and hud.talent_inspector_description.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING, "%s zeigt lange Talentwirkungen zweizeilig ohne Ellipsen" % context)
-				_check(hud.talent_inspector_description.get_visible_line_count() == hud.talent_inspector_description.get_line_count(), "%s hält die vollständige Talentwirkung im sichtbaren Fokusinspektor" % context)
 				if hud.talent_grid.columns == 1:
 					var branch_panels := hud.talent_grid.get_children()
 					for branch_index in range(1, branch_panels.size()):
@@ -317,27 +326,32 @@ func _run() -> void:
 					_check(_inside_nearest_panel_container(settings_control, hud.settings_overlay), "%s hält %s vollständig in seiner Einstellungs-Karte" % [context, settings_control.name])
 			if screen["id"] == "lexicon":
 				var lexicon := hud.lexicon_master_detail
-				var expected_stat_columns := 2 if hud.root.size.x < 820.0 else 4
+				var expected_stat_columns := 1 if hud.root.size.x < 820.0 else 2
 				_check(lexicon.detail_stats_grid.columns == expected_stat_columns, "%s zeigt Basiswerte in %d Gridspalten" % [context, expected_stat_columns])
 				_check(lexicon.detail_gameplay_panel != null and lexicon.detail_medical_panel != null, "%s trennt Spielwirkung und medizinischen Hintergrund semantisch" % context)
 				var detail_bar := lexicon.detail_scroll.get_v_scroll_bar()
 				if detail_bar.visible:
-					for value_index in range(1, lexicon.detail_stats_grid.get_child_count(), 2):
-						var value_label := lexicon.detail_stats_grid.get_child(value_index) as Control
-						_check(value_label.get_global_rect().end.x <= detail_bar.get_global_rect().position.x - 4.0, "%s hält Statistikwerte vor der Scrollbar" % context)
+					for stat_child in lexicon.detail_stats_grid.get_children():
+						var stat_panel := stat_child as Control
+						_check(stat_panel != null and stat_panel.get_global_rect().end.x <= detail_bar.get_global_rect().position.x - 4.0, "%s hält Statistikwerte vor der Scrollbar" % context)
 			if screen["id"] == "finding":
 				_check(_inside_viewport(hud.finding_panel, canvas_size), "%s hält das Befundfenster vollständig im Viewport" % context)
 			if screen["id"] == "upgrade":
 				_check(_inside_viewport(hud.upgrade_panel, canvas_size), "%s hält den Ausbau-Dialog vollständig im Viewport" % context)
 				_check(_has_scroll_ancestor(hud.upgrade_cards), "%s hält alle Ausbauoptionen scrollbar erreichbar" % context)
 			if screen["id"] == "story":
-				_check(_inside_viewport(hud.story_panel, canvas_size), "%s hält die Prologkarte vollständig im Viewport" % context)
-				_check(not _has_scroll_ancestor(hud.story_next_button), "%s zeigt den kurzen Prolog ohne unnötige Scrollfläche" % context)
+				_check(_inside_viewport(hud.story_panel, canvas_size), "%s hält die Prologkarte vollständig im Viewport (Karte %s, Canvas %s)" % [context, hud.story_panel.get_global_rect(), canvas_size])
+				var story_scroll := hud.story_screen.focus_scroll()
+				_check(story_scroll != null and story_scroll.follow_focus and story_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "%s verwendet den responsiven StoryScroll ohne horizontalen Überlauf" % context)
+				_check(story_scroll.is_ancestor_of(hud.story_next_button) and _control_fully_visible_within_clips(hud.story_next_button, canvas_size), "%s hält die fokussierte Fortsetzen-Aktion im StoryScroll sichtbar (Aktion %s, Scroll %s)" % [context, hud.story_next_button.get_global_rect(), story_scroll.get_global_rect()])
 			if screen["id"] == "run":
-				_check(hud.run_stats_strip is HFlowContainer and hud.run_stats_strip.custom_minimum_size.y <= HudStatStrip.MAXIMUM_SIZE.y, "%s ordnet Runwerte als flaches horizontales Statband an" % context)
+				var semantic_stat_strip := hud.run_hud_screen.run_stats_strip()
+				_check(semantic_stat_strip == hud.run_stats_strip and semantic_stat_strip.get_meta(&"alveolus_component", &"") == &"transparent_run_stats", "%s ordnet Runwerte als transparentes horizontales Statband des RunHUDOverlay an" % context)
 			if screen["id"] == "pause":
 				_check(not _contains_text(hud.pause_overlay, "RUNMENÜ"), "%s enthält keinen überflüssigen Runmenü-Obertitel" % context)
-				_check(not _has_scroll_ancestor(hud.pause_resume_button), "%s zeigt alle Hauptaktionen ohne äußeres Scrollen" % context)
+				_check(hud.pause_screen.current_mode() == PauseOverlay.Mode.MENU and not hud.pause_screen.body_scroll().is_ancestor_of(hud.pause_resume_button), "%s hält Weiter fest außerhalb des responsiven Inhaltsviewports" % context)
+			if screen["id"] == "pause_stats":
+				_check(hud.pause_screen.current_mode() == PauseOverlay.Mode.STATS and not hud.pause_screen.body_scroll().is_ancestor_of(hud.pause_stats_back_button), "%s zeigt Charakterwerte im gemeinsamen PauseOverlay mit festem Rückweg" % context)
 			if screen["id"] == "abort":
 				_check(_inside_viewport(hud.abort_panel, canvas_size), "%s hält die Abbruchbestätigung vollständig im Viewport" % context)
 			if screen["id"] == "intro_skip":
@@ -383,17 +397,17 @@ func _run() -> void:
 	hud.configure_ui_settings(baseline_settings)
 	await _settle()
 	hud.show_pause(false, PlayerStats.new(), RunState.new())
-	_check(hud.pause_panel.custom_minimum_size == GameHUD.PAUSE_PANEL_SIZE, "Pause verwendet ihre zentrale Normalgröße")
+	await _settle()
+	var normal_pause_height := hud.pause_panel.size.y
+	_check(_is_content_driven_modal(hud.pause_panel), "Pause folgt ihrer tatsächlichen Inhaltshöhe ohne dekorative Leerraumreserve")
 	hud.show_pause(true, PlayerStats.new(), RunState.new())
-	_check(hud.pause_panel.custom_minimum_size == GameHUD.PAUSE_INTRO_PANEL_SIZE, "Intro-Pause bleibt trotz zusätzlicher Aktion gleich kompakt")
-	for shell in hud.page_shells:
-		var header := shell.get("header") as HBoxContainer
-		var title := shell.get("title") as Label
-		var direct_labels := 0
-		for child in header.get_children():
-			if child is Label:
-				direct_labels += 1
-		_check(direct_labels == 1 and title != null and not shell.has("kicker"), "Jeder Dokumentheader besitzt genau einen Titel und keinen Obertitel")
+	await _settle()
+	_check(hud.pause_skip_button.is_visible_in_tree() and hud.pause_panel.size.y >= normal_pause_height - 0.5 and _is_content_driven_modal(hud.pause_panel), "Intro-Pause wächst nur mit ihrer sichtbaren Zusatzaktion und bleibt inhaltsgetrieben")
+	for document_overlay in [hud.practice_overlay, hud.research_overlay, hud.level_overlay, hud.preparation_overlay, hud.lexicon_overlay, hud.settings_overlay]:
+		var page_parts := _document_page_parts(hud, document_overlay as Control)
+		var header := page_parts.get("header") as Control
+		var title_labels := _document_title_labels(header)
+		_check(not page_parts.is_empty() and title_labels.size() == 1 and not _document_header_has_eyebrow(header), "Jeder Dokumentheader besitzt genau einen Titel und keinen Obertitel")
 	_check(_has_scroll_ancestor(hud.preparation_catalog), "Komponentenkatalog bleibt bei großer UI scrollbar")
 	_check(_has_descendant_type(hud.practice_overlay, "ScrollContainer"), "Praxis bleibt bei großer UI scrollbar")
 
@@ -424,16 +438,17 @@ func _run() -> void:
 		])
 		await _settle()
 		var compact_context := "%s bei 200 %%" % compact_setup
-		_check(hud.run_stats_panel.visible and _rects_separate(hud.run_stats_panel, hud.shield_panel), "%s trennt optionale Werte und Schutzleiste" % compact_context)
-		_check(_rects_separate(hud.analysis_sample_panel, hud.finding_progress_panel), "%s ordnet Probe und Befund ohne Überlagerung" % compact_context)
-		_check(_rects_separate(hud.finding_progress_panel, hud.ability_panel), "%s reserviert getrennte Befund- und Fähigkeitsreihen" % compact_context)
+		var run_hud := hud.run_hud_screen
+		_check(run_hud.run_stats_strip().visible and _rects_separate(run_hud.run_stats_strip(), run_hud.shield_panel()), "%s trennt optionale Werte und Schutzleiste im RunHUDOverlay" % compact_context)
+		_check(_rects_separate(run_hud.analysis_panel(), hud.finding_progress_panel), "%s ordnet Probe und Befund ohne Überlagerung" % compact_context)
+		_check(_rects_separate(hud.finding_progress_panel, run_hud.ability_panel()), "%s reserviert getrennte Befund- und Fähigkeitsreihen" % compact_context)
 		hud.show_boss(100.0, 2)
 		hud.update_boss_health(64.0, 100.0)
 		hud.show_alert("BELASTUNGSSCHUB", AlveolusVisualTheme.CORAL, 2.0)
 		await _settle()
-		_check(not hud.run_stats_panel.visible, "%s blendet optionale Werte für Boss und Alarm aus" % compact_context)
-		_check(_rects_separate(hud.shield_panel, hud.boss_panel), "%s trennt Schutz und Bosszustand" % compact_context)
-		_check(_rects_separate(hud.boss_panel, hud.alert_label), "%s trennt Bosszustand und Alarm" % compact_context)
+		_check(not run_hud.run_stats_strip().visible, "%s blendet optionale Werte für Boss und Alarm aus" % compact_context)
+		_check(_rects_separate(run_hud.shield_panel(), run_hud.boss_panel()), "%s trennt Schutz und Bosszustand" % compact_context)
+		_check(_rects_separate(run_hud.boss_panel(), hud.alert_label), "%s trennt Bosszustand und Alarm" % compact_context)
 		_check(_rects_separate(hud.alert_label, hud.finding_progress_panel), "%s trennt Alarm und untere Befundreihe" % compact_context)
 
 	hud.queue_free()
@@ -476,6 +491,78 @@ func _button_name(button: Button) -> String:
 		if node is Label and not (node as Label).text.strip_edges().is_empty():
 			return (node as Label).text.left(32)
 	return "Ohne Beschriftung"
+
+
+func _document_page_parts(hud: GameHUD, overlay: Control) -> Dictionary:
+	if hud == null or overlay == null:
+		return {}
+	var semantic_shell := _find_semantic_component(overlay, &"page_shell")
+	if semantic_shell != null:
+		var semantic_header := _find_semantic_component(semantic_shell, &"page_header")
+		var semantic_body := _document_body_after_header(semantic_header)
+		if semantic_header != null and semantic_body != null:
+			return {
+				"overlay": overlay,
+				"shell": semantic_shell,
+				"header": semantic_header,
+				"body": semantic_body,
+				"semantic": true,
+			}
+	for registered_shell in hud.page_shells:
+		if registered_shell.get("overlay") == overlay:
+			return registered_shell
+	return {}
+
+
+func _find_semantic_component(scope: Node, component_id: StringName) -> Control:
+	if scope == null:
+		return null
+	for node in _descendants(scope):
+		if node is Control and node.get_meta(&"alveolus_component", &"") == component_id:
+			return node as Control
+	return null
+
+
+func _document_body_after_header(header: Control) -> Control:
+	if header == null or header.get_parent() == null:
+		return null
+	for sibling in header.get_parent().get_children():
+		if sibling is Control and sibling != header:
+			return sibling as Control
+	return null
+
+
+func _document_title_labels(header: Control) -> Array[Label]:
+	var result: Array[Label] = []
+	if header == null:
+		return result
+	for node in _descendants(header):
+		if not node is Label:
+			continue
+		var label := node as Label
+		if label.name == &"PageTitle" or label.theme_type_variation == AlveolusVisualTheme.TYPE_TITLE_LABEL:
+			result.append(label)
+	return result
+
+
+func _document_header_has_eyebrow(header: Control) -> bool:
+	if header == null:
+		return false
+	for node in _descendants(header):
+		if not node is Label:
+			continue
+		var label := node as Label
+		if label.text.strip_edges().is_empty():
+			continue
+		if label.theme_type_variation == AlveolusVisualTheme.TYPE_EYEBROW_LABEL or String(label.name).to_lower().contains("kicker"):
+			return true
+	return false
+
+
+func _is_content_driven_modal(modal: Control) -> bool:
+	return modal != null \
+		and modal.custom_minimum_size.y <= 0.5 \
+		and modal.size.y <= modal.get_combined_minimum_size().y + 1.0
 
 func _descendants(root_node: Node) -> Array[Node]:
 	var result: Array[Node] = []

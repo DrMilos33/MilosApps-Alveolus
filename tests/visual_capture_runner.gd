@@ -124,8 +124,6 @@ func _populate_character_stats_capture(game: Node) -> void:
 
 func _capture_preparation_editor_states(game: Node) -> void:
 	game.hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
-	if game.hud.preparation_scroll != null:
-		game.hud.preparation_scroll.scroll_vertical = 0 if game.hud.root.size.x < 820.0 else 220
 	await _capture("preparation_picker")
 	var current_id: StringName = game.hud._preparation_component_at(LoadoutSlotId.ACTIVE_1)
 	var candidate_id: StringName = &""
@@ -166,33 +164,71 @@ func _verify_direct_preparation_state(game: Node) -> bool:
 	return false
 
 func _verify_document_page(hud: GameHUD, overlay: Control, screen_id: String) -> bool:
-	for shell in hud.page_shells:
-		if shell.get("overlay") != overlay:
-			continue
-		var header := shell.get("header") as HBoxContainer
-		var body := shell.get("body") as VBoxContainer
-		var header_transform := header.get_global_transform_with_canvas()
-		var body_transform := body.get_global_transform_with_canvas()
-		var header_rect := Rect2(
-			header_transform.origin,
-			Vector2(header.size.x * header_transform.x.length(), header.size.y * header_transform.y.length())
-		)
-		var body_rect := Rect2(
-			body_transform.origin,
-			Vector2(body.size.x * body_transform.x.length(), body.size.y * body_transform.y.length())
-		)
-		var viewport_rect := Rect2(Vector2.ZERO, Vector2(capture_size))
-		var valid := header.is_visible_in_tree() \
-			and viewport_rect.encloses(header_rect) \
-			and header_rect.end.y <= body_rect.position.y + 0.5
-		if valid:
-			return true
+	var page_parts := _document_page_parts(hud, overlay)
+	var header := page_parts.get("header") as Control
+	var body := page_parts.get("body") as Control
+	if page_parts.is_empty() or header == null or body == null:
 		capture_failed = true
-		push_error("Dokumentseite %s verliert oder überlagert ihren Header: header=%s body=%s viewport=%s" % [screen_id, header_rect, body_rect, viewport_rect])
+		push_error("Dokumentseite %s besitzt keine semantische oder kompatibel registrierte PageShell" % screen_id)
 		return false
+	var header_rect := _canvas_rect(header)
+	var body_rect := _canvas_rect(body)
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(capture_size))
+	var valid := header.is_visible_in_tree() \
+		and viewport_rect.encloses(header_rect) \
+		and header_rect.end.y <= body_rect.position.y + 0.5
+	if valid:
+		return true
 	capture_failed = true
-	push_error("Dokumentseite %s besitzt keinen registrierten Page-Shell" % screen_id)
+	push_error("Dokumentseite %s verliert oder überlagert ihren Header: header=%s body=%s viewport=%s" % [screen_id, header_rect, body_rect, viewport_rect])
 	return false
+
+func _document_page_parts(hud: GameHUD, overlay: Control) -> Dictionary:
+	if hud == null or overlay == null:
+		return {}
+	var semantic_shell := _find_semantic_component(overlay, &"page_shell")
+	if semantic_shell != null:
+		var semantic_header := _find_semantic_component(semantic_shell, &"page_header")
+		var semantic_body := _document_body_after_header(semantic_header)
+		if semantic_header != null and semantic_body != null:
+			return {
+				"overlay": overlay,
+				"shell": semantic_shell,
+				"header": semantic_header,
+				"body": semantic_body,
+				"semantic": true,
+			}
+	for registered_shell in hud.page_shells:
+		if registered_shell.get("overlay") == overlay:
+			return registered_shell
+	return {}
+
+func _find_semantic_component(scope: Node, component_id: StringName) -> Control:
+	if scope == null:
+		return null
+	var pending: Array[Node] = [scope]
+	while not pending.is_empty():
+		var current: Node = pending.pop_back()
+		if current is Control and current.get_meta(&"alveolus_component", &"") == component_id:
+			return current as Control
+		for child in current.get_children():
+			pending.append(child)
+	return null
+
+func _document_body_after_header(header: Control) -> Control:
+	if header == null or header.get_parent() == null:
+		return null
+	for sibling in header.get_parent().get_children():
+		if sibling is Control and sibling != header:
+			return sibling as Control
+	return null
+
+func _canvas_rect(control: Control) -> Rect2:
+	var transform := control.get_global_transform_with_canvas()
+	return Rect2(
+		transform.origin,
+		Vector2(control.size.x * transform.x.length(), control.size.y * transform.y.length())
+	)
 
 func _capture_transient_dialogs(game: Node) -> void:
 	var findings := ContentCatalog.finding_definitions()

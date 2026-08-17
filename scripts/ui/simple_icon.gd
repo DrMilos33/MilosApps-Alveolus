@@ -16,7 +16,7 @@ const DRAWN_KINDS: Array[StringName] = [
 	&"unlock_spread_treatment", &"unlock_piercing_treatment", &"unlock_defense_burst",
 	&"unlock_treatment_line", &"unlock_protection_field", &"unlock_sample_pull", &"quick_test",
 	&"reserve_buffer", &"defense_readiness", &"deployment_routine",
-	&"locked", &"check", &"remove", &"restart", &"diamond", &"circle",
+	&"locked", &"check", &"remove", &"restart", &"diamond", &"circle", &"target",
 ]
 
 static var _missing_warnings: Dictionary = {}
@@ -98,7 +98,7 @@ func _draw() -> void:
 		&"stability_reserve":
 			_draw_shield()
 			_draw_cross(Vector2.ZERO, 0.72)
-		&"therapy_precision", &"treatment_precision":
+		&"therapy_precision", &"treatment_precision", &"target":
 			_draw_target()
 		&"analysis", &"analysis_pickup", &"sample":
 			_draw_sample_vial()

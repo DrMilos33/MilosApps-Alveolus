@@ -9,7 +9,7 @@ const NODE_HEIGHT := 64.0
 const ROW_GAP := 20.0
 const OUTER_PADDING := 8.0
 const MINIMUM_NODE_WIDTH := 104.0
-const MAXIMUM_NODE_WIDTH := 164.0
+const MAXIMUM_NODE_WIDTH := 180.0
 
 var _nodes: Dictionary = {}
 var _layout: Dictionary = {}

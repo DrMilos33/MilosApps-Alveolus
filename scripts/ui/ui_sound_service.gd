@@ -109,7 +109,10 @@ func wire_tree(control_root: Node) -> void:
 	_wire_recursive(control_root)
 
 func _on_child_entered(child: Node) -> void:
-	_wire_recursive.call_deferred(child)
+	# Wire newly mounted screen controls in the same frame. The handler only
+	# connects signals and does not mutate the tree, while its recursive
+	# child-entered connection still covers descendants added afterwards.
+	_wire_recursive(child)
 
 func _wire_recursive(node: Node) -> void:
 	_wire_control(node)

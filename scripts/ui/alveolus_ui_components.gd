@@ -12,6 +12,7 @@ const ACTION_SECONDARY := &"secondary"
 const ACTION_DANGER := &"danger"
 const ACTION_QUIET := &"quiet"
 const ACTION_NAVIGATION := &"navigation"
+const ACTION_PLANNING_START := &"planning_start"
 
 static func label(text_value: String, variation: StringName = AlveolusVisualTheme.TYPE_BODY_LABEL) -> Label:
 	var control := Label.new()
@@ -37,6 +38,18 @@ static func action_button(
 ) -> Button:
 	return _build_action_button(text_value, _variation_for_role(role), icon_kind, accent, role)
 
+## Explicit exception to the global teal-to-teal primary action. This is the
+## only component API allowed to create the approved planning teal-to-warm-gold
+## membrane.
+static func planning_start_button(text_value: String = "Behandlung starten", icon_kind: StringName = &"play") -> Button:
+	return _build_action_button(
+		text_value,
+		AlveolusVisualTheme.TYPE_PRIMARY_BUTTON,
+		icon_kind,
+		AlveolusVisualTheme.TURQUOISE,
+		ACTION_PLANNING_START
+	)
+
 static func segmented_tab(text_value: String, selected: bool = false, group: ButtonGroup = null) -> Button:
 	var control := Button.new()
 	control.text = text_value
@@ -46,6 +59,7 @@ static func segmented_tab(text_value: String, selected: bool = false, group: But
 	control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB if selected else AlveolusVisualTheme.TYPE_SEGMENTED_TAB
 	control.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
 	control.focus_mode = Control.FOCUS_ALL
+	control.set_meta(&"disable_motion_scale", true)
 	control.set_meta(&"alveolus_component", &"segmented_tab")
 	control.set_meta(&"alveolus_accessible_name", text_value)
 	control.toggled.connect(func(pressed_value: bool) -> void:
@@ -60,6 +74,7 @@ static func toggle_row(text_value: String, pressed: bool = false) -> CheckButton
 	control.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
 	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	control.focus_mode = Control.FOCUS_ALL
+	control.set_meta(&"disable_motion_scale", true)
 	control.set_pressed_no_signal(pressed)
 	control.set_meta(&"alveolus_component", &"toggle_row")
 	control.set_meta(&"alveolus_accessible_name", text_value)
@@ -71,11 +86,16 @@ static func option_row(text_value: String, entries: Array[String], selected: int
 	var title := label(text_value, AlveolusVisualTheme.TYPE_BODY_LABEL)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.max_lines_visible = 2
+	title.clip_text = true
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	row.add_child(title)
 	var control := OptionButton.new()
 	control.theme_type_variation = AlveolusVisualTheme.TYPE_OPTION_ROW
 	control.custom_minimum_size = Vector2(176.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
 	control.focus_mode = Control.FOCUS_ALL
+	control.set_meta(&"disable_motion_scale", true)
 	for entry in entries:
 		control.add_item(entry)
 	if not entries.is_empty():
@@ -107,6 +127,7 @@ static func slider_row(
 	control.custom_minimum_size = Vector2(160.0, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
 	control.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	control.focus_mode = Control.FOCUS_ALL
+	control.set_meta(&"disable_motion_scale", true)
 	control.set_meta(&"alveolus_component", &"slider_row")
 	control.set_meta(&"alveolus_accessible_name", text_value)
 	row.add_child(control)
@@ -123,15 +144,149 @@ static func slider_row(
 static func panel(variation: StringName = AlveolusVisualTheme.TYPE_SECTION_GROUP) -> PanelContainer:
 	var control := PanelContainer.new()
 	control.theme_type_variation = variation
+	var role := _surface_role_for_variation(variation)
+	if role >= 0:
+		apply_surface_role(control, role, _default_accent_for_surface_role(role))
 	return control
 
 static func surface(role: int, accent: Color = AlveolusVisualTheme.TEAL) -> PanelContainer:
 	var control := PanelContainer.new()
-	control.theme_type_variation = _variation_for_surface_role(role)
-	if accent != AlveolusVisualTheme.TEAL:
-		control.add_theme_stylebox_override("panel", AlveolusVisualTheme.surface_role_style(role, accent))
-	control.set_meta(&"alveolus_surface_role", role)
+	apply_surface_role(control, role, accent)
 	return control
+
+## Applies a semantic Bio-Lumen surface to an existing Panel/PanelContainer.
+## This is the compatibility bridge for absolute-positioned HUD panels that
+## cannot yet become container-built controls without changing layout.
+static func apply_surface_role(
+	control: Control,
+	role: int,
+	accent: Color = AlveolusVisualTheme.TEAL,
+	emphasized: bool = false
+) -> Control:
+	if control == null:
+		return null
+	control.theme_type_variation = _variation_for_surface_role(role)
+	var surface_style := AlveolusVisualTheme.surface_role_style(role, accent)
+	if emphasized:
+		surface_style.set_border_width_all(maxi(2, surface_style.border_width_left))
+		surface_style.shadow_color = Color(accent, 0.14)
+		surface_style.shadow_size = maxi(surface_style.shadow_size, 3)
+	control.add_theme_stylebox_override("panel", surface_style)
+	control.set_meta(&"alveolus_surface_role", role)
+	var membrane := _surface_membrane(role, accent)
+	if not membrane.is_empty():
+		BioLumenSurfaceFill.attach(
+			control,
+			membrane["left"],
+			membrane["right"],
+			membrane["radii"],
+			membrane["energy"]
+		)
+	return control
+
+static func page_shell(header: Control = null, content: Control = null, compact: bool = false) -> Dictionary:
+	var shell := panel(AlveolusVisualTheme.TYPE_PAGE_CANVAS)
+	shell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shell.oversampling_with_scale = CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED
+	shell.set_meta(&"alveolus_component", &"page_shell")
+	var safe_area := MarginContainer.new()
+	var screen_margin := AlveolusVisualTheme.SCREEN_MARGIN_COMPACT if compact else AlveolusVisualTheme.SCREEN_MARGIN
+	for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
+		safe_area.add_theme_constant_override(side, screen_margin)
+	shell.add_child(safe_area)
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override(
+		"separation",
+		AlveolusVisualTheme.HEADER_CONTENT_GAP_COMPACT if compact else AlveolusVisualTheme.HEADER_CONTENT_GAP
+	)
+	safe_area.add_child(stack)
+	if header != null:
+		header.custom_minimum_size.y = maxf(
+			header.custom_minimum_size.y,
+			AlveolusVisualTheme.HEADER_HEIGHT_COMPACT if compact else AlveolusVisualTheme.HEADER_HEIGHT
+		)
+		stack.add_child(header)
+	if content != null:
+		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		stack.add_child(content)
+	return {"shell": shell, "safe_area": safe_area, "stack": stack, "header": header, "content": content}
+
+static func page_header(title_text: String, eyebrow_text: String = "", action: Control = null) -> Dictionary:
+	var header := surface(AlveolusVisualTheme.SurfaceRole.PAGE_HEADER)
+	header.set_meta(&"alveolus_component", &"page_header")
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.SECTION_GAP)
+	var heading := VBoxContainer.new()
+	heading.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	if not eyebrow_text.is_empty():
+		heading.add_child(label(eyebrow_text, AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL))
+	var title := label(title_text, AlveolusVisualTheme.TYPE_TITLE_LABEL)
+	# A page title must be allowed to yield horizontal space to navigation
+	# actions at high UI scales. Without an overrun policy its intrinsic text
+	# width expands the HBox beyond the viewport (notably "Einstellungen" and
+	# the two-action Fallarchiv header at 200 percent).
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title.clip_text = true
+	heading.add_child(title)
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(heading)
+	if action != null:
+		action.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(action)
+	header.add_child(margin(row, 12))
+	return {"panel": header, "row": row, "heading": heading, "title": title, "action": action}
+
+static func form_control_row(text_value: String, control: Control) -> Dictionary:
+	var row_panel := panel(AlveolusVisualTheme.TYPE_FORM_CONTROL)
+	row_panel.set_meta(&"alveolus_component", &"form_control_row")
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	var title := label(text_value, AlveolusVisualTheme.TYPE_BODY_LABEL)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.max_lines_visible = 2
+	title.clip_text = true
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	row.add_child(title)
+	control.focus_mode = Control.FOCUS_ALL
+	control.custom_minimum_size.y = maxf(control.custom_minimum_size.y, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
+	row.add_child(control)
+	row_panel.add_child(margin(row, 10))
+	return {"panel": row_panel, "row": row, "label": title, "control": control}
+
+static func modal_sheet(
+	title_text: String,
+	body: Control = null,
+	actions: Array[Control] = [],
+	padding: int = 20,
+	accent: Color = AlveolusVisualTheme.TEAL
+) -> Dictionary:
+	var sheet := surface(AlveolusVisualTheme.SurfaceRole.MODAL_SHEET, accent)
+	sheet.set_meta(&"alveolus_component", &"modal_sheet")
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	if not title_text.is_empty():
+		stack.add_child(label(title_text, AlveolusVisualTheme.TYPE_TITLE_LABEL))
+	if body != null:
+		stack.add_child(body)
+	var action_row: HBoxContainer = null
+	if not actions.is_empty():
+		action_row = HBoxContainer.new()
+		action_row.alignment = BoxContainer.ALIGNMENT_END
+		action_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+		for action in actions:
+			action_row.add_child(action)
+		stack.add_child(action_row)
+	sheet.add_child(margin(stack, padding))
+	return {"panel": sheet, "content": stack, "actions": action_row}
+
+static func tooltip_card(title_text: String, body_text: String, meta_text: String = "", accent: Color = AlveolusVisualTheme.TURQUOISE) -> Dictionary:
+	return _information_card(&"tooltip_card", AlveolusVisualTheme.TYPE_TOOLTIP_CARD, title_text, body_text, meta_text, accent, 288.0, 10)
+
+static func detail_card(title_text: String, body_text: String, meta_text: String = "", accent: Color = AlveolusVisualTheme.COBALT) -> Dictionary:
+	return _information_card(&"detail_card", AlveolusVisualTheme.TYPE_DETAIL_CARD, title_text, body_text, meta_text, accent, 360.0, 12)
 
 static func margin(content: Control, amount: int = AlveolusVisualTheme.CARD_PADDING) -> MarginContainer:
 	var control := MarginContainer.new()
@@ -163,19 +318,28 @@ static func section_header(eyebrow: String, title: String, description: String =
 		content.add_child(description_label)
 	return content
 
-static func stat_row(name_text: String, value_text: String, highlighted: bool = false) -> PanelContainer:
-	var row_panel := panel(AlveolusVisualTheme.TYPE_ACTION_CARD if highlighted else AlveolusVisualTheme.TYPE_DOCUMENT_INSET)
+static func value_row(name_text: String, value_text: String, highlighted: bool = false) -> PanelContainer:
+	var row_panel := surface(
+		AlveolusVisualTheme.SurfaceRole.VALUE_ROW,
+		AlveolusVisualTheme.TURQUOISE if highlighted else AlveolusVisualTheme.TEAL
+	)
+	row_panel.set_meta(&"alveolus_component", &"value_row")
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	var name_label := label(name_text, AlveolusVisualTheme.TYPE_BODY_LABEL)
+	name_label.name = "ValueName"
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(name_label)
 	var value_label := label(value_text, AlveolusVisualTheme.TYPE_VALUE_LABEL)
+	value_label.name = "Value"
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	row.add_child(value_label)
 	row_panel.add_child(margin(row, 8))
 	return row_panel
+
+static func stat_row(name_text: String, value_text: String, highlighted: bool = false) -> PanelContainer:
+	return value_row(name_text, value_text, highlighted)
 
 static func semantic_copy_section(
 	title_text: String,
@@ -253,10 +417,132 @@ static func progress(value: float, maximum: float = 100.0, show_percentage: bool
 	control.custom_minimum_size.y = 12.0
 	return control
 
+static func apply_progress_accent(control: ProgressBar, accent: Color) -> ProgressBar:
+	if control == null:
+		return null
+	if control.get_meta(&"alveolus_progress_accent", Color.TRANSPARENT) == accent:
+		return control
+	control.add_theme_stylebox_override("fill", AlveolusVisualTheme.bar_style(accent, 6))
+	control.set_meta(&"alveolus_progress_accent", accent)
+	return control
+
 static func vertical_rule() -> VSeparator:
 	var separator := VSeparator.new()
 	separator.add_theme_color_override("separator_color", AlveolusVisualTheme.HAIRLINE)
 	return separator
+
+static func refresh_button_state(button_control: BaseButton) -> void:
+	if button_control == null:
+		return
+	if button_control.has_method(&"refresh_state"):
+		button_control.call(&"refresh_state")
+	var fill := button_control.get_node_or_null("BioLumenFill") as BioLumenButtonFill
+	if fill != null:
+		fill.refresh_state()
+	var planning_fill := button_control.get_node_or_null("PreparationBioLumenFill") as PreparationBioLumenFill
+	if planning_fill != null:
+		planning_fill.refresh_state()
+	var surface_fill := button_control.get_node_or_null("MembraneFill") as PreparationBioLumenSurfaceFill
+	if surface_fill != null:
+		surface_fill.refresh_state()
+
+static func set_button_disabled(button_control: BaseButton, disabled: bool) -> void:
+	if button_control == null:
+		return
+	button_control.disabled = disabled
+	refresh_button_state(button_control)
+
+## Applies one semantic action role to an existing button. Screen code may
+## still own text, signals and layout width, while every visible state remains
+## sourced from the shared theme/component family.
+static func apply_action_role(
+	button_control: Button,
+	role: StringName = ACTION_SECONDARY,
+	accent: Color = AlveolusVisualTheme.TEAL
+) -> Button:
+	if button_control == null:
+		return null
+	var resolved_accent := AlveolusVisualTheme.TEAL if role == ACTION_PRIMARY else accent
+	button_control.theme_type_variation = _variation_for_role(role)
+	button_control.custom_minimum_size.y = maxf(
+		button_control.custom_minimum_size.y,
+		AlveolusVisualTheme.BUTTON_HEIGHT_PRIMARY if role in [ACTION_PRIMARY, ACTION_PLANNING_START] else AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	)
+	button_control.focus_mode = Control.FOCUS_ALL
+	button_control.scale = Vector2.ONE
+	button_control.set_meta(&"disable_motion_scale", true)
+	button_control.set_meta(&"alveolus_component", &"action_button")
+	button_control.set_meta(&"alveolus_action_role", role)
+	var accessible_name := button_control.text
+	if button_control is IconTextButton and (button_control as IconTextButton).caption != null:
+		accessible_name = (button_control as IconTextButton).caption.text
+	button_control.set_meta(&"alveolus_accessible_name", accessible_name)
+	var icon_kind := &""
+	if button_control is IconTextButton:
+		var icon_button := button_control as IconTextButton
+		if icon_button.icon_view != null:
+			icon_kind = icon_button.icon_view.kind
+			icon_button.accent = resolved_accent
+			icon_button.icon_view.configure(icon_kind, resolved_accent, icon_button.icon_view.framed)
+		icon_button.set_content_on_light(role in [ACTION_PRIMARY, ACTION_PLANNING_START])
+	button_control.set_meta(&"ui_sound_cue", _sound_cue_for(role, icon_kind))
+
+	var global_fill := button_control.get_node_or_null("BioLumenFill") as BioLumenButtonFill
+	var planning_fill := button_control.get_node_or_null("PreparationBioLumenFill") as PreparationBioLumenFill
+	if role == ACTION_PRIMARY:
+		global_fill = BioLumenButtonFill.attach(button_control, resolved_accent)
+		global_fill.show()
+		if planning_fill != null:
+			planning_fill.hide()
+	elif role == ACTION_PLANNING_START:
+		planning_fill = PreparationBioLumenFill.attach(button_control, AlveolusVisualTheme.TURQUOISE, AlveolusVisualTheme.GOLD)
+		planning_fill.show()
+		if global_fill != null:
+			global_fill.hide()
+	else:
+		if global_fill != null:
+			global_fill.hide()
+		if planning_fill != null:
+			planning_fill.hide()
+	refresh_button_state(button_control)
+	return button_control
+
+static func _information_card(
+	component_name: StringName,
+	variation: StringName,
+	title_text: String,
+	body_text: String,
+	meta_text: String,
+	accent: Color,
+	maximum_width: float,
+	padding: int
+) -> Dictionary:
+	var card := panel(variation)
+	# The positioning controller supplies an actual width only when wrapping is
+	# needed. A hard minimum would reintroduce the empty tooltip slabs the visual
+	# contract explicitly forbids.
+	card.custom_minimum_size.x = 0.0
+	card.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	card.set_meta(&"alveolus_component", component_name)
+	card.set_meta(&"alveolus_maximum_width", maximum_width)
+	if accent != AlveolusVisualTheme.TEAL:
+		var role := AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD if variation == AlveolusVisualTheme.TYPE_TOOLTIP_CARD else AlveolusVisualTheme.SurfaceRole.DETAIL_CARD
+		card.add_theme_stylebox_override("panel", AlveolusVisualTheme.surface_role_style(role, accent))
+	var stack := VBoxContainer.new()
+	stack.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	var title := label(title_text, AlveolusVisualTheme.TYPE_VALUE_LABEL)
+	stack.add_child(title)
+	var body := label(body_text, AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.add_child(body)
+	var meta_label: Label = null
+	if not meta_text.is_empty():
+		meta_label = label(meta_text, AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
+		meta_label.add_theme_color_override("font_color", accent.lightened(0.12))
+		stack.add_child(meta_label)
+	card.add_child(margin(stack, padding))
+	return {"panel": card, "content": stack, "title": title, "body": body, "meta": meta_label}
 
 static func _build_action_button(
 	text_value: String,
@@ -265,27 +551,18 @@ static func _build_action_button(
 	accent: Color,
 	role: StringName
 ) -> Button:
+	var resolved_accent := AlveolusVisualTheme.TEAL if role == ACTION_PRIMARY else accent
 	var control: Button
 	if icon_kind.is_empty():
 		control = Button.new()
 		control.text = text_value
 	else:
 		var icon_button := IconTextButton.new()
-		icon_button.configure(text_value, icon_kind, accent, 22.0, 8)
-		icon_button.set_content_on_light(role == ACTION_PRIMARY)
+		icon_button.configure(text_value, icon_kind, resolved_accent, 22.0, 8)
+		icon_button.set_content_on_light(role in [ACTION_PRIMARY, ACTION_PLANNING_START])
 		control = icon_button
 	control.theme_type_variation = variation
-	control.custom_minimum_size.y = maxf(
-		control.custom_minimum_size.y,
-		AlveolusVisualTheme.BUTTON_HEIGHT_PRIMARY if role == ACTION_PRIMARY else AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
-	)
-	control.focus_mode = Control.FOCUS_ALL
-	control.set_meta(&"alveolus_component", &"action_button")
-	control.set_meta(&"alveolus_action_role", role)
-	control.set_meta(&"alveolus_accessible_name", text_value)
-	control.set_meta(&"ui_sound_cue", _sound_cue_for(role, icon_kind))
-	if role == ACTION_PRIMARY:
-		BioLumenButtonFill.attach(control, accent)
+	apply_action_role(control, role, resolved_accent)
 	return control
 
 static func _choice_control(
@@ -298,7 +575,11 @@ static func _choice_control(
 	component_name: StringName
 ) -> Button:
 	var control := Button.new()
-	control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD if selected else AlveolusVisualTheme.TYPE_SELECTION_CARD
+	var compact_row := component_name == &"choice_row"
+	if compact_row:
+		control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CHOICE_ROW if selected else AlveolusVisualTheme.TYPE_CHOICE_ROW
+	else:
+		control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD if selected else AlveolusVisualTheme.TYPE_SELECTION_CARD
 	control.text = title if description.is_empty() else "%s\n%s" % [title, description]
 	if not meta.is_empty():
 		control.text += "\n%s" % meta
@@ -308,6 +589,8 @@ static func _choice_control(
 	control.custom_minimum_size.y = minimum_height
 	control.disabled = disabled
 	control.focus_mode = Control.FOCUS_ALL
+	control.scale = Vector2.ONE
+	control.set_meta(&"disable_motion_scale", true)
 	control.set_meta(&"alveolus_component", component_name)
 	control.set_meta(&"alveolus_accessible_name", title)
 	return control
@@ -320,6 +603,10 @@ static func _variation_for_role(role: StringName) -> StringName:
 			return AlveolusVisualTheme.TYPE_DANGER_BUTTON
 		ACTION_QUIET:
 			return AlveolusVisualTheme.TYPE_QUIET_BUTTON
+		ACTION_NAVIGATION:
+			return AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON
+		ACTION_PLANNING_START:
+			return AlveolusVisualTheme.TYPE_PRIMARY_BUTTON
 	return AlveolusVisualTheme.TYPE_SECONDARY_BUTTON
 
 static func _role_for_variation(variation: StringName) -> StringName:
@@ -330,6 +617,8 @@ static func _role_for_variation(variation: StringName) -> StringName:
 			return ACTION_DANGER
 		AlveolusVisualTheme.TYPE_QUIET_BUTTON:
 			return ACTION_QUIET
+		AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON:
+			return ACTION_NAVIGATION
 	return ACTION_SECONDARY
 
 static func _variation_for_surface_role(role: int) -> StringName:
@@ -350,10 +639,113 @@ static func _variation_for_surface_role(role: int) -> StringName:
 			return AlveolusVisualTheme.TYPE_HUD_ABILITY
 		AlveolusVisualTheme.SurfaceRole.HUD_ALERT:
 			return AlveolusVisualTheme.TYPE_HUD_ALERT
+		AlveolusVisualTheme.SurfaceRole.PAGE_HEADER:
+			return AlveolusVisualTheme.TYPE_PAGE_HEADER
+		AlveolusVisualTheme.SurfaceRole.FORM_CONTROL:
+			return AlveolusVisualTheme.TYPE_FORM_CONTROL
+		AlveolusVisualTheme.SurfaceRole.VALUE_ROW:
+			return AlveolusVisualTheme.TYPE_VALUE_ROW
+		AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD:
+			return AlveolusVisualTheme.TYPE_TOOLTIP_CARD
+		AlveolusVisualTheme.SurfaceRole.DETAIL_CARD:
+			return AlveolusVisualTheme.TYPE_DETAIL_CARD
 	return AlveolusVisualTheme.TYPE_SECTION_GROUP
 
+static func _surface_role_for_variation(variation: StringName) -> int:
+	match variation:
+		AlveolusVisualTheme.TYPE_PAGE_CANVAS:
+			return AlveolusVisualTheme.SurfaceRole.PAGE_CANVAS
+		AlveolusVisualTheme.TYPE_SECTION_GROUP:
+			return AlveolusVisualTheme.SurfaceRole.SECTION_GROUP
+		AlveolusVisualTheme.TYPE_ACTION_CARD:
+			return AlveolusVisualTheme.SurfaceRole.ACTION_CARD
+		AlveolusVisualTheme.TYPE_DOCUMENT_INSET:
+			return AlveolusVisualTheme.SurfaceRole.DOCUMENT_INSET
+		AlveolusVisualTheme.TYPE_MODAL_SHEET:
+			return AlveolusVisualTheme.SurfaceRole.MODAL_SHEET
+		AlveolusVisualTheme.TYPE_HUD_VITAL:
+			return AlveolusVisualTheme.SurfaceRole.HUD_VITAL
+		AlveolusVisualTheme.TYPE_HUD_OBJECTIVE:
+			return AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE
+		AlveolusVisualTheme.TYPE_HUD_ABILITY:
+			return AlveolusVisualTheme.SurfaceRole.HUD_ABILITY
+		AlveolusVisualTheme.TYPE_HUD_ALERT:
+			return AlveolusVisualTheme.SurfaceRole.HUD_ALERT
+		AlveolusVisualTheme.TYPE_PAGE_HEADER:
+			return AlveolusVisualTheme.SurfaceRole.PAGE_HEADER
+		AlveolusVisualTheme.TYPE_FORM_CONTROL:
+			return AlveolusVisualTheme.SurfaceRole.FORM_CONTROL
+		AlveolusVisualTheme.TYPE_VALUE_ROW:
+			return AlveolusVisualTheme.SurfaceRole.VALUE_ROW
+		AlveolusVisualTheme.TYPE_TOOLTIP_CARD:
+			return AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD
+		AlveolusVisualTheme.TYPE_DETAIL_CARD:
+			return AlveolusVisualTheme.SurfaceRole.DETAIL_CARD
+	return -1
+
+static func _default_accent_for_surface_role(role: int) -> Color:
+	match role:
+		AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE:
+			return AlveolusVisualTheme.COBALT
+		AlveolusVisualTheme.SurfaceRole.HUD_ABILITY:
+			return AlveolusVisualTheme.TURQUOISE
+		AlveolusVisualTheme.SurfaceRole.HUD_ALERT:
+			return AlveolusVisualTheme.CORAL
+		AlveolusVisualTheme.SurfaceRole.DETAIL_CARD:
+			return AlveolusVisualTheme.COBALT
+	return AlveolusVisualTheme.TEAL
+
+
+static func _surface_membrane(role: int, accent: Color) -> Dictionary:
+	var left := Color.TRANSPARENT
+	var right := Color.TRANSPARENT
+	var radii := Vector4(6.0, 6.0, 6.0, 6.0)
+	var energy := 1.0
+	match role:
+		AlveolusVisualTheme.SurfaceRole.SECTION_GROUP:
+			left = Color("0d3b40").lerp(accent, 0.08)
+			right = Color("061f26")
+			radii = Vector4.ZERO
+			energy = 0.96
+		AlveolusVisualTheme.SurfaceRole.ACTION_CARD:
+			left = Color("145052").lerp(accent, 0.08)
+			right = Color("082b31")
+		AlveolusVisualTheme.SurfaceRole.MODAL_SHEET:
+			left = Color("103f45").lerp(accent, 0.06)
+			right = Color("061f27")
+			radii = Vector4(6.0, 0.0, 6.0, 6.0)
+		AlveolusVisualTheme.SurfaceRole.PAGE_HEADER:
+			left = Color("0d3b40")
+			right = Color("061e25")
+			radii = Vector4.ZERO
+			energy = 0.94
+		AlveolusVisualTheme.SurfaceRole.HUD_VITAL:
+			left = Color("124a4b").lerp(accent, 0.10)
+			right = Color("061f26")
+			radii = Vector4(4.0, 4.0, 4.0, 4.0)
+		AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE:
+			left = Color("123f48").lerp(accent, 0.08)
+			right = Color("071f28")
+			radii = Vector4(4.0, 4.0, 4.0, 4.0)
+		AlveolusVisualTheme.SurfaceRole.HUD_ABILITY:
+			left = Color("10484b").lerp(accent, 0.10)
+			right = Color("061f26")
+		AlveolusVisualTheme.SurfaceRole.HUD_ALERT:
+			left = Color("153e42").lerp(accent, 0.10)
+			right = Color("071f27")
+		AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD:
+			left = Color("0b353a").lerp(accent, 0.06)
+			right = Color("061e25")
+			radii = Vector4(4.0, 4.0, 4.0, 4.0)
+		AlveolusVisualTheme.SurfaceRole.DETAIL_CARD:
+			left = Color("0f4447").lerp(accent, 0.06)
+			right = Color("07242b")
+		_:
+			return {}
+	return {"left": left, "right": right, "radii": radii, "energy": energy}
+
 static func _sound_cue_for(role: StringName, icon_kind: StringName) -> StringName:
-	if role == ACTION_PRIMARY:
+	if role in [ACTION_PRIMARY, ACTION_PLANNING_START]:
 		return &"confirm"
 	if role == ACTION_NAVIGATION or icon_kind == &"back":
 		return &"back"

@@ -183,7 +183,7 @@ func _build_components_view() -> Control:
 	var button_row := HBoxContainer.new()
 	button_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	button_row.add_child(AlveolusUIComponents.button("Behandlung starten", AlveolusVisualTheme.TYPE_PRIMARY_BUTTON, &"play", AlveolusVisualTheme.TEAL))
-	button_row.add_child(AlveolusUIComponents.button("Zurück", AlveolusVisualTheme.TYPE_SECONDARY_BUTTON, &"back", AlveolusVisualTheme.COBALT))
+	button_row.add_child(AlveolusUIComponents.action_button("Zurück", AlveolusUIComponents.ACTION_NAVIGATION, &"back", AlveolusVisualTheme.TEAL))
 	var selected := AlveolusUIComponents.button("Ausgewählt", AlveolusVisualTheme.TYPE_SELECTED_CARD)
 	selected.button_pressed = true
 	button_row.add_child(selected)
@@ -200,6 +200,27 @@ func _build_components_view() -> Control:
 	var slider_parts := AlveolusUIComponents.slider_row("Menülautstärke", 0.0, 100.0, 65.0)
 	form_content.add_child(slider_parts["row"])
 	page.add_child(form_card)
+
+	var information_row := HBoxContainer.new()
+	information_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	var tooltip_parts := AlveolusUIComponents.tooltip_card(
+		"Fokusfeld",
+		"Priorisiert und verstärkt die Behandlung im Zielgebiet.",
+		"Aktiv · 2 K"
+	)
+	var tooltip_panel := tooltip_parts["panel"] as PanelContainer
+	tooltip_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	information_row.add_child(tooltip_panel)
+	var detail_parts := AlveolusUIComponents.detail_card(
+		"Notfallhilfe",
+		"Stellt Zustand wieder her und erzeugt einen Schutzpuffer.",
+		"I · Information",
+		AlveolusVisualTheme.COBALT
+	)
+	var detail_panel := detail_parts["panel"] as PanelContainer
+	detail_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	information_row.add_child(detail_panel)
+	page.add_child(information_row)
 
 	var content_row := HBoxContainer.new()
 	content_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
@@ -283,8 +304,8 @@ func _build_preparation_view() -> Control:
 	var actions := HBoxContainer.new()
 	actions.alignment = BoxContainer.ALIGNMENT_END
 	actions.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	actions.add_child(AlveolusUIComponents.button("Zur Fallauswahl", AlveolusVisualTheme.TYPE_SECONDARY_BUTTON, &"back", AlveolusVisualTheme.COBALT))
-	actions.add_child(AlveolusUIComponents.button("Behandlung starten", AlveolusVisualTheme.TYPE_PRIMARY_BUTTON, &"play", AlveolusVisualTheme.TEAL))
+	actions.add_child(AlveolusUIComponents.action_button("Zur Fallauswahl", AlveolusUIComponents.ACTION_NAVIGATION, &"back", AlveolusVisualTheme.TEAL))
+	actions.add_child(AlveolusUIComponents.planning_start_button())
 	page.add_child(actions)
 	return scroll
 

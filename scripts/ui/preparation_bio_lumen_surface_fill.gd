@@ -5,40 +5,7 @@ extends ColorRect
 ## keep ownership of borders/focus while this child supplies the approved
 ## left-teal-to-right-petrol material below the card content.
 
-const SHADER_CODE := """
-shader_type canvas_item;
-
-uniform vec4 left_color : source_color;
-uniform vec4 right_color : source_color;
-uniform vec2 panel_size = vec2(280.0, 64.0);
-uniform vec4 corner_radii = vec4(15.0, 5.0, 15.0, 5.0);
-uniform float energy = 1.0;
-
-float rounded_mask(vec2 p, vec2 extent) {
-	float alpha = 1.0;
-	float tl = corner_radii.x;
-	float tr = corner_radii.y;
-	float br = corner_radii.z;
-	float bl = corner_radii.w;
-	if (p.x < tl && p.y < tl) alpha *= 1.0 - smoothstep(tl - 0.75, tl + 0.25, distance(p, vec2(tl, tl)));
-	if (p.x > extent.x - tr && p.y < tr) alpha *= 1.0 - smoothstep(tr - 0.75, tr + 0.25, distance(p, vec2(extent.x - tr, tr)));
-	if (p.x > extent.x - br && p.y > extent.y - br) alpha *= 1.0 - smoothstep(br - 0.75, br + 0.25, distance(p, vec2(extent.x - br, extent.y - br)));
-	if (p.x < bl && p.y > extent.y - bl) alpha *= 1.0 - smoothstep(bl - 0.75, bl + 0.25, distance(p, vec2(bl, extent.y - bl)));
-	return alpha;
-}
-
-void fragment() {
-	vec2 p = UV;
-	float drift = sin((p.x * 1.9 + p.y * 0.72) * 3.14159265) * 0.022;
-	float t = smoothstep(-0.04, 1.02, clamp(p.x + drift, 0.0, 1.0));
-	vec3 base = mix(left_color.rgb, right_color.rgb, t);
-	float lumen = exp(-dot((p - vec2(0.10, 0.24)) * vec2(2.1, 2.8), (p - vec2(0.10, 0.24)) * vec2(2.1, 2.8)));
-	float grain = (fract(sin(dot(floor(p * panel_size), vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.006;
-	base = base * energy + left_color.rgb * lumen * 0.105 + vec3(grain);
-	float alpha = rounded_mask(UV * panel_size, panel_size);
-	COLOR = vec4(base, alpha);
-}
-"""
+const SHADER_CODE := BioLumenMaterialCache.SURFACE_SHADER_CODE
 
 const NORMAL_LEFT := Color("18585a")
 const NORMAL_RIGHT := Color("082d34")
@@ -68,8 +35,13 @@ var surface_corner_radii := Vector4(15.0, 5.0, 15.0, 5.0)
 var hovered := false
 var focused := false
 var pressed := false
-var last_disabled := false
-var last_selected := false
+var _signals_connected := false
+
+func _enter_tree() -> void:
+	_connect_button_host()
+
+func _exit_tree() -> void:
+	_disconnect_button_host()
 
 static func attach(
 	button: BaseButton,
@@ -104,14 +76,14 @@ func configure(
 	large_radius: float = 15.0,
 	small_radius: float = 5.0
 ) -> void:
+	if button_host != null and button_host != button:
+		_disconnect_button_host()
 	host = button
 	button_host = button
 	static_surface = false
 	surface_corner_radii = Vector4(large_radius, small_radius, large_radius, small_radius)
 	normal_left = _left
 	normal_right = _right
-	last_disabled = button_host.disabled
-	last_selected = bool(button_host.get_meta(&"selected_slot", false))
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	offset_left = 1.0
 	offset_top = 1.0
@@ -122,18 +94,14 @@ func configure(
 	_ensure_material()
 	if not resized.is_connected(_update_size):
 		resized.connect(_update_size)
-	if not button_host.mouse_entered.is_connected(_set_hovered.bind(true)):
-		button_host.mouse_entered.connect(_set_hovered.bind(true))
-		button_host.mouse_exited.connect(_set_hovered.bind(false))
-		button_host.focus_entered.connect(_set_focused.bind(true))
-		button_host.focus_exited.connect(_set_focused.bind(false))
-		button_host.button_down.connect(_set_pressed.bind(true))
-		button_host.button_up.connect(_set_pressed.bind(false))
-	set_process(true)
+	_connect_button_host()
+	set_process(false)
 	_update_shader()
 	_update_size()
 
 func configure_static(control: Control, left: Color, right: Color, large_radius: float = 17.0, small_radius: float = 5.0) -> void:
+	if button_host != null:
+		_disconnect_button_host()
 	host = control
 	button_host = null
 	static_surface = true
@@ -158,43 +126,85 @@ func configure_static(control: Control, left: Color, right: Color, large_radius:
 func _ensure_material() -> void:
 	if material is ShaderMaterial:
 		return
-	var shader := Shader.new()
-	shader.code = SHADER_CODE
-	var shader_material := ShaderMaterial.new()
-	shader_material.shader = shader
-	material = shader_material
+	material = BioLumenMaterialCache.material(&"planning_surface", SHADER_CODE)
 
-func _process(_delta: float) -> void:
-	if host == null or not is_instance_valid(host):
-		set_process(false)
-		return
-	if static_surface or button_host == null:
-		set_process(false)
-		return
-	if last_disabled != button_host.disabled:
-		last_disabled = button_host.disabled
-		_update_shader()
-	var selected := bool(button_host.get_meta(&"selected_slot", false))
-	if selected != last_selected:
-		last_selected = selected
-		_update_shader()
-
-func _set_hovered(value: bool) -> void:
-	hovered = value
+## Synchronizes programmatic meta or disabled changes without a process loop.
+## Prefer `set_selected()` and `set_catalog_state()` in new callers.
+func refresh_state() -> void:
 	_update_shader()
 
-func _set_pressed(value: bool) -> void:
-	pressed = value
+func set_selected(value: bool) -> void:
+	if button_host == null:
+		return
+	button_host.set_meta(&"selected_slot", value)
 	_update_shader()
 
-func _set_focused(value: bool) -> void:
-	focused = value
+func set_catalog_state(state: StringName, available: bool = false) -> void:
+	if button_host == null:
+		return
+	button_host.set_meta(&"catalog_state", state)
+	button_host.set_meta(&"catalog_available", available)
+	_update_shader()
+
+func _connect_button_host() -> void:
+	if button_host == null or _signals_connected:
+		return
+	button_host.mouse_entered.connect(_on_mouse_entered)
+	button_host.mouse_exited.connect(_on_mouse_exited)
+	button_host.focus_entered.connect(_on_focus_entered)
+	button_host.focus_exited.connect(_on_focus_exited)
+	button_host.button_down.connect(_on_button_down)
+	button_host.button_up.connect(_on_button_up)
+	button_host.visibility_changed.connect(refresh_state)
+	_signals_connected = true
+
+func _disconnect_button_host() -> void:
+	if button_host == null or not _signals_connected or not is_instance_valid(button_host):
+		_signals_connected = false
+		return
+	for signal_and_callable in [
+		[button_host.mouse_entered, Callable(self, "_on_mouse_entered")],
+		[button_host.mouse_exited, Callable(self, "_on_mouse_exited")],
+		[button_host.focus_entered, Callable(self, "_on_focus_entered")],
+		[button_host.focus_exited, Callable(self, "_on_focus_exited")],
+		[button_host.button_down, Callable(self, "_on_button_down")],
+		[button_host.button_up, Callable(self, "_on_button_up")],
+		[button_host.visibility_changed, Callable(self, "refresh_state")],
+	]:
+		var host_signal: Signal = signal_and_callable[0]
+		var callback: Callable = signal_and_callable[1]
+		if host_signal.is_connected(callback):
+			host_signal.disconnect(callback)
+	_signals_connected = false
+
+func _on_mouse_entered() -> void:
+	hovered = true
+	_update_shader()
+
+func _on_mouse_exited() -> void:
+	hovered = false
+	_update_shader()
+
+func _on_focus_entered() -> void:
+	focused = true
+	_update_shader()
+
+func _on_focus_exited() -> void:
+	focused = false
+	_update_shader()
+
+func _on_button_down() -> void:
+	pressed = true
+	_update_shader()
+
+func _on_button_up() -> void:
+	pressed = false
 	_update_shader()
 
 func _update_size() -> void:
 	if material is ShaderMaterial:
-		(material as ShaderMaterial).set_shader_parameter("panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
-		(material as ShaderMaterial).set_shader_parameter("corner_radii", surface_corner_radii)
+		set_instance_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
+		set_instance_shader_parameter(&"corner_radii", surface_corner_radii)
 
 func _update_shader() -> void:
 	if not material is ShaderMaterial:
@@ -226,6 +236,6 @@ func _update_shader() -> void:
 	elif not static_surface and (hovered or focused):
 		left = HOVER_LEFT
 		right = HOVER_RIGHT
-	(material as ShaderMaterial).set_shader_parameter("left_color", left)
-	(material as ShaderMaterial).set_shader_parameter("right_color", right)
-	(material as ShaderMaterial).set_shader_parameter("energy", energy)
+	set_instance_shader_parameter(&"left_color", left)
+	set_instance_shader_parameter(&"right_color", right)
+	set_instance_shader_parameter(&"energy", energy)

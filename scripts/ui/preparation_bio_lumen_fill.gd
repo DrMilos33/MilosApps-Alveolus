@@ -6,10 +6,10 @@ extends ColorRect
 const SHADER_CODE := """
 shader_type canvas_item;
 
-uniform vec4 left_color : source_color;
-uniform vec4 right_color : source_color;
-uniform float energy = 1.0;
-uniform vec2 panel_size = vec2(220.0, 48.0);
+instance uniform vec4 left_color : source_color;
+instance uniform vec4 right_color : source_color;
+instance uniform float energy = 1.0;
+instance uniform vec2 panel_size = vec2(220.0, 48.0);
 // The membrane sits one pixel inside the button border, so its radii must be
 // one pixel smaller than the outer 18/5 signature. Matching them directly
 // produced transparent wedges at the large corners.
@@ -44,7 +44,13 @@ var left_accent := AlveolusVisualTheme.TURQUOISE
 var right_accent := AlveolusVisualTheme.GOLD
 var hovered := false
 var pressed := false
-var last_disabled := false
+var _signals_connected := false
+
+func _enter_tree() -> void:
+	_connect_host()
+
+func _exit_tree() -> void:
+	_disconnect_host()
 
 static func attach(button: BaseButton, left: Color, right: Color) -> PreparationBioLumenFill:
 	var existing := button.get_node_or_null("PreparationBioLumenFill") as PreparationBioLumenFill
@@ -57,8 +63,9 @@ static func attach(button: BaseButton, left: Color, right: Color) -> Preparation
 	return existing
 
 func configure(button: BaseButton, left: Color, right: Color) -> void:
+	if host != null and host != button:
+		_disconnect_host()
 	host = button
-	last_disabled = host.disabled
 	left_accent = left
 	right_accent = right
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -68,37 +75,65 @@ func configure(button: BaseButton, left: Color, right: Color) -> void:
 	offset_bottom = -1.0
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	show_behind_parent = true
-	var shader := Shader.new()
-	shader.code = SHADER_CODE
-	var shader_material := ShaderMaterial.new()
-	shader_material.shader = shader
-	material = shader_material
+	if not material is ShaderMaterial:
+		material = BioLumenMaterialCache.material(&"planning_start", SHADER_CODE)
 	if not resized.is_connected(_update_size):
 		resized.connect(_update_size)
-	set_process(true)
-	if not host.mouse_entered.is_connected(_set_hovered.bind(true)):
-		host.mouse_entered.connect(_set_hovered.bind(true))
-		host.mouse_exited.connect(_set_hovered.bind(false))
-		host.button_down.connect(_set_pressed.bind(true))
-		host.button_up.connect(_set_pressed.bind(false))
+	_connect_host()
+	set_process(false)
 	_update_shader()
 	_update_size()
 
-func _process(_delta: float) -> void:
-	if host != null and last_disabled != host.disabled:
-		last_disabled = host.disabled
-		_update_shader()
+## Call after changing `disabled` programmatically. All interactive state is
+## otherwise updated from host signals without a persistent callback.
+func refresh_state() -> void:
+	_update_shader()
 
 func _update_size() -> void:
 	if material is ShaderMaterial:
-		(material as ShaderMaterial).set_shader_parameter("panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
+		set_instance_shader_parameter(&"panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
 
-func _set_hovered(value: bool) -> void:
-	hovered = value
+func _connect_host() -> void:
+	if host == null or _signals_connected:
+		return
+	host.mouse_entered.connect(_on_mouse_entered)
+	host.mouse_exited.connect(_on_mouse_exited)
+	host.button_down.connect(_on_button_down)
+	host.button_up.connect(_on_button_up)
+	host.visibility_changed.connect(refresh_state)
+	_signals_connected = true
+
+func _disconnect_host() -> void:
+	if host == null or not _signals_connected or not is_instance_valid(host):
+		_signals_connected = false
+		return
+	for signal_and_callable in [
+		[host.mouse_entered, Callable(self, "_on_mouse_entered")],
+		[host.mouse_exited, Callable(self, "_on_mouse_exited")],
+		[host.button_down, Callable(self, "_on_button_down")],
+		[host.button_up, Callable(self, "_on_button_up")],
+		[host.visibility_changed, Callable(self, "refresh_state")],
+	]:
+		var host_signal: Signal = signal_and_callable[0]
+		var callback: Callable = signal_and_callable[1]
+		if host_signal.is_connected(callback):
+			host_signal.disconnect(callback)
+	_signals_connected = false
+
+func _on_mouse_entered() -> void:
+	hovered = true
 	_update_shader()
 
-func _set_pressed(value: bool) -> void:
-	pressed = value
+func _on_mouse_exited() -> void:
+	hovered = false
+	_update_shader()
+
+func _on_button_down() -> void:
+	pressed = true
+	_update_shader()
+
+func _on_button_up() -> void:
+	pressed = false
 	_update_shader()
 
 func _update_shader() -> void:
@@ -119,6 +154,6 @@ func _update_shader() -> void:
 		left = left.lightened(0.06)
 		right = right.lightened(0.05)
 		energy = 1.08
-	(material as ShaderMaterial).set_shader_parameter("left_color", left)
-	(material as ShaderMaterial).set_shader_parameter("right_color", right)
-	(material as ShaderMaterial).set_shader_parameter("energy", energy)
+	set_instance_shader_parameter(&"left_color", left)
+	set_instance_shader_parameter(&"right_color", right)
+	set_instance_shader_parameter(&"energy", energy)

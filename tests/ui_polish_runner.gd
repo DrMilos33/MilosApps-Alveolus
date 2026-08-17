@@ -32,7 +32,10 @@ func _run() -> void:
 	for scroll_value in hud.root.find_children("*", "ScrollContainer", true, false):
 		var scroll := scroll_value as ScrollContainer
 		if scroll != null and not _has_ancestor_type(scroll, "PopupMenu") and _has_focusable_descendant(scroll):
-			_check(scroll.follow_focus, "Interaktive Scrollfläche %s hält Tastatur- und Gamepadfokus im sichtbaren Ausschnitt" % scroll.get_path())
+			_check(
+				scroll.follow_focus or bool(scroll.get_meta(&"manual_focus_scroll", false)),
+				"Interaktive Scrollfläche %s hält Tastatur- und Gamepadfokus im sichtbaren Ausschnitt" % scroll.get_path()
+			)
 	hud.show_settings(true, true)
 	await process_frame
 	await process_frame
@@ -116,13 +119,13 @@ func _run() -> void:
 		var node_button := talent_button as Button
 		_check(node_button.custom_minimum_size.y <= TalentTreeBranch.NODE_HEIGHT, "Talentknoten bleiben auf die kompakte Baumhöhe begrenzt")
 		_check(not _contains_text(node_button, "VERFÜGBAR") and not _contains_text(node_button, "AKTIV") and not _contains_text(node_button, "BRAUCHT"), "Talentknoten erklären ihren Zustand ohne wiederholte Statuswörter")
-		_check(node_button.has_meta(&"talent_active") and node_button.has_meta(&"talent_selectable"), "Talentstatus bleibt semantisch prüfbar, obwohl er visuell über Farbe und Icon vermittelt wird")
+		_check(node_button.has_meta(&"item_state") and node_button.has_meta(&"item_interactive"), "Talentstatus bleibt semantisch prüfbar, obwohl er visuell über Farbe und Icon vermittelt wird")
 	var active_talent := hud.talent_buttons[&"organization_1"] as Button
 	var active_state_icon := active_talent.find_child("StateIcon", true, false) as SimpleIcon
-	_check(active_talent.button_pressed and active_state_icon != null and active_state_icon.kind == &"check", "Aktive Talente werden durch Highlight und Check-Icon statt Statustext markiert")
+	_check(active_talent.get_meta(&"item_state", &"") == &"active" and active_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD and active_state_icon != null and active_state_icon.kind == &"check", "Aktive Talente werden durch Highlight und Check-Icon statt Statustext markiert")
 	var locked_talent := hud.talent_buttons[&"hold_card"] as Button
 	var locked_state_icon := locked_talent.find_child("StateIcon", true, false) as SimpleIcon
-	_check(not bool(locked_talent.get_meta(&"talent_selectable")) and locked_state_icon != null and locked_state_icon.kind == &"locked", "Noch gesperrte Folgeknoten zeigen ein eindeutiges Schloss ohne Textballast")
+	_check(locked_talent.get_meta(&"item_state", &"") == &"locked" and not bool(locked_talent.get_meta(&"item_interactive", true)) and locked_state_icon != null and locked_state_icon.kind == &"locked", "Noch gesperrte Folgeknoten zeigen ein eindeutiges Schloss ohne Textballast")
 
 	var finding_reactions: Array = [
 		{"id": &"observe", "title": "Weiter beobachten", "description": "Befundfortschritt erhöhen."},
@@ -144,7 +147,12 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_assert_compact_modal(hud.end_panel, GameHUD.END_PANEL_SIZE.y, "Ergebnis Zustand erschöpft")
-	_check(not hud.end_reward.visible and not hud.end_unlock.visible and not hud.end_mastery_panel.visible, "Leere Belohnungs-, Freischaltungs- und Meisterschaftszeilen reservieren im Ergebnis keinen Platz")
+	_check(
+		hud.result_screen.find_child("Optional_reward", true, false) == null
+		and hud.result_screen.find_child("Optional_unlock", true, false) == null
+		and hud.result_screen.find_child("Optional_mastery", true, false) == null,
+		"Leere Belohnungs-, Freischaltungs- und Meisterschaftszeilen reservieren im Ergebnis keinen Platz"
+	)
 
 	var stats := PlayerStats.new()
 	# Exercise the dense, late-run form of the character sheet. A sparse
@@ -165,21 +173,27 @@ func _run() -> void:
 	hud.set_run_stats_visibility(true)
 	hud.show_running_hud()
 	await process_frame
-	_check(hud.run_stats_panel.visible, "Optionale Charakterwerte erscheinen oben rechts")
-	_check(hud.run_stats_label.text.contains("Wirkung  18"), "HUD-Anzeige zeigt echte dynamische Werte")
-	_check(not hud.run_stats_label.visible, "Die alte beschriftete Statistik bleibt visuell vollständig ausgeblendet")
-	_check(not hud.run_stats_panel is Panel, "Die Runstatistik besitzt keine eigene Hintergrundkachel")
-	_check(hud.run_stats_panel.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Die Runstatistik blockiert keine Ziele im Spiel")
-	_check(hud.run_stats_strip.descriptors.size() <= HudStatStrip.MAX_STATS, "Die Runstatistik bleibt auf höchstens fünf Werte begrenzt")
-	_check(hud.run_stats_strip is HFlowContainer and HudStatStrip.MAXIMUM_SIZE == Vector2(432.0, 50.0), "Die Runstatistik verwendet ein flaches horizontales Statband")
-	_check(hud.run_stats_panel.get_global_rect().position.x >= hud.timer_panel.get_global_rect().end.x, "Das Statband beginnt erst rechts neben dem Timer")
+	var run_stat_rows := hud.run_hud_screen.stat_rows()
+	_check(hud.run_hud_screen.run_stats_strip().visible and not run_stat_rows.is_empty(), "Optionale Charakterwerte erscheinen oben rechts")
+	var has_treatment_power := false
+	for row in run_stat_rows:
+		var accessible_text := String(row.get_meta(&"alveolus_accessible_name", ""))
+		if accessible_text.contains("Behandlungswirkung") and accessible_text.contains("18"):
+			has_treatment_power = true
+	_check(has_treatment_power, "HUD-Anzeige zeigt echte dynamische Werte")
+	_check(not hud.run_hud_screen.run_stats_strip().is_class("Panel"), "Die Runstatistik besitzt keine eigene Hintergrundkachel")
+	_check(hud.run_hud_screen.run_stats_strip().mouse_filter == Control.MOUSE_FILTER_IGNORE, "Die Runstatistik blockiert keine Ziele im Spiel")
+	_check(run_stat_rows.size() <= 5, "Die Runstatistik bleibt auf höchstens fünf Werte begrenzt")
+	_check(hud.run_hud_screen.run_stats_strip() is HFlowContainer and hud.run_hud_screen.run_stats_strip().get_meta(&"alveolus_component", &"") == &"transparent_run_stats", "Die Runstatistik verwendet ein flaches transparentes Statband")
+	_check(hud.run_hud_screen.run_stats_strip().get_global_rect().position.x >= hud.timer_panel.get_global_rect().end.x, "Das Statband beginnt erst rechts neben dem Timer")
 	var previous_row: Control = null
-	for row in hud.run_stats_strip.get_children():
+	for row in run_stat_rows:
+		_check(row.is_visible_in_tree(), "Jeder präsentierte Runwert ist tatsächlich sichtbar")
 		_check(row.get_child_count() == 2, "Eine Statistikzeile enthält ausschließlich Icon und Wert")
 		_check(row.get_child(0) is SimpleIcon and row.get_child(1) is Label, "Icon und Wert besitzen eine eindeutige Reihenfolge")
 		if previous_row != null:
-			_check((row as Control).position.x > previous_row.position.x and is_equal_approx((row as Control).position.y, previous_row.position.y), "Werte füllen das breite Statband zuerst horizontal")
-		previous_row = row as Control
+			_check(row.position.x > previous_row.position.x and is_equal_approx(row.position.y, previous_row.position.y), "Werte füllen das breite Statband zuerst horizontal")
+		previous_row = row
 	# Force the reusable strip into a genuinely constrained width. Target
 	# resolutions normally still expose the 1280×720 design canvas, while the
 	# FlowContainer must nevertheless wrap correctly if future HUD elements use
@@ -191,57 +205,56 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var wrapped_rows := {}
-	for row in hud.run_stats_strip.get_children():
-		wrapped_rows[roundi((row as Control).position.y)] = true
+	for row in hud.run_hud_screen.stat_rows():
+		wrapped_rows[roundi(row.position.y)] = true
 	_check(wrapped_rows.size() == 2, "Bei begrenztem Platz beginnt das Statband genau eine zweite Zeile")
 	hud._apply_ui_scale()
 	await process_frame
 	hud.show_pause(false, stats, state)
 	_check(not _contains_text(hud.pause_overlay, "RUNMENÜ"), "Das Pausemenü wiederholt keinen überflüssigen Runmenü-Obertitel")
-	_check(hud.pause_panel.find_children("*", "ScrollContainer", true, false).is_empty(), "Alle Pausenaktionen sind ohne äußeres Scrollen sichtbar")
+	_check(hud.pause_screen.current_mode() == PauseOverlay.Mode.MENU, "Das PauseOverlay öffnet im expliziten Menümodus")
+	_check(hud.pause_screen.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and not hud.pause_screen.body_scroll().get_v_scroll_bar().visible, "Alle Pausenaktionen sind ohne unnötiges Scrollen sichtbar")
 	hud._show_pause_stats()
 	await process_frame
 	await process_frame
-	_check(hud.is_pause_stats_open(), "Charakterwerte-Submenü öffnet innerhalb der Pause")
-	_check(not hud.pause_stats_label.visible and not hud.pause_stats_label_right.visible, "Veraltete Textspalten bleiben zugunsten kompakter Wertgruppen ausgeblendet")
-	_check(hud.pause_stats_grid.columns == 2 and hud.pause_stats_columns.size() == 2, "Charakterwerte verwenden bei 1280 × 720 exakt zwei Wertspalten")
-	_check(hud.pause_stats_grid.get_child_count() == 2, "Charakterwerte bestehen aus zwei ruhigen Spalten statt fünf Gruppenkarten")
+	_check(hud.is_pause_stats_open() and hud.pause_screen.current_mode() == PauseOverlay.Mode.STATS, "Charakterwerte-Submenü öffnet als expliziter Modus innerhalb der Pause")
+	var pause_stats_grid := hud.pause_screen.stats_grid()
+	var pause_stats_scroll := hud.pause_screen.body_scroll()
+	var pause_stat_rows := hud.pause_screen.stat_rows()
+	_check(pause_stats_grid.columns == 2, "Charakterwerte verwenden bei 1280 × 720 exakt zwei Wertspalten")
 	var expected_stat_rows := stats.stat_rows(state.stability, state.max_stability, TherapyAvatar.MOVE_SPEED).size()
-	_check(hud.pause_stat_rows.size() == expected_stat_rows and expected_stat_rows > 13, "Alle Basis- und optionalen Charakterwerte erscheinen als einzelne sichtbare Zeilen")
-	for column in hud.pause_stats_columns:
-		var value_right_edge := 0.0
-		var has_value_right_edge := false
-		var previous_stat_row: Control = null
-		for row_value in column.get_children():
-			var stat_row := row_value as PanelContainer
-			_check(stat_row != null and stat_row.has_meta(&"stat_group") and stat_row.is_visible_in_tree(), "Jeder Charakterwert ist eine sichtbare StatRow statt einer Gruppenkarte")
-			if stat_row == null:
-				continue
-			var marker := stat_row.find_child("StatMarker", true, false) as SimpleIcon
-			var caption := stat_row.find_child("StatCaption", true, false) as Label
-			var value := stat_row.find_child("StatValue", true, false) as Label
-			_check(marker != null and caption != null and value != null, "Jede StatRow besitzt Marker, Caption und rechtsbündigen Value")
-			if marker == null or caption == null or value == null:
-				continue
-			_check(value.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "Jeder Charakterwert ist am rechten Spaltenrand ausgerichtet")
-			var marker_rect := marker.get_global_rect()
-			var caption_rect := caption.get_global_rect()
-			var value_rect := value.get_global_rect()
-			_check(marker_rect.end.x <= caption_rect.position.x + 0.5 and caption_rect.end.x <= value_rect.position.x + 0.5, "Marker, Caption und Value einer StatRow überlappen einander nicht")
-			if previous_stat_row != null:
-				_check(previous_stat_row.get_global_rect().end.y <= stat_row.get_global_rect().position.y + 0.5, "Charakterwertzeilen überlappen vertikal nicht")
-			previous_stat_row = stat_row
-			if not has_value_right_edge:
-				value_right_edge = value_rect.end.x
-				has_value_right_edge = true
-			else:
-				_check(is_equal_approx(value_right_edge, value_rect.end.x), "Alle Value-Endkanten einer Charakterwertspalte sind bündig")
+	_check(pause_stat_rows.size() == expected_stat_rows and pause_stats_grid.get_child_count() == expected_stat_rows and expected_stat_rows > 13, "Alle Basis- und optionalen Charakterwerte erscheinen als einzelne sichtbare Zeilen")
+	var value_right_edges := {}
+	var previous_rows := {}
+	for row_index in range(pause_stat_rows.size()):
+		var stat_row := pause_stat_rows[row_index]
+		_check(stat_row.has_meta(&"stat_group") and stat_row.is_visible_in_tree(), "Jeder Charakterwert ist eine sichtbare StatRow statt einer Gruppenkarte")
+		var marker := stat_row.find_child("StatIcon", true, false) as SimpleIcon
+		var caption := stat_row.find_child("StatLabel", true, false) as Label
+		var value := stat_row.find_child("StatValue", true, false) as Label
+		_check(marker != null and caption != null and value != null, "Jede StatRow besitzt Icon, Label und rechtsbündigen Value")
+		if marker == null or caption == null or value == null:
+			continue
+		_check(value.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "Jeder Charakterwert ist am rechten Spaltenrand ausgerichtet")
+		var marker_rect := marker.get_global_rect()
+		var caption_rect := caption.get_global_rect()
+		var value_rect := value.get_global_rect()
+		_check(marker_rect.end.x <= caption_rect.position.x + 0.5 and caption_rect.end.x <= value_rect.position.x + 0.5, "Icon, Label und Value einer StatRow überlappen einander nicht")
+		var column_index := row_index % pause_stats_grid.columns
+		if previous_rows.has(column_index):
+			var previous_stat_row := previous_rows[column_index] as PanelContainer
+			_check(previous_stat_row.get_global_rect().end.y <= stat_row.get_global_rect().position.y + 0.5, "Charakterwertzeilen überlappen vertikal nicht")
+		previous_rows[column_index] = stat_row
+		if value_right_edges.has(column_index):
+			_check(is_equal_approx(float(value_right_edges[column_index]), value_rect.end.x), "Alle Value-Endkanten einer Charakterwertspalte sind bündig")
+		else:
+			value_right_edges[column_index] = value_rect.end.x
 	_check(
-		hud.pause_stats_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and not hud.pause_stats_scroll.get_v_scroll_bar().visible,
-		"Charakterwerte benötigen bei 1280 × 720 keinen Scrollbalken (Inhalt %.1f, Fläche %.1f, Modus %d)" % [hud.pause_stats_grid.get_combined_minimum_size().y, hud.pause_stats_scroll.size.y, hud.pause_stats_scroll.vertical_scroll_mode]
+		pause_stats_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and not pause_stats_scroll.get_v_scroll_bar().visible,
+		"Charakterwerte benötigen bei 1280 × 720 keinen Scrollbalken (Inhalt %.1f, Fläche %.1f, Modus %d)" % [pause_stats_grid.get_combined_minimum_size().y, pause_stats_scroll.size.y, pause_stats_scroll.vertical_scroll_mode]
 	)
 	hud.return_to_pause_menu()
-	_check(hud.pause_overlay.visible and not hud.pause_stats_overlay.visible, "Zurück führt ins Pausemenü statt in den Run")
+	_check(hud.pause_screen.visible and hud.pause_screen.current_mode() == PauseOverlay.Mode.MENU, "Zurück führt in den Menümodus der Pause statt in den Run")
 
 	var visibility_events: Array[bool] = []
 	hud.run_stats_visibility_changed.connect(func(enabled: bool) -> void: visibility_events.append(enabled))
@@ -254,7 +267,8 @@ func _run() -> void:
 	_check(hud.upgrade_panel != null and _has_scroll_ancestor(hud.upgrade_cards), "Ausbaukarten bleiben bei großer UI in einem scrollbaren Dialog")
 	_check(hud.upgrade_panel.custom_minimum_size.y <= 240.0, "Ausbaudialog folgt ohne Zusatzbereiche seiner Inhaltshöhe")
 	var upgrade_focus := get_root().gui_get_focus_owner()
-	_check(upgrade_focus == null or not hud.upgrade_overlay.is_ancestor_of(upgrade_focus), "Mausöffnung markiert keinen Ausbau vor der Auswahl")
+	_check(upgrade_focus == hud.upgrade_screen.neutral_focus_target(), "Mausöffnung parkt den Fokus auf dem neutralen Modalsentinel statt ungefragt einen Ausbau zu markieren")
+	_check(hud.upgrade_screen.cards().all(func(card: Button) -> bool: return card != upgrade_focus), "Mausöffnung fokussiert keine Ausbaukarte vor der Auswahl")
 	for card in hud.upgrade_cards.get_children():
 		_check((card as Control).scale.is_equal_approx(Vector2.ONE), "Ausbaukarten wachsen nicht über ihre Rasterzelle")
 		var has_left_strip := false
@@ -265,7 +279,7 @@ func _run() -> void:
 	hud.show_upgrade_choices(ContentCatalog.upgrade_definitions().slice(0, 1), stats, false, false)
 	await process_frame
 	var single_regular_upgrade := hud.upgrade_cards.get_child(0) as Control
-	_check(is_equal_approx(single_regular_upgrade.custom_minimum_size.y, 132.0), "Eine einzelne reguläre Ausbauoption wird nicht fälschlich als Introkarte klassifiziert")
+	_check(is_equal_approx(single_regular_upgrade.custom_minimum_size.y, UpgradeOverlay.CARD_HEIGHT), "Eine einzelne reguläre Ausbauoption wird nicht fälschlich als Introkarte klassifiziert")
 	hud.show_abort_confirmation()
 	await process_frame
 	_check(hud.abort_panel.custom_minimum_size.y <= GameHUD.ABORT_PANEL_SIZE.y, "Abbruchdialog reserviert keinen leeren unteren Bereich")
@@ -391,7 +405,7 @@ func _panel_container_ancestor(node: Node) -> PanelContainer:
 		ancestor = ancestor.get_parent()
 	return null
 
-func _assert_compact_modal(panel: Panel, maximum_height: float, label: String) -> void:
+func _assert_compact_modal(panel: Control, maximum_height: float, label: String) -> void:
 	_check(panel != null and panel.custom_minimum_size.y <= maximum_height + 0.5, "%s-Dialog bleibt auf seine kompakte Inhaltshöhe begrenzt" % label)
 	if panel == null:
 		return
@@ -402,7 +416,7 @@ func _assert_compact_modal(panel: Panel, maximum_height: float, label: String) -
 		var content := scroll.get_child(0) as Control if scroll != null and scroll.get_child_count() > 0 else null
 		if scroll != null and content != null:
 			var lower_blank := maxf(0.0, scroll.size.y - content.size.y)
-			_check(lower_blank <= 72.0, "%s-Dialog reserviert keinen auffälligen ungenutzten Leerraum unter seinem Inhalt" % label)
+			_check(lower_blank <= 72.0, "%s-Dialog reserviert keinen auffälligen ungenutzten Leerraum unter seinem Inhalt (Scroll %.1f, Inhalt %.1f, Differenz %.1f)" % [label, scroll.size.y, content.size.y, lower_blank])
 
 func _has_empty_vertical_expander(root_node: Node) -> bool:
 	for candidate in root_node.find_children("*", "Control", true, false):

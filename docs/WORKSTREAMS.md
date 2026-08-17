@@ -15,7 +15,7 @@ Produkt-, Architektur- oder Qualitätsentscheidungen zu ersetzen.
 Verknüpfte Tasks:
 
 - UI/UX: [ALVEOLUS – UI/UX Audit und Redesignplan](thread://01a00b3b-0840-7c32-941a-f326bcf7db19)
-- Struktur, Architektur & Performance: `ALVEOLUS – Struktur, Architektur & Performance`
+- Struktur, Architektur & Performance: [ALVEOLUS – Struktur, Architektur & Performance](thread://01a00f6a-19d0-7ad2-a1cb-3f816515fd73)
 - Game Concepts & Balancing: [Spielkonzept für Krankheits-Idlegame](thread://019fe3ec-752d-7d50-b32d-0b950895d000)
 
 Der UI/UX-Arbeitsstrom integriert den globalen Bio-Lumen-Rollout. Konzept und
@@ -107,4 +107,3 @@ ausdrücklich aus.
 4. Das Ergebnis wird mit Commit, Diff-Umfang und Prüfungen zurückgegeben.
 5. UI/UX integriert seriell, führt die risikogerechte Gesamtprüfung aus und
    gibt die Lease frei.
-

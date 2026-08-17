@@ -289,6 +289,7 @@ func _ready() -> void:
 	hud.preparation_reserve_requested.connect(_on_preparation_reserve_requested)
 	hud.preparation_replacement_cancelled.connect(_on_preparation_replacement_cancelled)
 	hud.ability_slot_requested.connect(_on_hud_ability_slot_requested)
+	hud.pause_requested.connect(_on_hud_pause_requested)
 	hud.upgrade_chosen.connect(_on_upgrade_chosen)
 	hud.reroll_requested.connect(_on_reroll_requested)
 	hud.resume_requested.connect(_resume_manual_pause)
@@ -316,6 +317,8 @@ func _ready() -> void:
 	hud.run_stats_visibility_changed.connect(_on_run_stats_visibility_changed)
 	hud.ui_settings_changed.connect(_on_ui_settings_changed)
 	hud.settings_reset_bindings_requested.connect(_on_settings_reset_bindings_requested)
+	hud.context_detail_opened.connect(_on_context_detail_opened)
+	hud.context_detail_closed.connect(_on_context_detail_closed)
 
 	meta = MetaProgressionState.new()
 	# Loading validates the talent economy. Configure the deliberately temporary
@@ -486,6 +489,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		_request_quick_restart()
 		return
+	if event.is_action_pressed(&"ui_info"):
+		var focus_owner := get_viewport().gui_get_focus_owner()
+		if focus_owner is Control and hud.toggle_focused_context_detail(focus_owner as Control):
+			get_viewport().set_input_as_handled()
+			return
+	if event.is_action_pressed(&"ui_cancel") and hud.is_context_detail_explicit():
+		hud.close_context_detail()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventJoypadMotion:
 		var motion := event as InputEventJoypadMotion
 		if motion.axis == JOY_AXIS_RIGHT_X:
@@ -504,11 +516,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"pause_game"):
 		match flow_state:
 			GameFlowState.State.RUNNING:
-				if state != null and state.active:
+				if _request_manual_pause():
 					get_viewport().set_input_as_handled()
-					ui_router.open_modal(&"pause", null, get_viewport().gui_get_focus_owner())
-					_set_flow(GameFlowState.State.MANUAL_PAUSE)
-				hud.show_pause(_can_skip_intro(), stats, state)
 			GameFlowState.State.DISCOVERY_PAUSE:
 				get_viewport().set_input_as_handled()
 				_on_discovery_dismissed()
@@ -652,7 +661,15 @@ func _set_flow(next_state: GameFlowState.State) -> void:
 func _on_hud_ability_slot_requested(slot: int) -> void:
 	if flow_state != GameFlowState.State.RUNNING:
 		return
-	_begin_or_queue_ability(slot, AbilityCommand.InputDevice.KEYBOARD_MOUSE)
+	if targeting_ability_slot == slot:
+		_confirm_ability_targeting()
+		return
+	if targeting_ability_slot >= 0:
+		_cancel_ability_targeting()
+	var device := AbilityCommand.InputDevice.KEYBOARD_MOUSE
+	if input_glyph_service != null and input_glyph_service.method() == InputGlyphService.GAMEPAD:
+		device = AbilityCommand.InputDevice.GAMEPAD
+	_begin_or_queue_ability(slot, device)
 
 func _begin_or_queue_ability(slot: int, device: AbilityCommand.InputDevice) -> void:
 	if ability_controller == null:
@@ -893,13 +910,25 @@ func _on_ui_settings_changed(settings: UISettingsState) -> void:
 	_save_meta()
 
 func _on_settings_reset_bindings_requested() -> void:
-	for action in [&"move_left", &"move_right", &"move_up", &"move_down", &"pause_game", &"active_ability_1", &"active_ability_2", &"ui_accept", &"ui_cancel", &"reroll_upgrades"]:
+	for action in [&"move_left", &"move_right", &"move_up", &"move_down", &"pause_game", &"active_ability_1", &"active_ability_2", &"ui_accept", &"ui_cancel", &"ui_info", &"reroll_upgrades"]:
 		if InputMap.has_action(action):
 			InputMap.action_erase_events(action)
 	_register_input_actions()
 	meta.ui_settings.input_bindings.clear()
 	hud.configure_ui_settings(meta.ui_settings)
 	_save_meta()
+
+func _on_context_detail_opened(source: Control, explicit: bool) -> void:
+	if not explicit or source == null:
+		return
+	if ui_router.current_modal_id() == &"context_detail":
+		ui_router.remember_focus(source)
+		return
+	ui_router.open_context_detail(&"context_detail", source)
+
+func _on_context_detail_closed() -> void:
+	if ui_router.current_modal_id() == &"context_detail":
+		ui_router.close_modal(get_viewport().gui_get_focus_owner())
 
 func _on_retry_requested() -> void:
 	if selected_level != null and not quick_run:
@@ -2624,6 +2653,17 @@ func _resume_manual_pause() -> void:
 	ui_router.close_modal(get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.RUNNING)
 
+func _on_hud_pause_requested() -> void:
+	_request_manual_pause()
+
+func _request_manual_pause() -> bool:
+	if flow_state != GameFlowState.State.RUNNING or state == null or not state.active:
+		return false
+	ui_router.open_modal(&"pause", null, get_viewport().gui_get_focus_owner())
+	_set_flow(GameFlowState.State.MANUAL_PAUSE)
+	hud.show_pause(_can_skip_intro(), stats, state)
+	return true
+
 func _on_abort_requested() -> void:
 	if flow_state != GameFlowState.State.MANUAL_PAUSE:
 		return
@@ -2954,6 +2994,7 @@ func _register_input_actions() -> void:
 	_add_keys(&"active_ability_2", [KEY_E])
 	_add_keys(&"ui_accept", [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE])
 	_add_keys(&"ui_cancel", [KEY_ESCAPE])
+	_add_keys(&"ui_info", [KEY_I])
 	_add_joy_button(&"move_left", JOY_BUTTON_DPAD_LEFT)
 	_add_joy_button(&"move_right", JOY_BUTTON_DPAD_RIGHT)
 	_add_joy_button(&"move_up", JOY_BUTTON_DPAD_UP)
@@ -2965,9 +3006,12 @@ func _register_input_actions() -> void:
 	_add_joy_button(&"pause_game", JOY_BUTTON_START)
 	_add_joy_button(&"active_ability_1", JOY_BUTTON_LEFT_SHOULDER)
 	_add_joy_button(&"active_ability_2", JOY_BUTTON_RIGHT_SHOULDER)
-	_add_joy_button(&"reroll_upgrades", JOY_BUTTON_Y)
+	# Y is the cross-screen information action. Reroll remains context-specific
+	# on X so the same physical input never fires both commands.
+	_add_joy_button(&"reroll_upgrades", JOY_BUTTON_X)
 	_add_joy_button(&"ui_accept", JOY_BUTTON_A)
 	_add_joy_button(&"ui_cancel", JOY_BUTTON_B)
+	_add_joy_button(&"ui_info", JOY_BUTTON_Y)
 
 func _add_keys(action: StringName, keycodes: Array) -> void:
 	if not InputMap.has_action(action):

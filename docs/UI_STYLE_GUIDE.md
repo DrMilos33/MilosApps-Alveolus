@@ -65,6 +65,7 @@ Alle Werte liegen in `AlveolusVisualTheme`:
 - Maus-Hover öffnet einen kompakten, am Auslöser anliegenden Tooltip. Er schließt, sobald der Hover endet, verändert kein Layout und löst keinen Sound oder Fokuswechsel aus.
 - Tastatur- oder Gamepadfokus allein öffnet niemals einen Tooltip oder eine Detailkarte. Die fokussierte Informationsquelle bleibt jedoch sichtbar als solche erkennbar.
 - `ui_info` öffnet für das fokussierte Element ausdrücklich dieselbe Information und Informationshierarchie wie der Maus-Tooltip. Die Standardbelegung ist `I` auf der Tastatur und Y auf dem Gamepad; sie ist in den Einstellungen konfigurierbar, und angezeigte Eingabesymbole folgen der aktiven Belegung.
+- Gamepad-Y ist exklusiv für `ui_info`; die kontextspezifische Upgrade-Neuwahl liegt auf Gamepad-X. Ohne registrierte Detailquelle bleibt `ui_info` wirkungslos, statt eine fremde Aktion auszulösen.
 - Während die Detailkarte offen ist, schließt `ui_info` oder `ui_cancel` ausschließlich diese oberste Ebene. Der Fokus bleibt am Auslöser beziehungsweise kehrt dorthin zurück; das Öffnen oder Schließen löst dessen eigentliche Aktion nicht aus.
 - Tooltip und Detailkarte verwenden dieselben Inhaltsdaten. Medizinische Einordnung und unmittelbare Spielwirkung bleiben als zwei semantisch getrennte, nicht nur farbcodierte Flächen erkennbar.
 

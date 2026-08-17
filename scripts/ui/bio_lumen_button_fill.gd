@@ -10,8 +10,8 @@ extends ColorRect
 const SHADER_CODE := """
 shader_type canvas_item;
 
-uniform vec4 top_color : source_color = vec4(0.34, 0.82, 0.79, 1.0);
-uniform vec4 bottom_color : source_color = vec4(0.18, 0.68, 0.67, 1.0);
+instance uniform vec4 top_color : source_color = vec4(0.34, 0.82, 0.79, 1.0);
+instance uniform vec4 bottom_color : source_color = vec4(0.18, 0.68, 0.67, 1.0);
 uniform float edge_fade = 0.018;
 
 void fragment() {
@@ -30,7 +30,14 @@ var accent: Color = AlveolusVisualTheme.TURQUOISE
 var host_button: BaseButton
 var _hovered := false
 var _pressed := false
-var _last_disabled := false
+var _focused := false
+var _signals_connected := false
+
+func _enter_tree() -> void:
+	_connect_host()
+
+func _exit_tree() -> void:
+	_disconnect_host()
 
 static func attach(button: BaseButton, color: Color) -> BioLumenButtonFill:
 	if button == null:
@@ -47,6 +54,8 @@ static func attach(button: BaseButton, color: Color) -> BioLumenButtonFill:
 	return fill
 
 func configure(button: BaseButton, color: Color) -> void:
+	if host_button != null and host_button != button:
+		_disconnect_host()
 	host_button = button
 	accent = color
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -56,34 +65,74 @@ func configure(button: BaseButton, color: Color) -> void:
 	offset_bottom = -1.0
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	show_behind_parent = true
-	var shader := Shader.new()
-	shader.code = SHADER_CODE
-	var shader_material := ShaderMaterial.new()
-	shader_material.shader = shader
-	material = shader_material
-	if not host_button.mouse_entered.is_connected(_on_hovered.bind(true)):
-		host_button.mouse_entered.connect(_on_hovered.bind(true))
-		host_button.mouse_exited.connect(_on_hovered.bind(false))
-		host_button.button_down.connect(_on_pressed.bind(true))
-		host_button.button_up.connect(_on_pressed.bind(false))
-	_last_disabled = host_button.disabled
+	if not material is ShaderMaterial:
+		material = BioLumenMaterialCache.material(&"global_button", SHADER_CODE)
+	_connect_host()
+	set_process(false)
 	_update_colors()
-	set_process(true)
 
-func _process(_delta: float) -> void:
-	if host_button == null or not is_instance_valid(host_button):
-		set_process(false)
+## Call after changing `disabled` programmatically. Pointer, press and focus
+## changes are already signal-driven and never require per-frame polling.
+func refresh_state() -> void:
+	_update_colors()
+
+func set_accent(color: Color) -> void:
+	accent = color
+	_update_colors()
+
+func _connect_host() -> void:
+	if host_button == null or _signals_connected:
 		return
-	if _last_disabled != host_button.disabled:
-		_last_disabled = host_button.disabled
-		_update_colors()
+	host_button.mouse_entered.connect(_on_mouse_entered)
+	host_button.mouse_exited.connect(_on_mouse_exited)
+	host_button.button_down.connect(_on_button_down)
+	host_button.button_up.connect(_on_button_up)
+	host_button.focus_entered.connect(_on_focus_entered)
+	host_button.focus_exited.connect(_on_focus_exited)
+	host_button.visibility_changed.connect(refresh_state)
+	_signals_connected = true
 
-func _on_hovered(value: bool) -> void:
-	_hovered = value
+func _disconnect_host() -> void:
+	if host_button == null or not _signals_connected or not is_instance_valid(host_button):
+		_signals_connected = false
+		return
+	for signal_and_callable in [
+		[host_button.mouse_entered, Callable(self, "_on_mouse_entered")],
+		[host_button.mouse_exited, Callable(self, "_on_mouse_exited")],
+		[host_button.button_down, Callable(self, "_on_button_down")],
+		[host_button.button_up, Callable(self, "_on_button_up")],
+		[host_button.focus_entered, Callable(self, "_on_focus_entered")],
+		[host_button.focus_exited, Callable(self, "_on_focus_exited")],
+		[host_button.visibility_changed, Callable(self, "refresh_state")],
+	]:
+		var host_signal: Signal = signal_and_callable[0]
+		var callback: Callable = signal_and_callable[1]
+		if host_signal.is_connected(callback):
+			host_signal.disconnect(callback)
+	_signals_connected = false
+
+func _on_mouse_entered() -> void:
+	_hovered = true
 	_update_colors()
 
-func _on_pressed(value: bool) -> void:
-	_pressed = value
+func _on_mouse_exited() -> void:
+	_hovered = false
+	_update_colors()
+
+func _on_button_down() -> void:
+	_pressed = true
+	_update_colors()
+
+func _on_button_up() -> void:
+	_pressed = false
+	_update_colors()
+
+func _on_focus_entered() -> void:
+	_focused = true
+	_update_colors()
+
+func _on_focus_exited() -> void:
+	_focused = false
 	_update_colors()
 
 func _update_colors() -> void:
@@ -99,8 +148,8 @@ func _update_colors() -> void:
 	elif _pressed:
 		top = accent.lightened(0.18)
 		bottom = accent.lightened(0.10)
-	elif _hovered:
+	elif _hovered or _focused:
 		top = accent.lightened(0.31)
 		bottom = accent.lightened(0.22)
-	(material as ShaderMaterial).set_shader_parameter("top_color", Color(top, alpha))
-	(material as ShaderMaterial).set_shader_parameter("bottom_color", Color(bottom, alpha))
+	set_instance_shader_parameter(&"top_color", Color(top, alpha))
+	set_instance_shader_parameter(&"bottom_color", Color(bottom, alpha))

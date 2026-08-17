@@ -36,6 +36,7 @@ func _capture_and_prepare_actions() -> void:
 		&"pause_game": [_key(KEY_ESCAPE), _joy(JOY_BUTTON_START)],
 		&"ui_accept": [_key(KEY_ENTER), _joy(JOY_BUTTON_A)],
 		&"ui_cancel": [_key(KEY_BACKSPACE), _joy(JOY_BUTTON_B)],
+		&"ui_info": [_key(KEY_I), _joy(JOY_BUTTON_Y)],
 	}
 	for action in UISettingsState.CONFIGURABLE_ACTIONS:
 		original_actions[action] = {
@@ -71,6 +72,9 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_true(not defaults.reduce_motion, "Reduzierte Bewegung ist optional")
 	_true(defaults.confirm_run_restart, "Strg+R verlangt standardmäßig eine bewusste Bestätigung")
 	_true(UISettingsState.from_dict({}).confirm_run_restart, "Ältere Einstellungsdaten erhalten den sicheren Neustart-Standard")
+	_true(UISettingsState.CONFIGURABLE_ACTIONS.has(&"ui_info"), "Kontextinformationen besitzen eine konfigurierbare Eingabeaktion")
+	_true(_has_key(InputMap.action_get_events(&"ui_info"), KEY_I), "Informationen verwenden standardmäßig I")
+	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_Y), "Informationen verwenden standardmäßig Gamepad-Y")
 
 	var sanitized := UISettingsState.from_dict({
 		"master_volume": 4.0,
@@ -108,6 +112,8 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	mouse.button_index = MOUSE_BUTTON_RIGHT
 	var decoded_mouse := UISettingsState.deserialize_input_event(UISettingsState.serialize_input_event(mouse)) as InputEventMouseButton
 	_equal(decoded_mouse.button_index, MOUSE_BUTTON_RIGHT, "Maustasten sind im Bindingformat unterstützt")
+	var legacy_settings := UISettingsState.from_dict({"input_bindings": {"active_ability_1": [{"type": "key", "physical_keycode": KEY_T}]}})
+	_true(not legacy_settings.input_bindings.has("ui_info"), "Ältere Einstellungsdaten benötigen keinen künstlichen ui_info-Saveeintrag")
 
 
 func _test_rebinding_conflicts_and_safe_restore() -> void:
@@ -116,6 +122,7 @@ func _test_rebinding_conflicts_and_safe_restore() -> void:
 	reserved_restart.ctrl_pressed = true
 	_true(UISettingsState.is_reserved_quick_restart_binding(reserved_restart), "Strg+R wird als reservierter Rundenneustart erkannt")
 	_true(not settings.set_single_binding(&"active_ability_1", reserved_restart), "Der globale Neustart-Shortcut kann keine konfigurierbare Spielaktion überschreiben")
+	_true(not settings.set_single_binding(&"ui_info", reserved_restart), "Auch die Informationstaste respektiert die Strg+R-Reservierung")
 	_true(settings.set_single_binding(&"active_ability_1", _key(KEY_R)), "Eine freie Taste kann neu belegt werden")
 	var ability_one_events := InputMap.action_get_events(&"active_ability_1")
 	_true(_has_key(ability_one_events, KEY_R), "Die neue Tastaturbelegung ist sofort aktiv")
@@ -128,12 +135,22 @@ func _test_rebinding_conflicts_and_safe_restore() -> void:
 	chord.ctrl_pressed = true
 	_true(settings.set_single_binding(&"active_ability_2", chord), "Eine freie Tastenkombination kann belegt werden")
 	_true(not settings.set_single_binding(&"not_configurable", _key(KEY_F)), "Nur freigegebene Aktionen können durch Save-Daten verändert werden")
+	_true(settings.set_single_binding(&"ui_info", _key(KEY_G)), "Die Informationstaste lässt sich unabhängig neu belegen")
+	_true(_has_key(InputMap.action_get_events(&"ui_info"), KEY_G), "Die neue Informationstaste ist sofort aktiv")
+	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_Y), "Ein Tastatur-Remap bewahrt Gamepad-Y")
+	_true(settings.set_single_binding(&"ui_info", _joy(JOY_BUTTON_X)), "Auch die Gamepadbelegung für Informationen lässt sich ändern")
+	_true(_has_key(InputMap.action_get_events(&"ui_info"), KEY_G), "Ein Gamepad-Remap bewahrt die Informationstaste der Tastatur")
+	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_X), "Der Gamepad-Remap ersetzt Y innerhalb seiner Geräteklasse")
+	_true(not _has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_Y), "Die alte Gamepadbelegung bleibt nach dem Remap nicht doppelt aktiv")
+	_true(settings.input_bindings.has("ui_info"), "Der ui_info-Remap verwendet das bestehende save-kompatible Bindingformat")
 
 	InputMap.action_erase_events(&"active_ability_1")
 	InputMap.action_add_event(&"active_ability_1", _key(KEY_T))
 	settings.apply_saved_bindings()
 	_true(_has_key(InputMap.action_get_events(&"active_ability_1"), KEY_R), "Gespeicherte Belegung wird wieder angewendet")
 	_true(_has_joy_button(InputMap.action_get_events(&"active_ability_1"), JOY_BUTTON_LEFT_SHOULDER), "Gespeicherter Roundtrip bewahrt beide Geräteklassen")
+	_true(_has_key(InputMap.action_get_events(&"ui_info"), KEY_G), "Der gespeicherte ui_info-Roundtrip stellt die Tastaturklasse wieder her")
+	_true(_has_joy_button(InputMap.action_get_events(&"ui_info"), JOY_BUTTON_X), "Der gespeicherte ui_info-Roundtrip stellt die Gamepadklasse wieder her")
 
 	var saved_gamepad := UISettingsState.new()
 	saved_gamepad.input_bindings = {
@@ -154,6 +171,10 @@ func _test_rebinding_conflicts_and_safe_restore() -> void:
 	_equal(InputMap.action_get_events(&"move_up").size(), before.size(), "Beschädigte Bindingdaten löschen keine funktionierende Standardbelegung")
 	_true(_has_key(InputMap.action_get_events(&"move_up"), KEY_W), "Der Standard bleibt nach beschädigten Save-Daten benutzbar")
 
+	InputMap.action_erase_events(&"ui_info")
+	InputMap.action_add_event(&"ui_info", _key(KEY_I))
+	InputMap.action_add_event(&"ui_info", _joy(JOY_BUTTON_Y))
+
 
 func _test_input_glyphs_follow_bindings_and_device() -> void:
 	var service := InputGlyphService.new()
@@ -165,9 +186,20 @@ func _test_input_glyphs_follow_bindings_and_device() -> void:
 	service.configure(UISettingsState.GLYPH_KEYBOARD)
 	_equal(service.glyph_for_action(&"active_ability_1"), "R", "Tastatursymbol folgt der tatsächlichen neuen Belegung")
 	_true(service.icon_for_action(&"active_ability_1") == null, "Eine freie Remap-Taste verwendet bewusst den Textfallback")
+	_equal(service.glyph_for_action(&"ui_info"), "I", "Die Informationstaste löst auf der Tastatur ihr tatsächliches Glyph auf")
+	_equal(InputGlyphService.caption_for_action(&"ui_info"), "Informationen", "Die Einstellungszeile benennt ui_info verständlich")
+	_true(service.icon_for_action(&"ui_info") == null, "I verwendet ohne passendes lizenziertes Asset bewusst den klaren Textfallback")
 	service.configure(UISettingsState.GLYPH_GAMEPAD)
 	_equal(service.glyph_for_action(&"active_ability_1"), "LB", "Gamepadsymbol folgt der tatsächlichen Belegung")
 	_true(service.icon_for_action(&"active_ability_1") != null, "Eine bekannte Standardbelegung verwendet die lizenzierte Promptgrafik")
+	_equal(service.glyph_for_action(&"ui_info"), "Y", "Kontextinformationen zeigen auf dem Gamepad Y")
+	_true(service.icon_for_action(&"ui_info") == null, "Y fällt ohne falsches Button-Asset auf zentrierten Text zurück")
+	InputMap.action_erase_events(&"ui_info")
+	_equal(service.glyph_for_action(&"ui_info"), "Y", "Der Gamepad-Fallback bleibt vor der Laufzeitregistrierung verständlich")
+	service.configure(UISettingsState.GLYPH_KEYBOARD)
+	_equal(service.glyph_for_action(&"ui_info"), "I", "Der Tastatur-Fallback bleibt vor der Laufzeitregistrierung verständlich")
+	InputMap.action_add_event(&"ui_info", _key(KEY_I))
+	InputMap.action_add_event(&"ui_info", _joy(JOY_BUTTON_Y))
 	service.configure(UISettingsState.GLYPH_AUTO)
 	var gamepad_event := InputEventJoypadButton.new()
 	gamepad_event.button_index = JOY_BUTTON_X
@@ -314,7 +346,13 @@ func _test_save_v5_settings_roundtrip() -> void:
 	settings.reduce_motion = true
 	settings.glyph_mode = UISettingsState.GLYPH_GAMEPAD
 	settings.confirm_run_restart = false
-	settings.input_bindings = {"active_ability_1": [{"type": "key", "physical_keycode": KEY_R, "keycode": 0}]}
+	settings.input_bindings = {
+		"active_ability_1": [{"type": "key", "physical_keycode": KEY_R, "keycode": 0}],
+		"ui_info": [
+			{"type": "key", "physical_keycode": KEY_I, "keycode": 0},
+			{"type": "joy_button", "button_index": JOY_BUTTON_Y},
+		],
+	}
 	meta.set_ui_settings(settings)
 	var data := meta.to_dict()
 	_equal(int(data.get("version", 0)), 5, "Einstellungen werden im Save-v5-Container gespeichert")
@@ -326,6 +364,8 @@ func _test_save_v5_settings_roundtrip() -> void:
 	_true(restored.ui_settings.reduce_motion, "Reduzierte Bewegung überlebt den Savegame-Roundtrip")
 	_equal(restored.ui_settings.glyph_mode, UISettingsState.GLYPH_GAMEPAD, "Glyphmodus überlebt den Savegame-Roundtrip")
 	_true(not restored.ui_settings.confirm_run_restart, "Die ausgeschaltete Neustartbestätigung überlebt den Savegame-Roundtrip")
+	_true(restored.ui_settings.input_bindings.has("ui_info"), "Eine angepasste ui_info-Belegung überlebt ohne neue Saveversion")
+	_equal((restored.ui_settings.input_bindings["ui_info"] as Array).size(), 2, "ui_info bewahrt Tastatur- und Gamepadklasse im Save-v5-Container")
 	var migrated := MetaProgressionState.new(func() -> int: return 900000)
 	_true(migrated.load_dict({"version": 4, "research_points": 17}), "Save v4 wird weiterhin migriert")
 	_equal(migrated.ui_settings.to_dict(), UISettingsState.new().to_dict(), "Save v4 erhält vollständige sichere Standardeinstellungen")

@@ -33,13 +33,24 @@ func _run() -> void:
 		quit(1)
 
 func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
+	_check(lexicon.theme != null, "Die eigenständig geladene Lexikonszene erhält ein lokales Fallback-Theme")
 	_check(lexicon.category_buttons.size() == 4, "Vier übergeordnete Kategorien sind sichtbar")
+	var surface := lexicon.get_node("Surface") as PanelContainer
+	_check(surface != null and surface.theme_type_variation == AlveolusVisualTheme.TYPE_PAGE_CANVAS, "Die Lexikonbühne verwendet die zentrale PageCanvas-Rolle")
+	_check(lexicon.list_panel.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Die Eintragsliste verwendet die zentrale Dokumentfläche")
+	_check(lexicon.detail_panel.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Das Detail verwendet die zentrale Aktionskartenfläche")
+	for category_button in lexicon.category_buttons.values():
+		_check((category_button as Button).get_meta(&"alveolus_component", &"") == &"segmented_tab", "Jede Lexikonkategorie verwendet die zentrale Tab-Komponente")
 	_check(lexicon.entry_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Linke Liste scrollt nur vertikal")
 	_check(lexicon.detail_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Detailbereich scrollt nur vertikal")
+	_check(lexicon.page_scroll != null and lexicon.page_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Die kompakte Gesamtbühne kann niemals horizontal aus dem Viewport laufen")
+	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Breites Lexikon benötigt keinen zusätzlichen vertikalen Seitenscroll")
 	_check(lexicon.entry_buttons.size() == 4, "Monsterliste enthält alle vier Gegnerarten")
 	_check(lexicon.selected_entry_id == &"pneumococcus", "Die erste bekannte Kachel füllt den Detailbereich sofort")
 	_check(MedicalLexiconIllustration.SAFE_MARGIN >= 4.0, "Lexikonillustrationen reservieren einen festen Sicherheitsabstand zum Kachelrand")
 	for button in lexicon.entry_buttons.values():
+		_check((button as Button).theme_type_variation in [AlveolusVisualTheme.TYPE_SELECTION_CARD, AlveolusVisualTheme.TYPE_SELECTED_CARD], "Jede Lexikonzeile verwendet eine zentrale Auswahlkartenrolle")
+		_check(not (button as Button).tooltip_text.is_empty(), "Der native Kurztooltip bleibt auf Maus-Hover verfügbar")
 		var illustrations: Array[Node] = button.find_children("*", "MedicalLexiconIllustration", true, false)
 		_check(illustrations.size() == 1, "Jede Lexikonkachel besitzt genau eine Illustration oder Silhouette")
 		if not illustrations.is_empty():
@@ -53,6 +64,18 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 		var scrollbar_width := lexicon.detail_scroll.get_v_scroll_bar().get_combined_minimum_size().x
 		_check(safe_inset.get_theme_constant("margin_right") >= ceili(scrollbar_width), "Der rechte Sicherheits-Inset hält Texte und Werte vollständig von der Scrollbar frei")
 		_check(safe_inset.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "Der Scrollbar-Inset füllt die verfügbare Detailbreite")
+	var entry_safe_inset := lexicon.entry_scroll.get_node_or_null("ScrollbarSafeInset") as MarginContainer
+	_check(entry_safe_inset != null and entry_safe_inset.get_parent() == lexicon.entry_scroll, "Auch die Eintragsliste hält eine eigene Scrollbar-Safe-Area frei")
+	if entry_safe_inset != null:
+		var entry_scrollbar_width := lexicon.entry_scroll.get_v_scroll_bar().get_combined_minimum_size().x
+		_check(entry_safe_inset.get_theme_constant("margin_right") >= ceili(entry_scrollbar_width), "Eintragskacheln reichen nicht unter die Scrollbar")
+	var context_sources := lexicon.context_detail_sources()
+	_check(context_sources.size() == lexicon.entry_buttons.size(), "Jede sichtbare Lexikonzeile stellt eine registrierbare ui_info-Quelle bereit")
+	if not context_sources.is_empty():
+		_check(not bool(context_sources[0].get("hover_enabled", true)), "Der gemeinsame Detailcontroller bleibt für Lexikoneinträge explizit; Maus-Hover nutzt ausschließlich den nativen Kurztooltip")
+		var content_provider: Callable = context_sources[0].get("provider", Callable())
+		var payload: Dictionary = content_provider.call() if content_provider.is_valid() else {}
+		_check(payload.has("title") and payload.has("body") and payload.has("sections"), "Der Detailprovider liefert eine abgelöste, semantisch gegliederte Inhaltskopie")
 	_check(lexicon.detail_gameplay_panel != lexicon.detail_medical_panel, "Spielwirkung und medizinischer Hintergrund besitzen getrennte Flächen")
 	for semantic_panel in [lexicon.detail_gameplay_panel, lexicon.detail_medical_panel]:
 		_check(semantic_panel is PanelContainer and semantic_panel.get_meta(&"alveolus_component", &"") == &"semantic_copy_section", "Jede Bedeutungsebene verwendet die semantische Textflächen-Komponente")
@@ -62,7 +85,7 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.select_entry(&"pneumococcus"), "Entdecktes Bakterium ist auswählbar")
 	_check(not lexicon.detail_illustration.locked, "Entdeckte Illustration ist sichtbar")
-	_check(lexicon.detail_stats_grid.get_child_count() == 12, "Sechs Gegnerwerte werden strukturiert dargestellt")
+	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Sechs Gegnerwerte werden strukturiert dargestellt")
 	_check(lexicon.detail_title.text == "Bakterium", "Detailtitel verwendet einfachen Namen")
 	_check(lexicon.detail_medical_name.text == "Pneumokokke", "Fachbegriff bleibt als zweite Ebene")
 
@@ -82,15 +105,19 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
 	_check(lexicon.select_entry(&"pneumococcus"), "Bekannter Gegner stellt seine Basiswerte für die Dichteprüfung bereit")
 	await process_frame
-	_check(lexicon.detail_stats_grid.columns == 4, "Breites Lexikon zeigt zwei kompakte Wertpaare pro Zeile")
-	_check(lexicon.detail_stats_grid.get_child_count() == 12, "Die Zwei-Spalten-Wertansicht behält alle sechs Basiswerte")
-	for index in range(0, lexicon.detail_stats_grid.get_child_count(), 2):
-		var caption := lexicon.detail_stats_grid.get_child(index) as Label
-		var value := lexicon.detail_stats_grid.get_child(index + 1) as Label
-		_check(caption != null and value != null and value.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "Jedes Basiswertpaar besteht aus Bezeichnung und rechtsbündigem Wert")
-		if caption != null and value != null:
-			var gap := value.get_global_rect().position.x - caption.get_global_rect().end.x
-			_check(gap >= -0.5 and gap <= 16.5, "Basiswert und Bezeichnung bleiben als nahe lesbares Paar zusammen")
+	_check(lexicon.detail_stats_grid.columns == 2, "Breites Lexikon zeigt zwei kompakte Wertkarten pro Zeile")
+	_check(lexicon.detail_stats_grid.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "Die Werteansicht nutzt die gesamte verfügbare Detailbreite")
+	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Die Zwei-Spalten-Wertansicht behält alle sechs Basiswerte")
+	for stat_child in lexicon.detail_stats_grid.get_children():
+		var stat_panel := stat_child as PanelContainer
+		_check(stat_panel != null and stat_panel.get_meta(&"alveolus_component", &"") == &"value_row", "Jeder Basiswert verwendet die zentrale kompakte Wertzeile")
+		if stat_panel != null:
+			var labels: Array[Node] = stat_panel.find_children("*", "Label", true, false)
+			_check(labels.size() == 2 and (labels[1] as Label).horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "Bezeichnung und Wert bleiben als links-/rechtsbündiges Paar in derselben Karte")
+			var name_label := stat_panel.find_child("ValueName", true, false) as Label
+			var value_label := stat_panel.find_child("Value", true, false) as Label
+			_check(name_label != null and name_label.autowrap_mode == TextServer.AUTOWRAP_OFF, "Wertbezeichnungen brechen niemals zeichenweise um")
+			_check(value_label != null and value_label.custom_minimum_size.x >= 72.0, "Der rechtsbündige Wert behält eine stabile lesbare Spalte")
 
 	# The scene has an 800-px minimum, which is intentionally still below the
 	# 820-px master/detail breakpoint. Pin it to the top-left so the test covers
@@ -100,13 +127,32 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	lexicon.size = Vector2(800.0, 620.0)
 	await process_frame
 	await process_frame
-	_check(lexicon.detail_stats_grid.columns == 2, "Kompaktes Lexikon zeigt genau ein Bezeichnungs-/Wertpaar pro Zeile")
+	_check(lexicon.detail_stats_grid.columns == 1, "Kompaktes Lexikon zeigt genau eine Wertkarte pro Zeile")
 	_check(lexicon.category_bar.columns == 2, "Kompaktes Lexikon ordnet auch die Kategorien in zwei Spalten")
+	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Kompaktes Lexikon aktiviert den vertikalen Seitenscroll")
+	_check(lexicon.content_row.custom_minimum_size.y >= LexiconMasterDetail.COMPACT_CONTENT_MIN_HEIGHT, "Liste und Detail kollabieren bei kompakter Höhe nicht zu einem leeren Streifen")
 
+	# 960 x 540 at 200 percent corresponds to only 480 x 270 logical pixels;
+	# after the shared page header the component can be even shorter. Exercise
+	# that exact density contract independently of the GameHUD transform.
+	var scene_minimum := lexicon.custom_minimum_size
+	lexicon.custom_minimum_size = Vector2.ZERO
+	lexicon.size = Vector2(480.0, 210.0)
+	await process_frame
+	await process_frame
+	_check(lexicon.page_scroll.get_v_scroll_bar().max_value > lexicon.page_scroll.get_v_scroll_bar().page, "Bei 960x540 @ 200 % besitzt die Bühne einen echten vertikalen Scrollbereich")
+	_check(lexicon.list_panel.visible and lexicon.entry_scroll.size.y >= 300.0, "Die kompakte Eintragsliste behält eine nutzbare Scrollfläche statt eines leeren Streifens")
+	_check(lexicon.select_entry(&"pneumococcus", true), "Kompakte Auswahl öffnet weiterhin das Detail")
+	await process_frame
+	await process_frame
+	_check(lexicon.detail_panel.visible and lexicon.detail_scroll.size.y >= 300.0, "Auch das kompakte Detail bleibt in einer nutzbaren vertikalen Scrollfläche erreichbar")
+	lexicon.cancel_step()
+
+	lexicon.custom_minimum_size = scene_minimum
 	lexicon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	await process_frame
 	await process_frame
-	_check(lexicon.detail_stats_grid.columns == 4, "Nach Rückkehr zur breiten Ansicht werden wieder zwei Wertpaare je Zeile gezeigt")
+	_check(lexicon.detail_stats_grid.columns == 2, "Nach Rückkehr zur breiten Ansicht werden wieder zwei Wertkarten je Zeile gezeigt")
 
 func _test_game_hud_embedding() -> void:
 	var hud := GameHUD.new()
@@ -116,6 +162,7 @@ func _test_game_hud_embedding() -> void:
 	_check(hud.lexicon_master_detail != null, "Der GameHUD bindet die Master/Detail-Komponente direkt ein")
 	if hud.lexicon_master_detail != null:
 		_check(not _has_scroll_ancestor(hud.lexicon_master_detail), "Das Lexikon besitzt im GameHUD keinen zweiten äußeren ScrollContainer")
+		_check(hud.lexicon_master_detail.theme == null, "Das eingebettete Lexikon erbt das gemeinsame HUD-Theme statt eine lokale Theme-Insel zu erzeugen")
 	hud.queue_free()
 	await process_frame
 
