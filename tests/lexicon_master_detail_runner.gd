@@ -46,10 +46,14 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.page_scroll != null and lexicon.page_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Die kompakte Gesamtbühne kann niemals horizontal aus dem Viewport laufen")
 	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Breites Lexikon benötigt keinen zusätzlichen vertikalen Seitenscroll")
 	_check(lexicon.entry_buttons.size() == 4, "Monsterliste enthält alle vier Gegnerarten")
-	_check(lexicon.selected_entry_id == &"pneumococcus", "Die erste bekannte Kachel füllt den Detailbereich sofort")
+	_check(lexicon.selected_entry_id == &"", "Beim Öffnen ist kein Lexikoneintrag automatisch ausgewählt")
+	_check(lexicon.empty_detail_label.visible and lexicon.empty_detail_label.text == "Eintrag auswählen.", "Die leere Detailfläche gibt eine knappe neutrale Anleitung")
+	_check(lexicon.empty_detail_label.size_flags_vertical == Control.SIZE_SHRINK_BEGIN, "Die leere Anleitung reserviert keinen unnötigen vertikalen Leerraum")
+	_check(lexicon.detail_panel.size_flags_vertical == Control.SIZE_SHRINK_BEGIN, "Auch die leere Detailfläche selbst kollabiert auf ihre knappe Anleitung")
 	_check(MedicalLexiconIllustration.SAFE_MARGIN >= 4.0, "Lexikonillustrationen reservieren einen festen Sicherheitsabstand zum Kachelrand")
 	for button in lexicon.entry_buttons.values():
 		_check((button as Button).theme_type_variation in [AlveolusVisualTheme.TYPE_SELECTION_CARD, AlveolusVisualTheme.TYPE_SELECTED_CARD], "Jede Lexikonzeile verwendet eine zentrale Auswahlkartenrolle")
+		_check(not (button as Button).button_pressed, "Keine Lexikonzeile ist beim Öffnen automatisch markiert")
 		_check(not (button as Button).tooltip_text.is_empty(), "Der native Kurztooltip bleibt auf Maus-Hover verfügbar")
 		var illustrations: Array[Node] = button.find_children("*", "MedicalLexiconIllustration", true, false)
 		_check(illustrations.size() == 1, "Jede Lexikonkachel besitzt genau eine Illustration oder Silhouette")
@@ -97,7 +101,14 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_TERMS)
 	_check(lexicon.entry_buttons.size() >= 27, "Begriffslexikon enthält den vollständigen Startkatalog")
+	_check(lexicon.selected_entry_id == &"", "Auch ein Kategorienwechsel wählt nicht automatisch den ersten Begriff")
+	_check(lexicon.empty_detail_label.visible, "Nach dem Kategorienwechsel bleibt die kompakte neutrale Anleitung sichtbar")
+	_check(lexicon.context_detail_sources().is_empty(), "Begriffe erzeugen keine ui_info-Detailquellen")
+	for term_button_value in lexicon.entry_buttons.values():
+		var term_button := term_button_value as Button
+		_check(term_button != null and term_button.tooltip_text.is_empty(), "Begriffe erzeugen keinen Maus-Tooltip")
 	var tempo_id := &"term_treatment_speed"
+	_check(lexicon.context_detail_payload(tempo_id).is_empty(), "Auch ein direkter Begriffsprovider liefert keine redundante Detailkarte")
 	_check(lexicon.select_entry(tempo_id), "Behandlungstempo ist direkt lesbar")
 	_check(lexicon.detail_gameplay_text.text.contains("Intervall"), "Detail erklärt Behandlungstempo verständlich")
 
@@ -172,6 +183,8 @@ func _test_mouse_and_focus_navigation(lexicon: LexiconMasterDetail) -> void:
 	_check(monster_tab.focus_neighbor_right == monster_tab.get_path_to(character_tab), "Kategorien besitzen explizite horizontale Fokusnavigation")
 	monster_tab.pressed.emit()
 	_check(lexicon.selected_category == LexiconEntryDefinition.CATEGORY_MONSTERS, "Mausklick wechselt die Kategorie")
+	_check(lexicon.selected_entry_id == &"", "Der Kategorienklick markiert nicht automatisch den ersten Eintrag")
+	_check(lexicon.empty_detail_label.visible, "Der Kategorienklick zeigt zunächst nur die neutrale Anleitung")
 	var visible_entries := LexiconCatalog.entries_for_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
 	var first := lexicon.entry_buttons[visible_entries[0].id] as Button
 	var second := lexicon.entry_buttons[visible_entries[1].id] as Button

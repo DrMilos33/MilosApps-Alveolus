@@ -151,6 +151,24 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	first_target.gui_input.emit(accept)
 	_check(selected_ids == [&"faster_impulse", &"faster_impulse"], "ui_accept emittiert dieselbe stabile ID genau einmal")
 
+	var generic_numeric := UpgradeOverlayViewModelScript.create([{
+		"id": &"future_upgrade_without_special_case",
+		"title": "Dichter Streuimpuls",
+		"effect": "+1 Projektil.",
+		"before": "3",
+		"after": "4 Projektile",
+		"icon_id": &"treatment",
+	}], 9)
+	_check(overlay.present(generic_numeric, false), "Beliebige zukünftige Ausbau-ID erhält die semantische Zahlenhierarchie")
+	await _settle()
+	var generic_card := overlay.cards()[0]
+	var numeric_effect := generic_card.find_child("UpgradeEffect", true, false) as RichTextLabel
+	var numeric_comparison := generic_card.find_child("UpgradeComparison", true, false) as RichTextLabel
+	_check(numeric_effect != null and numeric_effect.get_parsed_text() == "+1 Projektil.", "RichText-Ausbauwirkung bewahrt den vollständigen sichtbaren Text")
+	_check(numeric_effect != null and numeric_effect.get_meta(&"semantic_highlights", PackedStringArray()) == PackedStringArray(["+1"]), "Generischer Zahlenparser hebt das wichtige +1 hervor")
+	_check(numeric_comparison != null and numeric_comparison.get_parsed_text().contains("3") and numeric_comparison.get_parsed_text().contains("4 Projektile"), "Vorher-nachher-Zeile bleibt vollständig lesbar")
+	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_after", "") == "4 Projektile", "Der vollständige Zielwert wird semantisch als Ergebnis hervorgehoben")
+
 	var scripted: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
 		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Wirkung."
 	)
@@ -220,11 +238,11 @@ func _assert_card_contract(card: Button, option_id: StringName) -> void:
 	_check(card.focus_mode == Control.FOCUS_NONE, "Mauskarten übernehmen keinen Keyboardfokus")
 	_check(card.scale.is_equal_approx(Vector2.ONE), "Ausbaukarte bleibt ohne Scale-Transform")
 	var title := card.find_child("UpgradeTitle", true, false) as Label
-	var effect := card.find_child("UpgradeEffect", true, false) as Label
-	var comparison := card.find_child("UpgradeComparison", true, false) as Label
+	var effect := card.find_child("UpgradeEffect", true, false) as RichTextLabel
+	var comparison := card.find_child("UpgradeComparison", true, false) as RichTextLabel
 	_check(title != null and effect != null and comparison != null, "Karte besitzt Iconzeile, Kurztext und Vorher-nachher-Wert")
 	if effect != null:
-		_check(effect.max_lines_visible == 2 and effect.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Kurze Wirkung nutzt höchstens zwei lesbare Zeilen")
+		_check(effect.fit_content and not effect.scroll_active and effect.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Kurze Wirkung wächst in höchstens den verfügbaren Kartenraum statt intern zu scrollen")
 
 
 func _single_option_rows() -> Array:

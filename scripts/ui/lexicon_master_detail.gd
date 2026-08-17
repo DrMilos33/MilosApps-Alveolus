@@ -77,28 +77,21 @@ func set_seen_discoveries(discovered_ids: Variant) -> void:
 	if is_node_ready():
 		select_category(selected_category, false)
 
-func select_category(category: StringName, focus_first_entry: bool = false) -> void:
+func select_category(category: StringName, _focus_first_entry: bool = false) -> void:
 	if not LexiconCatalog.CATEGORY_ORDER.has(category):
 		return
 	selected_category = category
 	selected_entry_id = &""
 	_update_category_states()
 	_rebuild_entry_list()
-	var visible_definitions := _visible_definitions()
-	if visible_definitions.is_empty():
-		_show_empty_detail()
-	else:
-		select_entry(visible_definitions[0].id, false)
+	# Category changes only reveal the available entries. Selection remains an
+	# explicit player action, so the first row is neither marked nor focused.
+	_show_empty_detail()
 	if _is_compact():
 		compact_detail_visible = false
 		_apply_responsive_layout()
 	_configure_focus_neighbors()
 	category_changed.emit(category)
-	if focus_first_entry and not entry_buttons.is_empty():
-		var first_definition := visible_definitions[0]
-		var first_button := entry_buttons.get(first_definition.id) as Button
-		if first_button != null:
-			first_button.grab_focus()
 
 func select_entry(entry_id: StringName, move_focus: bool = false) -> bool:
 	var view_model := entry_view_models.get(entry_id) as LexiconEntryViewModel
@@ -145,17 +138,19 @@ func context_detail_sources() -> Array[Dictionary]:
 			result.append({
 				"source": source,
 				"provider": content_provider,
-				# The component retains its concise native mouse tooltip. The
-				# shared controller therefore supplies explicit ui_info only.
+				# Eligible entries retain their concise native mouse tooltip. The
+				# shared controller therefore supplies explicit ui_info only;
+				# glossary terms are intentionally never registered here.
 				"hover_enabled": false,
 			})
 	return result
 
-## Provides a detached data snapshot for mouse-hover tooltips and the later
-## explicit ui_info detail card. Only already-built view-model data is read.
+## Provides a detached data snapshot for the explicit ui_info detail card.
+## Glossary terms deliberately return no payload because their row and detail
+## already carry the complete explanation.
 func context_detail_payload(entry_id: StringName) -> Dictionary:
 	var view_model := entry_view_models.get(entry_id) as LexiconEntryViewModel
-	if view_model == null:
+	if view_model == null or view_model.category == LexiconEntryDefinition.CATEGORY_TERMS:
 		return {}
 	var stat_rows: Array[Dictionary] = []
 	for row in view_model.stat_rows:
@@ -317,7 +312,7 @@ func _build_category_buttons() -> void:
 		button.name = "Category_%s" % category
 		button.custom_minimum_size = Vector2(160.0, 46.0)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.pressed.connect(select_category.bind(category, true))
+		button.pressed.connect(select_category.bind(category, false))
 		category_bar.add_child(button)
 		category_buttons[category] = button
 
@@ -391,10 +386,11 @@ func _build_detail_content() -> void:
 	detail_related_text.add_theme_color_override("font_color", AlveolusVisualTheme.COBALT)
 	detail_content.add_child(detail_related_text)
 
-	empty_detail_label = AlveolusUIComponents.label("Wähle links einen Eintrag aus.", AlveolusVisualTheme.TYPE_MUTED_LABEL)
-	empty_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	empty_detail_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	empty_detail_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	empty_detail_label = AlveolusUIComponents.label("Eintrag auswählen.", AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	empty_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	empty_detail_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	empty_detail_label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	empty_detail_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	detail_content.add_child(empty_detail_label)
 
 func _rebuild_entry_list() -> void:
@@ -413,7 +409,8 @@ func _rebuild_entry_list() -> void:
 		button.name = "Entry_%s" % definition.id
 		button.toggle_mode = true
 		button.custom_minimum_size = Vector2(0.0, 72.0)
-		button.tooltip_text = _hover_tooltip_text(view_model)
+		var exposes_context_detail := view_model.category != LexiconEntryDefinition.CATEGORY_TERMS
+		button.tooltip_text = _hover_tooltip_text(view_model) if exposes_context_detail else ""
 		button.set_meta(&"lexicon_entry_id", definition.id)
 		button.pressed.connect(select_entry.bind(definition.id, true))
 		button.mouse_entered.connect(_preview_entry.bind(definition.id))
@@ -450,12 +447,13 @@ func _rebuild_entry_list() -> void:
 		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(title)
 
-		var content_provider := context_detail_payload.bind(definition.id)
-		_context_detail_sources[definition.id] = {
-			"source": button,
-			"provider": content_provider,
-		}
-		context_detail_source_available.emit(button, content_provider, false)
+		if exposes_context_detail:
+			var content_provider := context_detail_payload.bind(definition.id)
+			_context_detail_sources[definition.id] = {
+				"source": button,
+				"provider": content_provider,
+			}
+			context_detail_source_available.emit(button, content_provider, false)
 
 func _preview_entry(entry_id: StringName) -> void:
 	# Hover and navigation focus preview the same detail without committing a
@@ -463,6 +461,14 @@ func _preview_entry(entry_id: StringName) -> void:
 	select_entry(entry_id, false)
 
 func _show_empty_detail() -> void:
+	selected_entry_id = &""
+	detail_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	for button_value in entry_buttons.values():
+		var button := button_value as Button
+		if button == null:
+			continue
+		button.set_pressed_no_signal(false)
+		button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTION_CARD
 	detail_illustration.hide()
 	detail_category_label.hide()
 	detail_title.hide()
@@ -479,8 +485,10 @@ func _show_empty_detail() -> void:
 	detail_related_title.hide()
 	detail_related_text.hide()
 	empty_detail_label.show()
+	detail_scroll.scroll_vertical = 0
 
 func _show_detail(view_model: LexiconEntryViewModel) -> void:
+	detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	empty_detail_label.hide()
 	detail_illustration.show()
 	detail_category_label.show()

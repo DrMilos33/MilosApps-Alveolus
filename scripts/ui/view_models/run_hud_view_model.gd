@@ -51,6 +51,7 @@ class AbilitySlotViewModel:
 	var _slot: int
 	var _title: String
 	var _icon_id: StringName
+	var _effect_text: String
 	var _occupied: bool
 	var _ready: bool
 	var _cooldown_remaining: float
@@ -62,6 +63,7 @@ class AbilitySlotViewModel:
 		slot_value: int,
 		title_value: String,
 		icon_value: StringName,
+		effect_value: String,
 		occupied_value: bool,
 		ready_value: bool,
 		remaining_value: float,
@@ -72,6 +74,7 @@ class AbilitySlotViewModel:
 		_slot = slot_value
 		_title = title_value
 		_icon_id = icon_value
+		_effect_text = effect_value
 		_occupied = occupied_value
 		_ready = ready_value and occupied_value
 		_cooldown_remaining = maxf(0.0, remaining_value)
@@ -87,6 +90,9 @@ class AbilitySlotViewModel:
 
 	func icon_id() -> StringName:
 		return _icon_id
+
+	func effect_text() -> String:
+		return _effect_text
 
 	func occupied() -> bool:
 		return _occupied
@@ -148,7 +154,7 @@ var _content_hash := ""
 ## boss_visible/title/current/maximum/phase, analysis_current/target/level.
 ## Stat rows accept id, icon_id, value, accessible_name and priority.
 ## Ability rows accept slot (0/1), title, icon_id, occupied, ready,
-## cooldown_remaining/total, targeting and key_glyph_text.
+## effect_text, cooldown_remaining/total, targeting and key_glyph_text.
 static func create(
 	vital_snapshot: Dictionary,
 	stat_rows: Array,
@@ -365,6 +371,12 @@ func _copy_abilities(source_rows: Array) -> void:
 		var icon_value := StringName(String(row.get("icon_id", "ability")))
 		if icon_value == &"":
 			icon_value = &"ability"
+		var effect_value := String(row.get(
+			"effect_text",
+			row.get("description", row.get("effect", ""))
+		)).strip_edges()
+		if not occupied_value:
+			effect_value = ""
 		var glyph_default := "Q" if slot_value == 0 else "E"
 		var glyph_value := String(row.get("key_glyph_text", glyph_default)).strip_edges()
 		if glyph_value.is_empty():
@@ -373,6 +385,7 @@ func _copy_abilities(source_rows: Array) -> void:
 			slot_value,
 			title_value,
 			icon_value,
+			effect_value,
 			occupied_value,
 			bool(row.get("ready", false)),
 			float(row.get("cooldown_remaining", 0.0)),
@@ -409,6 +422,7 @@ func _calculate_content_hash() -> String:
 		canonical.append(str(ability.slot()))
 		canonical.append(_length_prefixed(ability.title()))
 		canonical.append(_length_prefixed(String(ability.icon_id())))
+		canonical.append(_length_prefixed(ability.effect_text()))
 		canonical.append("1" if ability.occupied() else "0")
 		canonical.append("1" if ability.ready() else "0")
 		canonical.append(_float_key(ability.cooldown_remaining()))

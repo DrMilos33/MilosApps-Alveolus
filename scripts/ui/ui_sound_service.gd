@@ -11,10 +11,11 @@ const OPEN := &"open"
 const REWARD := &"reward"
 const RUN_START := &"run_start"
 const ABILITY_READY := &"ability_ready"
+const ABILITY_BLOCKED := &"ability_blocked"
 
 const SOUND_ROLE_META := &"ui_sound_role"
 const LEGACY_SOUND_CUE_META := &"ui_sound_cue"
-const SOUND_ROLES := [NONE, PRESS, CONFIRM, BACK, ERROR, OPEN, REWARD, RUN_START, ABILITY_READY]
+const SOUND_ROLES := [NONE, PRESS, CONFIRM, BACK, ERROR, OPEN, REWARD, RUN_START, ABILITY_READY, ABILITY_BLOCKED]
 const FOCUS_NAVIGATION_ACTIONS := [&"ui_focus_next", &"ui_focus_prev", &"ui_left", &"ui_right", &"ui_up", &"ui_down"]
 
 const SOUND_PATHS := {
@@ -27,6 +28,7 @@ const SOUND_PATHS := {
 	REWARD: "res://assets/vendor/kenney_interface_sounds/maximize_003.wav",
 	RUN_START: "res://assets/vendor/kenney_interface_sounds/confirmation_004.wav",
 	ABILITY_READY: "res://assets/vendor/kenney_interface_sounds/maximize_003.wav",
+	ABILITY_BLOCKED: "res://assets/vendor/kenney_interface_sounds/select_003.wav",
 }
 
 const PLAYER_COUNT := 8
@@ -99,7 +101,12 @@ func play(cue: StringName) -> void:
 	var player := players[next_player]
 	next_player = (next_player + 1) % players.size()
 	player.stream = streams[cue]
-	player.volume_db = -8.0 if cue == FOCUS else 0.0
+	if cue == ABILITY_BLOCKED:
+		player.volume_db = -12.0
+	elif cue == FOCUS:
+		player.volume_db = -8.0
+	else:
+		player.volume_db = 0.0
 	if output_enabled:
 		player.play()
 

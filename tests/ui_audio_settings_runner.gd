@@ -231,7 +231,7 @@ func _test_audio_buses_assets_pool_and_wiring() -> void:
 		_true(service.streams.has(cue), "Audiocue %s wurde in den semantischen Katalog geladen" % String(cue))
 	_equal(
 		UISoundService.SOUND_ROLES,
-		[UISoundService.NONE, UISoundService.PRESS, UISoundService.CONFIRM, UISoundService.BACK, UISoundService.ERROR, UISoundService.OPEN, UISoundService.REWARD, UISoundService.RUN_START, UISoundService.ABILITY_READY],
+		[UISoundService.NONE, UISoundService.PRESS, UISoundService.CONFIRM, UISoundService.BACK, UISoundService.ERROR, UISoundService.OPEN, UISoundService.REWARD, UISoundService.RUN_START, UISoundService.ABILITY_READY, UISoundService.ABILITY_BLOCKED],
 		"Der explizite Aktivierungsvertrag enthält genau die verbindlichen Soundrollen"
 	)
 
@@ -267,6 +267,10 @@ func _test_audio_buses_assets_pool_and_wiring() -> void:
 	var before_player := service.next_player
 	service.play(UISoundService.PRESS)
 	_equal(service.next_player, (before_player + 1) % UISoundService.PLAYER_COUNT, "Ein Cue belegt genau einen Poolplayer")
+	var blocked_player_index := service.next_player
+	service.play(UISoundService.ABILITY_BLOCKED)
+	_equal(service.next_player, (blocked_player_index + 1) % UISoundService.PLAYER_COUNT, "Eine noch abklingende Fähigkeit erzeugt genau einen leichten Cue")
+	_near(service.players[blocked_player_index].volume_db, -12.0, 0.01, "Der Blockiert-Cue bleibt deutlich leiser als eine Bestätigung")
 
 	# Pointer movement and hover are deliberately silent, including the custom
 	# campus controls. A dense sweep must not accidentally model keyboard focus.

@@ -30,6 +30,7 @@ var _active_source_id := 0
 var _mode := OpenMode.NONE
 var _layout_generation := 0
 var _current_payload: Dictionary = {}
+var _hover_recovery_scheduled := false
 
 
 func _ready() -> void:
@@ -52,9 +53,23 @@ func register_source(source: Control, provider: Callable, hover_enabled: bool = 
 	var source_id := source.get_instance_id()
 	if _registrations.has(source_id):
 		var existing: Dictionary = _registrations[source_id]
+		var was_hover_enabled := bool(existing.get("hover_enabled", true))
+		var entered: Callable = existing.get("entered", Callable())
+		var exited: Callable = existing.get("exited", Callable())
+		if was_hover_enabled != hover_enabled:
+			if hover_enabled:
+				if entered.is_valid() and not source.mouse_entered.is_connected(entered):
+					source.mouse_entered.connect(entered)
+				if exited.is_valid() and not source.mouse_exited.is_connected(exited):
+					source.mouse_exited.connect(exited)
+			else:
+				_disconnect_if_connected(source.mouse_entered, entered)
+				_disconnect_if_connected(source.mouse_exited, exited)
 		existing["provider"] = provider
 		existing["hover_enabled"] = hover_enabled
 		_registrations[source_id] = existing
+		if hover_enabled:
+			_schedule_hover_recovery()
 		return
 
 	var entered := _on_source_mouse_entered.bind(source_id)
@@ -75,6 +90,8 @@ func register_source(source: Control, provider: Callable, hover_enabled: bool = 
 		"tree_exiting": tree_exiting,
 		"hover_enabled": hover_enabled,
 	}
+	if hover_enabled:
+		_schedule_hover_recovery()
 
 
 func unregister_source(source: Control) -> void:
@@ -296,6 +313,53 @@ func _on_source_mouse_entered(source_id: int) -> void:
 	if _mode == OpenMode.EXPLICIT:
 		return
 	_open(source_id, OpenMode.HOVER)
+
+
+func _schedule_hover_recovery() -> void:
+	# Rebuilt lists replace the Control below a stationary pointer. Godot does
+	# not guarantee a second mouse_entered signal for that replacement, so the
+	# shared tooltip would otherwise disappear until the mouse moves again.
+	if _hover_recovery_scheduled or not is_inside_tree():
+		return
+	_hover_recovery_scheduled = true
+	_begin_hover_recovery.call_deferred()
+
+
+func _begin_hover_recovery() -> void:
+	if not is_inside_tree():
+		_hover_recovery_scheduled = false
+		return
+	get_tree().process_frame.connect(_recover_hover_under_pointer, CONNECT_ONE_SHOT)
+
+
+func _recover_hover_under_pointer() -> void:
+	_hover_recovery_scheduled = false
+	if _mode == OpenMode.EXPLICIT or not is_inside_tree():
+		return
+	var hovered := get_viewport().gui_get_hovered_control()
+	var hovered_source_id := _registered_ancestor_id(hovered)
+	if hovered_source_id != 0:
+		var registration: Dictionary = _registrations.get(hovered_source_id, {})
+		if bool(registration.get("hover_enabled", false)):
+			_open(hovered_source_id, OpenMode.HOVER)
+			return
+	_recover_hover_at(get_local_mouse_position())
+
+
+func _recover_hover_at(local_pointer: Vector2) -> bool:
+	if _mode == OpenMode.EXPLICIT:
+		return false
+	for source_id_value in _registrations:
+		var source_id := int(source_id_value)
+		var registration: Dictionary = _registrations[source_id]
+		if not bool(registration.get("hover_enabled", false)):
+			continue
+		var source := _source_for_id(source_id)
+		if source == null or not source.is_inside_tree() or not source.is_visible_in_tree():
+			continue
+		if _source_rect_in_controller(source).has_point(local_pointer):
+			return _open(source_id, OpenMode.HOVER)
+	return false
 
 
 func _on_source_mouse_exited(source_id: int) -> void:

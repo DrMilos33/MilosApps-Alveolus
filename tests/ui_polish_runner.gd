@@ -185,7 +185,8 @@ func _run() -> void:
 	_check(hud.run_hud_screen.run_stats_strip().mouse_filter == Control.MOUSE_FILTER_IGNORE, "Die Runstatistik blockiert keine Ziele im Spiel")
 	_check(run_stat_rows.size() <= 5, "Die Runstatistik bleibt auf höchstens fünf Werte begrenzt")
 	_check(hud.run_hud_screen.run_stats_strip() is HFlowContainer and hud.run_hud_screen.run_stats_strip().get_meta(&"alveolus_component", &"") == &"transparent_run_stats", "Die Runstatistik verwendet ein flaches transparentes Statband")
-	_check(hud.run_hud_screen.run_stats_strip().get_global_rect().position.x >= hud.timer_panel.get_global_rect().end.x, "Das Statband beginnt erst rechts neben dem Timer")
+	var stat_strip_rect := hud.run_hud_screen.run_stats_strip().get_global_rect()
+	_check(stat_strip_rect.position.x >= hud.stability_panel.get_global_rect().end.x and stat_strip_rect.end.x <= hud.timer_panel.get_global_rect().position.x, "Das transparente Statband nutzt kollisionsfrei den Raum zwischen Zustand und Timer")
 	var previous_row: Control = null
 	for row in run_stat_rows:
 		_check(row.is_visible_in_tree(), "Jeder präsentierte Runwert ist tatsächlich sichtbar")

@@ -93,6 +93,7 @@ var run_hud_ability_rows: Array = [
 		"slot": 0,
 		"title": "Nicht belegt",
 		"icon_id": &"ability",
+		"effect_text": "",
 		"occupied": false,
 		"ready": false,
 		"cooldown_remaining": 0.0,
@@ -104,6 +105,7 @@ var run_hud_ability_rows: Array = [
 		"slot": 1,
 		"title": "Nicht belegt",
 		"icon_id": &"ability",
+		"effect_text": "",
 		"occupied": false,
 		"ready": false,
 		"cooldown_remaining": 0.0,
@@ -576,26 +578,30 @@ func _build_gameplay_hud() -> Control:
 	finding_progress_panel.set_anchor(SIDE_RIGHT, 0.5)
 	finding_progress_panel.set_anchor(SIDE_TOP, 1.0)
 	finding_progress_panel.set_anchor(SIDE_BOTTOM, 1.0)
-	finding_progress_panel.offset_left = -178.0
-	finding_progress_panel.offset_right = 178.0
-	finding_progress_panel.offset_top = -60.0
-	finding_progress_panel.offset_bottom = -12.0
+	finding_progress_panel.offset_left = -132.0
+	finding_progress_panel.offset_right = 132.0
+	finding_progress_panel.offset_top = -40.0
+	finding_progress_panel.offset_bottom = -10.0
 	finding_progress_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	AlveolusUIComponents.apply_surface_role(finding_progress_panel, AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, COLOR_GOLD)
 	layer.add_child(finding_progress_panel)
-	var finding_margin := _margin(12, 7, 12, 7)
+	var finding_margin := _margin(9, 4, 9, 4)
 	finding_progress_panel.add_child(finding_margin)
-	var finding_stack := VBoxContainer.new()
-	finding_stack.add_theme_constant_override("separation", 4)
-	finding_margin.add_child(finding_stack)
-	finding_progress_label = AlveolusUIComponents.label("BEFUND · 0 / 30", AlveolusVisualTheme.TYPE_HUD_VALUE_LABEL)
+	var finding_row := HBoxContainer.new()
+	finding_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	finding_row.add_theme_constant_override("separation", 8)
+	finding_margin.add_child(finding_row)
+	finding_progress_label = AlveolusUIComponents.label("BEFUND · 0 / 30", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 	finding_progress_label.add_theme_color_override("font_color", COLOR_GOLD)
-	finding_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	finding_stack.add_child(finding_progress_label)
+	finding_progress_label.custom_minimum_size.x = 122.0
+	finding_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	finding_row.add_child(finding_progress_label)
 	finding_progress_bar = AlveolusUIComponents.progress(0.0, 30.0, false)
-	finding_progress_bar.custom_minimum_size.y = 7.0
+	finding_progress_bar.custom_minimum_size.y = 5.0
+	finding_progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	finding_progress_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	AlveolusUIComponents.apply_progress_accent(finding_progress_bar, COLOR_GOLD)
-	finding_stack.add_child(finding_progress_bar)
+	finding_row.add_child(finding_progress_bar)
 	finding_progress_panel.hide()
 
 	return layer
@@ -614,6 +620,11 @@ func _install_run_hud_overlay(layer: Control) -> void:
 	)
 	layer.add_child(run_hud_screen)
 	layer.move_child(run_hud_screen, 0)
+	for registration in run_hud_screen.context_detail_registrations():
+		var source := registration.get("source") as Control
+		var provider: Callable = registration.get("provider", Callable())
+		if source != null and provider.is_valid():
+			register_context_detail(source, provider, bool(registration.get("hover_enabled", true)))
 
 	# Preserve the established compatibility handles for callers and focused
 	# layout tests. They now point at the central module's controls.
@@ -2971,6 +2982,7 @@ func configure_active_abilities(abilities: Array) -> void:
 			"slot": slot_index,
 			"title": String(_view_value(ability, &"title", _view_value(ability, &"display_name", "Aktive Fähigkeit"))),
 			"icon_id": ability_id,
+			"effect_text": String(_view_value(ability, &"description", _view_value(ability, &"effect_text", ""))),
 			"occupied": true,
 			"ready": bool(_view_value(ability, &"ready", true)),
 			"cooldown_remaining": float(_view_value(ability, &"cooldown_remaining", 0.0)),
@@ -3016,6 +3028,7 @@ func _empty_run_hud_ability(slot_index: int) -> Dictionary:
 		"slot": slot_index,
 		"title": "Nicht belegt",
 		"icon_id": &"ability",
+		"effect_text": "",
 		"occupied": false,
 		"ready": false,
 		"cooldown_remaining": 0.0,
@@ -3978,12 +3991,10 @@ func _rebuild_preparation_catalog(entries: Array, unlocked_ids: Variant = {}, se
 	var required_kind := ""
 	if planning_snapshot.mode in [PlanningSnapshot.Mode.COMPONENT_PICK, PlanningSnapshot.Mode.REPLACE_CONFIRM, PlanningSnapshot.Mode.RESERVE_PICK]:
 		required_kind = _component_kind_for_slot(planning_snapshot.selected_slot_id)
-	# The current component stays in the same choice group as the available
-	# alternatives. Changing a slot therefore changes only its visual state,
-	# rather than making the just-clicked card disappear or jump to another group.
-	var available_rows: Array[Dictionary] = []
-	var assigned_rows: Array[Dictionary] = []
-	var locked_rows: Array[Dictionary] = []
+	# Preserve the catalog's source order for every slot. Availability, current
+	# assignment and locks are visual states only; they must never reshuffle the
+	# player's learned spatial map when another plan slot is selected.
+	var ordered_rows: Array[Dictionary] = []
 	for entry in entries:
 		var id := StringName(_view_value(entry, &"id", &""))
 		var title := String(_view_value(entry, &"title", "Unbenannte Komponente"))
@@ -4012,17 +4023,14 @@ func _rebuild_preparation_catalog(entries: Array, unlocked_ids: Variant = {}, se
 		}
 		if current_for_slot:
 			row["state"] = &"current"
-			available_rows.append(row)
 		elif not unlocked:
 			row["state"] = &"locked"
-			locked_rows.append(row)
 		elif selected:
 			row["state"] = &"assigned"
-			assigned_rows.append(row)
 		else:
 			row["state"] = &"available"
-			available_rows.append(row)
-	for row in available_rows + assigned_rows + locked_rows:
+		ordered_rows.append(row)
+	for row in ordered_rows:
 		_add_preparation_catalog_row(row)
 	if preparation_component_buttons.is_empty():
 		var empty_label := _label("Keine weitere passende Komponente verfügbar.", 14, COLOR_MUTED)

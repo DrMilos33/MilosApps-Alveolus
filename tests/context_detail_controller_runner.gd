@@ -95,6 +95,27 @@ func _run() -> void:
 	await _settle()
 	_check(not controller.is_open() and controller.active_source() == null, "Eine freigegebene Quelle hinterlässt keine schwebende Karte")
 
+	# Refreshes replace progression cards while the pointer is stationary. The
+	# replacement must recover the same hover detail without waiting for another
+	# physical mouse movement.
+	var replacement := PanelContainer.new()
+	replacement.position = Vector2(406.0, 78.0)
+	replacement.size = Vector2(62.0, 48.0)
+	host.add_child(replacement)
+	controller.register_source(replacement, func() -> Dictionary:
+		return {"title": "Schnelltest II", "body": "+25 % Befund", "accent": AlveolusVisualTheme.COBALT}
+	)
+	await _settle()
+	controller.close_all()
+	_check(
+		controller._recover_hover_at(replacement.position + replacement.size * 0.5),
+		"Eine neu gebaute Karte unter dem ruhenden Zeiger wird als Hoverquelle wiedererkannt"
+	)
+	await _settle()
+	_check(controller.is_open() and controller.title_label.text == "Schnelltest II", "Der wiederhergestellte Tooltip zeigt die Daten der neuen Karteninstanz")
+	replacement.queue_free()
+	await _settle()
+
 	host.queue_free()
 	await process_frame
 	_finish()

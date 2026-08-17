@@ -173,6 +173,14 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	_check(q_runtime.cooldown_remaining > 0.0, "Q aktiviert die erste Fähigkeit und startet ihren Cooldown")
 	_check(e_runtime.cooldown_remaining > 0.0, "E aktiviert die zweite Fähigkeit und startet ihren Cooldown")
 	_check(int(game.mastery_tracker.ability_uses.get(0, 0)) == 1 and int(game.mastery_tracker.ability_uses.get(1, 0)) == 1, "Beide Fähigkeitseinsätze werden für Meisterschaft gezählt")
+	var alert_before_blocked: String = game.hud.alert_label.text
+	var sound_before_blocked: int = game.ui_sound_service.next_player
+	game._begin_or_queue_ability(0, AbilityCommand.InputDevice.KEYBOARD_MOUSE)
+	_check(game.hud.alert_label.text == alert_before_blocked, "Eine noch abklingende Fähigkeit blendet keinen Text ein")
+	_check(game.ui_sound_service.next_player == (sound_before_blocked + 1) % UISoundService.PLAYER_COUNT, "Eine noch abklingende Fähigkeit antwortet ausschließlich mit einem leichten Sound")
+	var sound_before_empty: int = game.ui_sound_service.next_player
+	game._begin_or_queue_ability(7, AbilityCommand.InputDevice.KEYBOARD_MOUSE)
+	_check(game.hud.alert_label.text == alert_before_blocked and game.ui_sound_service.next_player == sound_before_empty, "Ein unbelegter Fähigkeitsslot bleibt vollständig stumm")
 
 	var elapsed_before_pause: float = game.state.elapsed
 	var q_before_pause: float = q_runtime.cooldown_remaining

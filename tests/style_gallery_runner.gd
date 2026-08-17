@@ -312,9 +312,11 @@ func _run() -> void:
 	var page_medallion := header_parts["medallion"] as PanelContainer
 	var page_icon := header_parts["icon"] as SimpleIcon
 	var page_title := header_parts["title"] as Label
+	var page_heading := header_parts["heading"] as VBoxContainer
 	_check(page_medallion != null and page_medallion.custom_minimum_size.is_equal_approx(Vector2(44.0, 44.0)), "PageHeader besitzt das feste 44-px-Medaillon")
 	_check(page_icon != null and page_icon.kind == &"settings" and SimpleIcon.supports(page_icon.kind), "PageHeader verwendet ein semantisches SimpleIcon")
 	_check(page_title != null and page_title.text == "Einstellungen" and page_title.theme_type_variation == AlveolusVisualTheme.TYPE_TITLE_LABEL, "PageHeader enthält genau den Seitentitel")
+	_check(page_heading != null and page_heading.size_flags_vertical == Control.SIZE_SHRINK_CENTER and page_title.vertical_alignment == VERTICAL_ALIGNMENT_CENTER, "Jeder zentrale Seitentitel ist wie die Einsatzplanung vertikal im Kopfband zentriert")
 	_check(shell.oversampling_with_scale == CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED, "PageShell aktiviert skalierungsabhängiges Font-Oversampling")
 	var tooltip_parts := AlveolusUIComponents.tooltip_card("Fokusfeld", "Verstärkt die Behandlung.", "Aktiv · 2 K")
 	var detail_parts := AlveolusUIComponents.detail_card("Fokusfeld", "Verstärkt die Behandlung.", "I · Information")

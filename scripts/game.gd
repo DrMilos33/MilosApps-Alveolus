@@ -676,10 +676,10 @@ func _begin_or_queue_ability(slot: int, device: AbilityCommand.InputDevice) -> v
 		return
 	var runtime := ability_controller.runtime(slot)
 	if runtime == null or runtime.definition == null:
-		hud.show_alert("Dieser Platz ist nicht belegt.", AlveolusVisualTheme.CORAL, 1.4)
 		return
 	if not runtime.is_ready():
-		hud.show_alert("Diese Fähigkeit ist noch nicht bereit.", AlveolusVisualTheme.GOLD, 1.4)
+		if ui_sound_service != null:
+			ui_sound_service.play(UISoundService.ABILITY_BLOCKED)
 		return
 	if runtime.definition.target_mode == AbilityDefinition.TargetMode.SELF:
 		_queue_ability_command(slot, avatar.global_position, device)

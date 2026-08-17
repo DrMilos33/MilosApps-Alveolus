@@ -60,6 +60,7 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	_check(view_model.stat_count() == 5 and view_model.ability_count() == 2, "Snapshot enthält fünf kompakte Werte und exakt zwei Fähigkeitsslots")
 	_check(view_model.stat_at(0).id() == &"therapy_power", "Runwerte werden nach stabiler Priorität sortiert")
 	_check(view_model.ability_at(0).title() == "Fokusfeld" and view_model.ability_at(1).title() == "Notfallhilfe", "Fähigkeiten werden unabhängig von der Eingabereihenfolge nach Slot normalisiert")
+	_check(view_model.ability_at(0).effect_text() == "Priorisiert Ziele und verstärkt die Behandlung im Zielgebiet.", "Fähigkeitswirkung wird präsentationsfertig und nur lesbar kopiert")
 	_check(view_model.ability_at(0).targeting() and view_model.ability_at(0).status_text() == "Ziel wählen", "Targeting besitzt Vorrang vor dem Bereitstatus")
 	_check(is_equal_approx(view_model.ability_at(1).cooldown_progress(), 0.4), "Cooldownfortschritt wird aus kopierten Presenterwerten berechnet")
 	_check(view_model.ability_at(-1) == null and view_model.ability_at(2) == null, "Ungültige Fähigkeitsslots werden sicher abgewiesen")
@@ -68,20 +69,21 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	(vital["nested"] as Dictionary)["mutable"] = false
 	stats[0]["value"] = "999"
 	abilities[0]["title"] = "Fremde Fähigkeit"
+	abilities[0]["effect_text"] = "Fremde Wirkung"
 	var returned_stats := view_model.stats()
 	var returned_abilities := view_model.abilities()
 	returned_stats.clear()
 	returned_abilities.clear()
 	_check(view_model.timer_text() == "BOSS IN · 01:24", "Tiefe Quellmutationen erreichen den Vital-Snapshot nicht")
 	_check(view_model.stat_count() == 5 and view_model.stat_at(0).formatted_value() == "+18 %", "Runwertarrays sind defensiv kopiert")
-	_check(view_model.ability_count() == 2 and view_model.ability_at(1).title() == "Notfallhilfe", "Fähigkeitsarrays und -zeilen sind defensiv kopiert")
+	_check(view_model.ability_count() == 2 and view_model.ability_at(1).title() == "Notfallhilfe" and view_model.ability_at(1).effect_text().contains("Schutzpuffer"), "Fähigkeitsarrays, Namen und Wirkungen sind defensiv kopiert")
 
 	var equivalent: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), _stat_rows(), _ability_rows(), 23)
 	_check(equivalent.content_hash() == view_model.content_hash(), "Revision ist nicht Teil des semantischen HUD-Hashs")
 	var one_slot: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), [], [
-		{"slot": 0, "title": "Fokusfeld", "occupied": true, "key_glyph_text": "Q"},
+		{"slot": 0, "title": "Fokusfeld", "effect_text": "Verstärkt die Behandlung.", "occupied": true, "key_glyph_text": "Q"},
 	], 24)
-	_check(one_slot.ability_count() == 2 and not one_slot.ability_at(1).occupied(), "Fehlende Belegung bleibt als sichtbarer zweiter Leerslot erhalten")
+	_check(one_slot.ability_count() == 2 and not one_slot.ability_at(1).occupied(), "Fehlende Belegung bleibt nur als stabiles logisches Slot-Mapping erhalten")
 	_check(one_slot.ability_at(1).key_glyph_text() == "E", "Leerslot besitzt weiterhin seinen konfigurierbaren Glyphtext-Fallback")
 	return view_model
 
@@ -108,6 +110,9 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(hud.timer_value_label().text == "BOSS IN · 01:24", "Timer besitzt keine eigene Fortschrittslogik")
 	_check(hud.boss_panel().visible and hud.boss_value_label().text == "64 %", "Aktiver Bossstatus bleibt sichtbar")
 	_check(hud.analysis_value_label().text == "Lv 3 · 7/12" and hud.analysis_bar().value == 7.0, "Proben und Analyse bleiben als kompakte Zielanzeige sichtbar")
+	_check(hud.stability_panel().size.y <= 36.0 and hud.stability_panel().find_child("StabilityIcon", true, false) == null, "Zustand nutzt einen niedrigen, breiteren Balken ohne redundantes Vital-Icon")
+	_check(hud.analysis_panel().size.y <= 28.0, "Befund und Level bleiben als dezente Zielzeile kompakt")
+	_check(hud.timer_panel().size.x <= 176.0 and hud.timer_panel().global_position.x > 640.0, "Bosstimer sitzt klein und dezent oben rechts")
 
 	_check(hud.run_stats_strip().is_class("HFlowContainer") and not hud.run_stats_strip().is_class("Panel"), "Runwerte besitzen einen transparenten Flow statt einer eigenen Panel-Fläche")
 	_check(hud.stat_rows().size() == 5, "Alle fünf präsentierten Runwerte sind sichtbar")
@@ -115,15 +120,24 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 		_check(row.get_child_count() == 2 and row.get_child(0) is SimpleIcon and row.get_child(1) is Label, "Runwert zeigt ausschließlich Icon und Wert")
 		_check(row.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Transparenter Runwert blockiert kein Gameplay-Pointerevent")
 
-	_check(hud.ability_cards().size() == 2 and hud.ability_buttons().size() == 2, "Run-HUD besitzt exakt zwei feste Fähigkeitsslots")
+	_check(hud.ability_cards().size() == 2 and hud.ability_buttons().size() == 2, "Run-HUD behält exakt zwei stabile logische Fähigkeitsslots")
 	_check(hud.ability_icons().size() == 2 and hud.ability_key_labels().size() == 2, "Jeder Fähigkeitsslot besitzt Icon und Glyphtext")
-	_check(hud.ability_title_labels()[0].text == "Fokusfeld" and hud.ability_key_labels()[0].text == "Q", "Erster Fähigkeitsslot bindet Titel und Tastenglyphe")
+	_check(hud.ability_title_labels()[0].text == "Fokusfeld" and not hud.ability_title_labels()[0].visible and hud.ability_key_labels()[0].text == "Q", "Titel bleibt für Kompatibilität gebunden, aber dauerhaft aus dem knappen HUD ausgeblendet")
+	_check(hud.ability_cards().all(func(card: Panel) -> bool: return is_zero_approx(card.self_modulate.a) and card.get_meta(&"alveolus_component", &"") == &"transparent_hud_ability"), "Fähigkeiten zeigen keine massive Kachel hinter Icon und Readout")
 	_check(hud.ability_cooldown_labels()[0].text == "Ziel wählen", "Targeting wird im ersten Slot eindeutig angezeigt")
 	_check(hud.ability_cooldown_labels()[1].text == "7.2 s", "Zweiter Slot zeigt seinen Presenter-Cooldown")
 	_check(is_equal_approx(hud.ability_cooldown_bars()[1].value, 0.4), "Cooldownleiste bindet den normalisierten Fortschritt")
 	_check(hud.ability_cards()[0].get_meta(&"targeting", false), "Targetingstatus bleibt am kompatiblen Slot-Control verfügbar")
 	_check(not hud.ability_buttons()[0].disabled and not hud.ability_buttons()[1].disabled, "Belegte Slots bleiben interaktiv")
 	_check(hud.ability_buttons()[0].scale.is_equal_approx(Vector2.ONE), "Fähigkeitsfokus verwendet keine Scale-Transformation")
+	_check(hud.ability_buttons().all(func(button: Button) -> bool: return button.tooltip_text.is_empty()), "Native Tooltips konkurrieren nicht mit der zentralen Hoverkarte")
+	_check(hud.ability_buttons().all(func(button: Button) -> bool: return UISoundService.sound_role(button) == UISoundService.NONE), "Fähigkeitstrefferflächen überlassen Soundfeedback ausschließlich dem Gameplay-Intent")
+	var registrations := hud.context_detail_registrations()
+	_check(registrations.size() == 2 and bool(registrations[0].get("hover_enabled", false)), "Beide stabilen Slots exponieren hoverfähige ContextDetail-Registrierungen")
+	var hover_provider := hud.tooltip_provider_for(hud.ability_buttons()[0])
+	_check(hover_provider.is_valid() and hover_provider == hud.ui_info_provider_for(hud.ability_buttons()[0]), "Maus-Hover und ui_info teilen dieselbe stabile Informationsquelle")
+	var hover_payload: Dictionary = hover_provider.call()
+	_check(hover_payload.get("title", "") == "Fokusfeld" and String(hover_payload.get("body", "")).contains("verstärkt"), "Fähigkeitstooltip nennt Name und konkrete Wirkung kompakt")
 	_check(hud.pause_action().get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "Pause bleibt eine ruhige HUD-Aktion")
 	_check(get_root().gui_get_focus_owner() == null or not hud.is_ancestor_of(get_root().gui_get_focus_owner()), "Presenterupdate erzeugt keinen unerwarteten HUD-Fokus")
 
@@ -136,6 +150,7 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	hud.pause_action().pressed.emit()
 	_check(ability_intents == [0, 1], "Beide Fähigkeitstrefferflächen emittieren ausschließlich ihren Slot")
 	_check(pause_intents.size() == 1, "Pause emittiert genau einen Intent")
+	_check(hud.pause_action().size.is_equal_approx(Vector2(44.0, 44.0)), "Pause bleibt visuell kompakt bei vollständiger 44-Pixel-Trefferfläche")
 	_check(hud.grab_ability_focus(0), "Fassade kann den ersten belegten Fähigkeitsslot fokussieren")
 	await process_frame
 	_check(get_root().gui_get_focus_owner() == hud.ability_buttons()[0], "Expliziter Fokus landet auf dem angeforderten Slot")
@@ -166,18 +181,42 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 		await _settle()
 		_assert_critical_layout(hud, viewport_size)
 		var row_levels := _row_levels(hud.stat_rows())
-		if viewport_size.x == 1280:
-			_check(row_levels.size() == 1, "1280 px ordnet fünf kompakte Runwerte zuerst horizontal an")
+		if viewport_size.x >= 1024:
+			_check(row_levels.size() == 1, "%s nutzt den gewonnenen Platz für eine ruhige einzeilige Wertleiste" % viewport_size)
 		else:
-			_check(row_levels.size() == 2, "%s beginnt erst bei voller Breite eine zweite Statzeile" % viewport_size)
+			_check(row_levels.size() == 2, "%s verwendet erst bei echtem Platzmangel eine zweite Statzeile" % viewport_size)
 
 	# Logical 480 × 270 corresponds to the required 960 × 540 at 200 percent.
 	_resize_logical_host(host, Vector2i(480, 270))
 	await _settle()
 	_assert_critical_layout(hud, Vector2i(480, 270))
-	_check(hud.ability_panel().columns == 2, "Auch bei 200 Prozent bleiben exakt zwei eindeutige Fähigkeitsslots")
+	_check(hud.ability_panel().columns == 2, "Auch bei 200 Prozent bleiben zwei belegte Fähigkeiten eindeutig nebeneinander")
 	_check(hud.stability_panel().visible and hud.shield_panel().visible and hud.timer_panel().visible and hud.analysis_panel().visible, "200-Prozent-Layout blendet keinen gameplaykritischen Wert aus")
 	_check(hud.run_stats_strip().get_global_rect().end.y <= hud.analysis_panel().get_global_rect().position.y + 0.5, "Kompakte Statzeilen kollidieren nicht mit Analyse und Proben")
+
+	var one_slot_model: RunHUDViewModel = RunHUDViewModelScript.create(updated_vital, [], [
+		{
+			"slot": 0,
+			"title": "Fokusfeld",
+			"effect_text": "Verstärkt die Behandlung.",
+			"icon_id": &"ability_focus_field",
+			"occupied": true,
+			"ready": true,
+			"key_glyph_text": "Q",
+		},
+	], 24)
+	_check(hud.apply_view_model(one_slot_model), "Snapshot mit nur einer belegten Fähigkeit wird angewendet")
+	await _settle()
+	_check(hud.ability_cards()[0].visible and not hud.ability_cards()[1].visible, "Unbelegter Fähigkeitsslot wird vollständig ausgeblendet")
+	_check(hud.ability_panel().visible and hud.ability_panel().columns == 1, "Ein belegter Slot nutzt allein den kompakten HUD-Platz")
+	var empty_payload: Dictionary = hud.info_payload_for(hud.ability_buttons()[1])
+	_check(empty_payload.is_empty(), "Unbelegter Slot stellt weder Anzeige noch Tooltipinhalt bereit")
+	var no_slots_model: RunHUDViewModel = RunHUDViewModelScript.create(updated_vital, [], [], 25)
+	_check(hud.apply_view_model(no_slots_model), "Leerer Fähigkeits-Snapshot wird sicher angewendet")
+	await _settle()
+	_check(not hud.ability_panel().visible, "Ohne belegte Fähigkeiten nimmt das HUD keinerlei Slotplatz ein")
+	hud.ability_buttons()[0].pressed.emit()
+	_check(ability_intents == [0, 1], "Ein technisch ausgelöster Leerslot emittiert keinen Gameplay-Intent")
 
 	var stale: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), _stat_rows(), _ability_rows(), 8)
 	_check(not hud.apply_view_model(stale), "Veraltete Presenterrevision wird abgewiesen")
@@ -253,6 +292,7 @@ func _ability_rows() -> Array:
 		{
 			"slot": 1,
 			"title": "Notfallhilfe",
+			"effect_text": "Stellt Zustand wieder her und erzeugt einen Schutzpuffer.",
 			"icon_id": &"ability_emergency_support",
 			"occupied": true,
 			"ready": false,
@@ -264,6 +304,7 @@ func _ability_rows() -> Array:
 		{
 			"slot": 0,
 			"title": "Fokusfeld",
+			"effect_text": "Priorisiert Ziele und verstärkt die Behandlung im Zielgebiet.",
 			"icon_id": &"ability_focus_field",
 			"occupied": true,
 			"ready": true,

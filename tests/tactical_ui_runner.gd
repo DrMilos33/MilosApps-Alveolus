@@ -155,6 +155,16 @@ func _run() -> void:
 			and not bool(current_focus_candidate.get_meta(&"catalog_available", true)),
 		"Der aktuelle Slotinhalt bleibt als ausgegrauter, nicht erneut auswählbarer Kontext im Katalog"
 	)
+	var active_one_order := _catalog_component_order(hud)
+	hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_2)
+	await process_frame
+	var active_two_order := _catalog_component_order(hud)
+	_check(
+		active_one_order == [&"focus", &"emergency", &"shield", &"pulse", &"twin"] and active_two_order == active_one_order,
+		"Aktive Fähigkeiten behalten über alle Zielslots dieselbe räumliche Reihenfolge"
+	)
+	hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
+	await process_frame
 	_check(hud.preparation_editor_hint.text.contains("Aktuell: Fokusfeld"), "Der feste Editorkopf nennt Zielslot und aktuellen Inhalt")
 	var picker_focus := get_root().gui_get_focus_owner()
 	_check(picker_focus == null or not hud.preparation_catalog.is_ancestor_of(picker_focus), "Ein Mausklick markiert keinen Kandidaten ungefragt")
@@ -389,8 +399,8 @@ func _run() -> void:
 	_check(_inside_viewport(first_tree_root, get_root().size), "Der Fokus nach dem Talent-Reset bleibt sichtbar im Talentbaum")
 
 	hud.configure_active_abilities([
-		{"title": "Fokusfeld", "cooldown_remaining": 0.0, "cooldown_total": 16.0, "ready": true},
-		{"title": "Notfallhilfe", "cooldown_remaining": 7.2, "cooldown_total": 28.0, "ready": false}
+		{"id": &"ability_focus_field", "title": "Fokusfeld", "description": "Behandlung wirkt im Zielgebiet 25 % stärker.", "cooldown_remaining": 0.0, "cooldown_total": 16.0, "ready": true},
+		{"id": &"ability_emergency_support", "title": "Notfallhilfe", "description": "Stellt Zustand wieder her und erzeugt Schutz.", "cooldown_remaining": 7.2, "cooldown_total": 28.0, "ready": false}
 	])
 	hud.show_running_hud()
 	hud.set_run_stats_visibility(true)
@@ -403,8 +413,18 @@ func _run() -> void:
 	_check(hud.ability_key_labels[0].text == "Q" and hud.ability_key_labels[1].text == "E", "Das RunHUDOverlay zeigt Fähigkeitsbelegungen als scharfen Glyph-Text")
 	_check(hud.ability_cooldown_labels[0].text == "Bereit", "Bereite Fähigkeit wird in Sentence Case klar markiert")
 	_check(hud.ability_cooldown_labels[1].text == "7.2 s", "Restzeit wird sekundengenau gezeigt")
+	_check(not hud.ability_title_labels[0].visible and not hud.ability_title_labels[1].visible, "Das laufende HUD wiederholt keine Fähigkeitsnamen")
+	for ability_card in hud.ability_cards:
+		_check((ability_card as Panel).get_meta(&"alveolus_component", &"") == &"transparent_hud_ability", "Belegte Fähigkeiten erscheinen ohne massive Kartenfläche")
+	var run_ability_button := (hud.run_hud_screen.ability_buttons()[0] as Button)
+	run_ability_button.mouse_entered.emit()
+	await process_frame
+	_check(hud.context_detail_controller.is_open() and hud.context_detail_controller.current_payload().get("title", "") == "Fokusfeld" and String(hud.context_detail_controller.current_payload().get("body", "")).contains("25 %"), "Mouseover erklärt die vollständige Wirkung der aktiven Fähigkeit")
+	run_ability_button.mouse_exited.emit()
+	await process_frame
 	hud.update_finding_progress(18, 30)
 	_check(hud.finding_progress_label.text == "BEFUND · 18 / 30", "Befundleiste zeigt exakten Fortschritt")
+	_check(hud.finding_progress_panel.size.y <= 30.5 and hud.finding_progress_bar.custom_minimum_size.y <= 5.0, "Befundfortschritt bleibt als dezente, niedrige HUD-Zeile sichtbar")
 
 	var confirmed: Array = []
 	hud.finding_confirmed.connect(func(reaction_id: StringName, incoming: StringName, outgoing: StringName) -> void: confirmed.append([reaction_id, incoming, outgoing]))
@@ -497,6 +517,13 @@ func _named_label_text(root_control: Control, child_name: String) -> String:
 		return ""
 	var label := root_control.find_child(child_name, true, false) as Label
 	return label.text if label != null else ""
+
+func _catalog_component_order(hud: GameHUD) -> Array[StringName]:
+	var result: Array[StringName] = []
+	for child in hud.preparation_catalog.get_children():
+		if child is Button and child.has_meta(&"component_id"):
+			result.append(StringName(child.get_meta(&"component_id")))
+	return result
 
 func _rect_approx(first: Rect2, second: Rect2, tolerance: float = 0.5) -> bool:
 	return first.position.distance_to(second.position) <= tolerance \

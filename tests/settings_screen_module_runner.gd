@@ -163,6 +163,19 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	_check(binding_row != null and binding_row.get_child_count() == 2, "Tastenbelegung besteht nur aus Zweck und kompakter Aktion")
 	var binding_purpose := binding_row.find_child("SettingPurpose", true, false) as Label if binding_row != null else null
 	_check(binding_purpose != null and binding_purpose.text == "Details anzeigen", "ui_info benennt seinen Spielerzweck statt nur die interne Aktion")
+	for action_id in [
+		"move_up", "move_down", "move_left", "move_right", "active_ability_1",
+		"active_ability_2", "pause_game", "ui_accept", "ui_cancel", "ui_info",
+	]:
+		var shortcut_card := screen.find_child("BindingCard_%s" % action_id, true, false) as PanelContainer
+		_check(shortcut_card != null, "%s besitzt einen eigenen kompakten Bio-Lumen-Container" % action_id)
+	var binding_card := screen.find_child("BindingCard_ui_info", true, false) as PanelContainer
+	if binding_card != null:
+		_check(binding_card.get_meta(&"alveolus_component", &"") == &"shortcut_container", "Shortcut-Container ist semantisch als gemeinsame Einstellungsstruktur markiert")
+		_check(binding_card.get_meta(&"alveolus_surface_role", -1) == AlveolusVisualTheme.SurfaceRole.VALUE_ROW, "Shortcut-Container verwendet die zentrale ValueRow-Fläche")
+	var binding_button := screen.control_for_setting(&"binding.ui_info") as Button
+	if binding_purpose != null and binding_button != null:
+		_check(binding_purpose.custom_minimum_size.x <= 176.0 and binding_button.custom_minimum_size.x <= 210.0, "Beschreibung und Belegung bleiben in der Containerzeile direkt benachbart")
 
 
 func _assert_dependency_contract() -> void:

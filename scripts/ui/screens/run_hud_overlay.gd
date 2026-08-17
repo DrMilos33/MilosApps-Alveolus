@@ -15,14 +15,15 @@ const COMPACT_MARGIN := 8.0
 const STAT_ROW_WIDTH := 76.0
 const STAT_ROW_HEIGHT := 22.0
 const STAT_GAP := 6
-const ABILITY_HEIGHT := 68.0
+const ABILITY_WIDTH := 118.0
+const ABILITY_HEIGHT := 56.0
+const ABILITY_GAP := 6.0
 
 var _view_model: RunHUDViewModel
 var _applied_revision := -1
 var _applied_content_hash := ""
 
 var _stability_panel: Panel
-var _stability_icon: SimpleIcon
 var _stability_bar: ProgressBar
 var _stability_value: Label
 var _shield_panel: Panel
@@ -223,6 +224,36 @@ func ability_cooldown_bars() -> Array[ProgressBar]:
 	return result
 
 
+## Registration records are stable for the lifetime of the HUD. The provider
+## reads the latest immutable snapshot, so cooldown refreshes never reconnect
+## hover callbacks or make an already-open tooltip disappear.
+func context_detail_registrations() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for slot in range(_ability_buttons.size()):
+		result.append({
+			"source": _ability_buttons[slot],
+			"provider": _ability_info_payload.bind(slot),
+			"hover_enabled": true,
+		})
+	return result
+
+
+func tooltip_provider_for(source: Control) -> Callable:
+	return _info_provider_for(source)
+
+
+func ui_info_provider_for(source: Control) -> Callable:
+	return _info_provider_for(source)
+
+
+func info_payload_for(source: Control) -> Dictionary:
+	var provider := _info_provider_for(source)
+	if not provider.is_valid():
+		return {}
+	var payload: Variant = provider.call()
+	return (payload as Dictionary).duplicate(true) if payload is Dictionary else {}
+
+
 func pause_action() -> Button:
 	return _pause_button
 
@@ -252,15 +283,16 @@ func _build() -> void:
 func _build_stability() -> void:
 	_stability_panel = _surface_panel("Stability", AlveolusVisualTheme.SurfaceRole.HUD_VITAL, AlveolusVisualTheme.TEAL)
 	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	_stability_panel.add_child(_full_inset(row, 8))
-	_stability_icon = _hud_icon("StabilityIcon", &"stability_reserve", AlveolusVisualTheme.TURQUOISE, 22.0)
-	row.add_child(_stability_icon)
+	_stability_panel.add_child(_full_inset(row, 6))
 	_stability_bar = AlveolusUIComponents.progress(0.0, 100.0, false)
 	_stability_bar.name = "StabilityBar"
+	_stability_bar.custom_minimum_size.y = 9.0
 	_stability_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stability_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_stability_bar)
-	_stability_value = _hud_value("100 / 100", 68.0)
+	_stability_value = _hud_value("100 / 100", 62.0)
 	_stability_value.name = "StabilityValue"
 	row.add_child(_stability_value)
 	_stability_panel.set_meta(&"alveolus_accessible_name", "Zustand")
@@ -285,14 +317,14 @@ func _build_shield() -> void:
 
 
 func _build_timer() -> void:
-	_timer_panel = _surface_panel("Timer", AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, AlveolusVisualTheme.TEAL)
+	_timer_panel = _surface_panel("Timer", AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, AlveolusVisualTheme.MUTED)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	_timer_panel.add_child(_full_inset(row, 6))
-	_timer_icon = _hud_icon("TimerIcon", &"clock", AlveolusVisualTheme.TURQUOISE, 20.0)
+	_timer_panel.add_child(_full_inset(row, 4))
+	_timer_icon = _hud_icon("TimerIcon", &"clock", AlveolusVisualTheme.SKY_DEEP, 16.0)
 	row.add_child(_timer_icon)
-	_timer_value = AlveolusUIComponents.label("BOSS IN · 00:45", AlveolusVisualTheme.TYPE_HUD_LABEL)
+	_timer_value = AlveolusUIComponents.label("BOSS IN · 00:45", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 	_timer_value.name = "TimerValue"
 	_timer_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_timer_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -333,20 +365,20 @@ func _build_boss() -> void:
 
 
 func _build_analysis() -> void:
-	_analysis_panel = _surface_panel("Analysis", AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, AlveolusVisualTheme.COBALT)
+	_analysis_panel = _surface_panel("Analysis", AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, AlveolusVisualTheme.MUTED)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 5)
-	_analysis_panel.add_child(_full_inset(row, 5))
-	_analysis_icon = _hud_icon("AnalysisIcon", &"sample", AlveolusVisualTheme.COBALT, 20.0)
+	_analysis_panel.add_child(_full_inset(row, 4))
+	_analysis_icon = _hud_icon("AnalysisIcon", &"sample", AlveolusVisualTheme.SKY_DEEP, 16.0)
 	row.add_child(_analysis_icon)
 	_analysis_value = AlveolusUIComponents.label("Lv 0 · 0/0", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 	_analysis_value.name = "AnalysisValue"
-	_analysis_value.custom_minimum_size.x = 86.0
+	_analysis_value.custom_minimum_size.x = 78.0
 	_analysis_value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(_analysis_value)
 	_analysis_bar = AlveolusUIComponents.progress(0.0, 1.0, false)
 	_analysis_bar.name = "AnalysisBar"
-	_analysis_bar.custom_minimum_size.y = 8.0
+	_analysis_bar.custom_minimum_size.y = 6.0
 	_analysis_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(_analysis_bar)
 
@@ -367,8 +399,8 @@ func _build_abilities() -> void:
 	_ability_panel = GridContainer.new()
 	_ability_panel.name = "AbilitySlots"
 	_ability_panel.columns = 2
-	_ability_panel.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
-	_ability_panel.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_ability_panel.add_theme_constant_override("h_separation", int(ABILITY_GAP))
+	_ability_panel.add_theme_constant_override("v_separation", int(ABILITY_GAP))
 	add_child(_ability_panel)
 	for slot in range(2):
 		var card := _surface_panel(
@@ -377,45 +409,50 @@ func _build_abilities() -> void:
 			AlveolusVisualTheme.TURQUOISE,
 			false
 		)
-		card.custom_minimum_size = Vector2(180.0, ABILITY_HEIGHT)
+		card.custom_minimum_size = Vector2(ABILITY_WIDTH, ABILITY_HEIGHT)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_ability_panel.add_child(card)
 		_ability_cards.append(card)
-		var stack := VBoxContainer.new()
-		stack.add_theme_constant_override("separation", 2)
-		card.add_child(_full_inset(stack, 6))
-		var heading := HBoxContainer.new()
-		heading.add_theme_constant_override("separation", 5)
-		stack.add_child(heading)
-		var icon := _hud_icon("AbilityIcon%d" % (slot + 1), &"ability", AlveolusVisualTheme.TURQUOISE, 22.0)
-		heading.add_child(icon)
+		_make_ability_surface_transparent(card)
+		var row := HBoxContainer.new()
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_theme_constant_override("separation", 7)
+		card.add_child(_full_inset(row, 5))
+		var icon := _hud_icon("AbilityIcon%d" % (slot + 1), &"ability", AlveolusVisualTheme.TURQUOISE, 30.0)
+		row.add_child(icon)
 		_ability_icons.append(icon)
 		var title := AlveolusUIComponents.label("Nicht belegt", AlveolusVisualTheme.TYPE_HUD_LABEL)
 		title.name = "AbilityTitle%d" % (slot + 1)
-		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		heading.add_child(title)
+		title.hide()
+		row.add_child(title)
 		_ability_titles.append(title)
+		var status_stack := VBoxContainer.new()
+		status_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		status_stack.alignment = BoxContainer.ALIGNMENT_CENTER
+		status_stack.add_theme_constant_override("separation", 1)
+		row.add_child(status_stack)
+		var readout := HBoxContainer.new()
+		readout.add_theme_constant_override("separation", 5)
+		status_stack.add_child(readout)
 		var glyph := AlveolusUIComponents.label("Q" if slot == 0 else "E", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 		glyph.name = "AbilityGlyph%d" % (slot + 1)
-		glyph.custom_minimum_size.x = 30.0
-		glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		glyph.custom_minimum_size.x = 20.0
+		glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		glyph.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		heading.add_child(glyph)
+		readout.add_child(glyph)
 		_ability_glyphs.append(glyph)
-		var footer := HBoxContainer.new()
-		footer.add_theme_constant_override("separation", 5)
-		stack.add_child(footer)
 		var status := AlveolusUIComponents.label("Nicht belegt", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 		status.name = "AbilityStatus%d" % (slot + 1)
 		status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		footer.add_child(status)
+		status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		readout.add_child(status)
 		_ability_statuses.append(status)
 		var cooldown := AlveolusUIComponents.progress(0.0, 1.0, false)
 		cooldown.name = "AbilityCooldown%d" % (slot + 1)
-		cooldown.custom_minimum_size = Vector2(74.0, 8.0)
+		cooldown.custom_minimum_size = Vector2(58.0, 5.0)
+		cooldown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cooldown.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		footer.add_child(cooldown)
+		status_stack.add_child(cooldown)
 		_ability_bars.append(cooldown)
 		var hit := AlveolusUIComponents.action_button(
 			"",
@@ -431,6 +468,10 @@ func _build_abilities() -> void:
 		hit.mouse_filter = Control.MOUSE_FILTER_STOP
 		hit.set_meta(&"disable_motion_scale", true)
 		hit.set_meta(&"ability_slot", slot)
+		# Ability feedback is owned by the gameplay intent: successful abilities
+		# have their world feedback, while cooldown blocks emit exactly one quiet
+		# cue. The generic button press sound would otherwise double that response.
+		UISoundService.set_sound_role(hit, UISoundService.NONE)
 		hit.pressed.connect(_on_ability_pressed.bind(slot))
 		card.add_child(hit)
 		_ability_buttons.append(hit)
@@ -449,6 +490,12 @@ func _build_pause() -> void:
 	_pause_button.scale = Vector2.ONE
 	_pause_button.set_meta(&"disable_motion_scale", true)
 	_pause_button.set_meta(&"alveolus_accessible_name", "Pause")
+	_pause_button.custom_minimum_size = Vector2(44.0, 44.0)
+	if _pause_button is IconTextButton:
+		var compact_button := _pause_button as IconTextButton
+		compact_button.content_inset.add_theme_constant_override("margin_left", 10)
+		compact_button.content_inset.add_theme_constant_override("margin_right", 10)
+		compact_button.icon_view.custom_minimum_size = Vector2(18.0, 18.0)
 	_pause_button.pressed.connect(func() -> void: pause_requested.emit())
 	add_child(_pause_button)
 
@@ -468,7 +515,7 @@ func _apply_vitals() -> void:
 	_set_label_text(_shield_value, _view_model.shield_text())
 	_shield_panel.visible = _view_model.shield_current() > 0.001 and _view_model.shield_maximum() > 0.001
 	_set_label_text(_timer_value, _view_model.timer_text())
-	var timer_color := AlveolusVisualTheme.IVORY
+	var timer_color := AlveolusVisualTheme.SKY_DEEP
 	match _view_model.timer_tone():
 		&"attention":
 			timer_color = AlveolusVisualTheme.GOLD
@@ -485,7 +532,7 @@ func _apply_vitals() -> void:
 	_set_progress(_boss_bar, _view_model.boss_current(), _view_model.boss_maximum())
 	AlveolusUIComponents.apply_progress_accent(_boss_bar, AlveolusVisualTheme.CORAL)
 	_set_progress(_analysis_bar, float(_view_model.analysis_current()), maxf(1.0, float(_view_model.analysis_target())))
-	AlveolusUIComponents.apply_progress_accent(_analysis_bar, AlveolusVisualTheme.COBALT)
+	AlveolusUIComponents.apply_progress_accent(_analysis_bar, AlveolusVisualTheme.SKY_DEEP)
 	_set_label_text(_analysis_value, _view_model.analysis_text())
 
 
@@ -540,10 +587,16 @@ func _build_stat_row(stat: RunHUDViewModel.StatValueViewModel) -> void:
 
 
 func _apply_abilities() -> void:
-	_ability_panel.show()
 	var focus_paths_changed := false
+	var occupied_count := 0
 	for slot in range(2):
 		var ability := _view_model.ability_at(slot)
+		var should_show := ability.occupied()
+		if _ability_cards[slot].visible != should_show:
+			_ability_cards[slot].visible = should_show
+			focus_paths_changed = true
+		if should_show:
+			occupied_count += 1
 		var accent := AlveolusVisualTheme.MUTED
 		if ability.targeting():
 			accent = AlveolusVisualTheme.TURQUOISE
@@ -551,16 +604,7 @@ func _apply_abilities() -> void:
 			accent = AlveolusVisualTheme.TEAL
 		elif ability.occupied():
 			accent = AlveolusVisualTheme.COBALT
-		if (
-			_ability_cards[slot].get_meta(&"accent", Color.TRANSPARENT) != accent
-			or _ability_cards[slot].get_meta(&"targeting", false) != ability.targeting()
-		):
-			AlveolusUIComponents.apply_surface_role(
-				_ability_cards[slot],
-				AlveolusVisualTheme.SurfaceRole.HUD_ABILITY,
-				accent,
-				ability.targeting()
-			)
+		if _ability_cards[slot].get_meta(&"accent", Color.TRANSPARENT) != accent:
 			_ability_cards[slot].set_meta(&"accent", accent)
 		if _ability_icons[slot].kind != ability.icon_id() or _ability_icons[slot].accent != accent:
 			_ability_icons[slot].configure(ability.icon_id(), accent)
@@ -582,21 +626,51 @@ func _apply_abilities() -> void:
 		if _ability_buttons[slot].disabled != should_disable:
 			AlveolusUIComponents.set_button_disabled(_ability_buttons[slot], should_disable)
 			focus_paths_changed = true
-		var tooltip := (
-			"Ziel bestätigen" if ability.targeting()
-			else ("Fähigkeit einsetzen" if ability.ready() else ability.status_text())
-		)
-		if _ability_buttons[slot].tooltip_text != tooltip:
-			_ability_buttons[slot].tooltip_text = tooltip
+		# Native tooltips would race the shared ContextDetailController. The
+		# registered provider below is the single hover information source.
+		if not _ability_buttons[slot].tooltip_text.is_empty():
+			_ability_buttons[slot].tooltip_text = ""
 		var accessible_text := "%s · %s · %s" % [ability.key_glyph_text(), ability.title(), ability.status_text()]
 		if _ability_buttons[slot].get_meta(&"alveolus_accessible_name", "") != accessible_text:
 			_ability_buttons[slot].set_meta(&"alveolus_accessible_name", accessible_text)
+	_ability_panel.visible = occupied_count > 0
+	_ability_panel.columns = maxi(1, occupied_count)
 	if focus_paths_changed:
 		_configure_focus_paths()
+		_queue_responsive_layout()
 
 
 func _on_ability_pressed(slot: int) -> void:
+	if _view_model == null:
+		return
+	var ability := _view_model.ability_at(slot)
+	if ability == null or not ability.occupied():
+		return
 	ability_requested.emit(slot)
+
+
+func _info_provider_for(source: Control) -> Callable:
+	if source == null:
+		return Callable()
+	for slot in range(_ability_buttons.size()):
+		if _ability_buttons[slot] == source:
+			return _ability_info_payload.bind(slot)
+	return Callable()
+
+
+func _ability_info_payload(slot: int) -> Dictionary:
+	if _view_model == null:
+		return {}
+	var ability := _view_model.ability_at(slot)
+	if ability == null or not ability.occupied():
+		return {}
+	return {
+		"title": ability.title(),
+		"body": ability.effect_text(),
+		"meta": "%s · %s" % [ability.key_glyph_text(), ability.status_text()],
+		"icon_kind": ability.icon_id(),
+		"accent": AlveolusVisualTheme.TURQUOISE if ability.ready() else AlveolusVisualTheme.COBALT,
+	}
 
 
 func _configure_focus_paths() -> void:
@@ -636,25 +710,27 @@ func _apply_wide_layout() -> void:
 	var width := size.x
 	var height := size.y
 	var margin := WIDE_MARGIN
-	var vital_width := 250.0
-	var timer_width := 224.0
-	var pause_width := maxf(52.0, _pause_button.get_combined_minimum_size().x)
-	var timer_left := floorf((width - timer_width) * 0.5)
-	_place(_stability_panel, Rect2(margin, 16.0, vital_width, 44.0))
-	_place(_shield_panel, Rect2(margin, 64.0, vital_width, 32.0))
-	_place(_timer_panel, Rect2(timer_left, 16.0, timer_width, 40.0))
-	_place(_pause_button, Rect2(width - margin - pause_width, 14.0, pause_width, 44.0))
-	var stats_left := timer_left + timer_width + 12.0
-	var stats_right := _pause_button.position.x - 8.0
+	var vital_width := 294.0
+	var timer_width := 176.0
+	var pause_width := 44.0
+	var pause_left := width - margin - pause_width
+	var timer_left := pause_left - 8.0 - timer_width
+	_place(_stability_panel, Rect2(margin, 16.0, vital_width, 36.0))
+	_place(_shield_panel, Rect2(margin, 56.0, vital_width, 28.0))
+	_place(_timer_panel, Rect2(timer_left, 16.0, timer_width, 34.0))
+	_place(_pause_button, Rect2(pause_left, 11.0, pause_width, 44.0))
+	var stats_left := margin + vital_width + 12.0
+	var stats_right := timer_left - 8.0
 	_place(_stats_strip, Rect2(stats_left, 12.0, maxf(0.0, stats_right - stats_left), 48.0))
-	_stats_strip.alignment = FlowContainer.ALIGNMENT_END
+	_stats_strip.alignment = FlowContainer.ALIGNMENT_BEGIN
 	var boss_left := maxf(margin + vital_width + 12.0, floorf((width - 520.0) * 0.5))
 	var boss_width := minf(520.0, width - margin - boss_left)
-	_place(_boss_panel, Rect2(boss_left, 64.0, boss_width, 48.0))
-	_place(_analysis_panel, Rect2(margin, height - margin - 32.0, 230.0, 32.0))
-	var ability_width := minf(420.0, width * 0.46)
+	_place(_boss_panel, Rect2(boss_left, 64.0, boss_width, 44.0))
+	_place(_analysis_panel, Rect2(margin, height - margin - 28.0, 202.0, 28.0))
+	var visible_abilities := _visible_ability_count()
+	var ability_width := float(visible_abilities) * ABILITY_WIDTH + float(maxi(0, visible_abilities - 1)) * ABILITY_GAP
 	_place(_ability_panel, Rect2(width - margin - ability_width, height - margin - ABILITY_HEIGHT, ability_width, ABILITY_HEIGHT))
-	_ability_panel.columns = 2
+	_ability_panel.columns = maxi(1, visible_abilities)
 
 
 func _apply_compact_layout() -> void:
@@ -662,29 +738,36 @@ func _apply_compact_layout() -> void:
 	var height := size.y
 	var margin := COMPACT_MARGIN
 	var gap := 8.0
-	var half_width := floorf((width - margin * 2.0 - gap) * 0.5)
-	var right_left := margin + half_width + gap
-	var maximum_pause_width := maxf(48.0, half_width - 88.0)
-	var pause_width := minf(
-		maximum_pause_width,
-		maxf(48.0, _pause_button.get_combined_minimum_size().x)
-	)
-	_place(_stability_panel, Rect2(margin, 8.0, half_width, 44.0))
-	_place(_timer_panel, Rect2(right_left, 8.0, maxf(80.0, half_width - pause_width - gap), 44.0))
+	var vital_width := floorf((width - margin * 2.0 - gap) * 0.54)
+	var right_left := margin + vital_width + gap
+	var right_width := width - margin - right_left
+	var pause_width := 44.0
+	_place(_stability_panel, Rect2(margin, 8.0, vital_width, 36.0))
+	_place(_timer_panel, Rect2(right_left, 9.0, maxf(72.0, right_width - pause_width - gap), 34.0))
 	_place(_pause_button, Rect2(width - margin - pause_width, 8.0, pause_width, 44.0))
-	_place(_shield_panel, Rect2(margin, 56.0, half_width, 32.0))
-	_place(_boss_panel, Rect2(right_left, 56.0, half_width, 48.0))
-	_place(_stats_strip, Rect2(margin, 108.0, width - margin * 2.0, 48.0))
+	_place(_shield_panel, Rect2(margin, 48.0, vital_width, 28.0))
+	_place(_boss_panel, Rect2(right_left, 54.0, right_width, 40.0))
+	_place(_stats_strip, Rect2(margin, 98.0, width - margin * 2.0, 40.0))
 	_stats_strip.alignment = FlowContainer.ALIGNMENT_BEGIN
-	_place(_analysis_panel, Rect2(margin, 160.0, minf(220.0, width - margin * 2.0), 32.0))
-	_place(_ability_panel, Rect2(margin, height - margin - ABILITY_HEIGHT, width - margin * 2.0, ABILITY_HEIGHT))
-	_ability_panel.columns = 2
+	_place(_analysis_panel, Rect2(margin, 150.0, minf(202.0, width - margin * 2.0), 28.0))
+	var visible_abilities := _visible_ability_count()
+	var ability_width := float(visible_abilities) * ABILITY_WIDTH + float(maxi(0, visible_abilities - 1)) * ABILITY_GAP
+	_place(_ability_panel, Rect2(width - margin - ability_width, height - margin - ABILITY_HEIGHT, ability_width, ABILITY_HEIGHT))
+	_ability_panel.columns = maxi(1, visible_abilities)
 
 
 func _place(control: Control, rect: Rect2) -> void:
 	control.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	control.position = rect.position.floor()
 	control.size = rect.size.floor()
+
+
+func _visible_ability_count() -> int:
+	var result := 0
+	for card in _ability_cards:
+		if card.visible:
+			result += 1
+	return result
 
 
 func _surface_panel(
@@ -700,6 +783,17 @@ func _surface_panel(
 	if add_to_root:
 		add_child(panel)
 	return panel
+
+
+func _make_ability_surface_transparent(card: Panel) -> void:
+	# Preserve the semantic HUD_ABILITY role for tooling and focus contracts,
+	# but suppress its painted chrome. `self_modulate` only affects the Panel's
+	# own style; icon, readout and hit target stay fully opaque.
+	card.self_modulate = Color(1.0, 1.0, 1.0, 0.0)
+	var membrane := card.get_node_or_null("BioLumenSurface") as Control
+	if membrane != null:
+		membrane.hide()
+	card.set_meta(&"alveolus_component", &"transparent_hud_ability")
 
 
 func _full_inset(content: Control, amount: int) -> MarginContainer:

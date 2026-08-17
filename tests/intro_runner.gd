@@ -155,21 +155,23 @@ func _scripted_upgrade_card_is_qualitative(hud: GameHUD, expected_copy: String) 
 	var card := live_cards[0]
 	var text := _control_text(card)
 	# The numeric comparison row is intentionally absent for scripted lessons;
-	# exactly two labels leave room only for title and qualitative effect copy.
-	return text.contains(expected_copy) and _control_label_count(card) == 2
+	# exactly two copy controls leave room only for title and qualitative effect.
+	return text.contains(expected_copy) and _control_copy_count(card) == 2
 
 func _control_text(node: Node) -> String:
 	var result := ""
 	if node is Label:
 		result += (node as Label).text + "\n"
+	elif node is RichTextLabel:
+		result += (node as RichTextLabel).get_parsed_text() + "\n"
 	for child in node.get_children():
 		result += _control_text(child)
 	return result
 
-func _control_label_count(node: Node) -> int:
-	var result := 1 if node is Label else 0
+func _control_copy_count(node: Node) -> int:
+	var result := 1 if node is Label or node is RichTextLabel else 0
 	for child in node.get_children():
-		result += _control_label_count(child)
+		result += _control_copy_count(child)
 	return result
 
 func _check(condition: bool, message: String) -> void:

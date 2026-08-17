@@ -29,7 +29,7 @@ var _back_button: Button
 var _controls: Dictionary = {}
 var _audio_layout_records: Array[Dictionary] = []
 var _option_controls: Array[OptionButton] = []
-var _binding_buttons: Array[Button] = []
+var _binding_layout_records: Array[Dictionary] = []
 var _compact_layout := false
 var _navigation_restore_scheduled := false
 var _pending_restore_setting_id: StringName = &""
@@ -170,7 +170,7 @@ func _rebuild_sections() -> void:
 	_controls[&"back"] = _back_button
 	_audio_layout_records.clear()
 	_option_controls.clear()
-	_binding_buttons.clear()
+	_binding_layout_records.clear()
 	_upper_grid = GridContainer.new()
 	_upper_grid.name = "UpperSections"
 	_upper_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -393,9 +393,25 @@ func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel
 	button.pressed.connect(_on_binding_requested.bind(setting.get_action_id()))
 	var row := _compact_setting_row(purpose, button)
 	row.name = "BindingLayout_%s" % String(setting.get_action_id())
+	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var purpose_label := row.find_child("SettingPurpose", true, false) as Label
+	var card := AlveolusUIComponents.surface(
+		AlveolusVisualTheme.SurfaceRole.VALUE_ROW,
+		AlveolusVisualTheme.COBALT
+	)
+	card.name = "BindingCard_%s" % String(setting.get_action_id())
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM + 12.0
+	card.set_meta(&"alveolus_component", &"shortcut_container")
+	card.add_child(AlveolusUIComponents.margin(row, 6))
 	_controls[key] = button
-	_binding_buttons.append(button)
-	_bindings_grid.add_child(row)
+	_binding_layout_records.append({
+		"card": card,
+		"row": row,
+		"purpose": purpose_label,
+		"button": button,
+	})
+	_bindings_grid.add_child(card)
 
 
 func _compact_setting_row(text_value: String, control: Control) -> HBoxContainer:
@@ -503,8 +519,16 @@ func _refresh_responsive_layout() -> void:
 		audio_mute.custom_minimum_size.x = 88.0 if _compact_layout else 92.0
 	for option in _option_controls:
 		option.custom_minimum_size.x = 148.0 if _compact_layout else 176.0
-	for binding_button in _binding_buttons:
-		binding_button.custom_minimum_size.x = 160.0 if _compact_layout else 220.0
+	for record in _binding_layout_records:
+		var binding_purpose := record["purpose"] as Label
+		var binding_button := record["button"] as Button
+		# Each shortcut is a compact two-part unit. Fixed local columns keep the
+		# action and its binding visually adjacent instead of pushing the binding
+		# to the remote edge of a wide settings section.
+		binding_purpose.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		binding_purpose.custom_minimum_size.x = 124.0 if _compact_layout else 176.0
+		binding_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		binding_button.custom_minimum_size.x = 156.0 if _compact_layout else 210.0
 
 
 func _focused_setting_id() -> StringName:

@@ -586,6 +586,7 @@ func _check_compact_page_header(parts: Dictionary, host: Control, context: Strin
 	var stack := header.get_parent() as VBoxContainer if header != null else null
 	var medallion := header.find_child("PageMedallion", true, false) as PanelContainer if header != null else null
 	var icon := header.find_child("PageIcon", true, false) as SimpleIcon if header != null else null
+	var heading := header.find_child("PageHeading", true, false) as VBoxContainer if header != null else null
 	var titles := _document_title_labels(header)
 	_check(
 		shell != null and header != null and body != null and stack != null \
@@ -603,6 +604,7 @@ func _check_compact_page_header(parts: Dictionary, host: Control, context: Strin
 	)
 	_check(medallion != null and medallion.custom_minimum_size.is_equal_approx(Vector2(44.0, 44.0)), "%s behält das 44-px-Medaillon" % context)
 	_check(icon != null and SimpleIcon.supports(icon.kind) and titles.size() == 1, "%s zeigt semantisches SimpleIcon und genau einen Titel" % context)
+	_check(heading != null and not titles.is_empty() and heading.size_flags_vertical == Control.SIZE_SHRINK_CENTER and titles[0].vertical_alignment == VERTICAL_ALIGNMENT_CENTER, "%s zentriert den Seitentitel über den gemeinsamen Headervertrag" % context)
 	var visible_actions: Array[Control] = []
 	if header != null:
 		for node in _descendants(header):

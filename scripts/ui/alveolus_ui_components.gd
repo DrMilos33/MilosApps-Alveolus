@@ -282,10 +282,16 @@ static func page_header(
 	page_icon.configure(resolved_icon, AlveolusVisualTheme.TEAL)
 	medallion.add_child(page_icon)
 	var heading := VBoxContainer.new()
+	heading.name = "PageHeading"
 	heading.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	# The title block is one centered unit, matching the approved planning
+	# header. Keeping this in the shared primitive prevents every page from
+	# independently drifting toward the upper edge of the header band.
+	heading.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if not eyebrow_text.is_empty():
 		heading.add_child(label(eyebrow_text, AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL))
 	var title := label(title_text, AlveolusVisualTheme.TYPE_TITLE_LABEL)
+	title.name = "PageTitle"
 	# A page title must be allowed to yield horizontal space to navigation
 	# actions at high UI scales. Without an overrun policy its intrinsic text
 	# width expands the HBox beyond the viewport (notably "Einstellungen" and
@@ -293,6 +299,7 @@ static func page_header(
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.clip_text = true
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	heading.add_child(title)
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(heading)

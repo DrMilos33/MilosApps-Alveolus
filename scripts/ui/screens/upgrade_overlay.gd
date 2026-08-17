@@ -21,6 +21,8 @@ const CARD_HEIGHT := 124.0
 const MODAL_PADDING := 20
 const FOCUS_LINE_WIDTH := 2.0
 
+static var _numeric_fragment_pattern: RegEx
+
 var _view_model: UpgradeOverlayViewModel
 var _applied_revision := -1
 var _applied_content_hash := ""
@@ -339,20 +341,11 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	heading.add_child(title)
 
-	var effect := AlveolusUIComponents.label(option.effect(), AlveolusVisualTheme.TYPE_BODY_LABEL)
-	effect.name = "UpgradeEffect"
-	effect.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	effect.max_lines_visible = 2
-	effect.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	var effect := _build_effect_copy(option.effect())
 	content.add_child(effect)
 
-	var comparison_text := option.comparison_text()
-	if not comparison_text.is_empty():
-		var comparison := AlveolusUIComponents.label(comparison_text, AlveolusVisualTheme.TYPE_VALUE_LABEL)
-		comparison.name = "UpgradeComparison"
-		comparison.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		comparison.max_lines_visible = 2
-		comparison.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	if not option.comparison_text().is_empty():
+		var comparison := _build_comparison_copy(option.before_value(), option.after_value())
 		content.add_child(comparison)
 
 	var focus_ring := _build_focus_ring()
@@ -370,6 +363,76 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	card.add_child(focus_target)
 	_focus_targets.append(focus_target)
 	return card
+
+
+## Highlights numeric deltas in every effect sentence by content, never by
+## upgrade ID. New upgrades therefore inherit the same visual hierarchy.
+func _build_effect_copy(effect_text: String) -> RichTextLabel:
+	var copy := _rich_copy("UpgradeEffect", AlveolusVisualTheme.body_font(), AlveolusVisualTheme.TEXT_BODY)
+	var highlights := PackedStringArray()
+	var cursor := 0
+	for matched_fragment in _numeric_pattern().search_all(effect_text):
+		var match := matched_fragment as RegExMatch
+		if match.get_start() > cursor:
+			_append_colored_text(copy, effect_text.substr(cursor, match.get_start() - cursor), AlveolusVisualTheme.IVORY_DEEP)
+		var fragment := match.get_string()
+		_append_colored_text(copy, fragment, AlveolusVisualTheme.GOLD)
+		highlights.append(fragment)
+		cursor = match.get_end()
+	if cursor < effect_text.length():
+		_append_colored_text(copy, effect_text.substr(cursor), AlveolusVisualTheme.IVORY_DEEP)
+	copy.set_meta(&"semantic_highlights", highlights)
+	copy.set_meta(&"semantic_highlight_role", &"positive_delta")
+	return copy
+
+
+## Comparisons consistently de-emphasize the current value and emphasize the
+## resulting value as one meaningful unit (for example "4 Projektile").
+func _build_comparison_copy(before_value: String, after_value: String) -> RichTextLabel:
+	var copy := _rich_copy("UpgradeComparison", AlveolusVisualTheme.heading_font(), AlveolusVisualTheme.TEXT_BODY)
+	if not before_value.is_empty() and not after_value.is_empty():
+		_append_colored_text(copy, before_value, AlveolusVisualTheme.SKY_DEEP)
+		_append_colored_text(copy, "  →  ", AlveolusVisualTheme.TURQUOISE)
+		_append_colored_text(copy, after_value, AlveolusVisualTheme.GOLD)
+	elif not after_value.is_empty():
+		_append_colored_text(copy, after_value, AlveolusVisualTheme.GOLD)
+	else:
+		_append_colored_text(copy, before_value, AlveolusVisualTheme.GOLD)
+	copy.set_meta(&"semantic_before", before_value)
+	copy.set_meta(&"semantic_after", after_value)
+	copy.set_meta(&"semantic_highlight_role", &"result_value")
+	return copy
+
+
+func _rich_copy(copy_name: String, font: Font, font_size: int) -> RichTextLabel:
+	var copy := RichTextLabel.new()
+	copy.name = copy_name
+	copy.bbcode_enabled = false
+	copy.fit_content = true
+	copy.scroll_active = false
+	copy.selection_enabled = false
+	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.custom_minimum_size.y = 20.0
+	copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	copy.add_theme_font_override("normal_font", font)
+	copy.add_theme_font_size_override("normal_font_size", font_size)
+	return copy
+
+
+func _append_colored_text(copy: RichTextLabel, text_value: String, color: Color) -> void:
+	if text_value.is_empty():
+		return
+	copy.push_color(color)
+	copy.add_text(text_value)
+	copy.pop()
+
+
+func _numeric_pattern() -> RegEx:
+	if _numeric_fragment_pattern == null:
+		_numeric_fragment_pattern = RegEx.new()
+		_numeric_fragment_pattern.compile("[+\\-−]?\\d+(?:[.,]\\d+)?(?:\\s*%)?")
+	return _numeric_fragment_pattern
 
 
 func _build_focus_ring() -> Control:
