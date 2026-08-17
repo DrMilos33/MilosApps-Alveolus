@@ -9,6 +9,8 @@ extends Resource
 @export var target_type: StringName
 @export var priority: int = 0
 @export var category: StringName = &"mechanic"
+@export var visual_id: StringName
+@export var medical_name: String
 
 static func create(
 	discovery_id: StringName,
@@ -18,7 +20,9 @@ static func create(
 	gameplay: String,
 	target: StringName,
 	discovery_priority: int,
-	discovery_category: StringName
+	discovery_category: StringName,
+	visual: StringName = &"",
+	medical_name_override: String = ""
 ) -> DiscoveryDefinition:
 	var definition := DiscoveryDefinition.new()
 	definition.id = discovery_id
@@ -29,4 +33,6 @@ static func create(
 	definition.target_type = target
 	definition.priority = discovery_priority
 	definition.category = discovery_category
+	definition.visual_id = discovery_id if visual.is_empty() else visual
+	definition.medical_name = display_title if medical_name_override.is_empty() else medical_name_override
 	return definition

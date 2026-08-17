@@ -4,7 +4,9 @@
 # Local and exported builds (keep the Godot ignore marker tracked)
 build/*
 !build/.gdignore
+docs/*.import
 *.tmp
+.codex-temp/
 
 # Editor/OS noise
 .DS_Store

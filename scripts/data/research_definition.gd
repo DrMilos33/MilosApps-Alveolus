@@ -8,6 +8,8 @@ extends Resource
 @export var costs: PackedInt32Array
 @export var effect: StringName
 @export var magnitude: float
+@export var unlock_module_id: StringName = &""
+@export var category: StringName = &"passive"
 
 static func create(
 	definition_id: StringName,
@@ -27,8 +29,12 @@ static func create(
 	definition.magnitude = value
 	return definition
 
+func configure_unlock(module_id: StringName, research_category: StringName = &"module") -> ResearchDefinition:
+	unlock_module_id = module_id
+	category = research_category
+	return self
+
 func cost_for_rank(current_rank: int) -> int:
 	if current_rank < 0 or current_rank >= costs.size():
 		return 0
 	return costs[current_rank]
-

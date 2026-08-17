@@ -1,0 +1,164 @@
+# ALVEOLUS UI-Leitfaden
+
+Die verbindliche visuelle Golden Reference ist die freigegebene
+Einsatzplanung. `res://scenes/ui/style_gallery.tscn` dokumentiert die zentralen
+Bausteine sowie Referenzansichten für Einsatzplanung, Lexikon und Pause und
+muss visuell an diese Golden Reference anschließen.
+
+## Fachliche Grundlage
+
+Die Regeln dieses Leitfadens übersetzen etablierte plattformübergreifende
+Empfehlungen in konkrete Godot-Komponenten. Maßgeblich sind:
+
+- [Xbox Accessibility Guidelines](https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines) für lesbare Texte, Kontrast, Fokus, Eingaben und nicht ausschließlich farbcodierte Zustände.
+- [Epic CommonUI](https://dev.epicgames.com/documentation/unreal-engine/overview-of-advanced-multiplatform-user-interfaces-with-common-ui-for-unreal-engine) für ein gemeinsames Navigationsmodell über Maus, Tastatur und Gamepad.
+- [Steam Deck recommendations](https://partner.steamgames.com/doc/steamdeck/recommendations) für Controllerbedienung, passende Eingabesymbole und kleine Displays.
+- [Riot UI Design](https://www.riotgames.com/en/artedu/user-interface-design) für gameplaynahe Informationshierarchie und konsistente visuelle Sprache.
+- [Returnal: gameplay-first UI](https://blog.playstation.com/2021/05/11/unpacking-returnals-ux-design-gameplay-first-ui-retro-futuristic-tech-and-accessibility/) für zurückhaltende, aber eindeutige Kampfoberflächen.
+
+Die Quellen definieren die Richtung. Automatisierte Layout-, Fokus-, Kontrast-
+und Eingabetests in diesem Projekt machen die Regeln überprüfbar.
+
+## Grundprinzipien
+
+- Eine Ansicht hat genau eine klar hervorgehobene Hauptaktion.
+- Die visuelle Sprache ist „Bio-Lumen · lebendige Membran“ als organische Weiterentwicklung des dunklen medizinischen Einsatzdossiers: Petroltiefe, feine Zell- und Kapillarspuren, präzise Linien und wenige leuchtende Akzente. Weiße Kachelwände und beliebige Neon-Sci-Fi-Dekoration sind kein ALVEOLUS-Muster.
+- Diese Sprache gilt für die gesamte Oberfläche: Texte, Buttons, Formcontrols, Karten, Popups, Tooltips, Dialoge, HUD-Flächen, Beschriftungen, Fokusdarstellung und Lebensleisten. Häuser und Umgebungsbilder sowie die Figuren von Monstern und Spielern bleiben außerhalb dieses visuellen Rollouts; ihre darüberliegenden UI-Elemente gehören dazu.
+- Der feste Seitenkopf besitzt eine eigene sichere Zone. Inhalt, Gebäude und Karten beginnen immer unterhalb des Kopfes und nach dem verbindlichen Inhaltsabstand. Seine Zeichenebene bleibt lokal in der jeweiligen Seite und darf niemals über eine später geöffnete Seite ragen.
+- Der Seitenkopf wird durch seine durchgehende Unterkante getrennt. Zusätzliche kurze Akzentbalken unter dem Titel werden nicht verwendet.
+- Normale Aktionen, Auswahl, Gefahr und Navigation verwenden semantische Theme-Varianten. Lokale Farb- und Rahmenkopien sind zu vermeiden.
+- Farbe ist nie das einzige Signal. Auswahl wird zusätzlich durch Zustand, Text oder Symbol vermittelt.
+- Rückwärtsnavigation entfernt die oberste tatsächliche Ebene. Routineaktionen benötigen keine Bestätigung, destruktive Aktionen genau eine; nur die ausdrücklich abschaltbare Neustartbestätigung ist eine dokumentierte Nutzeroption.
+- Fließtext ist mindestens 16 Designpixel groß. Kleine Metadaten sind auf 14 Designpixel begrenzt und enthalten keine Kerninformation.
+- Maus, Tastatur und Gamepad erhalten dieselbe Informationshierarchie und einen sichtbaren Fokus.
+- Fokus und Auswahl werden innerhalb der zugeteilten Geometrie gezeichnet. Hover oder Fokus dürfen Controls niemals skalieren, über ihre Rasterzelle malen oder aus einem Dialog hinausragen.
+- Reines Zeigen mit der Maus bleibt still. Sounds markieren bestätigte Aktionen, Öffnen/Schließen, Fehler oder eine tatsächlich per Tastatur beziehungsweise Gamepad bewegte Fokusposition.
+- Texte werden in natürlichem Deutsch und Satzschreibweise formuliert. Lange Bindestrichketten und dauerhafte Großschreibung entfallen.
+- Flächen folgen auf normalen Ansichten ihrer tatsächlichen Inhaltshöhe. Feste Höhen sind nur Viewportgrenzen für Scrollflächen, keine Reserve für dekorativen Leerraum; unsichtbare Spacer dürfen kurze Dialoge nicht künstlich strecken.
+- Text berührt niemals seine bemalte Fläche: Primär-, Sekundär- und Gefahrbuttons besitzen in jedem Zustand mindestens 18 Pixel horizontalen Innenabstand, Auswahlzeilen mindestens 12 Pixel und gestylte Textbadges mindestens 8 Pixel. Lokale Zustands- oder Farb-Overrides müssen diese Safe Area erhalten; Panels mit eigenem `MarginContainer` werden nicht doppelt gepolstert.
+- Ausführliche Hilfen oder Wirkungsbeschreibungen belegen keine dauerhafte Kopf- oder Brettfläche. Auf Maus-Hover öffnen sie als kompakter Tooltip; Tastatur und Gamepad öffnen dieselbe Information ausschließlich über `ui_info` als kompakte Detailkarte. Reiner Fokus öffnet nichts. Beide Darstellungen verändern die Geometrie der Ansicht nicht.
+- Medizinische Einordnung und unmittelbare Spielwirkung verwenden getrennte semantische Flächen mit eigenem Icon und Akzent. Die Trennung darf nicht nur durch Farbe vermittelt werden und verwandelt kurze Inhalte nicht in zusätzliche Textwände.
+
+## Tokens
+
+Alle Werte liegen in `AlveolusVisualTheme`:
+
+- Außenabstand: 24 Pixel, kompakt 16 Pixel.
+- Primärbutton: mindestens 46 Pixel hoch.
+- Sekundärbutton: mindestens 40 Pixel hoch; interaktive Ziele mindestens 44 Pixel.
+- Kontrollradius: 4 Pixel, Kartenradius: 6 Pixel, Dialogsignatur: feste 6 Pixel. Die asymmetrisch ausgesparte Ecke gehört nur zu kleinen Signaturkarten und Dialogen; große Abschnittsflächen bleiben gerade.
+- Fließtext: 16 Pixel, Abschnitt: 20 Pixel, Seitentitel: 28 Pixel.
+- Rollenfarben: Tiefpetrol für die Bühne, Petrol-Wash für Flächen, Elfenbein für Primärtext, Türkis für Hauptaktionen, Kobalt für Auswahl, Koralle für Gefahr und Honiggold für Belohnung sowie Fokus. Primäraktionen verwenden einen schwachen Teal-zu-Teal-Verlauf und eine sehr ruhige Membranstruktur. Ausschließlich „Behandlung starten“ in der Einsatzplanung verwendet als Startaktion der Golden Reference Teal→Warmgold; für alle anderen Primäraktionen sind Goldverläufe und starkes Dauerleuchten unzulässig.
+
+## Seiten- und Navigationsvertrag
+
+- Normaler Außenabstand: 24 Pixel; kompakt: 16 Pixel.
+- Kopfzeile: 76 Pixel; kompakt: 60 Pixel. Danach folgen 20 beziehungsweise 12 Pixel Leerraum, bevor der erste Inhaltsblock beginnt.
+- Der Kopf enthält genau einen Seitentitel. Zwischen Medaillon und Titel liegen 16 Pixel; Obertitel oder wiederholte Kontextzeilen werden nicht verwendet.
+- `ui_cancel` schließt immer nur die oberste tatsächliche Ebene: Bestätigung → Auswahl → Detail → Seite → Campus/Run. Ein Pflichtdialog kann nicht in den Hintergrund durchgereicht werden.
+- Jede Scrollfläche mit interaktiven Inhalten folgt dem Tastatur-/Gamepadfokus. Ein sichtbarer Fokus darf nie außerhalb des aktuellen Viewports stehen; Maus und Touch behalten denselben Scrollbereich.
+- Ab 920 logischen Pixeln darf die Einsatzplanung Plan und Editor im Verhältnis 60/40 nebeneinander zeigen. Darunter werden beide Bereiche in derselben Seiten-Scrollfläche gestapelt und nach einer Platzwahl automatisch zum Editor geführt; ein zusätzlicher Übersichts-Zwischenschritt ist unzulässig.
+- Bei 200 Prozent bleiben alle Aktionen sichtbar oder über eine deutlich erkennbare Scrollfläche erreichbar. Schrift, Fokus und Ziele dürfen nicht verkleinert werden, um Inhalt hineinzuzwingen.
+
+## Input- und Popover-Vertrag
+
+- Maus-Hover öffnet einen kompakten, am Auslöser anliegenden Tooltip. Er schließt, sobald der Hover endet, verändert kein Layout und löst keinen Sound oder Fokuswechsel aus.
+- Tastatur- oder Gamepadfokus allein öffnet niemals einen Tooltip oder eine Detailkarte. Die fokussierte Informationsquelle bleibt jedoch sichtbar als solche erkennbar.
+- `ui_info` öffnet für das fokussierte Element ausdrücklich dieselbe Information und Informationshierarchie wie der Maus-Tooltip. Die Standardbelegung ist `I` auf der Tastatur und Y auf dem Gamepad; sie ist in den Einstellungen konfigurierbar, und angezeigte Eingabesymbole folgen der aktiven Belegung.
+- Während die Detailkarte offen ist, schließt `ui_info` oder `ui_cancel` ausschließlich diese oberste Ebene. Der Fokus bleibt am Auslöser beziehungsweise kehrt dorthin zurück; das Öffnen oder Schließen löst dessen eigentliche Aktion nicht aus.
+- Tooltip und Detailkarte verwenden dieselben Inhaltsdaten. Medizinische Einordnung und unmittelbare Spielwirkung bleiben als zwei semantisch getrennte, nicht nur farbcodierte Flächen erkennbar.
+
+## Einsatzplanung
+
+Die Einsatzplanung ist strikt platzorientiert:
+
+1. Die Seite öffnet direkt `COMPONENT_PICK(Behandlung)`. Der aktuell bearbeitete Planplatz ist zusätzlich zum Fokus dauerhaft durch Rahmen und Textzustand markiert.
+2. Ein Klick oder `Accept` auf einen der fünf Planplätze wechselt ausdrücklich das Ziel. Maus-Hover darf dessen Kurzinfo als Tooltip zeigen; Tastatur und Gamepad rufen sie mit `ui_info` auf. Reiner Fokus zeigt keine Kurzinfo, und keine dieser Informationsaktionen ändert den Zielplatz.
+3. `COMPONENT_PICK(slot)` hält Zielplatz und aktuellen Inhalt im Editorheader sichtbar. Darunter stehen ausschließlich echte passende Alternativen in einem kompakten zweispaltigen Katalog; unter 760 logischen Pixeln wird er einspaltig. Ein gemeinsamer Inspektor zeigt Wirkung, Voraussetzung und Kosten genau einmal.
+4. Bei einem belegten Platz ersetzt ein zulässiger Komponenten-Klick den Inhalt direkt und atomar. Es gibt keinen Bestätigungsdialog; aktueller Inhalt, neue Wirkung und Kapazitätsfolge sind vor dem Klick im gemeinsamen Inspektor sichtbar. Danach bleibt derselbe Platz im Picker aktiv, damit ein weiterer Wechsel oder Entfernen die Auswahl unmittelbar reversibel macht.
+5. Entfernen ist eine ausdrückliche Sekundäraktion. Die Reserve ist kein sichtbarer Planplatz; alte Savefelder und IDs bleiben lediglich für Kompatibilität bestehen.
+
+Ein Klick auf eine Komponente darf niemals raten, welcher Platz gefüllt oder ersetzt wird. Jede Planzeile besitzt mindestens 12 Pixel horizontalen Innenabstand. Kapazität wird global und auf der kompakten Kandidatenzeile gezeigt; der Inspektor nennt die unmittelbare Änderung vor dem direkten Ersetzen. Der aktuelle Inhalt wird nicht als scheinbar neu gewählter Kandidat wiederholt. Verfügbare, anderweitig verwendete und gesperrte Einträge sind durch Symbol und Kontrast unterscheidbar; gesperrte Icons, Titel und Kosten sind vollständig entsättigt.
+
+Im Intro ist der gesamte Planbereich schreibgeschützt. Eine flächendeckende Schlosskennzeichnung erklärt knapp, dass der Einführungsplan vorgegeben ist; einzelne darunterliegende Plätze oder Komponenten dürfen weder per Maus noch Fokus beziehungsweise Gamepad verändert werden.
+
+Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht aus Falltitel, höchstens einer Kurzzeile und umbruchfähigen Fakten: Dauer blau, Boss gold, negatives Fallmerkmal und negativer Startzustand korallrot, positive Unterstützung wie Atemhilfe türkis. Die vollständige Erklärung bleibt per Maus-Hover als Tooltip und per `ui_info` als zugängliche Detailkarte verfügbar.
+
+## Run-HUD
+
+- Oben erscheinen höchstens fünf optionale Charakterwerte als transparentes `Icon + Wert`-Band ohne Überschrift, Beschriftung, Kachel oder Mausblockade. Es beginnt 16 Pixel rechts des Timers, füllt den freien Raum bis zum rechten Rand horizontal und bricht nur bei Platzmangel in eine zweite Zeile um.
+- Vollständige Erklärungen und alle weiteren Werte liegen ausschließlich im pausierten Untermenü „Charakterwerte“.
+- Das Pausenmenü selbst ist nicht scrollbar: Titel und Fortsetzen bleiben sichtbar, die übrigen Aktionen liegen in einem responsiven Raster. Charakterwerte bilden einen ruhigen zweispaltigen Statblock. Jede Zeile besitzt einen farbcodierten semantischen Marker, eine linksbündige Bezeichnung und einen an einer gemeinsamen rechten Kante ausgerichteten Wert. Gruppenkarten und dreispaltige Textblöcke sind unzulässig; nur bei zukünftig mehr als neun Zeilen je Spalte darf der innere Wertebereich scrollen, die Zurückaktion bleibt fest sichtbar.
+- Dauerhaft sichtbar sind nur Zustand, Zeit, aktuelle Ziele und unmittelbar bedienbare Fähigkeiten. HUD-Flächen verwenden transparente Petrolrollen; massive weiße Hintergründe sind unzulässig.
+- Fähigkeitskarten sitzen kompakt am unteren Rand, zeigen Eingabesymbol, Bereitschaft und Abklingzeit und dürfen das Spielfeld nicht als durchgehende Leiste verdecken.
+- `Strg+R` fordert während eines laufenden oder pausierten Falls einen Neustart desselben Falls an. Standard ist ein einzelner kompakter Bestätigungsdialog; die Option „Neustart bestätigen“ darf ihn abschalten. Der Shortcut umgeht niemals einen bereits bindenden Pflichtdialog.
+
+## Campus
+
+- Der Campus trennt drei Ebenen: eine vollflächige Umgebung, die interaktive Welt und eine oberste geclippte Kopfzone.
+- Gebäude beginnen mindestens 20 Pixel unter dem 92-Pixel-Campusheader. Grafiken, Hoverkonturen und Klickflächen verwenden denselben Anker und können nie über der Kopfzone zeichnen.
+- Die Umgebung füllt den gesamten sichtbaren Bereich und bindet die isometrische Spielfläche durch Horizont, umgebende Flächen und einen Kontaktschatten ein. Eine isolierte Kachelinsel auf leerer Einheitsfarbe ist unzulässig.
+
+## Forschung und Talente
+
+- Dauerhafte Fortschrittsoptionen erscheinen als responsives kompaktes Brett statt als lange Dokumentliste.
+- Forschungskarten sind höchstens 76 Pixel, Talentknoten höchstens 80 Pixel hoch. Sichtbar bleiben Icon, Titel, Rang beziehungsweise Kosten und ein eindeutiger Zustand.
+- Die vollständige Wirkung erscheint per Maus-Hover als kompakter Tooltip und per `ui_info` als inhaltsgleiche Detailkarte; reiner Tastatur-/Gamepadfokus öffnet nichts. Beide Darstellungen belegen keinen dauerhaften Platz oberhalb des Bretts. Ein nativer Tooltip darf ergänzen, ist aber niemals die einzige Informationsquelle.
+- Forschung verwendet auf breiten Ansichten bis zu drei Spalten. Talente bilden drei getrennte Äste mit gezeichneten Verbindungen und echten Voraussetzungen; jede Verzweigung folgt auf einen freigeschalteten Elternknoten. Bei kleiner logischer Breite werden Äste auf zwei beziehungsweise eine Spalte reduziert und vertikal gescrollt.
+- Auf niedrigen 200-Prozent-Ansichten bleiben die beiden Progressionstabs sichtbar; Summary und Brett beziehungsweise Baum liegen in einer fokusfolgenden Scrollfläche, während ein über Maus-Hover oder `ui_info` angefordertes Detail als viewportgebundener Tooltip beziehungsweise Detailkarte erscheint. Reiner Fokus öffnet es nicht. Baumränder führen per D-Pad zu Tabs oder Nachbarästen statt in Selbstschleifen. Ein aktiver Elternknoten mit aktiven Nachfolgern erklärt die Sperre und bleibt unverändert, bis die Nachfolger ausdrücklich zurückgesetzt wurden.
+
+## Semantische Varianten
+
+Buttons:
+
+- `PrimaryButton`
+- `SecondaryButton`
+- `DangerButton`
+- `QuietButton`
+- `TabButton` und `SelectedTabButton`
+- `SelectionCard` und `SelectedCard`
+
+Flächen:
+
+- `PageCanvas`
+- `SectionGroup`
+- `ActionCard`
+- `DocumentInset`
+- `ModalSheet`
+- `HudVital`, `HudObjective`, `HudAbility` und `HudAlert`
+
+Die bisherigen `Panel*`-Namen bleiben lediglich Kompatibilitätsaliasse. Neue Ansichten verwenden die semantischen Rollen.
+- `Badge`
+
+Text:
+
+- `TitleLabel`
+- `SectionLabel`
+- `EyebrowLabel`
+- `BodyLabel`
+- `MutedLabel`
+- `ValueLabel`
+
+Jeder Button besitzt die Zustände `normal`, `hover`, `pressed`, `focus` und `disabled`. Schaltflächen mit dauerhaftem Ein/Aus-Zustand besitzen zusätzlich einen deckenden `hover_pressed`-Zustand. Auswahl ist eine eigene semantische Variante und kein nachträglicher lokaler Farbaustausch.
+
+## Wiederverwendbare Konstruktion
+
+`AlveolusUIComponents` erzeugt einfache Labels, Buttons, Panels, Karten, Badges, Wertezeilen und Fortschrittsanzeigen. Die Fabrik enthält ausschließlich Struktur. Das Aussehen stammt immer aus `AlveolusVisualTheme`.
+
+`IconTextButton` zentriert Symbol und Beschriftung als gemeinsame Einheit. Buttons mit manuell positioniertem Symbol und separat zentriertem Text sind nicht zulässig.
+
+## Prüfung
+
+Die UI- und Binding-Runner, darunter `tests/style_gallery_runner.gd`, prüfen:
+
+- vollständige Interaktionszustände;
+- semantische Theme-Varianten;
+- die Einsatzplanung als Golden Reference, einschließlich Teal→Warmgold ausschließlich auf „Behandlung starten“ und Teal→Teal auf allen anderen Primäraktionen;
+- Maus-Hover als einzigen automatischen Tooltip-Auslöser sowie stilles Schließen ohne Fokus- oder Aktionswechsel;
+- dass Tastatur-/Gamepadfokus allein keine Detailkarte öffnet, `ui_info` jedoch inhaltsgleiche Informationen zeigt und `ui_info` beziehungsweise `ui_cancel` mit erhaltenem Auslöserfokus schließt;
+- konfigurierbare `ui_info`-Belegungen und passende Tastatur-/Gamepadglyphen;
+- Mindestschrift und Kontrast;
+- gemeinsame Zentrierung von Symbol und Text;
+- Referenzansichten bei 1280×720, 1024×576 und 960×540;
+- Layout- und Fokusmatrix zusätzlich bei 1280×800 sowie allen vier Auflösungen mit 200 Prozent UI-Skalierung;
+- Screenshot-Smokes unter `.codex-temp/style-gallery/`.

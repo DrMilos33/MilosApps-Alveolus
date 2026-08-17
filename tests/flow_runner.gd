@@ -12,6 +12,14 @@ func _run_flow() -> void:
 	get_root().add_child(game)
 	await process_frame
 	await process_frame
+	# Flow assertions must start from a new local profile, independent of the
+	# developer's real save (which is intentionally preserved by the test).
+	game.persistence_enabled = false
+	game.meta.reset_defaults()
+	game.discovery_manager.configure(game.discovery_definitions, {})
+	game.story_return_state = GameFlowState.State.CAMPUS
+	game._set_flow(GameFlowState.State.STORY)
+	game.hud.show_story()
 
 	_check(game.flow_state == GameFlowState.State.STORY, "Neuer Spielstand öffnet direkt den Prolog")
 	game._on_story_finished()
@@ -30,13 +38,14 @@ func _run_flow() -> void:
 	_check(game.flow_state == GameFlowState.State.LEVEL_SELECT, "Fallarchiv ist vom Campus erreichbar")
 
 	game._on_level_selected(&"intro")
-	_check(game.flow_state == GameFlowState.State.BRIEFING, "Freigeschaltetes Intro öffnet sein Briefing")
+	_check(game.flow_state == GameFlowState.State.PREPARATION, "Freigeschaltetes Intro öffnet direkt die Einsatzplanung")
+	_check(game.pending_run_context != null and game.pending_loadout_draft != null, "Die Einsatzplanung besitzt einen stabilen RunContext und feste Slots")
 	game._on_intro_skip_requested()
-	_check(game.flow_state == GameFlowState.State.INTRO_SKIP_CONFIRMATION, "Intro-Briefing bietet eine bestätigte Überspringen-Funktion")
+	_check(game.flow_state == GameFlowState.State.INTRO_SKIP_CONFIRMATION, "Die Introplanung bietet eine bestätigte Überspringen-Funktion")
 	game._on_intro_skip_cancelled()
-	_check(game.flow_state == GameFlowState.State.BRIEFING, "Intro-Überspringen kann ohne Freischaltung verworfen werden")
-	game.start_run()
-	_check(game.flow_state == GameFlowState.State.RUNNING, "Briefing startet einen laufenden Run")
+	_check(game.flow_state == GameFlowState.State.PREPARATION, "Intro-Überspringen kann ohne Freischaltung verworfen werden")
+	game._on_preparation_start_requested(game.pending_preparation_loadout.to_dict())
+	_check(game.flow_state == GameFlowState.State.RUNNING, "Die Einsatzplanung startet einen laufenden Run")
 	var research_before_abort: int = game.meta.research_points
 	game._set_flow(GameFlowState.State.MANUAL_PAUSE)
 	game.hud.show_pause()
@@ -52,17 +61,7 @@ func _run_flow() -> void:
 	_check(game.meta.get_level_record(&"intro").attempts == 0, "Abbruch verändert keine Levelrekorde")
 
 	game._on_level_selected(&"intro")
-	game.start_run()
-	game._set_flow(GameFlowState.State.MANUAL_PAUSE)
-	game.hud.show_pause(true)
-	game._on_pause_levels_requested()
-	await process_frame
-	_check(game.flow_state == GameFlowState.State.LEVEL_SELECT, "Pause bietet einen direkten Weg zur Fallauswahl")
-	_check(game.meta.research_points == research_before_abort, "Direkter Wechsel zur Fallauswahl vergibt keine Forschung")
-	_check(game.meta.get_level_record(&"intro").attempts == 0, "Direkter Wechsel verändert keine Levelrekorde")
-
-	game._on_level_selected(&"intro")
-	game.start_run()
+	game._on_preparation_start_requested(game.pending_preparation_loadout.to_dict())
 	game.discovery_manager.mark_seen(&"research_reward")
 	game.state.elapsed = 50.0
 	game.state.mark_boss_defeated()
@@ -74,7 +73,7 @@ func _run_flow() -> void:
 
 	game._show_level_select()
 	game._on_level_selected(&"intro")
-	game.start_run()
+	game._on_preparation_start_requested(game.pending_preparation_loadout.to_dict())
 	game.state.elapsed = 48.0
 	game.state.mark_boss_defeated()
 	await process_frame

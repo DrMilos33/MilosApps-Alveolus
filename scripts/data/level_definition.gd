@@ -23,6 +23,9 @@ extends Resource
 @export_multiline var briefing_text: String
 @export_multiline var victory_text: String
 @export_multiline var failure_text: String
+@export var visible_trait_ids: Array[StringName] = []
+@export var hidden_finding_ids: Array[StringName] = []
+@export var finding_progress_target: int = 0
 
 static func create(
 	level_id: StringName,
@@ -72,6 +75,16 @@ static func create(
 	definition.victory_text = victory
 	definition.failure_text = failure
 	return definition
+
+func configure_case_variation(
+	traits: Array[StringName],
+	findings: Array[StringName],
+	finding_target: int
+) -> LevelDefinition:
+	visible_trait_ids = traits.duplicate()
+	hidden_finding_ids = findings.duplicate()
+	finding_progress_target = maxi(0, finding_target)
+	return self
 
 func duration_text() -> String:
 	if is_tutorial:

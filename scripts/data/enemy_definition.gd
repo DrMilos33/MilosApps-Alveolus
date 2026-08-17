@@ -11,6 +11,8 @@ extends Resource
 @export var color: Color
 @export var is_boss: bool = false
 @export var discovery_id: StringName
+@export var visual_id: StringName
+@export var medical_name: String
 
 static func create(
 	definition_id: StringName,
@@ -22,7 +24,9 @@ static func create(
 	body_radius: float,
 	body_color: Color,
 	boss: bool = false,
-	discovery: StringName = &""
+	discovery: StringName = &"",
+	visual: StringName = &"",
+	medical: String = ""
 ) -> EnemyDefinition:
 	var definition := EnemyDefinition.new()
 	definition.id = definition_id
@@ -35,4 +39,6 @@ static func create(
 	definition.color = body_color
 	definition.is_boss = boss
 	definition.discovery_id = discovery
+	definition.visual_id = definition_id if visual.is_empty() else visual
+	definition.medical_name = name if medical.is_empty() else medical
 	return definition

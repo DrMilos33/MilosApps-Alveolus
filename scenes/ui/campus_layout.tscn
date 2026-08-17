@@ -1,0 +1,524 @@
+[gd_scene format=3 uid="uid://cgh7t7ism8pvi"]
+
+[ext_resource type="Script" uid="uid://cu4ul1smnjp4m" path="res://scripts/ui/campus_layout.gd" id="1_layout"]
+[ext_resource type="Script" uid="uid://dub07l1fsmep0" path="res://scripts/ui/campus_building_slot.gd" id="2_slot"]
+[ext_resource type="Texture2D" uid="uid://b8t1iu6lmvift" path="res://assets/vendor/kenney_sketch_town/grass_center_S.png" id="3_grass"]
+[ext_resource type="Texture2D" uid="uid://drnxxiouxeeqk" path="res://assets/vendor/kenney_sketch_town/grass_path_E.png" id="4_path_e"]
+[ext_resource type="Texture2D" uid="uid://c3xjy4f8nvabh" path="res://assets/vendor/kenney_sketch_town/grass_pathCrossing_S.png" id="5_path_cross"]
+[ext_resource type="Texture2D" uid="uid://doct80sgx7e0p" path="res://assets/vendor/kenney_sketch_town/grass_path_S.png" id="6_path_s"]
+[ext_resource type="Texture2D" uid="uid://dkw75qr34w0o7" path="res://assets/vendor/kenney_sketch_town/grass_pathBend_S.png" id="7_path_bend_s"]
+[ext_resource type="Texture2D" uid="uid://bklj04n34lam3" path="res://assets/vendor/kenney_sketch_town/grass_path_N.png" id="8_path_n"]
+[ext_resource type="Texture2D" uid="uid://inldl43817gg" path="res://assets/vendor/kenney_sketch_town/grass_pathBend_N.png" id="9_path_bend_n"]
+[ext_resource type="Texture2D" uid="uid://bvucnoauuyxd" path="res://assets/vendor/kenney_sketch_town/grass_path_W.png" id="10_path_w"]
+[ext_resource type="Texture2D" uid="uid://dgugo0whc5d65" path="res://assets/vendor/kenney_sketch_town/grass_pathBend_W.png" id="11_path_bend_w"]
+[ext_resource type="Texture2D" uid="uid://cghktafhff6wh" path="res://assets/vendor/kenney_sketch_town/grass_pathBend_E.png" id="12_path_bend_e"]
+[ext_resource type="Texture2D" uid="uid://i8cnlay1xs2j" path="res://assets/vendor/kenney_sketch_town/tree_multiple_S.png" id="13_trees"]
+[ext_resource type="Texture2D" uid="uid://ccynf006w8o3a" path="res://assets/vendor/kenney_sketch_town/tree_single_S.png" id="14_tree"]
+[ext_resource type="Texture2D" uid="uid://bbgou7idni7bv" path="res://assets/vendor/kenney_sketch_town_expansion/tree_pineLarge_S.png" id="15_pines"]
+[ext_resource type="Texture2D" uid="uid://bcqr17r5aqaua" path="res://assets/vendor/kenney_sketch_town_expansion/tree_pine_S.png" id="16_pine"]
+[ext_resource type="Texture2D" uid="uid://eq73pspclbr0" path="res://assets/vendor/kenney_sketch_town_expansion/furrow_cropWheat_S.png" id="17_garden"]
+[ext_resource type="Texture2D" uid="uid://b3wydqa7yhfj4" path="res://assets/vendor/kenney_sketch_town_expansion/well_S.png" id="18_well"]
+[ext_resource type="Texture2D" uid="uid://b6tfg37nsijmp" path="res://assets/vendor/kenney_sketch_town/rocks_grass_S.png" id="19_rocks"]
+[ext_resource type="Texture2D" uid="uid://biyqof6ixidac" path="res://assets/vendor/kenney_sketch_town_expansion/fence_woodCorner_S.png" id="20_fence"]
+[ext_resource type="Script" path="res://scripts/ui/campus_backdrop.gd" id="21_backdrop"]
+
+[node name="CampusLayout" type="Control" unique_id=1200258104]
+custom_minimum_size = Vector2(1280, 720)
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_layout")
+
+[node name="Sky" type="ColorRect" parent="." unique_id=316878116]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.862745, 0.921569, 0.941176, 1)
+
+[node name="Horizon" type="ColorRect" parent="." unique_id=1065895138]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 86.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.811765, 0.894118, 0.898039, 1)
+
+[node name="EnvironmentBackdrop" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("21_backdrop")
+
+[node name="GroundTiles" type="Node2D" parent="." unique_id=1515282053]
+editor_description = "Einzelne isometrische Gras- und Wegplatten. Im 2D-Editor anklicken, verschieben, duplizieren oder die Texture im Inspector ersetzen."
+position = Vector2(0, 141)
+
+[node name="Tile_0_0" type="Sprite2D" parent="GroundTiles" unique_id=813576556]
+position = Vector2(558.08, -77.08)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_1_0" type="Sprite2D" parent="GroundTiles" unique_id=479175272]
+position = Vector2(632.32, -41.88)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_0_1" type="Sprite2D" parent="GroundTiles" unique_id=437044711]
+position = Vector2(483.84, -41.88)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_2_0" type="Sprite2D" parent="GroundTiles" unique_id=1356726498]
+position = Vector2(706.56, -6.68)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_1_1" type="Sprite2D" parent="GroundTiles" unique_id=1999598903]
+position = Vector2(558.08, -6.68)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_0_2" type="Sprite2D" parent="GroundTiles" unique_id=394658099]
+position = Vector2(409.6, -6.68)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_3_0" type="Sprite2D" parent="GroundTiles" unique_id=1106074782]
+position = Vector2(780.8, 28.52)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_2_1" type="Sprite2D" parent="GroundTiles" unique_id=896005805]
+position = Vector2(632.32, 28.52)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_1_2" type="Sprite2D" parent="GroundTiles" unique_id=1570609671]
+position = Vector2(483.84, 28.52)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_0_3" type="Sprite2D" parent="GroundTiles" unique_id=2121422187]
+position = Vector2(335.36, 28.52)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_4_0" type="Sprite2D" parent="GroundTiles" unique_id=627089008]
+position = Vector2(855.04, 63.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_3_1" type="Sprite2D" parent="GroundTiles" unique_id=1181190402]
+position = Vector2(706.56, 63.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_2_2" type="Sprite2D" parent="GroundTiles" unique_id=974933177]
+position = Vector2(558.08, 63.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_1_3" type="Sprite2D" parent="GroundTiles" unique_id=1690039443]
+position = Vector2(409.6, 63.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_0_4" type="Sprite2D" parent="GroundTiles" unique_id=955475646]
+position = Vector2(261.12, 63.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_5_0" type="Sprite2D" parent="GroundTiles" unique_id=284954469]
+position = Vector2(929.28, 98.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_4_1" type="Sprite2D" parent="GroundTiles" unique_id=538898036]
+position = Vector2(780.8, 98.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_3_2" type="Sprite2D" parent="GroundTiles" unique_id=874921399]
+position = Vector2(632.32, 98.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("7_path_bend_s")
+centered = false
+
+[node name="Tile_2_3" type="Sprite2D" parent="GroundTiles" unique_id=1466290379]
+position = Vector2(483.84, 98.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("4_path_e")
+centered = false
+
+[node name="Tile_1_4" type="Sprite2D" parent="GroundTiles" unique_id=1786367997]
+position = Vector2(335.36, 98.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("9_path_bend_n")
+centered = false
+
+[node name="Tile_0_5" type="Sprite2D" parent="GroundTiles" unique_id=393402566]
+position = Vector2(186.88, 98.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_6_0" type="Sprite2D" parent="GroundTiles" unique_id=960750434]
+position = Vector2(1003.52, 134.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_5_1" type="Sprite2D" parent="GroundTiles" unique_id=2124962462]
+position = Vector2(855.04, 134.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_4_2" type="Sprite2D" parent="GroundTiles" unique_id=291430267]
+position = Vector2(706.56, 134.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("6_path_s")
+centered = false
+
+[node name="Tile_3_3" type="Sprite2D" parent="GroundTiles" unique_id=1636262804]
+position = Vector2(558.08, 134.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("5_path_cross")
+centered = false
+
+[node name="Tile_2_4" type="Sprite2D" parent="GroundTiles" unique_id=1830525584]
+position = Vector2(409.6, 134.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("8_path_n")
+centered = false
+
+[node name="Tile_1_5" type="Sprite2D" parent="GroundTiles" unique_id=1757794248]
+position = Vector2(261.12, 134.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_0_6" type="Sprite2D" parent="GroundTiles" unique_id=1479973732]
+position = Vector2(112.64, 134.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_6_1" type="Sprite2D" parent="GroundTiles" unique_id=679967621]
+position = Vector2(929.28, 169.32)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_5_2" type="Sprite2D" parent="GroundTiles" unique_id=642106106]
+position = Vector2(780.8, 169.32)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_4_3" type="Sprite2D" parent="GroundTiles" unique_id=2012932251]
+position = Vector2(632.32, 169.32)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("11_path_bend_w")
+centered = false
+
+[node name="Tile_3_4" type="Sprite2D" parent="GroundTiles" unique_id=185769231]
+position = Vector2(483.84, 169.32)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("10_path_w")
+centered = false
+
+[node name="Tile_2_5" type="Sprite2D" parent="GroundTiles" unique_id=941811963]
+position = Vector2(335.36, 169.32)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_1_6" type="Sprite2D" parent="GroundTiles" unique_id=1946461269]
+position = Vector2(186.88, 169.32)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_6_2" type="Sprite2D" parent="GroundTiles" unique_id=1876480791]
+position = Vector2(855.04, 204.52)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_5_3" type="Sprite2D" parent="GroundTiles" unique_id=767757071]
+position = Vector2(707, 204.99998)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("4_path_e")
+centered = false
+
+[node name="Tile_4_4" type="Sprite2D" parent="GroundTiles" unique_id=1991774268]
+position = Vector2(558.08, 204.52)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_3_5" type="Sprite2D" parent="GroundTiles" unique_id=1580001225]
+position = Vector2(409.6, 204.52)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_2_6" type="Sprite2D" parent="GroundTiles" unique_id=257759187]
+position = Vector2(261.12, 204.52)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_6_3" type="Sprite2D" parent="GroundTiles" unique_id=1942607384]
+position = Vector2(780.8, 239.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_5_4" type="Sprite2D" parent="GroundTiles" unique_id=1223562805]
+position = Vector2(632.32, 239.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("12_path_bend_e")
+centered = false
+
+[node name="Tile_4_5" type="Sprite2D" parent="GroundTiles" unique_id=958771179]
+position = Vector2(483.84, 239.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_3_6" type="Sprite2D" parent="GroundTiles" unique_id=216258019]
+position = Vector2(335.36, 239.72)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_6_4" type="Sprite2D" parent="GroundTiles" unique_id=815225430]
+position = Vector2(706.56, 274.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_5_5" type="Sprite2D" parent="GroundTiles" unique_id=1074473243]
+position = Vector2(558.08, 274.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_4_6" type="Sprite2D" parent="GroundTiles" unique_id=360359787]
+position = Vector2(409.6, 274.92)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_6_5" type="Sprite2D" parent="GroundTiles" unique_id=2064011207]
+position = Vector2(632.32, 310.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_5_6" type="Sprite2D" parent="GroundTiles" unique_id=271934921]
+position = Vector2(483.84, 310.12)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Tile_6_6" type="Sprite2D" parent="GroundTiles" unique_id=1118365406]
+position = Vector2(558.08, 345.32)
+scale = Vector2(0.64, 0.64)
+texture = ExtResource("3_grass")
+centered = false
+
+[node name="Decorations" type="Node2D" parent="." unique_id=1556174301]
+editor_description = "Bäume, Garten, Brunnen, Steine und Zaun. Die Reihenfolge im Szenenbaum bestimmt die Zeichenreihenfolge."
+position = Vector2(-8, 62)
+
+[node name="TreesWest" type="Sprite2D" parent="Decorations" unique_id=145849261]
+position = Vector2(586, -14.000004)
+scale = Vector2(0.4608, 0.4608)
+texture = ExtResource("13_trees")
+centered = false
+
+[node name="TreeNorth" type="Sprite2D" parent="Decorations" unique_id=1453459767]
+position = Vector2(218.99997, 246)
+scale = Vector2(0.4352, 0.4352)
+texture = ExtResource("14_tree")
+centered = false
+
+[node name="PinesEast" type="Sprite2D" parent="Decorations" unique_id=1184376310]
+position = Vector2(1033, 205)
+scale = Vector2(0.448, 0.448)
+texture = ExtResource("15_pines")
+centered = false
+
+[node name="PineWest" type="Sprite2D" parent="Decorations" unique_id=850254616]
+position = Vector2(133.22, 197.74)
+scale = Vector2(0.448, 0.448)
+texture = ExtResource("16_pine")
+centered = false
+
+[node name="TreesSouth" type="Sprite2D" parent="Decorations" unique_id=1957707071]
+position = Vector2(592.29, 413.39)
+scale = Vector2(0.4352, 0.4352)
+texture = ExtResource("13_trees")
+centered = false
+
+[node name="Garden" type="Sprite2D" parent="Decorations" unique_id=1166718964]
+position = Vector2(368, 292)
+scale = Vector2(0.4736, 0.4736)
+texture = ExtResource("17_garden")
+centered = false
+
+[node name="Well" type="Sprite2D" parent="Decorations" unique_id=1324607142]
+position = Vector2(728, 337)
+scale = Vector2(0.4608, 0.4608)
+texture = ExtResource("18_well")
+centered = false
+
+[node name="Rocks" type="Sprite2D" parent="Decorations" unique_id=2072351456]
+position = Vector2(221.00003, 157.00002)
+scale = Vector2(0.448, 0.448)
+texture = ExtResource("19_rocks")
+centered = false
+
+[node name="FenceCorner" type="Sprite2D" parent="Decorations" unique_id=708696909]
+position = Vector2(956.00006, 174)
+scale = Vector2(0.448, 0.448)
+texture = ExtResource("20_fence")
+centered = false
+
+[node name="BuildingSlots" type="Control" parent="." unique_id=1837065845]
+editor_description = "Editorvorschau und einzige Positionsquelle der interaktiven Gebäude. Immer den vollständigen Slot verschieben; sein unterer Mittelpunkt ist der Runtime-Anker."
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 48.0
+offset_bottom = 48.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="practice" type="Control" parent="BuildingSlots" unique_id=1867482048]
+anchors_preset = 0
+offset_left = 396.52
+offset_top = 107.8
+offset_right = 586.52
+offset_bottom = 285.8
+mouse_filter = 2
+script = ExtResource("2_slot")
+
+[node name="research" type="Control" parent="BuildingSlots" unique_id=1867698660]
+anchors_preset = 0
+offset_left = 774.0
+offset_top = 100.0
+offset_right = 954.0
+offset_bottom = 278.0
+mouse_filter = 2
+script = ExtResource("2_slot")
+building_id = "research"
+
+[node name="levels" type="Control" parent="BuildingSlots" unique_id=304342037]
+anchors_preset = 0
+offset_left = 248.04
+offset_top = 180.2
+offset_right = 438.04
+offset_bottom = 356.2
+mouse_filter = 2
+script = ExtResource("2_slot")
+building_id = "levels"
+
+[node name="lexicon" type="Control" parent="BuildingSlots" unique_id=1080476516]
+anchors_preset = 0
+offset_left = 545.0
+offset_top = 248.6
+offset_right = 735.0
+offset_bottom = 426.6
+mouse_filter = 2
+script = ExtResource("2_slot")
+building_id = "lexicon"
+
+[node name="settings" type="Control" parent="BuildingSlots" unique_id=1549041184]
+anchors_preset = 0
+offset_left = 785.0
+offset_top = 341.0
+offset_right = 931.0
+offset_bottom = 481.0
+mouse_filter = 2
+script = ExtResource("2_slot")
+building_id = "settings"
+
+[node name="RuntimeStaff" type="Control" parent="." unique_id=892336316]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 48.0
+offset_bottom = 48.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="StaffMarkers" type="Node2D" parent="." unique_id=1467889411]
+editor_description = "Je Route die Marker Start und End verschieben. phase und speed liegen als Metadaten am Routenknoten."
+position = Vector2(0, 48)
+
+[node name="RouteA" type="Node2D" parent="StaffMarkers" unique_id=1873230906]
+metadata/phase = 0.1
+metadata/speed = 0.08
+
+[node name="Start" type="Marker2D" parent="StaffMarkers/RouteA" unique_id=698782787]
+position = Vector2(557.76, 301)
+
+[node name="End" type="Marker2D" parent="StaffMarkers/RouteA" unique_id=1338594649]
+position = Vector2(652, 338.2)
+
+[node name="RouteB" type="Node2D" parent="StaffMarkers" unique_id=918067650]
+metadata/phase = 0.58
+metadata/speed = 0.065
+
+[node name="Start" type="Marker2D" parent="StaffMarkers/RouteB" unique_id=397573487]
+position = Vector2(724.24, 375.4)
+
+[node name="End" type="Marker2D" parent="StaffMarkers/RouteB" unique_id=81676066]
+position = Vector2(778.48, 411.6)
+
+[node name="HeaderVeil" type="ColorRect" parent="." unique_id=1100708715]
+layout_mode = 0
+offset_right = 1280.0
+offset_bottom = 92.0
+mouse_filter = 2
+color = Color(0.97, 0.95, 0.9, 0.78)

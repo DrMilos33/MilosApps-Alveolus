@@ -44,7 +44,7 @@ func tick(delta: float) -> void:
 		boss_spawned = true
 		boss_due.emit()
 	if elapsed >= config.final_deadline_seconds and not boss_defeated:
-		finish(false, "Das Therapiefenster wurde überschritten.")
+		finish(false, "Die Behandlungszeit ist abgelaufen.")
 
 func change_stability(amount: float) -> void:
 	if not active:
@@ -52,13 +52,24 @@ func change_stability(amount: float) -> void:
 	stability = clampf(stability + amount, 0.0, max_stability)
 	stability_changed.emit(stability, max_stability)
 	if is_zero_approx(stability):
-		finish(false, "Die Patientenstabilität ist erschöpft.")
+		finish(false, "Der Zustand ist erschöpft.")
 
 func increase_max_stability(amount: float) -> void:
 	if amount <= 0.0:
 		return
 	max_stability += amount
 	stability = minf(max_stability, stability + amount)
+	stability_changed.emit(stability, max_stability)
+
+func adjust_max_stability(amount: float, restore_added_capacity: bool = true) -> void:
+	if is_zero_approx(amount):
+		return
+	var previous_maximum := max_stability
+	max_stability = maxf(1.0, max_stability + amount)
+	if amount > 0.0 and restore_added_capacity:
+		stability = minf(max_stability, stability + (max_stability - previous_maximum))
+	else:
+		stability = minf(stability, max_stability)
 	stability_changed.emit(stability, max_stability)
 
 func add_analysis(amount: int) -> void:

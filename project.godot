@@ -1,13 +1,23 @@
 ; Engine configuration file.
-; Edit through the Godot editor where possible.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
 config_version=5
 
 [application]
 
 config/name="ALVEOLUS"
-config/description="Ein medizinisch fundierter 2D-Survivors-Prototyp."
+config/description="Ein illustrierter 2D-Survivors- und Idle-Prototyp im Lungenmodell."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[application_run]
+
+disable_stdout=false
 
 [display]
 
@@ -17,17 +27,12 @@ window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 
-[rendering]
-
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
-textures/default_filters/use_nearest_mipmap_filter=false
-environment/defaults/default_clear_color=Color(0.025, 0.043, 0.055, 1)
-
 [physics]
 
 common/physics_interpolation=true
 
-[application_run]
+[rendering]
 
-disable_stdout=false
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.862, 0.922, 0.941, 1)

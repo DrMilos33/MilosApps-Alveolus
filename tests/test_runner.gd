@@ -1,5 +1,7 @@
 extends SceneTree
 
+const UnitBodyComponent = preload("res://scripts/ui/unit_body_2d.gd")
+
 var assertions: int = 0
 var failures: int = 0
 
@@ -15,8 +17,12 @@ func _run_all() -> void:
 	_test_pressure_guard_contract()
 	_test_torus_topology()
 	_test_object_highlighter_geometry()
+	_test_unit_body_geometry()
+	_test_batched_sprite_regions()
+	_test_centered_icon_buttons()
 	_test_projectile_discovery_timing()
 	_test_upgrade_previews()
+	_test_character_stat_rows()
 	_test_level_catalog_and_run_config()
 	_test_enemy_spawn_and_boss_phases()
 	_test_discovery_catalog_and_queue()
@@ -93,6 +99,53 @@ func _test_object_highlighter_geometry() -> void:
 	highlighter.clear()
 	_assert_equal(highlighter.shape, ObjectHighlighter.Shape.NONE, "Highlighter lässt sich vollständig deaktivieren")
 	highlighter.free()
+
+func _test_unit_body_geometry() -> void:
+	var body = UnitBodyComponent.new()
+	body.position = Vector2(20, 12)
+	body.configure_polygon(PackedVector2Array([Vector2(0, 0), Vector2(60, 0), Vector2(50, 40), Vector2(0, 40)]))
+	_assert_equal(body.local_bounds(), Rect2(0, 0, 60, 40), "Unit-Körper berechnet seine lokale Silhouette")
+	_assert_true(body.contains_parent_point(Vector2(30, 24)), "Unit-Körper übernimmt den Interaktionstest")
+	_assert_true(not body.contains_parent_point(Vector2(90, 24)), "Interaktion endet außerhalb des Unit-Körpers")
+	var transformed := body.contours_transformed(Transform2D(0.0, Vector2(100, 80)), 0.0)
+	_assert_equal(transformed[0][0], Vector2(100, 80), "Unit-Körper lässt sich in den Zeichenraum des Highlighters übertragen")
+	body.free()
+	var alpha_body = UnitBodyComponent.new()
+	alpha_body.position = Vector2(10, 20)
+	var practice_texture := VisualAssetCatalog.campus_building(&"practice")
+	alpha_body.configure_alpha_texture(practice_texture, Rect2(0, 0, 190, 178), 0.12)
+	_assert_true(alpha_body.uses_alpha_texture(), "Gebäude-Unit verwendet die sichtbare Sprite-Alpha als Körper")
+	_assert_true(alpha_body.contains_parent_point(Vector2(95, 100)), "Sichtbare Gebäudepixel sind interaktiv")
+	_assert_true(not alpha_body.contains_parent_point(Vector2(2, 2)), "Transparente Spritebereiche gehören nicht zur Klickfläche")
+	alpha_body.free()
+
+func _test_batched_sprite_regions() -> void:
+	var bacterium := VisualAssetCatalog.gameplay_batch_texture(&"pneumococcus")
+	var cluster := VisualAssetCatalog.gameplay_batch_texture(&"bacterial_cluster")
+	var sample := VisualAssetCatalog.gameplay_batch_texture(&"analysis_pickup")
+	_assert_true(bacterium != null and cluster != null and sample != null, "Batch-Sprites werden als eigenständige Texturen erzeugt")
+	_assert_equal(bacterium.get_width(), bacterium.get_height(), "Keimregion wird verzerrungsfrei auf eine quadratische Textur gepolstert")
+	_assert_equal(cluster.get_width(), cluster.get_height(), "Bakteriengruppe wird verzerrungsfrei auf eine quadratische Textur gepolstert")
+	_assert_true(not (bacterium is AtlasTexture) and not (cluster is AtlasTexture) and not (sample is AtlasTexture), "MultiMesh erhält keine ungefilterten Atlasregionen")
+	_assert_true(bacterium == VisualAssetCatalog.gameplay_batch_texture(&"pneumococcus"), "Zugeschnittene Batch-Texturen werden wiederverwendet")
+	_assert_true(VisualAssetCatalog.has_gameplay_visual(&"pneumococcus") and VisualAssetCatalog.has_gameplay_visual(&"analysis_pickup"), "Der Katalog erkennt explizit registrierte Gameplay-Grafiken")
+	_assert_true(not VisualAssetCatalog.has_gameplay_visual(&"missing_visual") and not VisualAssetCatalog.has_gameplay_visual(&""), "Unbekannte und leere Grafik-IDs gelten nicht als registriert")
+	_assert_true(VisualAssetCatalog.gameplay_sprite(&"missing_visual") == null, "Unbekannte Gameplay-IDs fallen nicht auf das Proben-Symbol zurück")
+	_assert_true(VisualAssetCatalog.gameplay_batch_texture(&"") == null, "Eine leere Batch-ID erzeugt keine falsche Textur")
+	var doctor_right := VisualAssetCatalog.doctor_frame(Vector2.RIGHT, 0, true)
+	var doctor_left := VisualAssetCatalog.doctor_frame(Vector2.LEFT, 0, true)
+	_assert_equal(Vector2i(doctor_right.get_width(), doctor_right.get_height()), Vector2i(30, 30), "Medical-Examiner-Frame wird ohne gelbe Rasterkante ausgeschnitten")
+	_assert_true(doctor_right != doctor_left, "Medical Examiner verwendet richtungsabhängige Frames")
+
+func _test_centered_icon_buttons() -> void:
+	var button := IconTextButton.new()
+	button.size = Vector2(184, 40)
+	button.configure("ZUM CAMPUS", &"home", AlveolusVisualTheme.COBALT)
+	_assert_true(button.text.is_empty(), "Icon-Buttons zeichnen keinen zweiten unabhängig zentrierten Buttontext")
+	_assert_equal(button.content_center.anchor_left, 0.0, "Icon-Button-Inhalt beginnt am linken Buttonrand")
+	_assert_equal(button.content_center.anchor_right, 1.0, "Icon-Button-Inhalt umfasst die vollständige Buttonbreite")
+	_assert_true(button.content_row.get_parent() == button.content_center, "Icon und Text bilden eine gemeinsam zentrierte Layoutgruppe")
+	button.free()
 
 func _test_projectile_discovery_timing() -> void:
 	var topology := ArenaTopology.new(Rect2(-1000, -700, 2000, 1400))
@@ -176,13 +229,13 @@ func _test_upgrade_previews() -> void:
 	_assert_equal(target_preview.effect_text, "+1 Projektil", "Zielupgrade benennt den exakten Projektilzuwachs")
 	_assert_equal(target_preview.before_after_text, "1 Ziel  >  2 Ziele", "Zielupgrade zeigt Vorher und Nachher")
 	var rhythm_preview := stats.preview_upgrade(rhythm)
-	_assert_equal(rhythm_preview.effect_text, "+16 % Therapierhythmus", "Rhythmusupgrade priorisiert den verständlichen Prozentzuwachs")
+	_assert_equal(rhythm_preview.effect_text, "+16 % Tempo", "Rhythmusupgrade priorisiert den verständlichen Prozentzuwachs")
 	_assert_equal(rhythm_preview.before_after_text, "0,82 s  >  0,69 s Intervall", "Intervallupgrade zeigt den konkreten Vorher-/Nachher-Wert")
 	var immune_preview := stats.preview_upgrade(immune_damage)
-	_assert_equal(immune_preview.effect_text, "+6 Immunwirkung", "Immunupgrade verwendet die kompakte Effektzeile")
+	_assert_equal(immune_preview.effect_text, "+6 Abwehrwirkung", "Abwehrupgrade verwendet die kompakte Effektzeile")
 	_assert_equal(immune_preview.before_after_text, "10 Wirkung  >  16 Wirkung", "Immunupgrade zeigt nur den Wertvergleich")
 	var support_preview := stats.preview_upgrade(oxygenation)
-	_assert_equal(support_preview.effect_text, "+4 Stabilität", "Supportupgrade verwendet die kompakte Effektzeile")
+	_assert_equal(support_preview.effect_text, "+4 Zustand", "Atemhilfe-Upgrade verwendet die kompakte Effektzeile")
 	_assert_true(support_preview.before_after_text.contains("5,65 s"), "Supportupgrade nennt das tatsächliche Impulsintervall")
 
 	var rng := RandomNumberGenerator.new()
@@ -198,6 +251,22 @@ func _test_upgrade_previews() -> void:
 	_assert_equal(rerolled_ids.size(), rerolled.size(), "Neuauswahl enthält keine doppelten Upgrades")
 	for id in excluded:
 		_assert_true(not rerolled_ids.has(id), "Neuauswahl vermeidet die zuvor sichtbaren Upgrades")
+
+func _test_character_stat_rows() -> void:
+	var stats := PlayerStats.new()
+	var rows := stats.stat_rows(80.0, 90.0, 275.0)
+	_assert_equal(rows.size(), 13, "Charakterwertemenü enthält alle relevanten dynamischen Werte")
+	_assert_equal(String(rows[0].get("value", "")), "80 / 90", "Aktueller und maximaler Zustand werden gemeinsam angezeigt")
+	_assert_equal(String(rows[2].get("value", "")), "18", "Behandlungswirkung entspricht dem echten Basiswert")
+	_assert_equal(String(rows[6].get("value", "")), "0", "Nicht freigeschaltete Abwehr zeigt keine erfundenen Zellen")
+	stats.immune_level = 1
+	stats.support_level = 1
+	rows = stats.stat_rows(80.0, 90.0, 275.0)
+	_assert_equal(String(rows[6].get("value", "")), "2", "Freigeschaltete Abwehr zeigt die echte Zellenzahl")
+	_assert_equal(String(rows[10].get("value", "")), "+4", "Atemhilfe zeigt die echte Regeneration")
+	var compact := stats.compact_stat_text(80.0, 90.0)
+	_assert_true(compact.contains("Wirkung  18"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
+	_assert_true(compact.contains("Abwehrzellen  2"), "Kompakte Anzeige aktualisiert Ausbauwerte")
 
 func _test_level_catalog_and_run_config() -> void:
 	var levels := ContentCatalog.level_definitions()
@@ -234,6 +303,17 @@ func _test_enemy_spawn_and_boss_phases() -> void:
 	regular._physics_process(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	_assert_true(regular.is_targetable(), "Gegner wird erst nach vollständiger Materialisierung aktiv")
 	_assert_equal(regular.position, Vector2(271.0, -118.0), "Spawnposition bleibt vor dem ersten aktiven Frame erhalten")
+	regular.take_damage(1.0)
+	_assert_equal(regular.hit_reaction_amount(), 1.0, "Treffer startet die kurze Keimreaktion")
+	regular._physics_process(InfectionEnemy.HIT_REACTION_SECONDS * 0.5)
+	_assert_true(regular.hit_reaction_amount() > 0.0 and regular.hit_reaction_amount() < 1.0, "Keimreaktion klingt über mehrere Physikframes ab")
+	regular._physics_process(InfectionEnemy.HIT_REACTION_SECONDS)
+	_assert_equal(regular.hit_reaction_amount(), 0.0, "Trefferreaktion endet vollständig und hinterlässt keine Dauerskalierung")
+	var defeat_count := [0]
+	regular.defeated.connect(func(_enemy: InfectionEnemy, _analysis: int, _boss: bool) -> void: defeat_count[0] += 1)
+	regular.take_damage(999.0)
+	_assert_equal(defeat_count[0], 1, "Besiegte Gegner verschwinden ohne verzögerte Todesanimation")
+	_assert_equal(InfectionEnemy.DEATH_SECONDS, 0.0, "Todesanimation ist vollständig deaktiviert")
 
 	var boss := InfectionEnemy.new()
 	boss.position = Vector2(-190.0, 80.0)
@@ -347,6 +427,7 @@ func _test_meta_save_roundtrip_and_recovery() -> void:
 	source.mark_discovery_seen(&"pneumococcus")
 	source.mark_intro_skipped()
 	source.set_tutorial_step(&"movement")
+	source.show_run_stats = true
 	source.register_level_result(ContentCatalog.level_definitions()[0], true, 54.0, 3, 20)
 	var repository := MetaSaveRepository.new(path)
 	_assert_true(repository.save(source), "Meta-Spielstand wird als JSON gespeichert")
@@ -360,6 +441,7 @@ func _test_meta_save_roundtrip_and_recovery() -> void:
 	_assert_true(loaded.has_seen_discovery(&"pneumococcus"), "Entdeckungen überleben den Savegame-Roundtrip")
 	_assert_true(loaded.intro_skipped, "Intro-Überspringen überlebt den Savegame-Roundtrip")
 	_assert_true(bool(loaded.tutorial_status.get(&"movement", false)), "Tutorialstatus überlebt den Savegame-Roundtrip")
+	_assert_true(loaded.show_run_stats, "Anzeigeeinstellung für Charakterwerte überlebt den Savegame-Roundtrip")
 
 	var version_two := FileAccess.open(path, FileAccess.WRITE)
 	version_two.store_string(JSON.stringify({
@@ -383,6 +465,7 @@ func _test_meta_save_roundtrip_and_recovery() -> void:
 	_assert_equal(migrated_v2.highest_unlocked_level, 2, "V2-Migration bewahrt Level-Freischaltungen")
 	_assert_equal(migrated_v2.get_level_record(&"localized_focus").victories, 1, "V2-Migration bewahrt Levelrekorde")
 	_assert_true(migrated_v2.seen_discovery_ids.is_empty(), "V2-Migration erfindet keine Entdeckungen")
+	_assert_true(not migrated_v2.show_run_stats, "Ältere Spielstände starten mit ausgeblendeten Charakterwerten")
 
 	var version_one := FileAccess.open(path, FileAccess.WRITE)
 	version_one.store_string(JSON.stringify({

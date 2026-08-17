@@ -3,6 +3,9 @@ extends CharacterBody2D
 
 const MOVE_SPEED := 275.0
 const BODY_RADIUS := 23.0
+const DAMAGE_FLASH_SECONDS := 0.16
+const WALK_FRAME_SECONDS := 0.12
+const DOCTOR_DRAW_RECT := Rect2(-30.0, -44.0, 60.0, 60.0)
 
 var arena_bounds: Rect2
 var stats: PlayerStats
@@ -10,6 +13,15 @@ var topology: ArenaTopology
 var input_enabled: bool = false
 var immune_angle: float = 0.0
 var camera: Camera2D
+var visual_time: float = 0.0
+var walk_frame_time: float = 0.0
+var walk_frame: int = 0
+var last_facing := Vector2.DOWN
+var treatment_anim_time: float = 0.0
+var damage_flash_time: float = 0.0
+var visual_body: UnitBody2D
+var doctor_texture: Texture2D
+var immune_texture: Texture2D
 
 func configure(bounds: Rect2, player_stats: PlayerStats, arena_topology: ArenaTopology) -> void:
 	arena_bounds = bounds
@@ -18,6 +30,12 @@ func configure(bounds: Rect2, player_stats: PlayerStats, arena_topology: ArenaTo
 	queue_redraw()
 
 func _ready() -> void:
+	doctor_texture = VisualAssetCatalog.gameplay_sprite(&"doctor")
+	immune_texture = VisualAssetCatalog.gameplay_sprite(&"immune_cell")
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	visual_body = UnitBody2D.new()
+	visual_body.configure_alpha_texture(doctor_texture, DOCTOR_DRAW_RECT, 0.08)
+	add_child(visual_body)
 	camera = Camera2D.new()
 	camera.position_smoothing_enabled = false
 	camera.process_callback = Camera2D.CAMERA2D_PROCESS_PHYSICS
@@ -29,6 +47,9 @@ func _ready() -> void:
 	camera.make_current()
 
 func _physics_process(delta: float) -> void:
+	step_fixed(delta)
+
+func step_fixed(_delta: float) -> void:
 	if input_enabled:
 		var direction := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
 		velocity = direction * MOVE_SPEED
@@ -43,9 +64,42 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 
 func _process(delta: float) -> void:
-	if stats == null or stats.immune_level <= 0:
-		return
-	immune_angle = fmod(immune_angle + delta * 1.7, TAU)
+	var needs_redraw := false
+	var treatment_was_active := treatment_anim_time > 0.0
+	var damage_was_active := damage_flash_time > 0.0
+	treatment_anim_time = maxf(0.0, treatment_anim_time - delta)
+	damage_flash_time = maxf(0.0, damage_flash_time - delta)
+	needs_redraw = treatment_was_active or damage_was_active
+	if velocity.length_squared() > 1.0:
+		var next_facing := velocity.normalized()
+		if not next_facing.is_equal_approx(last_facing):
+			last_facing = next_facing
+			needs_redraw = true
+		walk_frame_time += delta
+		if walk_frame_time >= WALK_FRAME_SECONDS:
+			walk_frame = (walk_frame + 1) % 4
+			walk_frame_time = fmod(walk_frame_time, WALK_FRAME_SECONDS)
+			needs_redraw = true
+	else:
+		if walk_frame != 0:
+			walk_frame = 0
+			needs_redraw = true
+		walk_frame_time = 0.0
+	if stats != null and stats.immune_level > 0:
+		immune_angle = fmod(immune_angle + delta * 1.7, TAU)
+		needs_redraw = true
+	if needs_redraw:
+		queue_redraw()
+
+func get_highlight_body() -> UnitBody2D:
+	return visual_body
+
+func show_treatment_impulse() -> void:
+	treatment_anim_time = 0.16
+	queue_redraw()
+
+func show_damage_flash() -> void:
+	damage_flash_time = DAMAGE_FLASH_SECONDS
 	queue_redraw()
 
 func neutrophil_radius() -> float:
@@ -54,19 +108,17 @@ func neutrophil_radius() -> float:
 	return 98.0 + float(stats.immune_level) * 18.0
 
 func _draw() -> void:
-	# Treatment field and readable silhouette.
-	draw_circle(Vector2.ZERO, 34.0, Color(0.22, 0.91, 0.82, 0.09))
-	draw_arc(Vector2.ZERO, 31.0, 0.0, TAU, 32, Color(0.35, 0.94, 0.86, 0.58), 2.0, true)
-	draw_circle(Vector2(0.0, -14.0), 10.0, Color("e8c8ad"))
-	draw_rect(Rect2(-12.0, -4.0, 24.0, 28.0), Color("e7f1ef"), true)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-12.0, -4.0), Vector2(-2.0, 4.0), Vector2(-7.0, 24.0), Vector2(-15.0, 20.0)
-	]), Color("b9d9d6"))
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(12.0, -4.0), Vector2(2.0, 4.0), Vector2(7.0, 24.0), Vector2(15.0, 20.0)
-	]), Color("b9d9d6"))
-	draw_line(Vector2(0.0, 1.0), Vector2(0.0, 22.0), Color("203946"), 2.0)
-	draw_circle(Vector2(0.0, 10.0), 2.6, Color("e85f75"))
+	if doctor_texture != null:
+		var moving := velocity.length_squared() > 1.0
+		doctor_texture = VisualAssetCatalog.doctor_frame(last_facing, walk_frame, moving)
+		var treatment_amount := treatment_anim_time / 0.16
+		var damage_amount := clampf(damage_flash_time / DAMAGE_FLASH_SECONDS, 0.0, 1.0)
+		var doctor_tint := Color.WHITE.lerp(Color(1.0, 0.46, 0.43, 1.0), damage_amount * 0.62)
+		# Damage feedback deliberately changes only the tint. The small treatment
+		# offset is unrelated to taking damage and never scales the character.
+		draw_set_transform(Vector2(0.0, -treatment_amount), 0.0, Vector2.ONE)
+		draw_texture_rect(doctor_texture, DOCTOR_DRAW_RECT, false, doctor_tint)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	if stats == null or stats.immune_level <= 0:
 		return
@@ -75,7 +127,8 @@ func _draw() -> void:
 	for index in range(count):
 		var angle := immune_angle + TAU * float(index) / float(count)
 		var point := Vector2.from_angle(angle) * orbit_radius
-		draw_circle(point, 11.0, Color(0.96, 0.75, 0.39, 0.18))
-		draw_circle(point, 7.0, Color("f1bc62"))
-		draw_circle(point + Vector2(-2.0, 0.0), 2.0, Color("76543a"))
-		draw_circle(point + Vector2(3.0, -1.0), 2.2, Color("76543a"))
+		draw_circle(point + Vector2(0.0, 2.0), 12.0, Color(AlveolusVisualTheme.PETROL, 0.13))
+		if immune_texture != null:
+			draw_texture_rect(immune_texture, Rect2(point - Vector2.ONE * 12.0, Vector2.ONE * 24.0), false)
+		else:
+			draw_circle(point, 8.0, AlveolusVisualTheme.GOLD)

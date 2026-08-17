@@ -1,0 +1,231 @@
+class_name PreparationBioLumenSurfaceFill
+extends ColorRect
+
+## Planning-only membrane wash for slot and candidate cards. The Button styles
+## keep ownership of borders/focus while this child supplies the approved
+## left-teal-to-right-petrol material below the card content.
+
+const SHADER_CODE := """
+shader_type canvas_item;
+
+uniform vec4 left_color : source_color;
+uniform vec4 right_color : source_color;
+uniform vec2 panel_size = vec2(280.0, 64.0);
+uniform vec4 corner_radii = vec4(15.0, 5.0, 15.0, 5.0);
+uniform float energy = 1.0;
+
+float rounded_mask(vec2 p, vec2 extent) {
+	float alpha = 1.0;
+	float tl = corner_radii.x;
+	float tr = corner_radii.y;
+	float br = corner_radii.z;
+	float bl = corner_radii.w;
+	if (p.x < tl && p.y < tl) alpha *= 1.0 - smoothstep(tl - 0.75, tl + 0.25, distance(p, vec2(tl, tl)));
+	if (p.x > extent.x - tr && p.y < tr) alpha *= 1.0 - smoothstep(tr - 0.75, tr + 0.25, distance(p, vec2(extent.x - tr, tr)));
+	if (p.x > extent.x - br && p.y > extent.y - br) alpha *= 1.0 - smoothstep(br - 0.75, br + 0.25, distance(p, vec2(extent.x - br, extent.y - br)));
+	if (p.x < bl && p.y > extent.y - bl) alpha *= 1.0 - smoothstep(bl - 0.75, bl + 0.25, distance(p, vec2(bl, extent.y - bl)));
+	return alpha;
+}
+
+void fragment() {
+	vec2 p = UV;
+	float drift = sin((p.x * 1.9 + p.y * 0.72) * 3.14159265) * 0.022;
+	float t = smoothstep(-0.04, 1.02, clamp(p.x + drift, 0.0, 1.0));
+	vec3 base = mix(left_color.rgb, right_color.rgb, t);
+	float lumen = exp(-dot((p - vec2(0.10, 0.24)) * vec2(2.1, 2.8), (p - vec2(0.10, 0.24)) * vec2(2.1, 2.8)));
+	float grain = (fract(sin(dot(floor(p * panel_size), vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.006;
+	base = base * energy + left_color.rgb * lumen * 0.105 + vec3(grain);
+	float alpha = rounded_mask(UV * panel_size, panel_size);
+	COLOR = vec4(base, alpha);
+}
+"""
+
+const NORMAL_LEFT := Color("18585a")
+const NORMAL_RIGHT := Color("082d34")
+const HOVER_LEFT := Color("216764")
+const HOVER_RIGHT := Color("0a363d")
+const PREVIEW_LEFT := Color("26736e")
+const PREVIEW_RIGHT := Color("0a353d")
+const PRESSED_LEFT := Color("0c393d")
+const PRESSED_RIGHT := Color("061f25")
+const LOCKED_LEFT := Color("0b2b30")
+const LOCKED_RIGHT := Color("061f25")
+const ASSIGNED_LEFT := Color("103b40")
+const ASSIGNED_RIGHT := Color("07252c")
+const CURRENT_LEFT := Color("123b3f")
+const CURRENT_RIGHT := Color("07262c")
+const PANEL_LEFT := Color("0b3b3d")
+const PANEL_RIGHT := Color("061f26")
+
+var host: Control
+var button_host: BaseButton
+var static_surface := false
+var static_left := PANEL_LEFT
+var static_right := PANEL_RIGHT
+var normal_left := NORMAL_LEFT
+var normal_right := NORMAL_RIGHT
+var surface_corner_radii := Vector4(15.0, 5.0, 15.0, 5.0)
+var hovered := false
+var focused := false
+var pressed := false
+var last_disabled := false
+var last_selected := false
+
+static func attach(
+	button: BaseButton,
+	left: Color = NORMAL_LEFT,
+	right: Color = NORMAL_RIGHT,
+	large_radius: float = 15.0,
+	small_radius: float = 5.0
+) -> PreparationBioLumenSurfaceFill:
+	var fill := button.get_node_or_null("MembraneFill") as PreparationBioLumenSurfaceFill
+	if fill == null:
+		fill = PreparationBioLumenSurfaceFill.new()
+		fill.name = "MembraneFill"
+		button.add_child(fill)
+		button.move_child(fill, 0)
+	fill.configure(button, left, right, large_radius, small_radius)
+	return fill
+
+static func attach_static(control: Control, left: Color = PANEL_LEFT, right: Color = PANEL_RIGHT, large_radius: float = 17.0, small_radius: float = 5.0) -> PreparationBioLumenSurfaceFill:
+	var fill := control.get_node_or_null("MembraneSurface") as PreparationBioLumenSurfaceFill
+	if fill == null:
+		fill = PreparationBioLumenSurfaceFill.new()
+		fill.name = "MembraneSurface"
+		control.add_child(fill)
+		control.move_child(fill, 0)
+	fill.configure_static(control, left, right, large_radius, small_radius)
+	return fill
+
+func configure(
+	button: BaseButton,
+	_left: Color,
+	_right: Color,
+	large_radius: float = 15.0,
+	small_radius: float = 5.0
+) -> void:
+	host = button
+	button_host = button
+	static_surface = false
+	surface_corner_radii = Vector4(large_radius, small_radius, large_radius, small_radius)
+	normal_left = _left
+	normal_right = _right
+	last_disabled = button_host.disabled
+	last_selected = bool(button_host.get_meta(&"selected_slot", false))
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	offset_left = 1.0
+	offset_top = 1.0
+	offset_right = -1.0
+	offset_bottom = -1.0
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	show_behind_parent = true
+	_ensure_material()
+	if not resized.is_connected(_update_size):
+		resized.connect(_update_size)
+	if not button_host.mouse_entered.is_connected(_set_hovered.bind(true)):
+		button_host.mouse_entered.connect(_set_hovered.bind(true))
+		button_host.mouse_exited.connect(_set_hovered.bind(false))
+		button_host.focus_entered.connect(_set_focused.bind(true))
+		button_host.focus_exited.connect(_set_focused.bind(false))
+		button_host.button_down.connect(_set_pressed.bind(true))
+		button_host.button_up.connect(_set_pressed.bind(false))
+	set_process(true)
+	_update_shader()
+	_update_size()
+
+func configure_static(control: Control, left: Color, right: Color, large_radius: float = 17.0, small_radius: float = 5.0) -> void:
+	host = control
+	button_host = null
+	static_surface = true
+	static_left = left
+	static_right = right
+	surface_corner_radii = Vector4(large_radius, small_radius, large_radius, small_radius)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	offset_left = 1.0
+	offset_top = 1.0
+	offset_right = -1.0
+	offset_bottom = -1.0
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Static panel fills sit above the flat fallback and below the content nodes.
+	show_behind_parent = false
+	_ensure_material()
+	if not resized.is_connected(_update_size):
+		resized.connect(_update_size)
+	set_process(false)
+	_update_shader()
+	_update_size()
+
+func _ensure_material() -> void:
+	if material is ShaderMaterial:
+		return
+	var shader := Shader.new()
+	shader.code = SHADER_CODE
+	var shader_material := ShaderMaterial.new()
+	shader_material.shader = shader
+	material = shader_material
+
+func _process(_delta: float) -> void:
+	if host == null or not is_instance_valid(host):
+		set_process(false)
+		return
+	if static_surface or button_host == null:
+		set_process(false)
+		return
+	if last_disabled != button_host.disabled:
+		last_disabled = button_host.disabled
+		_update_shader()
+	var selected := bool(button_host.get_meta(&"selected_slot", false))
+	if selected != last_selected:
+		last_selected = selected
+		_update_shader()
+
+func _set_hovered(value: bool) -> void:
+	hovered = value
+	_update_shader()
+
+func _set_pressed(value: bool) -> void:
+	pressed = value
+	_update_shader()
+
+func _set_focused(value: bool) -> void:
+	focused = value
+	_update_shader()
+
+func _update_size() -> void:
+	if material is ShaderMaterial:
+		(material as ShaderMaterial).set_shader_parameter("panel_size", Vector2(maxf(size.x, 1.0), maxf(size.y, 1.0)))
+		(material as ShaderMaterial).set_shader_parameter("corner_radii", surface_corner_radii)
+
+func _update_shader() -> void:
+	if not material is ShaderMaterial:
+		return
+	var left := static_left if static_surface else normal_left
+	var right := static_right if static_surface else normal_right
+	var energy := 1.0
+	var catalog_state := StringName(button_host.get_meta(&"catalog_state", &"available")) if button_host != null else &"available"
+	if not static_surface and catalog_state == &"current":
+		left = CURRENT_LEFT
+		right = CURRENT_RIGHT
+	elif not static_surface and button_host != null and (button_host.disabled or catalog_state == &"locked"):
+		left = LOCKED_LEFT
+		right = LOCKED_RIGHT
+	elif not static_surface and catalog_state == &"assigned":
+		left = ASSIGNED_LEFT
+		right = ASSIGNED_RIGHT
+	elif not static_surface and pressed:
+		left = PRESSED_LEFT
+		right = PRESSED_RIGHT
+	elif not static_surface and (hovered or focused) and button_host != null and button_host.has_meta(&"catalog_available") and bool(button_host.get_meta(&"catalog_available", false)):
+		left = PREVIEW_LEFT
+		right = PREVIEW_RIGHT
+	elif not static_surface and button_host != null and bool(button_host.get_meta(&"selected_slot", false)):
+		# Selection is communicated by the gold outline and contextual height.
+		# Keeping the neutral membrane avoids the former green slab effect.
+		left = NORMAL_LEFT
+		right = NORMAL_RIGHT
+	elif not static_surface and (hovered or focused):
+		left = HOVER_LEFT
+		right = HOVER_RIGHT
+	(material as ShaderMaterial).set_shader_parameter("left_color", left)
+	(material as ShaderMaterial).set_shader_parameter("right_color", right)
+	(material as ShaderMaterial).set_shader_parameter("energy", energy)

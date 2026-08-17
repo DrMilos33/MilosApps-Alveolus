@@ -5,10 +5,16 @@ signal research_changed(points: int, claimable: int)
 signal clinic_changed
 signal upgrades_changed
 signal discoveries_changed
+signal talents_changed
+signal mastery_changed(new_ids: Array[StringName], earned_points: int)
+signal loadouts_changed(level_id: StringName)
+signal settings_changed
 
-const SAVE_VERSION := 3
+const SAVE_VERSION := 5
 const PASSIVE_INTERVAL_SECONDS := 600.0
 const PASSIVE_CAP_SECONDS := 28800.0
+const UNLIMITED_TEST_POINT_POOL := 1_000_000_000
+const TALENT_TREE_REVISION := 2
 
 var research_points: int = 0
 var passive_seconds: float = 0.0
@@ -24,10 +30,35 @@ var level_records: Dictionary = {}
 var intro_skipped: bool = false
 var seen_discovery_ids: Dictionary = {}
 var tutorial_status: Dictionary = {}
+var show_run_stats: bool = false
+var selected_talent_ids: Dictionary = {}
+var talent_tree_refund_pending: bool = false
+var completed_mastery_ids: Dictionary = {}
+var prepared_loadouts: Dictionary = {}
+var level_case_seeds: Dictionary = {}
+var case_seed_nonce: int = 0
+var ui_settings: UISettingsState = UISettingsState.new()
 var clock: Callable
+var unlimited_test_progression: bool = false
 
 func _init(time_provider: Callable = Callable()) -> void:
 	clock = time_provider
+
+func set_unlimited_test_progression(enabled: bool) -> void:
+	if unlimited_test_progression == enabled:
+		return
+	unlimited_test_progression = enabled
+	research_changed.emit(research_points, claimable_research())
+	talents_changed.emit()
+
+func is_unlimited_test_progression() -> bool:
+	return unlimited_test_progression
+
+func research_balance() -> int:
+	return UNLIMITED_TEST_POINT_POOL if unlimited_test_progression else research_points
+
+func can_afford_research(cost: int) -> bool:
+	return cost > 0 and (unlimited_test_progression or research_points >= cost)
 
 func reset_defaults(now: int = -1) -> void:
 	research_points = 0
@@ -44,9 +75,19 @@ func reset_defaults(now: int = -1) -> void:
 	intro_skipped = false
 	seen_discovery_ids = {}
 	tutorial_status = {}
+	show_run_stats = false
+	selected_talent_ids = {}
+	talent_tree_refund_pending = false
+	completed_mastery_ids = {}
+	prepared_loadouts = {}
+	level_case_seeds = {}
+	case_seed_nonce = 0
+	ui_settings = UISettingsState.new()
+	_ensure_default_loadouts()
 	research_changed.emit(research_points, claimable_research())
 	clinic_changed.emit()
 	upgrades_changed.emit()
+	settings_changed.emit()
 
 func accrue_time(now: int = -1) -> void:
 	var current_time := _now() if now < 0 else now
@@ -115,9 +156,10 @@ func purchase(definition: ResearchDefinition) -> bool:
 	if rank >= definition.max_level:
 		return false
 	var cost := definition.cost_for_rank(rank)
-	if cost <= 0 or research_points < cost:
+	if not can_afford_research(cost):
 		return false
-	research_points -= cost
+	if not unlimited_test_progression:
+		research_points -= cost
 	research_ranks[definition.id] = rank + 1
 	research_changed.emit(research_points, claimable_research())
 	upgrades_changed.emit()
@@ -166,7 +208,7 @@ func mark_prologue_seen() -> void:
 	prologue_seen = true
 
 func has_seen_discovery(id: StringName) -> bool:
-	return bool(seen_discovery_ids.get(id, false))
+	return ContentCatalog.is_discovery_unlocked_by_default(id) or bool(seen_discovery_ids.get(id, false))
 
 func mark_discovery_seen(id: StringName) -> void:
 	if id == &"" or has_seen_discovery(id):
@@ -181,11 +223,204 @@ func mark_intro_skipped() -> void:
 func set_tutorial_step(key: StringName, completed: bool = true) -> void:
 	tutorial_status[key] = completed
 
+func talent_points_earned() -> int:
+	var catalog := MasteryObjectiveDefinition.catalog()
+	var total := 0
+	for id in completed_mastery_ids:
+		if catalog.has(id):
+			var definition: MasteryObjectiveDefinition = catalog[id]
+			total += definition.reward_points
+	return total
+
+func talent_points_spent() -> int:
+	var catalog := TalentDefinition.catalog()
+	var total := 0
+	for id in selected_talent_ids:
+		if bool(selected_talent_ids[id]) and catalog.has(id):
+			var definition: TalentDefinition = catalog[id]
+			total += definition.cost
+	return total
+
+func available_talent_points() -> int:
+	if unlimited_test_progression:
+		return UNLIMITED_TEST_POINT_POOL
+	return maxi(0, talent_points_earned() - talent_points_spent())
+
+func has_talent(id: StringName) -> bool:
+	return bool(selected_talent_ids.get(id, false))
+
+func loadout_capacity() -> int:
+	var capacity := LoadoutValidator.DEFAULT_CAPACITY
+	if has_talent(&"organization_1"):
+		capacity += 1
+	if has_talent(&"organization_2"):
+		capacity += 1
+	return capacity
+
+func preparation_capacity() -> int:
+	return loadout_capacity()
+
+func unlocked_module_ids(module_definitions: Dictionary, research_definitions: Array[ResearchDefinition] = []) -> Dictionary:
+	var unlocked: Dictionary = {}
+	for id in module_definitions:
+		var definition: Variant = module_definitions[id]
+		if definition is LoadoutModuleDefinition:
+			var module: LoadoutModuleDefinition = definition
+			if module.starter or (module.unlock_research_id != &"" and rank(module.unlock_research_id) > 0):
+				unlocked[StringName(id)] = true
+		elif definition is Dictionary:
+			var starter := bool(definition.get("starter", false))
+			var research_id := StringName(str(definition.get("unlock_research_id", "")))
+			if starter or (research_id != &"" and rank(research_id) > 0):
+				unlocked[StringName(id)] = true
+	for research in research_definitions:
+		if research != null and research.unlock_module_id != &"" and rank(research.id) > 0 and module_definitions.has(research.unlock_module_id):
+			unlocked[research.unlock_module_id] = true
+	return unlocked
+
+func validate_prepared_loadout(
+	loadout: PreparedLoadout,
+	module_definitions: Dictionary,
+	research_definitions: Array[ResearchDefinition] = []
+) -> LoadoutValidationResult:
+	return LoadoutValidator.validate(
+		loadout,
+		module_definitions,
+		unlocked_module_ids(module_definitions, research_definitions),
+		preparation_capacity()
+	)
+
+func set_talent_selection(ids: Array[StringName]) -> bool:
+	var requested: Dictionary = {}
+	for id in ids:
+		if id != &"":
+			requested[id] = true
+	var catalog := TalentDefinition.catalog()
+	var spent := 0
+	for id in requested:
+		if not catalog.has(id):
+			return false
+		var definition: TalentDefinition = catalog[id]
+		spent += definition.cost
+		for required_id in definition.required_ids:
+			if not requested.has(StringName(required_id)):
+				return false
+	if not unlimited_test_progression and spent > talent_points_earned():
+		return false
+	selected_talent_ids = requested
+	talent_tree_refund_pending = false
+	talents_changed.emit()
+	return true
+
+func set_talent_active(id: StringName, active: bool) -> bool:
+	var ids: Array[StringName] = []
+	for selected_id in selected_talent_ids:
+		if bool(selected_talent_ids[selected_id]):
+			ids.append(StringName(selected_id))
+	if active:
+		if not ids.has(id):
+			ids.append(id)
+	else:
+		var catalog := TalentDefinition.catalog()
+		for selected_id_value in selected_talent_ids:
+			var selected_id := StringName(selected_id_value)
+			if selected_id == id or not bool(selected_talent_ids[selected_id]) or not catalog.has(selected_id):
+				continue
+			var selected_definition: TalentDefinition = catalog[selected_id]
+			if selected_definition.required_ids.has(String(id)):
+				# Never make one click silently refund a complete branch. Children
+				# must be removed explicitly before their prerequisite.
+				return false
+		ids.erase(id)
+	return set_talent_selection(ids)
+
+func clear_talents() -> void:
+	if selected_talent_ids.is_empty() and not talent_tree_refund_pending:
+		return
+	selected_talent_ids = {}
+	talent_tree_refund_pending = false
+	talents_changed.emit()
+
+func complete_mastery(id: StringName) -> bool:
+	var catalog := MasteryObjectiveDefinition.catalog()
+	if id == &"" or not catalog.has(id) or bool(completed_mastery_ids.get(id, false)):
+		return false
+	completed_mastery_ids[id] = true
+	var definition: MasteryObjectiveDefinition = catalog[id]
+	var new_ids: Array[StringName] = [id]
+	mastery_changed.emit(new_ids, definition.reward_points)
+	return true
+
+func apply_mastery_candidates(ids: Array[StringName]) -> Array[StringName]:
+	var added: Array[StringName] = []
+	var points := 0
+	var catalog := MasteryObjectiveDefinition.catalog()
+	for id in ids:
+		if id == &"" or not catalog.has(id) or bool(completed_mastery_ids.get(id, false)):
+			continue
+		completed_mastery_ids[id] = true
+		added.append(id)
+		var definition: MasteryObjectiveDefinition = catalog[id]
+		points += definition.reward_points
+	if not added.is_empty():
+		mastery_changed.emit(added, points)
+	return added
+
+func has_completed_mastery(id: StringName) -> bool:
+	return bool(completed_mastery_ids.get(id, false))
+
+func get_prepared_loadout(level_id: StringName) -> PreparedLoadout:
+	if not prepared_loadouts.has(level_id) or not (prepared_loadouts[level_id] is PreparedLoadout):
+		prepared_loadouts[level_id] = _default_loadout_from_research()
+	var loadout: PreparedLoadout = prepared_loadouts[level_id]
+	return loadout.duplicate_loadout()
+
+func set_prepared_loadout(level_id: StringName, loadout: PreparedLoadout) -> bool:
+	if level_id == &"" or loadout == null:
+		return false
+	prepared_loadouts[level_id] = loadout.duplicate_loadout()
+	loadouts_changed.emit(level_id)
+	return true
+
+func get_or_create_case_seed(level_id: StringName) -> int:
+	var existing := int(level_case_seeds.get(level_id, 0))
+	if existing != 0:
+		return existing
+	case_seed_nonce += 1
+	var generated := absi(hash("%s:%d:%d:%d" % [String(level_id), _now(), lifetime_runs, case_seed_nonce])) + 1
+	level_case_seeds[level_id] = generated
+	return generated
+
+func clear_case_seed(level_id: StringName) -> void:
+	level_case_seeds.erase(level_id)
+
+func create_run_context(
+	level_id: StringName,
+	visible_trait_id: StringName = &"",
+	hidden_finding_id: StringName = &""
+) -> RunContext:
+	return RunContext.create(
+		level_id,
+		get_or_create_case_seed(level_id),
+		get_prepared_loadout(level_id),
+		selected_talent_ids,
+		visible_trait_id,
+		hidden_finding_id
+	)
+
 func to_dict() -> Dictionary:
 	var serialized_records: Dictionary = {}
 	for id in level_records:
 		var record: LevelRecord = level_records[id]
 		serialized_records[String(id)] = record.to_dict()
+	var serialized_loadouts: Dictionary = {}
+	for id in prepared_loadouts:
+		if prepared_loadouts[id] is PreparedLoadout:
+			var loadout: PreparedLoadout = prepared_loadouts[id]
+			serialized_loadouts[String(id)] = LoadoutSlotSaveAdapter.serialize_loadout(loadout)
+	var serialized_seeds: Dictionary = {}
+	for id in level_case_seeds:
+		serialized_seeds[String(id)] = int(level_case_seeds[id])
 	return {
 		"version": SAVE_VERSION,
 		"research_points": research_points,
@@ -201,13 +436,27 @@ func to_dict() -> Dictionary:
 		"level_records": serialized_records,
 		"intro_skipped": intro_skipped,
 		"seen_discovery_ids": seen_discovery_ids.keys().map(func(id: Variant) -> String: return String(id)),
-		"tutorial_status": tutorial_status.duplicate(true)
+		"tutorial_status": tutorial_status.duplicate(true),
+		"show_run_stats": show_run_stats,
+		"selected_talent_ids": _true_dictionary_keys(selected_talent_ids),
+		"talent_tree_revision": TALENT_TREE_REVISION,
+		"completed_mastery_ids": _true_dictionary_keys(completed_mastery_ids),
+		"prepared_loadouts": serialized_loadouts,
+		"level_case_seeds": serialized_seeds,
+		"case_seed_nonce": case_seed_nonce,
+		"ui_settings": ui_settings.to_dict(),
 	}
 
 func load_dict(data: Dictionary) -> bool:
 	var version := int(data.get("version", -1))
 	if version < 1 or version > SAVE_VERSION:
 		return false
+	# V4 stored variable-length ability/passive arrays. Normalize the complete
+	# container first so every V5 load below sees the same fixed-slot schema and
+	# legacy surplus entries can never leak back into a five-slot plan.
+	if version == 4:
+		data = LoadoutSlotSaveAdapter.migrate_v4_save(data)
+		version = int(data.get("version", version))
 	research_points = maxi(0, int(data.get("research_points", 0)))
 	passive_seconds = clampf(float(data.get("passive_seconds", 0.0)), 0.0, PASSIVE_CAP_SECONDS)
 	last_seen_unix = int(data.get("last_seen_unix", _now()))
@@ -244,7 +493,83 @@ func load_dict(data: Dictionary) -> bool:
 		tutorial_status = loaded_tutorial.duplicate(true) if typeof(loaded_tutorial) == TYPE_DICTIONARY else {}
 	else:
 		tutorial_status = {}
+	show_run_stats = bool(data.get("show_run_stats", false))
+	selected_talent_ids = {}
+	talent_tree_refund_pending = false
+	completed_mastery_ids = {}
+	prepared_loadouts = {}
+	level_case_seeds = {}
+	case_seed_nonce = 0
+	ui_settings = UISettingsState.from_dict(data.get("ui_settings", {})) if version >= 5 else UISettingsState.new()
+	if version >= 4:
+		completed_mastery_ids = _known_id_dictionary(data.get("completed_mastery_ids", []), MasteryObjectiveDefinition.catalog())
+		var stored_tree_revision := int(data.get("talent_tree_revision", 1))
+		if stored_tree_revision < TALENT_TREE_REVISION:
+			talent_tree_refund_pending = not _known_id_dictionary(data.get("selected_talent_ids", []), TalentDefinition.catalog()).is_empty()
+			selected_talent_ids = {}
+		else:
+			var requested_talents := _known_id_dictionary(data.get("selected_talent_ids", []), TalentDefinition.catalog())
+			var requested_ids: Array[StringName] = []
+			for requested_id in requested_talents:
+				requested_ids.append(StringName(requested_id))
+			if not set_talent_selection(requested_ids):
+				selected_talent_ids = {}
+				talent_tree_refund_pending = not requested_talents.is_empty()
+		var loaded_loadouts: Variant = data.get("prepared_loadouts", {})
+		if typeof(loaded_loadouts) == TYPE_DICTIONARY:
+			for id in loaded_loadouts:
+				if typeof(loaded_loadouts[id]) == TYPE_DICTIONARY:
+					prepared_loadouts[StringName(str(id))] = LoadoutSlotSaveAdapter.deserialize_loadout(loaded_loadouts[id])
+		var loaded_seeds: Variant = data.get("level_case_seeds", {})
+		if typeof(loaded_seeds) == TYPE_DICTIONARY:
+			for id in loaded_seeds:
+				var seed := int(loaded_seeds[id])
+				if seed != 0:
+					level_case_seeds[StringName(str(id))] = seed
+		case_seed_nonce = maxi(0, int(data.get("case_seed_nonce", level_case_seeds.size())))
+	_ensure_default_loadouts()
 	return true
+
+func set_ui_settings(settings: UISettingsState) -> void:
+	ui_settings = settings.duplicate_settings() if settings != null else UISettingsState.new()
+	settings_changed.emit()
+
+func _ensure_default_loadouts() -> void:
+	for level_id in [&"localized_focus", &"spreading_infection", &"severe_pneumonia"]:
+		if not prepared_loadouts.has(level_id):
+			prepared_loadouts[level_id] = _default_loadout_from_research()
+
+func _default_loadout_from_research() -> PreparedLoadout:
+	var available_modules: Array[StringName] = []
+	for id in [&"stability_reserve", &"therapy_precision", &"sample_logistics", &"preanalysis", &"second_opinion"]:
+		if rank(id) > 0:
+			available_modules.append(id)
+	var active_modules: Array[StringName] = []
+	while active_modules.size() < 2 and not available_modules.is_empty():
+		active_modules.append(available_modules.pop_front())
+	return PreparedLoadout.default_loadout(active_modules)
+
+static func _true_dictionary_keys(source: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for id in source:
+		if bool(source[id]):
+			result.append(String(id))
+	result.sort()
+	return result
+
+static func _known_id_dictionary(value: Variant, catalog: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	if typeof(value) == TYPE_ARRAY:
+		for raw_id in value:
+			var id := StringName(str(raw_id))
+			if catalog.has(id):
+				result[id] = true
+	elif typeof(value) == TYPE_DICTIONARY:
+		for raw_id in value:
+			var id := StringName(str(raw_id))
+			if bool(value[raw_id]) and catalog.has(id):
+				result[id] = true
+	return result
 
 func _now() -> int:
 	if clock.is_valid():

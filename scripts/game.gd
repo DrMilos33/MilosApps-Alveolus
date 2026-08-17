@@ -8,9 +8,15 @@ signal flow_changed(state: GameFlowState.State)
 
 const MAX_ACTIVE_PICKUPS := 360
 const MAX_ENEMY_POOL := 640
-const MAX_PROJECTILE_POOL := 96
+const MAX_ACTIVE_PROJECTILES := 512
+const MAX_PROJECTILE_POOL := MAX_ACTIVE_PROJECTILES
 const MAX_PICKUP_POOL := MAX_ACTIVE_PICKUPS
 const MAX_DAMAGE_NUMBER_POOL := 40
+const MAX_VISUAL_BURSTS := 80
+const STRESS_RUN_SECONDS := 1.0e12
+# Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
+# balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
+const UNLIMITED_PROGRESSION_TEST_MODE := true
 
 var levels: Array[LevelDefinition]
 var selected_level: LevelDefinition
@@ -24,20 +30,41 @@ var research_definitions: Array[ResearchDefinition]
 var discovery_definitions: Dictionary
 var arena_visuals: Dictionary
 var discovery_manager: DiscoveryManager
+var loadout_modules: Dictionary
+var treatment_definitions: Dictionary
+var ability_definitions: Dictionary
+var case_traits: Dictionary
+var finding_definitions: Dictionary
+var reaction_definitions: Dictionary
 
 var topology: ArenaTopology
 var simulation_root: Node2D
 var arena: ArenaBackdrop
 var crowd_renderer: CrowdRenderer
+var projectile_renderer: ProjectileRenderer
+var feedback_renderer: FeedbackRenderer
+var ability_feedback_world: AbilityFeedbackWorld
+var ability_target_preview: AbilityTargetPreview
+var run_session: RunSession
+var combat_capacity := CombatCapacity.defaults()
+var cosmetic_budget_controller: CosmeticBudgetController
+var enemy_world: EnemyWorld
+var projectile_world: ProjectileWorld
+var pickup_world: PickupWorld
+var combat_query: CombatQuery
+var pickup_query: CombatQuery
 var avatar: TherapyAvatar
 var hud: GameHUD
+var ui_sound_service: UISoundService
+var input_glyph_service: InputGlyphService
 var meta: MetaProgressionState
 var save_repository: MetaSaveRepository
 var flow_state: GameFlowState.State = GameFlowState.State.CAMPUS
 var settings_return_state: GameFlowState.State = GameFlowState.State.CAMPUS
 var story_return_state: GameFlowState.State = GameFlowState.State.CAMPUS
 var discovery_return_state: GameFlowState.State = GameFlowState.State.RUNNING
-var intro_skip_return_state: GameFlowState.State = GameFlowState.State.BRIEFING
+var intro_skip_return_state: GameFlowState.State = GameFlowState.State.PREPARATION
+var restart_return_state: GameFlowState.State = GameFlowState.State.RUNNING
 
 var enemies: Array[InfectionEnemy] = []
 var projectiles: Array[TherapyProjectile] = []
@@ -47,8 +74,37 @@ var enemy_pool: Array[InfectionEnemy] = []
 var projectile_pool: Array[TherapyProjectile] = []
 var pickup_pool: Array[AnalysisPickup] = []
 var damage_number_pool: Array[DamageNumber] = []
+var visual_bursts: Array[VisualBurst] = []
+var visual_burst_pool: Array[VisualBurst] = []
 var current_upgrade_options: Array[UpgradeDefinition] = []
 var active_boss: InfectionEnemy
+
+var pending_run_context: RunContext
+var active_run_context: RunContext
+var active_loadout: PreparedLoadout
+var build_state: RunBuildState
+var treatment_controller: TreatmentController
+var ability_controller: AbilityController
+var finding_controller: FindingController
+var mastery_tracker := MasteryTracker.new()
+var pending_preparation_loadout: PreparedLoadout
+var pending_loadout_draft: LoadoutDraft
+var pending_replacement_component: StringName = &""
+var ui_router := UIScreenRouter.new()
+var active_reaction: ReactionDefinition
+var pending_finding_definition: FindingDefinition
+var hidden_nest_timers: Dictionary = {}
+var pressure_surge_timer: float = 25.0
+var pressure_surge_remaining: float = 0.0
+var reaction_boost_timer: float = 0.0
+var reaction_boost_source: StringName = &""
+var last_ability_slot: int = -1
+var last_ability_time: float = -1000.0
+var emergency_talent_used: bool = false
+var targeting_ability_slot: int = -1
+var targeting_input_device: AbilityCommand.InputDevice = AbilityCommand.InputDevice.UNKNOWN
+var gamepad_target_direction: Vector2 = Vector2.ZERO
+var ability_ready_states: Dictionary = {}
 
 var spawn_accumulator: float = 0.0
 var therapy_timer: float = 0.0
@@ -65,12 +121,26 @@ var intro_phase: StringName = &""
 var intro_start_position: Vector2 = Vector2.ZERO
 var intro_primary_enemy: InfectionEnemy
 var intro_upgrade_id: StringName = &""
+var intro_transition_timer: float = 0.0
 var discovery_spawn_reservations: Dictionary = {}
+var _fixed_step_active: bool = false
+var deferred_spawn_requests: Array[EnemySpawnRequest] = []
+var deferred_spawn_cursor: int = 0
+var performance_profile_enabled: bool = false
+var last_phase_timings_ms: Dictionary = {}
+var _combat_query_dirty: bool = true
+var _combat_query_handles: PackedInt64Array = PackedInt64Array()
+var _pickup_query_dirty: bool = true
+var _pickup_query_handles: PackedInt64Array = PackedInt64Array()
 
 var quick_run: bool = false
 var stress_test: bool = false
 var stress_reported: bool = false
 var stress_hud_timer: float = 0.0
+var stress_telemetry: RenderStressTelemetry
+var stress_warmup_seconds: float = RenderStressTelemetry.DEFAULT_WARMUP_SECONDS
+var stress_measurement_seconds: float = RenderStressTelemetry.DEFAULT_MEASUREMENT_SECONDS
+var _web_test_options: Dictionary = {}
 var completion_smoke: bool = false
 var pause_smoke: bool = false
 var persistence_enabled: bool = true
@@ -82,13 +152,22 @@ var pause_smoke_therapy_timer: float = 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	ui_router.focus_requested.connect(_on_route_focus_requested)
 	_register_input_actions()
 	var arguments := OS.get_cmdline_user_args()
+	_web_test_options = _read_web_test_options()
 	completion_smoke = arguments.has("--completion-smoke")
-	stress_test = arguments.has("--stress-test")
+	stress_test = arguments.has("--stress-test") or bool(_web_test_options.get("stress", false))
+	stress_warmup_seconds = _stress_number_option(arguments, "--stress-warmup=", "warmup", RenderStressTelemetry.DEFAULT_WARMUP_SECONDS)
+	stress_measurement_seconds = _stress_number_option(arguments, "--stress-duration=", "duration", RenderStressTelemetry.DEFAULT_MEASUREMENT_SECONDS)
 	pause_smoke = arguments.has("--pause-smoke")
 	quick_run = arguments.has("--quick-run") or completion_smoke or pause_smoke
 	persistence_enabled = not quick_run and not stress_test
+	# The explicit native stress run measures actual render headroom. With VSync
+	# enabled, frame deltas describe the monitor cadence (and its scheduling
+	# jitter) instead of the game's cost. Browser rAF remains untouched.
+	if stress_test and not OS.has_feature("web") and DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 
 	levels = ContentCatalog.level_definitions()
 	selected_level = levels[0]
@@ -100,6 +179,12 @@ func _ready() -> void:
 	research_definitions = ContentCatalog.research_definitions()
 	discovery_definitions = ContentCatalog.discovery_definitions()
 	arena_visuals = ContentCatalog.arena_visual_definitions()
+	loadout_modules = ContentCatalog.loadout_module_definitions()
+	treatment_definitions = TreatmentDefinition.catalog()
+	ability_definitions = AbilityDefinition.catalog()
+	case_traits = ContentCatalog.case_trait_definitions()
+	finding_definitions = ContentCatalog.finding_definitions()
+	reaction_definitions = ContentCatalog.reaction_definitions()
 	rng.seed = config.random_seed
 	topology = ArenaTopology.new(config.arena_rect())
 
@@ -111,49 +196,148 @@ func _ready() -> void:
 	arena.configure(config.arena_rect(), arena_visuals[selected_level.id])
 	simulation_root.add_child(arena)
 	crowd_renderer = CrowdRenderer.new()
-	crowd_renderer.configure(MAX_ENEMY_POOL, MAX_ACTIVE_PICKUPS)
+	crowd_renderer.configure(combat_capacity.max_enemies, combat_capacity.max_pickup_stacks)
 	simulation_root.add_child(crowd_renderer)
+	projectile_renderer = ProjectileRenderer.new()
+	projectile_renderer.configure(combat_capacity.max_projectile_visuals)
+	simulation_root.add_child(projectile_renderer)
+	feedback_renderer = FeedbackRenderer.new()
+	feedback_renderer.configure(combat_capacity.max_feedback_visuals)
+	feedback_renderer.burst_finished.connect(_on_visual_burst_finished)
+	simulation_root.add_child(feedback_renderer)
+	ability_feedback_world = AbilityFeedbackWorld.new().configure(topology, MAX_VISUAL_BURSTS, false)
+	ability_feedback_world.z_index = 4
+	simulation_root.add_child(ability_feedback_world)
+	ability_target_preview = AbilityTargetPreview.new()
+	simulation_root.add_child(ability_target_preview)
+	run_session = RunSession.new().configure(combat_capacity, false)
+	run_session.register_system(self, RunSession.Phase.CLOCK)
+	simulation_root.add_child(run_session)
+	enemy_world = EnemyWorld.new().configure_enemy_world(combat_capacity)
+	projectile_world = ProjectileWorld.new().configure_projectile_world(combat_capacity)
+	pickup_world = PickupWorld.new().configure_pickup_world(combat_capacity)
+	combat_query = CombatQuery.new().configure(
+		topology,
+		_enemy_position_for_handle,
+		_enemy_radius_for_handle,
+		_enemy_targetable_for_handle,
+		enemy_world.resolve,
+		CombatSpatialGrid.DEFAULT_CELL_SIZE,
+		96.0
+	)
+	combat_query.set_prepare_callback(_ensure_combat_query)
+	pickup_query = CombatQuery.new().configure(
+		topology,
+		_pickup_position_for_handle,
+		Callable(),
+		_pickup_targetable_for_handle,
+		pickup_world.resolve,
+		CombatSpatialGrid.DEFAULT_CELL_SIZE,
+		0.0
+	)
+	pickup_query.set_prepare_callback(_ensure_pickup_query)
+	cosmetic_budget_controller = CosmeticBudgetController.new().configure(true, true)
+	cosmetic_budget_controller.quality_changed.connect(_on_cosmetic_quality_changed)
+	add_child(cosmetic_budget_controller)
 	stats = PlayerStats.new()
 	avatar = TherapyAvatar.new()
 	avatar.configure(config.arena_rect(), stats, topology)
 	avatar.position = Vector2.ZERO
 	avatar.z_index = 5
 	simulation_root.add_child(avatar)
+	avatar.set_physics_process(false)
+	ability_feedback_world.set_shield_anchor(avatar)
+	treatment_controller = TreatmentController.new()
+	treatment_controller.enabled = false
+	treatment_controller.shots_requested.connect(_on_treatment_shots_requested)
+	treatment_controller.treatment_fired.connect(_on_treatment_fired)
+	treatment_controller.feedback_requested.connect(_on_treatment_feedback_requested)
+	simulation_root.add_child(treatment_controller)
+	treatment_controller.set_physics_process(false)
+	ability_controller = AbilityController.new()
+	ability_controller.ability_used.connect(_on_ability_used)
+	ability_controller.ability_failed.connect(_on_ability_failed)
+	ability_controller.cooldown_changed.connect(_on_ability_cooldown_changed)
+	ability_controller.feedback_requested.connect(_on_ability_feedback_requested)
+	ability_controller.shield_changed.connect(_on_ability_shield_changed)
+	ability_controller.finding_progress_requested.connect(_on_ability_finding_progress)
+	simulation_root.add_child(ability_controller)
+	ability_controller.set_physics_process(false)
+	finding_controller = FindingController.new()
+	finding_controller.progress_changed.connect(_on_finding_progress_changed)
+	finding_controller.finding_revealed.connect(_on_finding_revealed)
+	finding_controller.reaction_applied.connect(_on_finding_reaction_applied)
 
 	hud = GameHUD.new()
 	add_child(hud)
+	ui_sound_service = UISoundService.new()
+	ui_sound_service.name = "UISoundService"
+	add_child(ui_sound_service)
+	input_glyph_service = InputGlyphService.new()
+	input_glyph_service.name = "InputGlyphService"
+	add_child(input_glyph_service)
 	hud.navigate_requested.connect(_on_navigate_requested)
 	hud.back_requested.connect(_on_back_requested)
 	hud.quit_requested.connect(_on_quit_requested)
 	hud.story_finished.connect(_on_story_finished)
 	hud.level_selected.connect(_on_level_selected)
-	hud.briefing_start_requested.connect(start_run)
+	hud.preparation_start_requested.connect(_on_preparation_start_requested)
+	hud.preparation_component_requested.connect(_on_preparation_component_requested)
+	hud.preparation_slot_component_requested.connect(_on_preparation_slot_component_requested)
+	hud.preparation_slot_clear_requested.connect(_on_preparation_slot_clear_requested)
+	hud.preparation_slot_requested.connect(_on_preparation_slot_requested)
+	hud.preparation_reserve_requested.connect(_on_preparation_reserve_requested)
+	hud.preparation_replacement_cancelled.connect(_on_preparation_replacement_cancelled)
+	hud.ability_slot_requested.connect(_on_hud_ability_slot_requested)
 	hud.upgrade_chosen.connect(_on_upgrade_chosen)
 	hud.reroll_requested.connect(_on_reroll_requested)
 	hud.resume_requested.connect(_resume_manual_pause)
-	hud.pause_levels_requested.connect(_on_pause_levels_requested)
 	hud.abort_requested.connect(_on_abort_requested)
 	hud.abort_confirmed.connect(_on_abort_confirmed)
 	hud.abort_cancelled.connect(_on_abort_cancelled)
-	hud.retry_requested.connect(start_run)
+	hud.retry_requested.connect(_on_retry_requested)
 	hud.result_levels_requested.connect(_show_level_select)
 	hud.result_campus_requested.connect(_show_campus)
 	hud.offline_claim_requested.connect(_on_offline_claim_requested)
 	hud.clinic_job_start_requested.connect(_on_clinic_job_start_requested)
 	hud.clinic_job_claim_requested.connect(_on_clinic_job_claim_requested)
 	hud.research_purchase_requested.connect(_on_research_purchase_requested)
+	hud.research_tab_changed.connect(_on_research_tab_changed)
+	hud.talent_toggle_requested.connect(_on_talent_toggle_requested)
+	hud.talent_reset_requested.connect(_on_talent_reset_requested)
+	hud.finding_confirmed.connect(_on_finding_confirmed)
+	hud.finding_reserve_swap_requested.connect(_on_finding_reserve_swap_requested)
 	hud.discovery_dismissed.connect(_on_discovery_dismissed)
 	hud.intro_skip_requested.connect(_on_intro_skip_requested)
 	hud.intro_skip_confirmed.connect(_on_intro_skip_confirmed)
 	hud.intro_skip_cancelled.connect(_on_intro_skip_cancelled)
+	hud.restart_confirmed.connect(_on_restart_confirmed)
+	hud.restart_cancelled.connect(_on_restart_cancelled)
+	hud.run_stats_visibility_changed.connect(_on_run_stats_visibility_changed)
+	hud.ui_settings_changed.connect(_on_ui_settings_changed)
+	hud.settings_reset_bindings_requested.connect(_on_settings_reset_bindings_requested)
 
 	meta = MetaProgressionState.new()
+	# Loading validates the talent economy. Configure the deliberately temporary
+	# unlimited mode first so its valid local test selections survive a restart;
+	# switching this flag off later will reject overspent trees with a refund.
+	meta.set_unlimited_test_progression(UNLIMITED_PROGRESSION_TEST_MODE)
 	save_repository = MetaSaveRepository.new()
 	if persistence_enabled:
 		save_repository.load_into(meta)
 	else:
 		meta.reset_defaults()
 	_sanitize_meta()
+	meta.ui_settings.apply_saved_bindings()
+	meta.ui_settings.apply_audio()
+	meta.ui_settings.apply_window()
+	ui_sound_service.configure(meta.ui_settings)
+	ability_feedback_world.set_reduced_motion(meta.ui_settings.reduce_motion)
+	ui_sound_service.wire_tree(hud.root)
+	input_glyph_service.configure(meta.ui_settings.glyph_mode)
+	hud.configure_input_glyphs(input_glyph_service)
+	hud.configure_ui_settings(meta.ui_settings)
+	hud.set_run_stats_visibility(meta.show_run_stats)
 	discovery_manager = DiscoveryManager.new()
 	discovery_manager.configure(discovery_definitions, meta.seen_discovery_ids)
 	discovery_manager.seen_changed.connect(_on_discovery_seen)
@@ -161,7 +345,7 @@ func _ready() -> void:
 		for discovery_id in discovery_definitions:
 			discovery_manager.mark_seen(discovery_id)
 	meta.accrue_time()
-	if arguments.has("--auto-start"):
+	if arguments.has("--auto-start") or bool(_web_test_options.get("auto_start", false)):
 		call_deferred("start_run")
 	elif not meta.prologue_seen:
 		story_return_state = GameFlowState.State.CAMPUS
@@ -171,6 +355,7 @@ func _ready() -> void:
 		_show_campus()
 
 func _process(delta: float) -> void:
+	_update_ability_target_preview()
 	meta_refresh_timer -= delta
 	if meta_refresh_timer <= 0.0:
 		meta_refresh_timer = 1.0
@@ -183,55 +368,159 @@ func _process(delta: float) -> void:
 			hud.refresh_campus(meta, clinic_definitions)
 	if pause_smoke:
 		_pause_smoke_step(delta)
+	if flow_state == GameFlowState.State.RUNNING and state != null and state.active and stress_test:
+		stress_hud_timer -= delta
+		if stress_hud_timer <= 0.0:
+			stress_hud_timer = 1.0
+			hud.show_alert("STRESSTEST · %d GEGNER · %d PROBEN · %d FPS" % [enemies.size(), pickups.size(), Engine.get_frames_per_second()], Color("58dacb"), 1.2)
+	if stress_test and stress_telemetry != null:
+		var stress_finished := stress_telemetry.sample_frame(delta)
+		# Native stress runs are command-line acceptance jobs. End them as soon as
+		# the report is complete and propagate its result through the process exit
+		# code. Web runs stay alive so the parent harness can read the report.
+		if stress_finished and not OS.has_feature("web"):
+			var stress_report := stress_telemetry.latest_report()
+			stress_telemetry = null
+			_cleanup_run_nodes()
+			_complete_native_stress_exit.call_deferred(0 if bool(stress_report.get("passed", false)) else 4)
+
+
+func _complete_native_stress_exit(exit_code: int) -> void:
+	# Let the RenderingServer consume the synchronously hidden final buffers
+	# before the scene tree releases the renderer resources.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	get_tree().quit(exit_code)
+
+func _physics_process(delta: float) -> void:
+	if get_tree().paused:
+		return
+	if run_session != null:
+		run_session.step_fixed(delta)
+
+func step_fixed(delta: float, _session: RunSession = null) -> void:
 	if flow_state != GameFlowState.State.RUNNING or state == null or not state.active:
 		return
+	var phase_started := Time.get_ticks_usec() if performance_profile_enabled else 0
+	if performance_profile_enabled:
+		last_phase_timings_ms[&"spatial_query_rebuild"] = 0.0
+	_fixed_step_active = true
+	avatar.step_fixed(delta)
 	state.tick(delta)
 	if not state.active:
+		_finalize_fixed_step()
 		return
 	if selected_level.is_tutorial:
-		_intro_step()
+		_intro_step(delta)
 		hud.update_intro_timer(intro_lesson, intro_phase, state.boss_spawned)
 	else:
 		hud.update_timer(state.elapsed, config.run_duration_seconds, config.final_deadline_seconds, state.boss_spawned)
 	pressure_grace_timer = maxf(0.0, pressure_grace_timer - delta)
 	_spawn_step(delta)
-	_therapy_step(delta)
-	_immune_step(delta)
-	_support_step(delta)
-	crowd_renderer.sync(enemies, pickups)
+	_profile_phase(&"clock_spawn", phase_started)
+	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
+	enemy_world.step_fixed(delta, run_session)
+	_profile_phase(&"enemy_world", phase_started)
+	_combat_query_dirty = true
+	_pickup_query_dirty = true
+	# CombatQuery prepares its fixed-tick snapshot lazily on the first actual
+	# nearest/circle/line request. Idle runs therefore pay no indexing cost.
+	ability_controller.step_fixed(delta, run_session)
+	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
+	if flow_state != GameFlowState.State.RUNNING:
+		_finalize_fixed_step()
+		return
+	if not stress_test:
+		if selected_level.is_tutorial:
+			_therapy_step(delta)
+		else:
+			treatment_controller.step(delta)
+		_immune_step(delta)
+		_support_step(delta)
+		_case_mechanics_step(delta)
+	_profile_phase(&"combat", phase_started)
+	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
+	if flow_state != GameFlowState.State.RUNNING:
+		_finalize_fixed_step()
+		return
+	projectile_world.step_fixed(delta, run_session)
+	_profile_phase(&"projectile_world", phase_started)
+	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
+	if flow_state != GameFlowState.State.RUNNING:
+		_finalize_fixed_step()
+		return
+	pickup_world.step_fixed(delta, run_session)
+	_pickup_query_dirty = true
+	_profile_phase(&"pickup_world", phase_started)
+	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
+	if ability_feedback_world != null:
+		ability_feedback_world.step_fixed(delta, run_session)
+	_finalize_fixed_step()
+	_profile_phase(&"events_snapshot", phase_started)
 	if stress_test and not stress_reported and state.elapsed >= 2.0:
 		stress_reported = true
-		print("STRESS_CHECK enemies=%d pickups=%d feedback=%d enemy_pool=%d projectile_pool=%d objects=%d process_ms=%.3f physics_ms=%.3f" % [
-			enemies.size(), pickups.size(), damage_numbers.size(), enemy_pool.size(), projectile_pool.size(),
+		print("STRESS_CHECK enemies=%d pickups=%d projectiles=%d feedback=%d enemy_pool=%d projectile_pool=%d objects=%d fps=%d quality=%s process_ms=%.3f physics_ms=%.3f" % [
+			enemies.size(), pickups.size(), projectiles.size(), visual_bursts.size(), enemy_pool.size(), projectile_pool.size(),
 			Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
+			Engine.get_frames_per_second(),
+			cosmetic_budget_controller.quality_name() if cosmetic_budget_controller != null else "unknown",
 			Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
 			Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
 		])
-	if stress_test:
-		stress_hud_timer -= delta
-		if stress_hud_timer <= 0.0:
-			stress_hud_timer = 1.0
-			hud.show_alert("STRESSTEST · %d GEGNER · %d ANALYSE · %d FPS" % [enemies.size(), pickups.size(), Engine.get_frames_per_second()], Color("58dacb"), 1.2)
+
+func _profile_phase(id: StringName, started_usec: int) -> void:
+	if performance_profile_enabled:
+		last_phase_timings_ms[id] = float(Time.get_ticks_usec() - started_usec) / 1000.0
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_CLOSE_REQUEST:
 		_save_meta()
 
 func _unhandled_input(event: InputEvent) -> void:
+	# A held keyboard key may emit echo events. Ability commands and modal
+	# actions are edge-triggered, so an echo must never enqueue a second cast or
+	# repeat a destructive navigation action.
+	if event is InputEventKey and (event as InputEventKey).echo:
+		return
+	if _is_quick_restart_event(event):
+		get_viewport().set_input_as_handled()
+		_request_quick_restart()
+		return
+	if event is InputEventJoypadMotion:
+		var motion := event as InputEventJoypadMotion
+		if motion.axis == JOY_AXIS_RIGHT_X:
+			gamepad_target_direction.x = motion.axis_value
+		elif motion.axis == JOY_AXIS_RIGHT_Y:
+			gamepad_target_direction.y = motion.axis_value
+	if targeting_ability_slot >= 0:
+		if event.is_action_pressed(&"ui_cancel") or event.is_action_pressed(&"pause_game") or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT):
+			_cancel_ability_targeting()
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_confirm_ability_targeting()
+			get_viewport().set_input_as_handled()
+			return
 	if event.is_action_pressed(&"pause_game"):
 		match flow_state:
 			GameFlowState.State.RUNNING:
 				if state != null and state.active:
 					get_viewport().set_input_as_handled()
+					ui_router.open_modal(&"pause", null, get_viewport().gui_get_focus_owner())
 					_set_flow(GameFlowState.State.MANUAL_PAUSE)
-				hud.show_pause(selected_level != null and selected_level.is_tutorial)
+				hud.show_pause(_can_skip_intro(), stats, state)
 			GameFlowState.State.DISCOVERY_PAUSE:
 				get_viewport().set_input_as_handled()
 				_on_discovery_dismissed()
 			GameFlowState.State.MANUAL_PAUSE:
 				get_viewport().set_input_as_handled()
-				_resume_manual_pause()
+				if hud.is_pause_stats_open():
+					hud.return_to_pause_menu()
+				else:
+					_resume_manual_pause()
 			GameFlowState.State.LEVEL_UP:
+				get_viewport().set_input_as_handled()
+			GameFlowState.State.FINDING_PAUSE:
 				get_viewport().set_input_as_handled()
 			GameFlowState.State.ABORT_CONFIRMATION:
 				get_viewport().set_input_as_handled()
@@ -239,10 +528,49 @@ func _unhandled_input(event: InputEvent) -> void:
 			GameFlowState.State.INTRO_SKIP_CONFIRMATION:
 				get_viewport().set_input_as_handled()
 				_on_intro_skip_cancelled()
-			GameFlowState.State.PRACTICE, GameFlowState.State.RESEARCH, GameFlowState.State.LEVEL_SELECT, GameFlowState.State.LEXICON, GameFlowState.State.SETTINGS, GameFlowState.State.BRIEFING, GameFlowState.State.STORY, GameFlowState.State.CAMPUS:
+			GameFlowState.State.RUN_RESTART_CONFIRMATION:
+				get_viewport().set_input_as_handled()
+				_on_restart_cancelled()
+			GameFlowState.State.PRACTICE, GameFlowState.State.RESEARCH, GameFlowState.State.LEVEL_SELECT, GameFlowState.State.LEXICON, GameFlowState.State.SETTINGS, GameFlowState.State.PREPARATION, GameFlowState.State.STORY, GameFlowState.State.CAMPUS:
 				get_viewport().set_input_as_handled()
 				_on_back_requested()
 		return
+	if event.is_action_pressed(&"ui_cancel"):
+		match flow_state:
+			GameFlowState.State.DISCOVERY_PAUSE:
+				_on_discovery_dismissed()
+			GameFlowState.State.MANUAL_PAUSE:
+				if hud.is_pause_stats_open():
+					hud.return_to_pause_menu()
+				else:
+					_resume_manual_pause()
+			GameFlowState.State.ABORT_CONFIRMATION:
+				_on_abort_cancelled()
+			GameFlowState.State.INTRO_SKIP_CONFIRMATION:
+				_on_intro_skip_cancelled()
+			GameFlowState.State.RUN_RESTART_CONFIRMATION:
+				_on_restart_cancelled()
+			GameFlowState.State.PRACTICE, GameFlowState.State.RESEARCH, GameFlowState.State.LEVEL_SELECT, GameFlowState.State.LEXICON, GameFlowState.State.SETTINGS, GameFlowState.State.PREPARATION, GameFlowState.State.STORY:
+				_on_back_requested()
+			GameFlowState.State.LEVEL_UP, GameFlowState.State.FINDING_PAUSE:
+				# These decisions are mandatory. Consume Back without closing their modal.
+				pass
+			_:
+				return
+		get_viewport().set_input_as_handled()
+		return
+	if flow_state == GameFlowState.State.RUNNING:
+		for action_data in [[&"active_ability_1", AbilityController.SLOT_Q], [&"active_ability_2", AbilityController.SLOT_E]]:
+			var action: StringName = action_data[0]
+			var slot: int = action_data[1]
+			if event.is_action_pressed(action):
+				_begin_or_queue_ability(slot, _ability_device_for_event(event))
+				get_viewport().set_input_as_handled()
+				return
+			if event.is_action_released(action) and targeting_ability_slot == slot:
+				_confirm_ability_targeting()
+				get_viewport().set_input_as_handled()
+				return
 	if flow_state == GameFlowState.State.DISCOVERY_PAUSE and event is InputEventKey and event.pressed and event.keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
 		_on_discovery_dismissed()
 		get_viewport().set_input_as_handled()
@@ -262,12 +590,144 @@ func _unhandled_input(event: InputEvent) -> void:
 		_on_reroll_requested()
 		get_viewport().set_input_as_handled()
 
+func _is_quick_restart_event(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	var is_r := key.keycode == KEY_R or key.physical_keycode == KEY_R
+	return key.pressed and not key.echo and is_r and key.ctrl_pressed and not key.alt_pressed and not key.shift_pressed and not key.meta_pressed
+
+func _can_skip_intro() -> bool:
+	return selected_level != null and selected_level.is_tutorial and meta != null and not meta.intro_skipped
+
+func _request_quick_restart() -> void:
+	if flow_state == GameFlowState.State.RUN_RESTART_CONFIRMATION:
+		return
+	if flow_state not in [GameFlowState.State.RUNNING, GameFlowState.State.MANUAL_PAUSE] or state == null or not state.active:
+		return
+	if meta != null and not meta.ui_settings.confirm_run_restart:
+		_restart_current_run()
+		return
+	restart_return_state = flow_state
+	ui_router.open_modal(&"restart", null, get_viewport().gui_get_focus_owner())
+	_set_flow(GameFlowState.State.RUN_RESTART_CONFIRMATION)
+	hud.show_restart_confirmation()
+
+func _on_restart_cancelled() -> void:
+	if flow_state != GameFlowState.State.RUN_RESTART_CONFIRMATION:
+		return
+	ui_router.close_modal(get_viewport().gui_get_focus_owner())
+	hud.hide_restart_confirmation()
+	_set_flow(restart_return_state)
+	if restart_return_state == GameFlowState.State.MANUAL_PAUSE:
+		hud.show_running_hud()
+		hud.show_pause(_can_skip_intro(), stats, state)
+
+func _on_restart_confirmed() -> void:
+	if flow_state != GameFlowState.State.RUN_RESTART_CONFIRMATION:
+		return
+	_restart_current_run()
+
+func _restart_current_run() -> void:
+	if selected_level == null:
+		return
+	var context := active_run_context.duplicate_context() if active_run_context != null else null
+	while ui_router.modal_depth() > 0:
+		ui_router.close_modal()
+	hud.hide_restart_confirmation()
+	start_run(context)
+
 func _set_flow(next_state: GameFlowState.State) -> void:
+	if next_state != GameFlowState.State.RUNNING and targeting_ability_slot >= 0:
+		_cancel_ability_targeting()
+	if run_session != null:
+		if next_state == GameFlowState.State.RUNNING and run_session.lifecycle == RunSession.Lifecycle.PAUSED:
+			run_session.resume_session()
+		elif GameFlowState.pauses_simulation(next_state) and run_session.lifecycle == RunSession.Lifecycle.RUNNING:
+			run_session.pause_session()
 	flow_state = next_state
 	get_tree().paused = GameFlowState.pauses_simulation(next_state)
 	flow_changed.emit(next_state)
 
-func _show_campus() -> void:
+func _on_hud_ability_slot_requested(slot: int) -> void:
+	if flow_state != GameFlowState.State.RUNNING:
+		return
+	_begin_or_queue_ability(slot, AbilityCommand.InputDevice.KEYBOARD_MOUSE)
+
+func _begin_or_queue_ability(slot: int, device: AbilityCommand.InputDevice) -> void:
+	if ability_controller == null:
+		return
+	var runtime := ability_controller.runtime(slot)
+	if runtime == null or runtime.definition == null:
+		hud.show_alert("Dieser Platz ist nicht belegt.", AlveolusVisualTheme.CORAL, 1.4)
+		return
+	if not runtime.is_ready():
+		hud.show_alert("Diese Fähigkeit ist noch nicht bereit.", AlveolusVisualTheme.GOLD, 1.4)
+		return
+	if runtime.definition.target_mode == AbilityDefinition.TargetMode.SELF:
+		_queue_ability_command(slot, avatar.global_position, device)
+		return
+	targeting_ability_slot = slot
+	targeting_input_device = device
+	var requested_target := _current_ability_target(device, runtime.definition)
+	ability_target_preview.begin(runtime.definition, build_state, topology, avatar.global_position, requested_target, meta.ui_settings.reduce_motion)
+	hud.set_ability_targeting(slot, true)
+
+func _confirm_ability_targeting() -> void:
+	if targeting_ability_slot < 0 or ability_controller == null:
+		return
+	var slot := targeting_ability_slot
+	var runtime := ability_controller.runtime(slot)
+	var target := ability_target_preview.resolved_target() if ability_target_preview != null and ability_target_preview.is_targeting() else avatar.global_position
+	var device := targeting_input_device
+	_cancel_ability_targeting()
+	if runtime != null and runtime.definition != null:
+		_queue_ability_command(slot, target, device)
+
+func _cancel_ability_targeting() -> void:
+	if targeting_ability_slot >= 0:
+		hud.set_ability_targeting(targeting_ability_slot, false)
+	targeting_ability_slot = -1
+	targeting_input_device = AbilityCommand.InputDevice.UNKNOWN
+	if ability_target_preview != null:
+		ability_target_preview.cancel()
+
+func _queue_ability_command(slot: int, target: Vector2, device: AbilityCommand.InputDevice) -> void:
+	var tick := run_session.fixed_tick if run_session != null else 0
+	if ability_controller.queue_slot(slot, target, device, tick) == null:
+		hud.show_alert("Die Fähigkeit konnte nicht vorgemerkt werden.", AlveolusVisualTheme.CORAL, 1.4)
+
+func _update_ability_target_preview() -> void:
+	if targeting_ability_slot < 0 or flow_state != GameFlowState.State.RUNNING or ability_target_preview == null:
+		return
+	var runtime := ability_controller.runtime(targeting_ability_slot)
+	if runtime == null or runtime.definition == null:
+		_cancel_ability_targeting()
+		return
+	ability_target_preview.update_target(avatar.global_position, _current_ability_target(targeting_input_device, runtime.definition))
+
+func _current_ability_target(device: AbilityCommand.InputDevice, definition: AbilityDefinition) -> Vector2:
+	if device != AbilityCommand.InputDevice.GAMEPAD:
+		return get_global_mouse_position()
+	var direction := gamepad_target_direction
+	if direction.length_squared() < 0.16:
+		direction = avatar.last_facing
+	if direction.length_squared() < 0.001:
+		direction = Vector2.RIGHT
+	direction = direction.normalized()
+	var distance := float(definition.parameters.get("range", definition.parameters.get("radius", 220.0)))
+	if definition.target_mode == AbilityDefinition.TargetMode.CURSOR_AREA:
+		distance = maxf(distance * 1.25, 220.0)
+	return topology.wrap_position(avatar.global_position + direction * distance)
+
+func _ability_device_for_event(event: InputEvent) -> AbilityCommand.InputDevice:
+	return AbilityCommand.InputDevice.GAMEPAD if event is InputEventJoypadButton or event is InputEventJoypadMotion else AbilityCommand.InputDevice.KEYBOARD_MOUSE
+
+func _on_route_focus_requested(target: Variant) -> void:
+	if target is Control and is_instance_valid(target) and (target as Control).is_visible_in_tree():
+		(target as Control).grab_focus.call_deferred()
+
+func _show_campus(reset_route: bool = true) -> void:
 	_cleanup_run_nodes()
 	avatar.input_enabled = false
 	avatar.hide()
@@ -275,21 +735,29 @@ func _show_campus() -> void:
 	_save_meta()
 	_set_flow(GameFlowState.State.CAMPUS)
 	hud.show_campus(meta, clinic_definitions)
+	if reset_route:
+		ui_router.reset(&"campus")
 
 func _show_practice() -> void:
+	_route_to(&"practice")
 	_set_flow(GameFlowState.State.PRACTICE)
 	hud.show_practice(meta, clinic_definitions)
 
 func _show_research() -> void:
+	_route_to(&"research")
 	_set_flow(GameFlowState.State.RESEARCH)
-	hud.show_research(meta, research_definitions)
+	hud.show_research_tabs(meta, research_definitions, TalentDefinition.definitions())
 
-func _show_level_select() -> void:
+func _show_level_select(update_route: bool = true) -> void:
 	_cleanup_run_nodes()
 	avatar.input_enabled = false
 	avatar.hide()
 	_set_flow(GameFlowState.State.LEVEL_SELECT)
 	hud.show_level_select(meta, levels)
+	if update_route:
+		if ui_router.current_screen_id() != &"campus":
+			ui_router.reset(&"campus")
+		_route_to(&"level_select")
 
 func _show_lexicon() -> void:
 	_cleanup_run_nodes()
@@ -297,9 +765,14 @@ func _show_lexicon() -> void:
 	avatar.hide()
 	_set_flow(GameFlowState.State.LEXICON)
 	hud.show_lexicon(meta)
+	_route_to(&"lexicon")
 
 func _show_settings(return_state: GameFlowState.State) -> void:
 	settings_return_state = return_state
+	if return_state == GameFlowState.State.MANUAL_PAUSE:
+		ui_router.open_modal(&"settings", null, get_viewport().gui_get_focus_owner())
+	else:
+		ui_router.push_screen(&"settings", null, get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.SETTINGS)
 	hud.show_settings(not OS.has_feature("web"), return_state != GameFlowState.State.MANUAL_PAUSE)
 
@@ -317,32 +790,46 @@ func _on_navigate_requested(destination: StringName) -> void:
 			_show_settings(flow_state)
 		&"story":
 			story_return_state = flow_state
+			ui_router.push_screen(&"story", null, get_viewport().gui_get_focus_owner())
 			_set_flow(GameFlowState.State.STORY)
 			hud.show_story()
+
+func _route_to(screen_id: StringName) -> void:
+	var owner := get_viewport().gui_get_focus_owner()
+	if ui_router.current_screen_id() == &"":
+		ui_router.reset(&"campus")
+	if ui_router.current_screen_id() == screen_id:
+		return
+	ui_router.push_screen(screen_id, null, owner)
 
 func _on_back_requested() -> void:
 	match flow_state:
 		GameFlowState.State.CAMPUS:
 			return
-		GameFlowState.State.PRACTICE, GameFlowState.State.RESEARCH, GameFlowState.State.LEVEL_SELECT, GameFlowState.State.LEXICON:
-			_show_campus()
-		GameFlowState.State.BRIEFING:
-			_show_level_select()
+		GameFlowState.State.PRACTICE, GameFlowState.State.RESEARCH, GameFlowState.State.LEVEL_SELECT:
+			_show_campus(false)
+			ui_router.back(get_viewport().gui_get_focus_owner())
+		GameFlowState.State.LEXICON:
+			if hud.cancel_lexicon_step():
+				return
+			_show_campus(false)
+			ui_router.back(get_viewport().gui_get_focus_owner())
+		GameFlowState.State.PREPARATION:
+			if hud.cancel_preparation_step():
+				return
+			if pending_replacement_component != &"":
+				_on_preparation_replacement_cancelled()
+			else:
+				_show_level_select(false)
+				ui_router.back(get_viewport().gui_get_focus_owner())
 		GameFlowState.State.STORY:
 			_return_from_story()
 		GameFlowState.State.SETTINGS:
 			_return_from_settings()
 
 func _return_from_settings() -> void:
-	match settings_return_state:
-		GameFlowState.State.MANUAL_PAUSE:
-			_set_flow(GameFlowState.State.MANUAL_PAUSE)
-			hud.show_running_hud()
-			hud.show_pause(selected_level != null and selected_level.is_tutorial)
-		GameFlowState.State.CAMPUS:
-			_show_campus()
-		_:
-			_show_campus()
+	ui_router.back(get_viewport().gui_get_focus_owner())
+	_restore_screen(settings_return_state)
 
 func _on_story_finished() -> void:
 	meta.mark_prologue_seen()
@@ -350,31 +837,293 @@ func _on_story_finished() -> void:
 	_return_from_story()
 
 func _return_from_story() -> void:
-	if story_return_state == GameFlowState.State.LEVEL_SELECT:
-		_show_level_select()
-	else:
-		_show_campus()
+	ui_router.back(get_viewport().gui_get_focus_owner())
+	_restore_screen(story_return_state)
+
+func _restore_screen(target_state: GameFlowState.State) -> void:
+	match target_state:
+		GameFlowState.State.MANUAL_PAUSE:
+			_set_flow(GameFlowState.State.MANUAL_PAUSE)
+			hud.show_running_hud()
+			hud.show_pause(_can_skip_intro(), stats, state)
+		GameFlowState.State.PRACTICE:
+			_set_flow(GameFlowState.State.PRACTICE)
+			hud.show_practice(meta, clinic_definitions)
+		GameFlowState.State.RESEARCH:
+			_set_flow(GameFlowState.State.RESEARCH)
+			hud.show_research_tabs(meta, research_definitions, TalentDefinition.definitions())
+		GameFlowState.State.LEVEL_SELECT:
+			_show_level_select(false)
+		GameFlowState.State.LEXICON:
+			_set_flow(GameFlowState.State.LEXICON)
+			hud.show_lexicon(meta)
+		GameFlowState.State.PREPARATION:
+			_set_flow(GameFlowState.State.PREPARATION)
+			_refresh_preparation()
+		_:
+			_show_campus(false)
 
 func _on_level_selected(id: StringName) -> void:
 	for definition in levels:
 		if definition.id == id and meta.is_level_unlocked(definition.order):
 			selected_level = definition
-			_set_flow(GameFlowState.State.BRIEFING)
-			hud.show_briefing(definition)
+			# Selecting a case always opens the same explicit planning step. The
+			# quick-run flag shortens simulation timings for tests; it must not
+			# silently bypass a user-facing navigation contract.
+			_show_preparation()
 			return
 
 func _on_quit_requested() -> void:
 	_save_meta()
 	get_tree().quit()
 
-func start_run() -> void:
+func _on_run_stats_visibility_changed(enabled: bool) -> void:
+	meta.show_run_stats = enabled
+	_save_meta()
+
+func _on_ui_settings_changed(settings: UISettingsState) -> void:
+	meta.set_ui_settings(settings)
+	meta.ui_settings.apply_audio()
+	if ability_feedback_world != null:
+		ability_feedback_world.set_reduced_motion(meta.ui_settings.reduce_motion)
+	if ui_sound_service != null:
+		ui_sound_service.configure(meta.ui_settings)
+	if input_glyph_service != null:
+		input_glyph_service.configure(meta.ui_settings.glyph_mode)
+	_save_meta()
+
+func _on_settings_reset_bindings_requested() -> void:
+	for action in [&"move_left", &"move_right", &"move_up", &"move_down", &"pause_game", &"active_ability_1", &"active_ability_2", &"ui_accept", &"ui_cancel", &"reroll_upgrades"]:
+		if InputMap.has_action(action):
+			InputMap.action_erase_events(action)
+	_register_input_actions()
+	meta.ui_settings.input_bindings.clear()
+	hud.configure_ui_settings(meta.ui_settings)
+	_save_meta()
+
+func _on_retry_requested() -> void:
+	if selected_level != null and not quick_run:
+		_show_preparation()
+	else:
+		start_run()
+
+func _show_preparation() -> void:
+	if selected_level == null:
+		return
+	var seed := meta.get_or_create_case_seed(selected_level.id)
+	var case_rng := RandomNumberGenerator.new()
+	case_rng.seed = seed
+	var trait_id := _deterministic_case_choice(selected_level.visible_trait_ids, case_rng)
+	var finding_id := _deterministic_case_choice(selected_level.hidden_finding_ids, case_rng)
+	pending_run_context = meta.create_run_context(selected_level.id, trait_id, finding_id)
+	pending_preparation_loadout = pending_run_context.loadout_snapshot.duplicate_loadout()
+	# Reserve remains serializable for old saves, but is intentionally dormant in
+	# the current product milestone. New plans and runs start without it.
+	pending_preparation_loadout.reserve_id = &""
+	pending_run_context.loadout_snapshot.reserve_id = &""
+	var unlocked := meta.unlocked_module_ids(loadout_modules, research_definitions)
+	pending_loadout_draft = LoadoutDraft.from_prepared(pending_preparation_loadout, loadout_modules, unlocked, meta.preparation_capacity())
+	pending_replacement_component = &""
+	_set_flow(GameFlowState.State.PREPARATION)
+	if ui_router.current_screen_id() != &"level_select":
+		ui_router.reset(&"campus")
+		ui_router.push_screen(&"level_select")
+	ui_router.push_screen(&"preparation", null, get_viewport().gui_get_focus_owner())
+	_refresh_preparation()
+
+func _deterministic_case_choice(ids: Array[StringName], case_rng: RandomNumberGenerator) -> StringName:
+	var valid: Array[StringName] = []
+	for id in ids:
+		if id != &"":
+			valid.append(id)
+	if valid.is_empty():
+		return &""
+	return valid[case_rng.randi_range(0, valid.size() - 1)]
+
+func _refresh_preparation() -> void:
+	if pending_loadout_draft == null:
+		return
+	pending_preparation_loadout = pending_loadout_draft.to_prepared()
+	var validation := pending_loadout_draft.validate()
+	var case_trait_value: Variant = case_traits.get(pending_run_context.visible_trait_id)
+	var view_model := {
+		"level_title": selected_level.title,
+		"level_description": selected_level.briefing_text,
+		"duration_text": selected_level.duration_text(),
+		"boss_time_text": selected_level.boss_time_text(),
+		"tutorial_locked": selected_level.is_tutorial,
+		"can_skip_intro": selected_level.is_tutorial and not meta.intro_skipped,
+		"trait": case_trait_value,
+		"validation": validation,
+		"finding_hint": _preparation_finding_hint(),
+		"unlocked_ids": meta.unlocked_module_ids(loadout_modules, research_definitions),
+		"slot_snapshot": pending_loadout_draft.slot_snapshot(),
+		"loadout_snapshot": pending_preparation_loadout.to_dict(),
+		"replacement_component": pending_replacement_component,
+	}
+	hud.show_preparation(view_model, loadout_modules.values(), pending_preparation_loadout)
+
+func _preparation_finding_hint() -> String:
+	if pending_run_context == null or not pending_run_context.has_talent(&"early_classification"):
+		return "Der genaue Befund entsteht während der Behandlung."
+	var finding: FindingDefinition = finding_definitions.get(pending_run_context.hidden_finding_id)
+	if finding == null:
+		return "Frühe Einordnung: noch unklar"
+	var category := "Ausbreitungsverhalten"
+	if finding.behavior == FindingDefinition.Behavior.PRESSURE_SURGES:
+		category = "Zustandsbelastung"
+	elif finding.behavior == FindingDefinition.Behavior.HIDDEN_NESTS:
+		category = "Lokale Herde"
+	return "Frühe Einordnung: %s" % category
+
+func _on_preparation_component_requested(id: StringName) -> void:
+	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
+		return
+	var unlocked := meta.unlocked_module_ids(loadout_modules, research_definitions)
+	if not bool(unlocked.get(id, false)) or not loadout_modules.has(id):
+		return
+	var result := pending_loadout_draft.equip(id)
+	_handle_loadout_change(result)
+
+func _on_preparation_slot_component_requested(slot_id: StringName, id: StringName) -> void:
+	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
+		return
+	if not LoadoutSlotId.active().has(slot_id) or not loadout_modules.has(id):
+		return
+	var unlocked := meta.unlocked_module_ids(loadout_modules, research_definitions)
+	if not bool(unlocked.get(id, false)):
+		return
+	# The plan already names an explicit target slot, so replacement is atomic
+	# and immediately reversible. A second confirmation added friction without
+	# protecting any irreversible action.
+	var result := pending_loadout_draft.replace(id, slot_id)
+	_handle_loadout_change(result)
+
+func _on_preparation_slot_clear_requested(slot_index: int) -> void:
+	if slot_index < 0 or slot_index >= LoadoutSlotId.active().size():
+		return
+	_on_preparation_slot_requested(LoadoutSlotId.active()[slot_index])
+
+func _on_preparation_slot_requested(slot_id: StringName) -> void:
+	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
+		return
+	var result: LoadoutChangeResult
+	if pending_replacement_component != &"":
+		result = pending_loadout_draft.confirm_replacement(pending_replacement_component, slot_id)
+		if result.applied:
+			pending_replacement_component = &""
+	else:
+		result = pending_loadout_draft.remove(slot_id)
+	_handle_loadout_change(result)
+
+func _handle_loadout_change(result: LoadoutChangeResult) -> void:
+	if result == null:
+		return
+	if result.needs_replacement():
+		pending_replacement_component = result.component_id
+		var capacity_previews: Dictionary = {}
+		var incoming: LoadoutModuleDefinition = loadout_modules.get(result.component_id)
+		for slot_id in result.replacement_slots:
+			var outgoing: LoadoutModuleDefinition = loadout_modules.get(pending_loadout_draft.component_at(slot_id))
+			var after := result.capacity_before
+			if incoming != null:
+				after += incoming.capacity_cost
+			if outgoing != null:
+				after -= outgoing.capacity_cost
+			capacity_previews[slot_id] = after
+		hud.show_preparation_replacement(result.component_id, result.replacement_slots, result.capacity_before, capacity_previews)
+		return
+	if result.is_noop():
+		hud.complete_preparation_change(result.focus_slot)
+		_refresh_preparation()
+		return
+	if not result.applied:
+		hud.show_preparation_error(result.first_error())
+		return
+	pending_preparation_loadout = pending_loadout_draft.to_prepared()
+	if pending_loadout_draft.validate().valid:
+		meta.set_prepared_loadout(selected_level.id, pending_preparation_loadout)
+		pending_run_context.loadout_snapshot = pending_preparation_loadout.duplicate_loadout()
+		_save_meta()
+	hud.complete_preparation_change(result.target_slot)
+	_refresh_preparation()
+
+func _on_preparation_reserve_requested(id: StringName) -> void:
+	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or not loadout_modules.has(id) or _is_preparation_loadout_locked():
+		return
+	var definition: LoadoutModuleDefinition = loadout_modules[id]
+	var unlocked := meta.unlocked_module_ids(loadout_modules, research_definitions)
+	if definition.kind != LoadoutModuleDefinition.Kind.PASSIVE or not bool(unlocked.get(id, false)):
+		return
+	var result := pending_loadout_draft.equip(id, LoadoutSlotId.RESERVE)
+	if result.needs_replacement():
+		result = pending_loadout_draft.replace(id, LoadoutSlotId.RESERVE)
+	_handle_loadout_change(result)
+
+func _on_preparation_replacement_cancelled() -> void:
+	if flow_state != GameFlowState.State.PREPARATION:
+		return
+	pending_replacement_component = &""
+	_refresh_preparation()
+
+func _is_preparation_loadout_locked() -> bool:
+	return selected_level != null and selected_level.is_tutorial
+
+func _on_preparation_start_requested(snapshot: Dictionary) -> void:
+	if flow_state != GameFlowState.State.PREPARATION or pending_run_context == null or pending_loadout_draft == null:
+		return
+	var requested := pending_loadout_draft.to_prepared()
+	var validation := meta.validate_prepared_loadout(requested, loadout_modules, research_definitions)
+	if not validation.valid:
+		_refresh_preparation()
+		return
+	pending_preparation_loadout = requested.duplicate_loadout()
+	meta.set_prepared_loadout(selected_level.id, requested)
+	pending_run_context.loadout_snapshot = requested.duplicate_loadout()
+	_save_meta()
+	start_run(pending_run_context)
+
+func start_run(run_context: RunContext = null) -> void:
 	_cleanup_run_nodes()
+	if cosmetic_budget_controller != null:
+		cosmetic_budget_controller.reset_quality()
 	config = ContentCatalog.create_run_config(selected_level, quick_run)
+	active_run_context = _resolved_run_context(run_context)
+	active_loadout = active_run_context.loadout_snapshot.duplicate_loadout() if active_run_context != null and active_run_context.loadout_snapshot != null else null
+	if active_run_context != null:
+		config.random_seed = active_run_context.seed
+		_apply_case_trait_to_config(active_run_context.visible_trait_id)
+	if stress_test:
+		_configure_stress_run_config()
 	topology.bounds = config.arena_rect()
+	combat_query.configure(
+		topology,
+		_enemy_position_for_handle,
+		_enemy_radius_for_handle,
+		_enemy_targetable_for_handle,
+		enemy_world.resolve,
+		CombatSpatialGrid.DEFAULT_CELL_SIZE,
+		96.0
+	)
+	pickup_query.configure(
+		topology,
+		_pickup_position_for_handle,
+		Callable(),
+		_pickup_targetable_for_handle,
+		pickup_world.resolve,
+		CombatSpatialGrid.DEFAULT_CELL_SIZE,
+		0.0
+	)
+	_combat_query_dirty = true
+	_pickup_query_dirty = true
 	arena.configure(config.arena_rect(), arena_visuals[selected_level.id])
 	stats = PlayerStats.new()
-	if not selected_level.is_tutorial:
-		stats.apply_meta_progression(meta.research_ranks)
+	var treatment: TreatmentDefinition = treatment_definitions.get(active_loadout.treatment_id) if active_loadout != null else null
+	if not selected_level.is_tutorial and treatment != null:
+		stats.configure_prepared_treatment(treatment)
+		stats.apply_prepared_progression(meta.research_ranks, active_loadout.passive_ids)
+		if active_run_context != null and active_run_context.visible_trait_id == &"fragile_condition":
+			stats.support_effect_multiplier *= 1.20
 	if completion_smoke:
 		stats.therapy_damage = 250.0
 		stats.therapy_cooldown = 0.28
@@ -389,7 +1138,7 @@ func start_run() -> void:
 	avatar.input_enabled = true
 	avatar.show()
 	avatar.queue_redraw()
-	rng.seed = config.random_seed + Time.get_ticks_msec()
+	rng.seed = config.random_seed
 	spawn_accumulator = config.initial_spawn_interval
 	therapy_timer = 0.18
 	immune_timer = 0.75
@@ -399,7 +1148,7 @@ func start_run() -> void:
 	defeats = 0
 	stress_reported = false
 	stress_hud_timer = 0.0
-	reroll_available = meta.has_research(&"second_opinion")
+	reroll_available = active_loadout != null and active_loadout.passive_ids.has(&"second_opinion")
 	reroll_used = false
 	current_upgrade_options.clear()
 	active_boss = null
@@ -408,8 +1157,20 @@ func start_run() -> void:
 	intro_start_position = avatar.global_position
 	intro_primary_enemy = null
 	intro_upgrade_id = &""
+	intro_transition_timer = 0.0
 	discovery_spawn_reservations.clear()
 	discovery_manager.clear_pending()
+	active_reaction = null
+	pending_finding_definition = null
+	hidden_nest_timers.clear()
+	pressure_surge_timer = 25.0
+	pressure_surge_remaining = 0.0
+	reaction_boost_timer = 0.0
+	reaction_boost_source = &""
+	last_ability_slot = -1
+	last_ability_time = -1000.0
+	emergency_talent_used = false
+	ability_ready_states.clear()
 
 	state = RunState.new()
 	state.stability_changed.connect(_on_stability_changed)
@@ -417,16 +1178,35 @@ func start_run() -> void:
 	state.level_up_requested.connect(_on_level_up_requested)
 	state.boss_due.connect(_spawn_boss)
 	state.run_finished.connect(_on_run_finished)
-	var starting_analysis := 2 if meta.has_research(&"preanalysis") and not selected_level.is_tutorial else 0
+	var starting_analysis := 2 if active_loadout != null and active_loadout.passive_ids.has(&"preanalysis") and not selected_level.is_tutorial else 0
 	state.reset(config, starting_analysis, stats.max_stability_bonus)
+	if run_session != null:
+		run_session.reset()
+		run_session.start(active_run_context)
+	_configure_tactical_run(treatment)
+	mastery_tracker.begin_run(selected_level.id, config.run_duration_seconds)
+	mastery_tracker.record_stability(state.stability, state.max_stability)
+	if active_run_context != null and not selected_level.is_tutorial and persistence_enabled:
+		meta.clear_case_seed(selected_level.id)
+		_save_meta()
 
+	hud.update_run_stats(stats, state)
+	hud.update_shield(0.0, 0.0)
 	hud.show_running_hud()
+	if ui_sound_service != null:
+		ui_sound_service.play(UISoundService.RUN_START)
+	ui_router.replace_screen(&"run", null, get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.RUNNING)
 	if selected_level.is_tutorial:
+		treatment_controller.enabled = false
+		ability_controller.clear()
+		hud.configure_active_abilities([])
+		hud.hide_finding_progress()
 		hud.update_intro_timer(1, intro_phase, false)
 		if not meta.tutorial_status.has(&"movement"):
 			hud.show_alert("Bewege dich mit WASD oder den Pfeiltasten", Color("f2bd68"), 3.2)
 	else:
+		treatment_controller.enabled = true
 		hud.update_timer(0.0, config.run_duration_seconds, config.final_deadline_seconds, false)
 		for index in range(3):
 			_spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0 + index * 34.0))
@@ -441,9 +1221,212 @@ func start_run() -> void:
 			var angle := TAU * float(index) / 1200.0
 			var ring := 510.0 + float(index % 8) * 61.0
 			_spawn_analysis_pickup(1, topology.wrap_position(Vector2.from_angle(angle) * ring))
+		_spawn_stress_projectiles()
+		for index in range(combat_capacity.max_feedback_visuals):
+			var angle := TAU * float(index) / float(combat_capacity.max_feedback_visuals)
+			_spawn_visual_burst(Vector2.from_angle(angle) * 260.0, &"stress", AlveolusVisualTheme.TURQUOISE, 4, STRESS_RUN_SECONDS, 24.0)
+		stress_telemetry = RenderStressTelemetry.new().configure(
+			_stress_telemetry_snapshot,
+			stress_warmup_seconds,
+			stress_measurement_seconds
+		)
+		stress_telemetry.begin()
+
+func _spawn_stress_projectiles() -> void:
+	var shots: Array[TreatmentShot] = []
+	for index in range(combat_capacity.max_projectile_states):
+		var angle := TAU * float(index) / float(combat_capacity.max_projectile_states)
+		var origin := Vector2.from_angle(angle) * (170.0 + float(index % 5) * 14.0)
+		shots.append(TreatmentShot.tracking(origin, enemies[index % enemies.size()], 0.0, 2000.0, &"stress"))
+	_on_treatment_shots_requested(shots)
+	for index in range(projectiles.size()):
+		var projectile := projectiles[index]
+		projectile.lifetime = STRESS_RUN_SECONDS
+		projectile.speed = 520.0
+		projectile.direction = Vector2.from_angle(TAU * float(index) / float(maxi(projectiles.size(), 1)) + PI * 0.5)
+		projectile.rotation = projectile.direction.angle()
+		projectile.target = null
+		projectile.target_handle = EntityHandle.INVALID
+		projectile.target_resolver = Callable()
+
+func _configure_stress_run_config() -> void:
+	# Stress telemetry measures a stable, exact render load. It must never be
+	# terminated by the selected level's deadline or by crowd contact while a
+	# long native/browser measurement is still in progress.
+	config.run_duration_seconds = STRESS_RUN_SECONDS
+	config.final_deadline_seconds = STRESS_RUN_SECONDS * 2.0
+	config.initial_stability = 1.0e9
+	config.contact_damage_multiplier = 0.0
+	config.initial_spawn_interval = STRESS_RUN_SECONDS
+	config.final_spawn_interval = STRESS_RUN_SECONDS
+
+func _stress_telemetry_snapshot() -> Dictionary:
+	var enemy_active := enemy_world.active_count() if enemy_world != null else enemies.size()
+	var pickup_active := pickup_world.active_count() if pickup_world != null else pickups.size()
+	var projectile_active := projectile_world.active_count() if projectile_world != null else projectiles.size()
+	return {
+		"quality": cosmetic_budget_controller.quality_name() if cosmetic_budget_controller != null else "unknown",
+		"flow": {
+			"state": int(flow_state),
+			"running": flow_state == GameFlowState.State.RUNNING,
+			"run_active": state != null and state.active,
+			"running_active": flow_state == GameFlowState.State.RUNNING and state != null and state.active,
+		},
+		"entities": {
+			"enemies": enemies.size(),
+			"regular_enemies": enemy_world.regular_count if enemy_world != null else enemies.size(),
+			"critical_enemies": enemy_world.critical_count if enemy_world != null else 0,
+			"pickups": pickups.size(),
+			"projectiles": projectiles.size(),
+			"feedback": visual_bursts.size() + damage_numbers.size(),
+			"visual_bursts": visual_bursts.size(),
+			"damage_numbers": damage_numbers.size(),
+		},
+		"pools": {
+			"enemies": {
+				"active": enemy_active,
+				"inactive": enemy_pool.size(),
+				"available_slots": enemy_world.available_count() if enemy_world != null else maxi(0, combat_capacity.max_enemies - enemy_active),
+				"capacity": combat_capacity.max_enemies,
+			},
+			"pickups": {
+				"active": pickup_active,
+				"inactive": pickup_pool.size(),
+				"available_slots": pickup_world.available_count() if pickup_world != null else maxi(0, combat_capacity.max_pickup_stacks - pickup_active),
+				"capacity": combat_capacity.max_pickup_stacks,
+			},
+			"projectiles": {
+				"active": projectile_active,
+				"inactive": projectile_pool.size(),
+				"available_slots": projectile_world.available_count() if projectile_world != null else maxi(0, combat_capacity.max_projectile_states - projectile_active),
+				"capacity": combat_capacity.max_projectile_states,
+			},
+			"feedback": {
+				"active": visual_bursts.size() + damage_numbers.size(),
+				"inactive": visual_burst_pool.size() + damage_number_pool.size(),
+				"capacity": combat_capacity.max_feedback_visuals,
+			},
+		},
+		"render": {
+			"objects_in_frame": int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)),
+			"draw_calls_in_frame": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+			"primitives_in_frame": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
+			"projectile_visuals": projectile_renderer.active_count() if projectile_renderer != null else projectiles.size(),
+			"crowd_enemy_visuals": crowd_renderer.active_enemy_visual_count() if crowd_renderer != null else enemies.size(),
+			"crowd_pickup_visuals": crowd_renderer.active_pickup_visual_count() if crowd_renderer != null else pickups.size(),
+			"crowd_visuals": crowd_renderer.active_visual_count() if crowd_renderer != null else enemies.size() + pickups.size(),
+			"feedback_visuals": feedback_renderer.active_count() if feedback_renderer != null else visual_bursts.size(),
+			"process_ms": Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+			"physics_ms": Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+		},
+	}
+
+func _read_web_test_options() -> Dictionary:
+	if not OS.has_feature("web"):
+		return {}
+	var encoded: Variant = JavaScriptBridge.eval(
+		"JSON.stringify((function(){const q=new URLSearchParams(location.search);return {stress:q.get('stress')==='1',auto_start:q.get('auto_start')==='1',warmup:q.get('stress_warmup'),duration:q.get('stress_duration')};})())",
+		true
+	)
+	var parsed: Variant = JSON.parse_string(str(encoded))
+	return parsed if parsed is Dictionary else {}
+
+func _stress_number_option(arguments: PackedStringArray, prefix: String, web_key: String, fallback: float) -> float:
+	for argument in arguments:
+		if argument.begins_with(prefix):
+			return clampf(float(argument.trim_prefix(prefix)), 0.0, 3600.0)
+	var web_value: Variant = _web_test_options.get(web_key)
+	if web_value != null and not str(web_value).is_empty():
+		return clampf(float(web_value), 0.0, 3600.0)
+	return fallback
+
+func _resolved_run_context(requested: RunContext) -> RunContext:
+	if selected_level == null or selected_level.is_tutorial:
+		return null
+	if requested != null and requested.level_id == selected_level.id:
+		return requested.duplicate_context()
+	if quick_run:
+		return RunContext.create(selected_level.id, config.random_seed, PreparedLoadout.default_loadout(), {})
+	var seed := meta.get_or_create_case_seed(selected_level.id)
+	var case_rng := RandomNumberGenerator.new()
+	case_rng.seed = seed
+	return meta.create_run_context(
+		selected_level.id,
+		_deterministic_case_choice(selected_level.visible_trait_ids, case_rng),
+		_deterministic_case_choice(selected_level.hidden_finding_ids, case_rng)
+	)
+
+func _apply_case_trait_to_config(trait_id: StringName) -> void:
+	var case_trait_definition: CaseTraitDefinition = case_traits.get(trait_id)
+	if case_trait_definition == null:
+		return
+	for modifier in case_trait_definition.modifiers:
+		var stat_id := StringName(str(modifier.get("stat_id", "")))
+		var operation := StringName(str(modifier.get("operation", "add")))
+		var value := float(modifier.get("value", 0.0))
+		match stat_id:
+			&"spawn_interval":
+				config.initial_spawn_interval = _apply_scalar_modifier(config.initial_spawn_interval, operation, value)
+				config.final_spawn_interval = _apply_scalar_modifier(config.final_spawn_interval, operation, value)
+			&"enemy_health":
+				config.enemy_health_start = _apply_scalar_modifier(config.enemy_health_start, operation, value)
+				config.enemy_health_end = _apply_scalar_modifier(config.enemy_health_end, operation, value)
+			&"enemy_speed":
+				config.enemy_speed_multiplier = _apply_scalar_modifier(config.enemy_speed_multiplier, operation, value)
+			&"contact_damage":
+				config.contact_damage_multiplier = _apply_scalar_modifier(config.contact_damage_multiplier, operation, value)
+			&"initial_stability":
+				config.initial_stability = maxf(1.0, _apply_scalar_modifier(config.initial_stability, operation, value))
+
+func _apply_scalar_modifier(current: float, operation: StringName, value: float) -> float:
+	match operation:
+		&"multiply":
+			return current * value
+		&"override":
+			return value
+	return current + value
+
+func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
+	build_state = RunBuildState.from_treatment(treatment)
+	if treatment == null or selected_level.is_tutorial:
+		treatment_controller.enabled = false
+		ability_controller.clear()
+		return
+	build_state.set_base(RunBuildState.TREATMENT_DAMAGE, stats.therapy_damage)
+	build_state.set_base(RunBuildState.TREATMENT_INTERVAL, stats.therapy_cooldown)
+	build_state.set_base(RunBuildState.TREATMENT_RANGE, stats.therapy_range)
+	build_state.set_base(RunBuildState.TREATMENT_TARGETS, stats.therapy_targets)
+	build_state.set_base(RunBuildState.PICKUP_RANGE, stats.pickup_range)
+	build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, stats.ability_cooldown_multiplier)
+	build_state.set_base(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier)
+	build_state.set_base(RunBuildState.SUPPORT_EFFECT, stats.support_effect_multiplier)
+	if stats.has_method("bind_run_build"):
+		var equipped_abilities: Array[AbilityDefinition] = []
+		for id in active_loadout.ability_ids:
+			var ability: AbilityDefinition = ability_definitions.get(id)
+			if ability != null:
+				equipped_abilities.append(ability)
+		stats.call("bind_run_build", build_state, treatment, equipped_abilities)
+	treatment_controller.configure(treatment, build_state, topology, avatar, _treatment_candidates, ability_controller)
+	treatment_controller.enabled = true
+	ability_controller.configure(build_state, topology, avatar, func() -> Array: return enemies, func() -> Array: return pickups, state)
+	ability_controller.configure_queries(combat_query, pickup_query)
+	var ability_views: Array = []
+	for slot in range(mini(active_loadout.ability_ids.size(), 2)):
+		var ability: AbilityDefinition = ability_definitions.get(active_loadout.ability_ids[slot])
+		if ability != null and ability_controller.equip(slot, ability):
+			ability_views.append(ability)
+	hud.configure_active_abilities(ability_views)
+	var finding: FindingDefinition = finding_definitions.get(active_run_context.hidden_finding_id) if active_run_context != null else null
+	if finding != null:
+		var threshold_multiplier := TalentDefinition.magnitude_for(&"rapid_evaluation", 0.8) if active_run_context.has_talent(&"rapid_evaluation") else 1.0
+		finding_controller.configure(finding, maxi(1, roundi(float(selected_level.finding_progress_target) * threshold_multiplier)))
+	else:
+		hud.hide_finding_progress()
 
 func _spawn_step(delta: float) -> void:
-	if selected_level.is_tutorial:
+	_drain_deferred_spawns(8)
+	if selected_level.is_tutorial or stress_test:
 		return
 	if state.boss_spawned or enemies.size() >= 220:
 		return
@@ -452,6 +1435,10 @@ func _spawn_step(delta: float) -> void:
 		return
 	var progress := clampf(state.elapsed / config.run_duration_seconds, 0.0, 1.0)
 	var interval := lerpf(config.initial_spawn_interval, config.final_spawn_interval, pow(progress, 0.82))
+	var finding := _active_finding()
+	if finding != null and finding.behavior == FindingDefinition.Behavior.ACCELERATION and progress >= 0.5:
+		var late_factor := inverse_lerp(0.5, 1.0, progress)
+		interval *= lerpf(1.0, 1.0 - finding.magnitude, late_factor)
 	spawn_accumulator += interval
 	var batch := 1
 	if progress > 0.58 and rng.randf() < 0.22:
@@ -459,9 +1446,33 @@ func _spawn_step(delta: float) -> void:
 	for index in range(batch):
 		var type: StringName = &"pneumococcus"
 		var cluster_chance := lerpf(config.cluster_chance_start, config.cluster_chance_end, progress)
+		if finding != null and finding.behavior == FindingDefinition.Behavior.GROUPING:
+			cluster_chance = clampf(cluster_chance + finding.magnitude, 0.0, 0.85)
 		if discovery_manager.has_seen(&"pneumococcus") and rng.randf() < cluster_chance:
 			type = &"bacterial_cluster"
 		_spawn_enemy(type, _spawn_position_around_avatar(rng.randf_range(500.0, 620.0)))
+
+func _drain_deferred_spawns(maximum_per_tick: int) -> void:
+	var emitted := 0
+	while deferred_spawn_cursor < deferred_spawn_requests.size() and emitted < maximum_per_tick:
+		var request := deferred_spawn_requests[deferred_spawn_cursor]
+		if request == null or not request.is_valid() or not enemy_definitions.has(request.definition_id):
+			deferred_spawn_cursor += 1
+			continue
+		var critical := request.is_critical()
+		if not combat_capacity.can_allocate_enemy(enemy_world.regular_count, enemy_world.critical_count, critical):
+			break
+		var spawned := _spawn_enemy(request.definition_id, request.position, request.health_scale, critical, false)
+		if spawned == null:
+			break
+		deferred_spawn_cursor += 1
+		emitted += 1
+	if deferred_spawn_cursor >= deferred_spawn_requests.size():
+		deferred_spawn_requests.clear()
+		deferred_spawn_cursor = 0
+	elif deferred_spawn_cursor >= 512:
+		deferred_spawn_requests = deferred_spawn_requests.slice(deferred_spawn_cursor)
+		deferred_spawn_cursor = 0
 
 func _therapy_step(delta: float) -> void:
 	if selected_level.is_tutorial and intro_phase == &"await_immune_defeat":
@@ -471,7 +1482,12 @@ func _therapy_step(delta: float) -> void:
 		return
 	therapy_timer += stats.therapy_cooldown
 	var targets := _nearest_targets(stats.therapy_range, stats.therapy_targets)
+	if not targets.is_empty():
+		avatar.show_treatment_impulse()
 	for enemy in targets:
+		if projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+			enemy.take_damage(stats.therapy_damage, &"therapy")
+			continue
 		var projectile: TherapyProjectile
 		if not projectile_pool.is_empty():
 			projectile = projectile_pool.pop_back()
@@ -482,10 +1498,108 @@ func _therapy_step(delta: float) -> void:
 			projectile.discovery_ready.connect(_on_projectile_discovery_ready)
 			simulation_root.add_child(projectile)
 		projectile.global_position = avatar.global_position
-		projectile.configure(enemy, stats.therapy_damage, topology, not discovery_manager.has_seen(&"automatic_therapy"))
+		projectile.configure(
+			enemy,
+			stats.therapy_damage,
+			topology,
+			not discovery_manager.has_seen(&"automatic_therapy"),
+			&"therapy",
+			enemy_world.handle_for(enemy),
+			enemy_world.resolve,
+			360.0 if selected_level.is_tutorial and intro_phase == &"await_first_shot" else TherapyProjectile.DEFAULT_SPEED
+		)
 		projectile.global_position = avatar.global_position
 		projectile.reset_physics_interpolation()
+		projectile.set_physics_process(false)
+		var projectile_handle := projectile_world.register_projectile(projectile)
+		if not EntityHandle.is_valid(projectile_handle):
+			_store_projectile(projectile)
+			enemy.take_damage(stats.therapy_damage, &"therapy")
+			continue
+		if projectile_renderer == null or not projectile_renderer.register_projectile(projectile, projectile_handle, projectile.discovery_pending):
+			projectile_world.release(projectile_handle, false)
+			_store_projectile(projectile)
+			enemy.take_damage(stats.therapy_damage, &"therapy")
+			continue
 		projectiles.append(projectile)
+
+func _on_treatment_shots_requested(shots: Array[TreatmentShot]) -> void:
+	if flow_state != GameFlowState.State.RUNNING or state == null or not state.active:
+		return
+	if not shots.is_empty():
+		avatar.show_treatment_impulse()
+	for shot in shots:
+		if shot == null:
+			continue
+		if shot.mode == TreatmentShot.Mode.TRACKING and is_instance_valid(shot.target):
+			if projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+				shot.target.take_damage(_resolved_treatment_damage(shot.damage, shot.target), shot.source_id)
+				continue
+			var projectile: TherapyProjectile
+			if not projectile_pool.is_empty():
+				projectile = projectile_pool.pop_back()
+			else:
+				projectile = TherapyProjectile.new()
+				projectile.z_index = 6
+				projectile.finished.connect(_on_projectile_finished)
+				projectile.discovery_ready.connect(_on_projectile_discovery_ready)
+				simulation_root.add_child(projectile)
+			projectile.global_position = shot.origin
+			projectile.configure(
+				shot.target,
+				_resolved_treatment_damage(shot.damage, shot.target),
+				topology,
+				false,
+				shot.source_id,
+				enemy_world.handle_for(shot.target),
+				enemy_world.resolve
+			)
+			projectile.global_position = shot.origin
+			projectile.reset_physics_interpolation()
+			projectile.set_physics_process(false)
+			var projectile_handle := projectile_world.register_projectile(projectile)
+			if not EntityHandle.is_valid(projectile_handle):
+				_store_projectile(projectile)
+				shot.target.take_damage(_resolved_treatment_damage(shot.damage, shot.target), shot.source_id)
+				continue
+			if projectile_renderer == null or not projectile_renderer.register_projectile(projectile, projectile_handle, projectile.discovery_pending):
+				projectile_world.release(projectile_handle, false)
+				_store_projectile(projectile)
+				shot.target.take_damage(_resolved_treatment_damage(shot.damage, shot.target), shot.source_id)
+				continue
+			projectiles.append(projectile)
+		elif shot.mode == TreatmentShot.Mode.LINE:
+			# Hitscan treatments use the same generation-safe spatial index as
+			# active abilities. This avoids sorting/scanning the entire crowd for
+			# every spread bolt while preserving front-to-back piercing order.
+			_ensure_combat_query()
+			for handle in combat_query.line(shot.origin, shot.direction, shot.range_value, shot.hit_radius, shot.max_hits):
+				var enemy := enemy_world.resolve(handle) as InfectionEnemy
+				if is_instance_valid(enemy) and enemy.is_targetable():
+					enemy.take_damage(_resolved_treatment_damage(shot.damage, enemy), shot.source_id)
+
+func _on_treatment_feedback_requested(_treatment_id: StringName, shots: Array[TreatmentShot]) -> void:
+	if ability_feedback_world == null:
+		return
+	# Tracking shots already own a moving ProjectileRenderer visual. Hitscan
+	# treatments need a short tracer because their damage resolves immediately.
+	for shot in shots:
+		if shot != null and shot.mode == TreatmentShot.Mode.LINE:
+			ability_feedback_world.spawn_treatment_shot(shot)
+
+func _on_treatment_fired(_treatment_id: StringName) -> void:
+	if not selected_level.is_tutorial and discovery_manager.request(&"automatic_therapy", avatar):
+		_try_present_next_discovery()
+
+func _resolved_treatment_damage(base_damage: float, enemy: InfectionEnemy) -> float:
+	if enemy == null or enemy.definition == null or build_state == null:
+		return base_damage
+	var result := base_damage
+	if enemy.definition.id == &"bacterial_cluster":
+		result *= build_state.value(&"group_area_effect", 1.0)
+	if enemy.definition.id == &"minor_focus":
+		result *= build_state.value(&"nest_damage", 1.0)
+	return result
 
 func _on_projectile_discovery_ready(projectile: TherapyProjectile) -> void:
 	if discovery_manager.request(&"automatic_therapy", projectile):
@@ -500,9 +1614,10 @@ func _immune_step(delta: float) -> void:
 	immune_timer += maxf(0.42, 0.82 - stats.immune_level * 0.06)
 	var radius := avatar.neutrophil_radius()
 	var damage := stats.immune_damage + float(stats.immune_level - 1) * 3.0
-	for enemy in enemies:
-		var immune_radius := radius + enemy.definition.radius if is_instance_valid(enemy) else 0.0
-		if is_instance_valid(enemy) and enemy.is_targetable() and topology.distance_squared(avatar.global_position, enemy.global_position) <= immune_radius * immune_radius:
+	_ensure_combat_query()
+	for handle in combat_query.circle(avatar.global_position, radius):
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy
+		if is_instance_valid(enemy):
 			enemy.take_damage(damage, &"immune")
 
 func _support_step(delta: float) -> void:
@@ -512,26 +1627,47 @@ func _support_step(delta: float) -> void:
 	if support_timer > 0.0:
 		return
 	support_timer += maxf(3.8, 6.2 - float(stats.support_level) * 0.55)
-	var recovery := 2.0 + float(stats.support_level) * 2.0
+	var support_multiplier := stats.support_effect_multiplier
+	if build_state != null and not selected_level.is_tutorial:
+		support_multiplier = build_state.value(RunBuildState.SUPPORT_EFFECT, stats.support_effect_multiplier)
+	var recovery := (2.0 + float(stats.support_level) * 2.0) * support_multiplier
+	var overflow := maxf(0.0, state.stability + recovery - state.max_stability)
 	state.change_stability(recovery)
+	if overflow > 0.0 and stats.overheal_shield_cap > 0.0 and ability_controller != null:
+		ability_controller.grant_shield_capped(overflow, stats.overheal_shield_cap)
 	if selected_level.is_tutorial and intro_phase == &"await_support_tick":
 		intro_phase = &"boss_pending"
 		meta.set_tutorial_step(&"supportive_therapy")
 		discovery_manager.mark_seen(&"patient_stability")
 		state.trigger_event_boss()
 
-func _intro_step() -> void:
+func _intro_step(delta: float) -> void:
 	if not selected_level.is_tutorial or state == null or not state.active:
 		return
 	if intro_phase == &"await_movement" and topology.distance(intro_start_position, avatar.global_position) >= 32.0:
 		meta.set_tutorial_step(&"movement")
-		intro_phase = &"await_enemy"
-		intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(390.0), 0.55)
+		intro_phase = &"enemy_approach"
+		intro_transition_timer = 0.85
+		hud.show_alert("Beobachte den ersten Erreger.", AlveolusVisualTheme.GOLD, 1.4)
+	elif intro_phase == &"enemy_approach":
+		intro_transition_timer = maxf(0.0, intro_transition_timer - delta)
+		if intro_transition_timer <= 0.0:
+			intro_phase = &"await_enemy"
+			intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0), 0.55)
+			if is_instance_valid(intro_primary_enemy):
+				intro_primary_enemy.set_status_modifier(&"intro_guidance", 0.58, 1.0)
 
-func _spawn_enemy(type: StringName, spawn_position: Vector2, health_scale_override: float = -1.0) -> InfectionEnemy:
+func _spawn_enemy(
+	type: StringName,
+	spawn_position: Vector2,
+	health_scale_override: float = -1.0,
+	critical_spawn: bool = false,
+	defer_if_full: bool = true
+) -> InfectionEnemy:
 	if not enemy_definitions.has(type):
 		return null
 	var definition: EnemyDefinition = enemy_definitions[type]
+	var critical := critical_spawn or definition.is_boss
 	var progress := 0.0 if state == null or config.event_driven_intro else clampf(state.elapsed / maxf(config.run_duration_seconds, 0.001), 0.0, 1.0)
 	var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, progress)
 	var phases := PackedInt32Array()
@@ -540,8 +1676,22 @@ func _spawn_enemy(type: StringName, spawn_position: Vector2, health_scale_overri
 		phases = config.boss_phase_minions
 	if health_scale_override > 0.0:
 		health_scale = health_scale_override
+	if not combat_capacity.can_allocate_enemy(enemy_world.regular_count, enemy_world.critical_count, critical):
+		if defer_if_full and deferred_spawn_requests.size() - deferred_spawn_cursor < 2048:
+			deferred_spawn_requests.append(EnemySpawnRequest.create(
+				type,
+				spawn_position,
+				definition.visual_id,
+				health_scale,
+				config.enemy_speed_multiplier,
+				config.contact_damage_multiplier,
+				phases,
+				EnemySpawnRequest.Priority.CRITICAL if critical else EnemySpawnRequest.Priority.REGULAR
+			))
+		return null
 	var resolved_spawn_position := spawn_position
-	if discovery_manager != null and not discovery_manager.has_seen(definition.discovery_id) and not discovery_spawn_reservations.has(definition.discovery_id):
+	var force_detailed_discovery := discovery_manager != null and not discovery_manager.has_seen(definition.discovery_id) and not discovery_spawn_reservations.has(definition.discovery_id)
+	if force_detailed_discovery:
 		resolved_spawn_position = _visible_discovery_spawn_position(definition.radius)
 		discovery_spawn_reservations[definition.discovery_id] = true
 	var wrapped_position := topology.wrap_position(resolved_spawn_position)
@@ -552,7 +1702,7 @@ func _spawn_enemy(type: StringName, spawn_position: Vector2, health_scale_overri
 		enemy = InfectionEnemy.new()
 		enemy.z_index = 2
 		enemy.defeated.connect(_on_enemy_defeated)
-		enemy.pressure_applied.connect(_on_pressure_applied)
+		enemy.pressure_applied.connect(_on_pressure_applied.bind(enemy))
 		enemy.minions_requested.connect(_on_minions_requested)
 		enemy.damage_feedback.connect(_on_enemy_damage_feedback)
 		enemy.health_changed.connect(_on_enemy_health_changed.bind(enemy))
@@ -562,9 +1712,19 @@ func _spawn_enemy(type: StringName, spawn_position: Vector2, health_scale_overri
 		simulation_root.add_child(enemy)
 	enemy.global_position = wrapped_position
 	enemy.configure(definition, avatar, topology, health_scale, config.enemy_speed_multiplier, config.contact_damage_multiplier, phases)
+	_apply_group_control_to_enemy(enemy)
 	enemy.global_position = wrapped_position
 	enemy.reset_physics_interpolation()
+	enemy.set_physics_process(false)
+	var world_handle := enemy_world.register_enemy(enemy, critical)
+	if not EntityHandle.is_valid(world_handle):
+		enemy.recycle()
+		if enemy_pool.size() < MAX_ENEMY_POOL:
+			enemy_pool.append(enemy)
+		return null
+	_combat_query_dirty = true
 	enemies.append(enemy)
+	crowd_renderer.register_enemy(enemy, force_detailed_discovery)
 	return enemy
 
 func _spawn_boss() -> void:
@@ -572,18 +1732,25 @@ func _spawn_boss() -> void:
 		return
 	active_boss = _spawn_enemy(&"infection_focus", _spawn_position_around_avatar(600.0))
 	if active_boss != null:
+		mastery_tracker.record_boss_spawned(state.elapsed)
 		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
 	if selected_level.is_tutorial:
 		intro_phase = &"boss_active"
 		intro_lesson = 3
 
 func _on_minions_requested(origin: Vector2, count: int) -> void:
+	if _fixed_step_active:
+		run_session.event_queue.push(&"minions_requested", EntityHandle.INVALID, EntityHandle.INVALID, float(count), origin)
+		return
+	_apply_minions_requested(origin, count)
+
+func _apply_minions_requested(origin: Vector2, count: int) -> void:
 	if state == null or not state.active:
 		return
 	for index in range(count):
 		var angle := TAU * float(index) / float(maxi(count, 1)) + rng.randf_range(-0.22, 0.22)
 		var position := topology.wrap_position(origin + Vector2.from_angle(angle) * rng.randf_range(88.0, 130.0))
-		_spawn_enemy(&"pneumococcus", position)
+		_spawn_enemy(&"pneumococcus", position, -1.0, true)
 
 func _on_boss_phase_changed(phase: int) -> void:
 	hud.show_boss_phase(phase)
@@ -623,6 +1790,7 @@ func _try_present_next_discovery() -> void:
 	if flow_state != GameFlowState.State.DISCOVERY_PAUSE:
 		discovery_return_state = flow_state
 	_set_flow(GameFlowState.State.DISCOVERY_PAUSE)
+	ui_router.open_modal(&"discovery", null, get_viewport().gui_get_focus_owner())
 	var definition := discovery_manager.definition(item["id"])
 	var override := ""
 	var context: Dictionary = item.get("context", {})
@@ -641,6 +1809,7 @@ func _on_discovery_dismissed() -> void:
 	if not discovery_manager.queue.is_empty():
 		_try_present_next_discovery()
 		return
+	ui_router.close_modal(get_viewport().gui_get_focus_owner())
 	_set_flow(discovery_return_state)
 	if discovery_return_state == GameFlowState.State.RESULT:
 		return
@@ -652,23 +1821,10 @@ func _on_enemy_health_changed(current: float, maximum: float, enemy: InfectionEn
 	if enemy == active_boss:
 		hud.update_boss_health(current, maximum)
 
-func _on_enemy_damage_feedback(position: Vector2, amount: float) -> void:
-	while damage_numbers.size() >= 40:
-		var oldest: DamageNumber = damage_numbers.pop_front()
-		if is_instance_valid(oldest):
-			_store_damage_number(oldest)
-	var number: DamageNumber
-	if not damage_number_pool.is_empty():
-		number = damage_number_pool.pop_back()
-	else:
-		number = DamageNumber.new()
-		number.z_index = 7
-		number.finished.connect(_on_damage_number_finished)
-		simulation_root.add_child(number)
-	number.position = position + Vector2(rng.randf_range(-8.0, 8.0), -18.0)
-	number.configure(amount)
-	number.global_position = position + Vector2(rng.randf_range(-8.0, 8.0), -18.0)
-	damage_numbers.append(number)
+func _on_enemy_damage_feedback(_position: Vector2, _amount: float) -> void:
+	# Intentionally quiet: damage numbers, hit particles and scale impulses made
+	# dense fights visually noisy. The signal remains as a stable extension hook.
+	pass
 
 func _on_damage_number_finished(number: DamageNumber) -> void:
 	damage_numbers.erase(number)
@@ -683,23 +1839,56 @@ func _store_damage_number(number: DamageNumber) -> void:
 		number.queue_free()
 
 func _on_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bool) -> void:
+	var handle := enemy_world.handle_for(enemy) if enemy_world != null and is_instance_valid(enemy) else EntityHandle.INVALID
+	if crowd_renderer != null and is_instance_valid(enemy):
+		crowd_renderer.release_enemy(enemy, enemy.activation_generation)
+	if enemy_world != null and is_instance_valid(enemy):
+		if EntityHandle.is_valid(handle):
+			enemy_world.release(handle, _fixed_step_active)
+			_combat_query_dirty = true
+	if _fixed_step_active:
+		run_session.event_queue.push(&"enemy_defeated", handle, EntityHandle.INVALID, float(analysis_value), enemy.global_position, {
+			"enemy": enemy,
+			"was_boss": was_boss,
+		})
+		return
+	_apply_enemy_defeated(enemy, analysis_value, was_boss)
+
+func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bool) -> void:
+	if not is_instance_valid(enemy) or not enemies.has(enemy):
+		return
 	enemies.erase(enemy)
 	defeats += 1
+	if enemy.definition != null and enemy.definition.id == &"minor_focus":
+		hidden_nest_timers.erase(enemy)
+		if build_state != null:
+			var extra_samples := maxi(0, roundi(build_state.value(&"nest_samples", 0.0)))
+			analysis_value += extra_samples
+			if extra_samples > 0:
+				for slot in range(2):
+					var runtime := ability_controller.runtime(slot)
+					if runtime != null:
+						runtime.reduce(1.0)
 	var guided_intro_pickup := selected_level.is_tutorial and intro_phase == &"await_first_analysis" and enemy.definition.id == &"pneumococcus"
-	var pickup_position := topology.wrap_position(avatar.global_position + Vector2(92.0, -48.0)) if guided_intro_pickup else enemy.global_position
+	var pickup_position := topology.wrap_position(avatar.global_position + Vector2(150.0, -76.0)) if guided_intro_pickup else enemy.global_position
 	_spawn_analysis_pickup(analysis_value, pickup_position, guided_intro_pickup)
 	if selected_level.is_tutorial and intro_phase == &"await_immune_defeat" and enemy.last_damage_source == &"immune":
 		intro_lesson = 3
 		intro_phase = &"support_setup"
 		state.change_stability(-minf(16.0, maxf(0.0, state.stability - 1.0)))
-		hud.show_patient_hit()
+		avatar.show_damage_flash()
 		_present_intro_upgrade(&"oxygenation", 3, null)
 	if was_boss:
 		active_boss = null
+		mastery_tracker.record_boss_defeated(state.elapsed if state != null else 0.0)
 		state.mark_boss_defeated()
 	_store_enemy(enemy)
 
 func _store_enemy(enemy: InfectionEnemy) -> void:
+	if crowd_renderer != null:
+		crowd_renderer.release_enemy(enemy, enemy.activation_generation)
+	if not _release_registry_entity_for_pool(enemy_world, enemy, &"enemy"):
+		return
 	enemy.recycle()
 	if enemy_pool.size() < MAX_ENEMY_POOL:
 		if not enemy_pool.has(enemy):
@@ -725,15 +1914,52 @@ func _spawn_analysis_pickup(value: int, spawn_position: Vector2, guided: bool = 
 		simulation_root.add_child(pickup)
 		pickup.collected.connect(_on_pickup_collected.bind(pickup))
 	pickup.global_position = spawn_position
-	pickup.configure(avatar, value, topology, rng.randf_range(0.0, TAU), guided)
+	pickup.configure(
+		avatar,
+		value,
+		topology,
+		rng.randf_range(0.0, TAU),
+		guided,
+		280.0 if guided and selected_level != null and selected_level.is_tutorial else AnalysisPickup.DEFAULT_GUIDED_SPEED
+	)
+	pickup.decorative_trail_enabled = guided or cosmetic_budget_controller == null or cosmetic_budget_controller.pickup_trails_enabled()
 	pickup.global_position = spawn_position
 	pickup.reset_physics_interpolation()
+	pickup.set_physics_process(false)
+	var pickup_handle := pickup_world.register_pickup(pickup)
+	if not EntityHandle.is_valid(pickup_handle):
+		pickup.recycle()
+		if pickup_pool.size() < MAX_PICKUP_POOL:
+			pickup_pool.append(pickup)
+		for existing in pickups:
+			if is_instance_valid(existing) and EntityHandle.is_valid(pickup_world.handle_for(existing)):
+				existing.absorb(value)
+				return existing
+		return null
+	_pickup_query_dirty = true
 	pickups.append(pickup)
+	var force_detailed := guided or (discovery_manager != null and not discovery_manager.has_seen(&"analysis_pickup"))
+	crowd_renderer.register_pickup(pickup, force_detailed)
 	if discovery_manager.request(&"analysis_pickup", pickup):
 		_try_present_next_discovery()
 	return pickup
 
 func _on_pickup_collected(value: int, pickup: AnalysisPickup) -> void:
+	var handle := pickup_world.handle_for(pickup) if pickup_world != null and is_instance_valid(pickup) else EntityHandle.INVALID
+	if crowd_renderer != null and is_instance_valid(pickup):
+		crowd_renderer.release_pickup(pickup)
+	if pickup_world != null and is_instance_valid(pickup):
+		if EntityHandle.is_valid(handle):
+			pickup_world.release(handle, _fixed_step_active)
+			_pickup_query_dirty = true
+	if _fixed_step_active:
+		run_session.event_queue.push(&"pickup_collected", handle, EntityHandle.INVALID, float(value), pickup.global_position, pickup)
+		return
+	_apply_pickup_collected(value, pickup)
+
+func _apply_pickup_collected(value: int, pickup: AnalysisPickup) -> void:
+	if not is_instance_valid(pickup) or not pickups.has(pickup):
+		return
 	pickups.erase(pickup)
 	_store_pickup(pickup)
 	if selected_level.is_tutorial:
@@ -746,12 +1972,75 @@ func _on_pickup_collected(value: int, pickup: AnalysisPickup) -> void:
 			_present_intro_upgrade(&"potency", 1, upgrade_target)
 	elif state != null:
 		state.add_analysis(value)
+		if finding_controller != null and finding_controller.definition != null and not finding_controller.revealed:
+			finding_controller.add_progress(value, build_state.value(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier) if build_state != null else stats.finding_progress_multiplier)
 
 func _on_projectile_finished(projectile: TherapyProjectile) -> void:
+	var handle := projectile_world.handle_for(projectile) if projectile_world != null and is_instance_valid(projectile) else EntityHandle.INVALID
+	if projectile_renderer != null and EntityHandle.is_valid(handle):
+		projectile_renderer.release_projectile(projectile, handle)
+	if projectile_world != null and is_instance_valid(projectile):
+		if EntityHandle.is_valid(handle):
+			projectile_world.release(handle, _fixed_step_active)
+	if _fixed_step_active:
+		run_session.event_queue.push(&"projectile_finished", handle, EntityHandle.INVALID, 0.0, projectile.global_position, projectile)
+		return
+	_apply_projectile_finished(projectile)
+
+func _apply_projectile_finished(projectile: TherapyProjectile) -> void:
+	if not is_instance_valid(projectile) or not projectiles.has(projectile):
+		return
 	projectiles.erase(projectile)
 	_store_projectile(projectile)
 
+func _flush_combat_events() -> void:
+	# Signals may be emitted while attacks iterate the active registries. Apply
+	# structural mutations only after the fixed simulation step is complete.
+	if run_session != null:
+		run_session.event_queue.flush_to(_apply_combat_event)
+
+func _apply_combat_event(event: CombatEventQueue.CombatEvent) -> void:
+	match event.type:
+		&"enemy_defeated":
+			var payload: Dictionary = event.payload if event.payload is Dictionary else {}
+			_apply_enemy_defeated(payload.get("enemy") as InfectionEnemy, roundi(event.amount), bool(payload.get("was_boss", false)))
+		&"pickup_collected":
+			_apply_pickup_collected(roundi(event.amount), event.payload as AnalysisPickup)
+		&"projectile_finished":
+			_apply_projectile_finished(event.payload as TherapyProjectile)
+		&"minions_requested":
+			_apply_minions_requested(event.position, roundi(event.amount))
+
+func _finalize_fixed_step() -> void:
+	_fixed_step_active = false
+	var phase_started := Time.get_ticks_usec() if performance_profile_enabled else 0
+	# Damage can retire an enemy after EnemyWorld has already completed its
+	# phase. Flush physical leases before combat events recycle Nodes into pools.
+	# A second flush covers releases produced by an event callback while still
+	# keeping every structural mutation outside registry iteration.
+	_flush_deferred_world_releases()
+	_flush_combat_events()
+	_flush_deferred_world_releases()
+	_profile_phase(&"event_queue_flush", phase_started)
+	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
+	if crowd_renderer != null:
+		crowd_renderer.publish_snapshot()
+	_profile_phase(&"crowd_snapshot", phase_started)
+	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
+	if projectile_renderer != null:
+		projectile_renderer.publish_snapshot()
+	_profile_phase(&"projectile_snapshot", phase_started)
+	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
+	if ability_feedback_world != null:
+		ability_feedback_world.publish_snapshot()
+	_profile_phase(&"ability_feedback_snapshot", phase_started)
+
 func _store_projectile(projectile: TherapyProjectile) -> void:
+	var allocated_handle := projectile_world.allocated_handle_for(projectile) if projectile_world != null else EntityHandle.INVALID
+	if projectile_renderer != null and EntityHandle.is_valid(allocated_handle):
+		projectile_renderer.release_projectile(projectile, allocated_handle)
+	if not _release_registry_entity_for_pool(projectile_world, projectile, &"projectile"):
+		return
 	projectile.recycle()
 	if projectile_pool.size() < MAX_PROJECTILE_POOL:
 		if not projectile_pool.has(projectile):
@@ -760,6 +2049,10 @@ func _store_projectile(projectile: TherapyProjectile) -> void:
 		projectile.queue_free()
 
 func _store_pickup(pickup: AnalysisPickup) -> void:
+	if crowd_renderer != null:
+		crowd_renderer.release_pickup(pickup)
+	if not _release_registry_entity_for_pool(pickup_world, pickup, &"pickup"):
+		return
 	pickup.recycle()
 	if pickup_pool.size() < MAX_PICKUP_POOL:
 		if not pickup_pool.has(pickup):
@@ -767,18 +2060,405 @@ func _store_pickup(pickup: AnalysisPickup) -> void:
 	else:
 		pickup.queue_free()
 
-func _on_pressure_applied(amount: float) -> void:
+func _flush_deferred_world_releases() -> void:
+	if enemy_world != null:
+		enemy_world.flush_deferred()
+	if projectile_world != null:
+		projectile_world.flush_deferred()
+	if pickup_world != null:
+		pickup_world.flush_deferred()
+
+## Pool ownership begins only after the registry's physical lease is gone.
+## handle_for() is intentionally insufficient here because it hides retiring
+## entities immediately; allocated_handle_for() observes the complete lease.
+func _release_registry_entity_for_pool(world: NodeEntityRegistry, entity: Node, kind: StringName) -> bool:
+	if world == null or not is_instance_valid(entity):
+		return true
+	if _fixed_step_active:
+		push_error("Cannot pool %s while a fixed-step registry is iterating" % kind)
+		return false
+	var handle := world.allocated_handle_for(entity)
+	if not EntityHandle.is_valid(handle):
+		return true
+	if world.is_active(handle):
+		world.release(handle, true)
+	world.flush_deferred()
+	if EntityHandle.is_valid(world.allocated_handle_for(entity)):
+		push_error("Cannot pool %s before its registry lease is physically released" % kind)
+		return false
+	return true
+
+func _spawn_visual_burst(position: Vector2, kind: StringName, color: Color, count: int, duration: float, radius: float) -> void:
+	var visual_limit := MAX_VISUAL_BURSTS
+	if cosmetic_budget_controller != null:
+		visual_limit = cosmetic_budget_controller.visual_limit(CosmeticBudgetController.EffectPriority.COMBAT, MAX_VISUAL_BURSTS)
+		count = cosmetic_budget_controller.particle_count(count, CosmeticBudgetController.EffectPriority.COMBAT)
+	if visual_bursts.size() >= visual_limit:
+		return
+	var burst: VisualBurst
+	if not visual_burst_pool.is_empty():
+		burst = visual_burst_pool.pop_back()
+	else:
+		burst = VisualBurst.new()
+	burst.global_position = position
+	burst.configure(kind, color, count, duration, radius)
+	if feedback_renderer == null or not feedback_renderer.register_burst(burst):
+		burst.recycle()
+		if visual_burst_pool.size() < MAX_VISUAL_BURSTS:
+			visual_burst_pool.append(burst)
+		return
+	visual_bursts.append(burst)
+
+func _on_cosmetic_quality_changed(_previous: CosmeticBudgetController.Quality, _current: CosmeticBudgetController.Quality) -> void:
+	if ability_feedback_world != null:
+		ability_feedback_world.set_quality_tier(_current)
+	var trails_enabled := cosmetic_budget_controller.pickup_trails_enabled()
+	for pickup in pickups:
+		if is_instance_valid(pickup):
+			pickup.decorative_trail_enabled = pickup.guided_to_target or trails_enabled
+			pickup.queue_redraw()
+
+func _on_visual_burst_finished(burst: VisualBurst) -> void:
+	visual_bursts.erase(burst)
+	_store_visual_burst(burst)
+
+func _store_visual_burst(burst: VisualBurst) -> void:
+	if feedback_renderer != null:
+		feedback_renderer.release_burst(burst, burst.activation_generation)
+	burst.recycle()
+	if visual_burst_pool.size() < MAX_VISUAL_BURSTS:
+		if not visual_burst_pool.has(burst):
+			visual_burst_pool.append(burst)
+
+func _on_pressure_applied(amount: float, source_enemy: InfectionEnemy = null) -> void:
 	if state == null or not state.active or state.level_up_pending or pressure_grace_timer > 0.0:
+		return
+	if build_state != null and source_enemy != null and source_enemy.definition != null and source_enemy.definition.id == &"bacterial_cluster":
+		amount *= build_state.value(&"group_contact", 1.0)
+	if pressure_surge_remaining > 0.0:
+		var finding := _active_finding()
+		if finding != null and finding.behavior == FindingDefinition.Behavior.PRESSURE_SURGES:
+			amount *= 1.0 + finding.magnitude
+		if build_state != null:
+			amount *= build_state.value(&"surge_contact", 1.0)
+	if ability_controller != null:
+		amount = ability_controller.absorb_pressure(amount)
+	if amount <= 0.0:
 		return
 	if selected_level.is_tutorial and not state.boss_spawned:
 		amount = minf(amount, maxf(0.0, state.stability - 1.0))
 	state.change_stability(-amount)
 	pressure_grace_timer = 0.68
-	hud.show_patient_hit()
+	avatar.show_damage_flash()
 
 func _on_stability_changed(current: float, maximum: float) -> void:
 	stability_changed.emit(current, maximum)
 	hud.update_stability(current, maximum)
+	mastery_tracker.record_stability(current, maximum)
+	var emergency_threshold := TalentDefinition.magnitude_for(&"emergency_window", 0.25)
+	if active_run_context != null and active_run_context.has_talent(&"emergency_window") and not emergency_talent_used and current <= maximum * emergency_threshold:
+		emergency_talent_used = true
+		ability_controller.reset_all_cooldowns()
+		hud.show_alert("NOTFALLFENSTER · FÄHIGKEITEN BEREIT", Color("ef7766"), 2.4)
+
+func _on_ability_used(slot: int, _ability_id: StringName, _target: Vector2) -> void:
+	mastery_tracker.record_ability_used(slot)
+	if active_run_context != null and active_run_context.has_talent(&"linked_deployment"):
+		ability_controller.reduce_other_cooldown(slot, TalentDefinition.magnitude_for(&"linked_deployment", 2.0))
+	if active_run_context != null and active_run_context.has_talent(&"alternating_rhythm") and last_ability_slot >= 0 and last_ability_slot != slot and state.elapsed - last_ability_time <= TalentDefinition.ALTERNATING_RHYTHM_WINDOW_SECONDS:
+		var runtime := ability_controller.runtime(slot)
+		if runtime != null:
+			runtime.scale_remaining(TalentDefinition.magnitude_for(&"alternating_rhythm", 0.75))
+	last_ability_slot = slot
+	last_ability_time = state.elapsed if state != null else 0.0
+
+func _on_ability_failed(_slot: int, reason: String) -> void:
+	hud.show_alert(reason, Color("eab553"), 1.5)
+
+func _on_ability_cooldown_changed(slot: int, remaining: float, total: float) -> void:
+	var title := ""
+	if ability_controller != null:
+		var runtime := ability_controller.runtime(slot)
+		if runtime != null and runtime.definition != null:
+			title = runtime.definition.display_name
+	var ready := remaining <= 0.0
+	var was_ready := bool(ability_ready_states.get(slot, true))
+	ability_ready_states[slot] = ready
+	if ready and not was_ready and ui_sound_service != null:
+		ui_sound_service.play(UISoundService.ABILITY_READY)
+	hud.update_active_ability(slot, title, remaining, total, ready)
+
+func _on_ability_feedback_requested(result: AbilityExecutionResult) -> void:
+	if ability_feedback_world != null:
+		ability_feedback_world.spawn_from_result(result)
+
+func _on_ability_shield_changed(current: float, maximum: float) -> void:
+	hud.update_shield(current, maximum)
+	if ability_feedback_world != null:
+		ability_feedback_world.update_shield(current, maximum)
+
+func _on_ability_finding_progress(amount: float) -> void:
+	if finding_controller != null and finding_controller.definition != null:
+		finding_controller.add_progress(maxi(1, roundi(amount)))
+
+func _on_finding_progress_changed(current: int, target: int) -> void:
+	hud.update_finding_progress(current, target, current >= target)
+
+func _on_finding_revealed(definition: FindingDefinition) -> void:
+	if definition == null or state == null:
+		return
+	mastery_tracker.record_finding_revealed(state.elapsed)
+	if active_run_context != null and active_run_context.has_talent(&"finding_readiness"):
+		for slot in ability_controller.slots:
+			var runtime := ability_controller.runtime(int(slot))
+			if runtime != null:
+				runtime.scale_remaining(TalentDefinition.magnitude_for(&"finding_readiness", 0.5))
+	if definition.behavior == FindingDefinition.Behavior.HIDDEN_NESTS:
+		_spawn_hidden_nests(maxi(1, roundi(definition.magnitude)))
+	if flow_state == GameFlowState.State.LEVEL_UP:
+		pending_finding_definition = definition
+		return
+	_present_finding(definition)
+
+func _present_finding(definition: FindingDefinition) -> void:
+	if definition == null or finding_controller.resolved:
+		return
+	pending_finding_definition = null
+	_set_flow(GameFlowState.State.FINDING_PAUSE)
+	ui_router.open_modal(&"finding", null, get_viewport().gui_get_focus_owner())
+	var reactions := _reactions_for_finding(definition)
+	var reserve: Variant = loadout_modules.get(active_loadout.reserve_id) if active_loadout != null and active_loadout.reserve_id != &"" else null
+	var swappable: Array = []
+	if active_loadout != null:
+		for id in active_loadout.passive_ids:
+			if loadout_modules.has(id):
+				swappable.append(loadout_modules[id])
+	hud.show_finding(definition, reactions, reserve, swappable)
+
+func _reactions_for_finding(definition: FindingDefinition) -> Array:
+	var result: Array = []
+	for id in definition.reaction_ids:
+		if reaction_definitions.has(id):
+			result.append(reaction_definitions[id])
+	if active_run_context != null and active_run_context.has_talent(&"broader_perspective"):
+		var adaptive_id := StringName("%s_adaptive" % String(definition.id))
+		if not reaction_definitions.has(adaptive_id):
+			reaction_definitions[adaptive_id] = ReactionDefinition.create(
+				adaptive_id,
+				definition.id,
+				"Flexible Anpassung",
+				"+6 % Behandlungstempo und 6 % kürzere aktive Abklingzeiten.",
+				[
+					{"stat_id": &"therapy_cooldown", "operation": &"multiply", "value": 0.94},
+					{"stat_id": &"ability_cooldown", "operation": &"multiply", "value": 0.94},
+				]
+			)
+		result.append(reaction_definitions[adaptive_id])
+	return result
+
+func _on_finding_confirmed(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName) -> void:
+	if flow_state != GameFlowState.State.FINDING_PAUSE or not reaction_definitions.has(reaction_id):
+		return
+	var reaction: ReactionDefinition = reaction_definitions[reaction_id]
+	if finding_controller.definition == null or reaction.finding_id != finding_controller.definition.id:
+		return
+	if incoming_id != &"" or outgoing_id != &"":
+		if active_loadout == null or incoming_id != active_loadout.reserve_id:
+			return
+		var validation := LoadoutValidator.validate_reserve_swap(
+			active_loadout,
+			outgoing_id,
+			loadout_modules,
+			meta.unlocked_module_ids(loadout_modules, research_definitions),
+			meta.preparation_capacity()
+		)
+		if not validation.valid:
+			hud.set_finding_swap_validation(false, validation.first_error())
+			return
+		_apply_reserve_swap(outgoing_id)
+	if not finding_controller.resolve(reaction):
+		return
+	hud.hide_finding()
+	hud.hide_finding_progress()
+	hud.show_running_hud()
+	if active_boss != null and is_instance_valid(active_boss):
+		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
+		hud.update_boss_health(active_boss.health, active_boss.max_health)
+	ui_router.close_modal(get_viewport().gui_get_focus_owner())
+	_set_flow(GameFlowState.State.RUNNING)
+
+func _on_finding_reserve_swap_requested(incoming_id: StringName, outgoing_id: StringName) -> void:
+	if flow_state != GameFlowState.State.FINDING_PAUSE:
+		return
+	if incoming_id == &"" and outgoing_id == &"":
+		hud.set_finding_swap_validation(true, "Kein Reservewechsel gewählt.")
+		return
+	if active_loadout == null or incoming_id != active_loadout.reserve_id:
+		hud.set_finding_swap_validation(false, "Reserveauswahl ist nicht mehr gültig.")
+		return
+	var validation := LoadoutValidator.validate_reserve_swap(
+		active_loadout,
+		outgoing_id,
+		loadout_modules,
+		meta.unlocked_module_ids(loadout_modules, research_definitions),
+		meta.preparation_capacity()
+	)
+	hud.set_finding_swap_validation(validation.valid, "Reservewechsel ist gültig." if validation.valid else validation.first_error())
+
+func _apply_reserve_swap(outgoing_id: StringName) -> void:
+	var incoming_id := active_loadout.reserve_id
+	var before_bonus := stats.max_stability_bonus
+	stats.apply_prepared_passive(outgoing_id, meta.research_ranks, false)
+	stats.apply_prepared_passive(incoming_id, meta.research_ranks, true)
+	active_loadout = LoadoutValidator.apply_reserve_swap(active_loadout, outgoing_id)
+	state.adjust_max_stability(stats.max_stability_bonus - before_bonus)
+	reroll_available = active_loadout.passive_ids.has(&"second_opinion")
+	_sync_passive_swap_to_build(incoming_id, outgoing_id)
+	mastery_tracker.record_reserve_swap()
+	hud.update_run_stats(stats, state)
+
+func _on_finding_reaction_applied(definition: ReactionDefinition) -> void:
+	if definition == null or build_state == null:
+		return
+	active_reaction = definition
+	build_state.remove_source(definition.id)
+	for index in range(definition.modifiers.size()):
+		var modifier_data: Dictionary = definition.modifiers[index]
+		# One-shot shield reactions are applied below. Registering them in the
+		# shared build as well would silently strengthen every later shield skill.
+		if StringName(str(modifier_data.get("stat_id", ""))) == RunBuildState.ABILITY_SHIELD:
+			continue
+		build_state.add_modifier(ModifierDefinition.from_dict(
+			modifier_data,
+			StringName("%s_%d" % [String(definition.id), index]),
+			definition.id
+		))
+	if definition.id == &"surge_buffer":
+		ability_controller.grant_shield(12.0)
+	if definition.id == &"group_control":
+		for enemy in enemies:
+			_apply_group_control_to_enemy(enemy)
+	if active_run_context != null and active_run_context.has_talent(&"immediate_measure"):
+		_apply_immediate_reaction_boost(definition)
+	stats.call("_sync_fields_from_build")
+	hud.update_run_stats(stats, state)
+
+func _apply_group_control_to_enemy(enemy: InfectionEnemy) -> void:
+	if enemy == null or enemy.definition == null or enemy.definition.id != &"bacterial_cluster" or build_state == null:
+		return
+	var strength := build_state.value(&"group_control", 1.0)
+	if strength > 1.001:
+		enemy.set_status_modifier(&"finding_group_control", 1.0 / strength, 1.0)
+	else:
+		enemy.clear_status_modifier(&"finding_group_control")
+
+func _apply_immediate_reaction_boost(definition: ReactionDefinition) -> void:
+	reaction_boost_source = StringName("immediate_%s" % String(definition.id))
+	build_state.remove_source(reaction_boost_source)
+	var bonus_fraction := TalentDefinition.IMMEDIATE_MEASURE_BONUS_FRACTION
+	for index in range(definition.modifiers.size()):
+		var data: Dictionary = definition.modifiers[index].duplicate(true)
+		var stat_id := StringName(str(data.get("stat_id", "")))
+		var value := float(data.get("value", 0.0))
+		var operation := StringName(str(data.get("operation", "add")))
+		if stat_id == RunBuildState.ABILITY_SHIELD:
+			# The normal one-shot grant already happened. Add its exact 50 % bonus
+			# immediately instead of turning it into a hidden future ability buff.
+			var bonus_shield := maxf(0.0, value * bonus_fraction)
+			ability_controller.grant_shield_capped(bonus_shield, value + bonus_shield)
+			continue
+		if operation == &"multiply":
+			# Modifiers multiply with each other. Compute the quotient needed to
+			# make the combined delta exactly 150 %, rather than multiplying a
+			# second approximate delta (1.30 * 1.15 would incorrectly be 1.495).
+			var boosted_total := 1.0 + (value - 1.0) * (1.0 + bonus_fraction)
+			data["value"] = boosted_total / value if not is_zero_approx(value) else boosted_total
+		elif operation == &"add":
+			data["value"] = value * bonus_fraction
+		else:
+			continue
+		build_state.add_modifier(ModifierDefinition.from_dict(
+			data,
+			StringName("%s_%d" % [String(reaction_boost_source), index]),
+			reaction_boost_source
+		))
+	reaction_boost_timer = TalentDefinition.magnitude_for(&"immediate_measure", TalentDefinition.IMMEDIATE_MEASURE_DURATION_SECONDS)
+	if definition.id == &"group_control":
+		for enemy in enemies:
+			_apply_group_control_to_enemy(enemy)
+
+func _sync_passive_swap_to_build(incoming_id: StringName, outgoing_id: StringName) -> void:
+	if build_state == null:
+		return
+	_adjust_passive_build_base(outgoing_id, false)
+	_adjust_passive_build_base(incoming_id, true)
+	build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, stats.ability_cooldown_multiplier)
+	build_state.set_base(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier)
+	build_state.set_base(RunBuildState.SUPPORT_EFFECT, stats.support_effect_multiplier)
+	stats.call("_sync_fields_from_build")
+
+func _adjust_passive_build_base(id: StringName, enabled: bool) -> void:
+	var direction_factor := 1.0
+	match id:
+		&"therapy_precision":
+			direction_factor = 1.0 + float(meta.rank(id)) * 0.02
+			build_state.set_base(RunBuildState.TREATMENT_DAMAGE, build_state.base_value(RunBuildState.TREATMENT_DAMAGE) * direction_factor if enabled else build_state.base_value(RunBuildState.TREATMENT_DAMAGE) / maxf(direction_factor, 0.001))
+		&"sample_logistics":
+			direction_factor = 1.0 + float(meta.rank(id)) * 0.05
+			build_state.set_base(RunBuildState.PICKUP_RANGE, build_state.base_value(RunBuildState.PICKUP_RANGE) * direction_factor if enabled else build_state.base_value(RunBuildState.PICKUP_RANGE) / maxf(direction_factor, 0.001))
+		&"quick_test":
+			build_state.set_base(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier)
+		&"deployment_routine":
+			build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, stats.ability_cooldown_multiplier)
+
+func _sync_legacy_upgrade_to_build(definition: UpgradeDefinition) -> void:
+	if build_state == null or definition == null or not definition.modifiers.is_empty():
+		return
+	if definition.effect == &"pickup_range":
+		build_state.set_base(RunBuildState.PICKUP_RANGE, stats.pickup_range)
+
+func _active_finding() -> FindingDefinition:
+	if active_run_context == null:
+		return null
+	return finding_definitions.get(active_run_context.hidden_finding_id)
+
+func _case_mechanics_step(delta: float) -> void:
+	var finding := _active_finding()
+	if finding != null and finding.behavior == FindingDefinition.Behavior.PRESSURE_SURGES:
+		if pressure_surge_remaining > 0.0:
+			pressure_surge_remaining = maxf(0.0, pressure_surge_remaining - delta)
+		else:
+			pressure_surge_timer -= delta
+			if pressure_surge_timer <= 0.0:
+				pressure_surge_timer += 25.0
+				pressure_surge_remaining = 4.0
+				hud.show_alert("BELASTUNGSSCHUB · 4 SEKUNDEN", Color("ef7766"), 2.2)
+	if reaction_boost_timer > 0.0:
+		reaction_boost_timer = maxf(0.0, reaction_boost_timer - delta)
+		if reaction_boost_timer <= 0.0 and build_state != null:
+			build_state.remove_source(reaction_boost_source)
+			stats.call("_sync_fields_from_build")
+			hud.update_run_stats(stats, state)
+			for enemy in enemies:
+				_apply_group_control_to_enemy(enemy)
+	for nest in hidden_nest_timers.keys():
+		if not is_instance_valid(nest) or nest.is_queued_for_deletion():
+			hidden_nest_timers.erase(nest)
+			continue
+		var remaining := float(hidden_nest_timers[nest]) - delta
+		if remaining > 0.0:
+			hidden_nest_timers[nest] = remaining
+			continue
+		for index in range(4):
+			var angle := TAU * float(index) / 4.0 + rng.randf_range(-0.18, 0.18)
+			_spawn_enemy(&"pneumococcus", topology.wrap_position(nest.global_position + Vector2.from_angle(angle) * 84.0))
+		hidden_nest_timers.erase(nest)
+
+func _spawn_hidden_nests(count: int) -> void:
+	for index in range(count):
+		var nest := _spawn_enemy(&"minor_focus", _spawn_position_around_avatar(390.0 + float(index) * 85.0), 1.0)
+		if nest != null:
+			hidden_nest_timers[nest] = 20.0
 
 func _on_analysis_changed(current: int, target: int, level: int) -> void:
 	analysis_changed.emit(current, target, level)
@@ -789,7 +2469,8 @@ func _on_level_up_requested(level: int) -> void:
 		state.resolve_level_up()
 		return
 	level_up_requested.emit(level)
-	current_upgrade_options = ContentCatalog.choose_upgrades(stats.upgrade_levels, rng, 3, level == 1)
+	var guided_interval := maxi(1, roundi(TalentDefinition.magnitude_for(&"guided_choice", 3.0)))
+	current_upgrade_options = _choose_tactical_upgrades([], level == 1 or (active_run_context != null and active_run_context.has_talent(&"guided_choice") and level % guided_interval == 0))
 	if current_upgrade_options.is_empty():
 		state.resolve_level_up()
 		return
@@ -798,9 +2479,11 @@ func _on_level_up_requested(level: int) -> void:
 		stats.apply_upgrade(definition)
 		if definition.effect == &"max_stability":
 			state.increase_max_stability(definition.magnitude)
+		_sync_legacy_upgrade_to_build(definition)
 		state.resolve_level_up()
 		return
 	_set_flow(GameFlowState.State.LEVEL_UP)
+	ui_router.open_modal(&"level_up", null, get_viewport().gui_get_focus_owner())
 	hud.show_upgrade_choices(current_upgrade_options, stats, reroll_available and not reroll_used, false)
 
 func _present_intro_upgrade(id: StringName, lesson: int, target_enemy: InfectionEnemy) -> void:
@@ -825,7 +2508,8 @@ func _present_intro_upgrade(id: StringName, lesson: int, target_enemy: Infection
 		target = avatar
 	hud.set_intro_upgrade_target(target)
 	_set_flow(GameFlowState.State.LEVEL_UP)
-	hud.show_upgrade_choices(current_upgrade_options, stats, false, false)
+	ui_router.open_modal(&"level_up", null, get_viewport().gui_get_focus_owner())
+	hud.show_upgrade_choices(current_upgrade_options, stats, false, false, true)
 
 func _on_reroll_requested() -> void:
 	if flow_state != GameFlowState.State.LEVEL_UP or not reroll_available or reroll_used:
@@ -834,8 +2518,27 @@ func _on_reroll_requested() -> void:
 	var excluded: Array[StringName] = []
 	for definition in current_upgrade_options:
 		excluded.append(definition.id)
-	current_upgrade_options = ContentCatalog.choose_upgrades(stats.upgrade_levels, rng, 3, state.level == 1, excluded)
+	var held: UpgradeDefinition = null
+	if active_run_context != null and active_run_context.has_talent(&"hold_card") and not current_upgrade_options.is_empty():
+		held = current_upgrade_options[0]
+	current_upgrade_options = _choose_tactical_upgrades(excluded, false, 2 if held != null else 3)
+	if held != null:
+		current_upgrade_options.push_front(held)
 	hud.show_upgrade_choices(current_upgrade_options, stats, false, false)
+
+func _choose_tactical_upgrades(excluded: Array[StringName], guarantee_treatment: bool, count: int = 3) -> Array[UpgradeDefinition]:
+	if active_loadout == null:
+		return ContentCatalog.choose_upgrades(stats.upgrade_levels, rng, count, guarantee_treatment, excluded)
+	var component_ids := active_loadout.active_component_ids()
+	var tags: Array[StringName] = []
+	for id in component_ids:
+		if not loadout_modules.has(id):
+			continue
+		var module: LoadoutModuleDefinition = loadout_modules[id]
+		for tag in module.tags:
+			if not tags.has(tag):
+				tags.append(tag)
+	return UpgradePoolBuilder.choose(ContentCatalog.upgrade_definitions(), stats.upgrade_levels, rng, component_ids, tags, count, excluded, guarantee_treatment)
 
 func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	if flow_state != GameFlowState.State.LEVEL_UP or state == null or not state.active:
@@ -844,12 +2547,15 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 		return
 	if definition.effect == &"max_stability":
 		state.increase_max_stability(definition.magnitude)
+	_sync_legacy_upgrade_to_build(definition)
 	avatar.queue_redraw()
+	hud.update_run_stats(stats, state)
 	hud.show_running_hud()
 	if active_boss != null and is_instance_valid(active_boss):
 		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
 		hud.update_boss_health(active_boss.health, active_boss.max_health)
 	var scripted_intro := selected_level.is_tutorial and intro_upgrade_id == definition.id
+	ui_router.close_modal(get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.RUNNING)
 	state.resolve_level_up()
 	if scripted_intro:
@@ -869,6 +2575,9 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 				discovery_manager.mark_seen(&"supportive_oxygenation")
 		_save_meta()
 		return
+	if pending_finding_definition != null:
+		_present_finding(pending_finding_definition)
+		return
 	if definition.effect == &"immune_level":
 		discovery_manager.request(&"neutrophil_orbit", avatar)
 	elif definition.effect == &"support_level":
@@ -876,6 +2585,8 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	_try_present_next_discovery()
 
 func _on_run_finished(success: bool, reason: String) -> void:
+	if run_session != null:
+		run_session.finish(success, reason)
 	run_finished.emit(success, reason)
 	if completion_smoke:
 		print("COMPLETION_SMOKE success=%s elapsed=%.2f defeats=%d reason=%s" % [str(success), state.elapsed, defeats, reason])
@@ -886,9 +2597,23 @@ func _on_run_finished(success: bool, reason: String) -> void:
 	var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
 	var reward := meta.award_run(success, state.elapsed, state.level, defeats, multiplier)
 	var unlocked_new := meta.register_level_result(selected_level, success, state.elapsed, state.level, defeats)
+	var new_mastery_ids := meta.apply_mastery_candidates(mastery_tracker.completed_candidates(success))
 	_save_meta()
 	_set_flow(GameFlowState.State.RESULT)
+	ui_router.replace_screen(&"result", null, get_viewport().gui_get_focus_owner())
 	hud.show_end(selected_level, success, reason, state.elapsed, state.level, defeats, reward, unlocked_new)
+	if ui_sound_service != null:
+		ui_sound_service.play(UISoundService.REWARD)
+	if not new_mastery_ids.is_empty():
+		var mastery_cards: Array = []
+		var mastery_catalog := MasteryObjectiveDefinition.catalog()
+		var earned_points := 0
+		for id in new_mastery_ids:
+			if mastery_catalog.has(id):
+				var objective: MasteryObjectiveDefinition = mastery_catalog[id]
+				mastery_cards.append(objective)
+				earned_points += objective.reward_points
+		hud.show_end_mastery(mastery_cards, earned_points, meta.talent_points_earned())
 	if discovery_manager.request(&"research_reward", null):
 		_try_present_next_discovery()
 
@@ -896,30 +2621,23 @@ func _resume_manual_pause() -> void:
 	if flow_state != GameFlowState.State.MANUAL_PAUSE or state == null or not state.active:
 		return
 	hud.hide_pause()
+	ui_router.close_modal(get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.RUNNING)
-
-func _on_pause_levels_requested() -> void:
-	if flow_state != GameFlowState.State.MANUAL_PAUSE:
-		return
-	if state != null:
-		state.cancel()
-	_cleanup_run_nodes()
-	avatar.input_enabled = false
-	avatar.hide()
-	_show_level_select()
 
 func _on_abort_requested() -> void:
 	if flow_state != GameFlowState.State.MANUAL_PAUSE:
 		return
+	ui_router.open_modal(&"abort", null, get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.ABORT_CONFIRMATION)
 	hud.show_abort_confirmation()
 
 func _on_abort_cancelled() -> void:
 	if flow_state != GameFlowState.State.ABORT_CONFIRMATION:
 		return
+	ui_router.close_modal(get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.MANUAL_PAUSE)
 	hud.show_running_hud()
-	hud.show_pause(selected_level != null and selected_level.is_tutorial)
+	hud.show_pause(_can_skip_intro(), stats, state)
 
 func _on_abort_confirmed() -> void:
 	if flow_state != GameFlowState.State.ABORT_CONFIRMATION:
@@ -932,23 +2650,25 @@ func _on_abort_confirmed() -> void:
 	_show_level_select()
 
 func _on_intro_skip_requested() -> void:
-	if selected_level == null or not selected_level.is_tutorial or flow_state not in [GameFlowState.State.BRIEFING, GameFlowState.State.MANUAL_PAUSE]:
+	if not _can_skip_intro() or flow_state not in [GameFlowState.State.PREPARATION, GameFlowState.State.MANUAL_PAUSE]:
 		return
 	intro_skip_return_state = flow_state
+	ui_router.open_modal(&"intro_skip", null, get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.INTRO_SKIP_CONFIRMATION)
 	hud.show_intro_skip_confirmation()
 
 func _on_intro_skip_cancelled() -> void:
 	if flow_state != GameFlowState.State.INTRO_SKIP_CONFIRMATION:
 		return
+	ui_router.close_modal(get_viewport().gui_get_focus_owner())
 	hud.hide_intro_skip_confirmation()
 	if intro_skip_return_state == GameFlowState.State.MANUAL_PAUSE:
 		_set_flow(GameFlowState.State.MANUAL_PAUSE)
 		hud.show_running_hud()
-		hud.show_pause(true)
+		hud.show_pause(_can_skip_intro(), stats, state)
 	else:
-		_set_flow(GameFlowState.State.BRIEFING)
-		hud.show_briefing(selected_level)
+		_set_flow(GameFlowState.State.PREPARATION)
+		_refresh_preparation()
 
 func _on_intro_skip_confirmed() -> void:
 	if flow_state != GameFlowState.State.INTRO_SKIP_CONFIRMATION or selected_level == null or not selected_level.is_tutorial:
@@ -987,26 +2707,121 @@ func _on_research_purchase_requested(id: StringName) -> void:
 			break
 	hud.refresh_research(meta, research_definitions)
 
+func _on_research_tab_changed(tab: StringName) -> void:
+	if flow_state == GameFlowState.State.RESEARCH and tab == &"talents":
+		hud.refresh_talents(_talent_view_model())
+
+func _on_talent_toggle_requested(id: StringName) -> void:
+	if flow_state != GameFlowState.State.RESEARCH:
+		return
+	if meta.set_talent_active(id, not meta.has_talent(id)):
+		_save_meta()
+	hud.refresh_talents(_talent_view_model())
+
+func _on_talent_reset_requested() -> void:
+	if flow_state != GameFlowState.State.RESEARCH:
+		return
+	meta.clear_talents()
+	_save_meta()
+	hud.refresh_talents(_talent_view_model())
+
+func _talent_view_model() -> Dictionary:
+	var cards: Array = []
+	var definitions := TalentDefinition.definitions()
+	var titles: Dictionary = {}
+	for definition in definitions:
+		titles[definition.id] = definition.title
+	for definition in definitions:
+		var prerequisites_met := true
+		var requirement_titles := PackedStringArray()
+		var active_dependents := PackedStringArray()
+		for required_id in definition.required_ids:
+			requirement_titles.append(String(titles.get(StringName(required_id), String(required_id))))
+			if not meta.has_talent(StringName(required_id)):
+				prerequisites_met = false
+				break
+		for candidate in definitions:
+			if meta.has_talent(candidate.id) and candidate.required_ids.has(String(definition.id)):
+				active_dependents.append(candidate.title)
+		cards.append({
+			"id": definition.id,
+			"title": definition.title,
+			"description": definition.description,
+			"cost": definition.cost,
+			"category": definition.category,
+			"active": meta.has_talent(definition.id),
+			"prerequisite_met": prerequisites_met,
+			"required_ids": definition.required_ids.duplicate(),
+			"active_dependents": active_dependents,
+			"requirement_text": " + ".join(requirement_titles) if not requirement_titles.is_empty() else "Einstieg des Astes",
+			"tree_tier": definition.tree_tier,
+			"tree_lane": definition.tree_lane,
+		})
+	return {
+		"total_points": meta.talent_points_earned(),
+		"spent_points": meta.talent_points_spent(),
+		"unlimited": meta.is_unlimited_test_progression(),
+		"tree_refunded": meta.talent_tree_refund_pending,
+		"talents": cards,
+	}
+
 func _nearest_targets(max_range: float, count: int) -> Array[InfectionEnemy]:
 	var nearest: Array[InfectionEnemy] = []
-	var distances: Array[float] = []
-	var maximum_squared := max_range * max_range
-	for enemy in enemies:
-		if is_instance_valid(enemy) and not enemy.is_queued_for_deletion() and enemy.is_targetable():
-			var distance_squared := topology.distance_squared(avatar.global_position, enemy.global_position)
-			if distance_squared > maximum_squared:
-				continue
-			var insertion_index := 0
-			while insertion_index < distances.size() and distances[insertion_index] <= distance_squared:
-				insertion_index += 1
-			if insertion_index >= count:
-				continue
-			nearest.insert(insertion_index, enemy)
-			distances.insert(insertion_index, distance_squared)
-			if nearest.size() > count:
-				nearest.resize(count)
-				distances.resize(count)
+	_ensure_combat_query()
+	for handle in combat_query.nearest(avatar.global_position, max_range, count):
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy
+		if is_instance_valid(enemy):
+			nearest.append(enemy)
 	return nearest
+
+func _treatment_candidates() -> Array:
+	if treatment_controller == null or treatment_controller.definition == null or build_state == null:
+		return enemies
+	_ensure_combat_query()
+	var definition := treatment_controller.definition
+	var maximum_range := build_state.value(RunBuildState.TREATMENT_RANGE, definition.base_range, definition.tags)
+	var result: Array = []
+	for handle in combat_query.circle(avatar.global_position, maximum_range):
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy
+		if is_instance_valid(enemy):
+			result.append(enemy)
+	return result
+
+func _ensure_combat_query() -> void:
+	if not _combat_query_dirty:
+		return
+	var started := Time.get_ticks_usec() if performance_profile_enabled else 0
+	_combat_query_handles = enemy_world.handles(_combat_query_handles)
+	combat_query.rebuild(_combat_query_handles)
+	_combat_query_dirty = false
+	if performance_profile_enabled:
+		last_phase_timings_ms[&"spatial_query_rebuild"] = float(Time.get_ticks_usec() - started) / 1000.0
+
+func _ensure_pickup_query() -> void:
+	if not _pickup_query_dirty or pickup_query == null:
+		return
+	_pickup_query_handles = pickup_world.handles(_pickup_query_handles)
+	pickup_query.rebuild(_pickup_query_handles)
+	_pickup_query_dirty = false
+
+func _enemy_position_for_handle(handle: int) -> Vector2:
+	var enemy := enemy_world.resolve(handle) as InfectionEnemy
+	return enemy.global_position if is_instance_valid(enemy) else Vector2.ZERO
+
+func _enemy_radius_for_handle(handle: int) -> float:
+	var enemy := enemy_world.resolve(handle) as InfectionEnemy
+	return enemy.definition.radius if is_instance_valid(enemy) and enemy.definition != null else 0.0
+
+func _enemy_targetable_for_handle(handle: int) -> bool:
+	var enemy := enemy_world.resolve(handle) as InfectionEnemy
+	return is_instance_valid(enemy) and enemy.is_targetable()
+
+func _pickup_position_for_handle(handle: int) -> Vector2:
+	var pickup := pickup_world.resolve(handle) as AnalysisPickup
+	return pickup.global_position if is_instance_valid(pickup) else Vector2.ZERO
+
+func _pickup_targetable_for_handle(handle: int) -> bool:
+	return is_instance_valid(pickup_world.resolve(handle))
 
 func _spawn_position_around_avatar(distance: float) -> Vector2:
 	var safe_distance := minf(distance, minf(config.arena_size.x, config.arena_size.y) * 0.5 - 70.0)
@@ -1025,12 +2840,37 @@ func _visible_discovery_spawn_position(radius: float) -> Vector2:
 	)
 
 func _cleanup_run_nodes() -> void:
+	if run_session != null:
+		if run_session.is_active():
+			run_session.cancel()
+		else:
+			run_session.reset()
+	_fixed_step_active = false
+	if run_session != null:
+		run_session.event_queue.clear()
+	deferred_spawn_requests.clear()
+	deferred_spawn_cursor = 0
 	if discovery_manager != null:
 		discovery_manager.clear_pending()
 	if hud != null:
 		hud.hide_discovery()
+		hud.hide_finding()
+		hud.hide_finding_progress()
+		hud.clear_active_abilities()
+		hud.update_shield(0.0, 0.0)
+	if treatment_controller != null:
+		treatment_controller.enabled = false
+	if ability_controller != null:
+		ability_controller.clear()
+	_cancel_ability_targeting()
+	if ability_feedback_world != null:
+		ability_feedback_world.clear()
 	if crowd_renderer != null:
 		crowd_renderer.clear()
+	if projectile_renderer != null:
+		projectile_renderer.clear()
+	if feedback_renderer != null:
+		feedback_renderer.clear()
 	for enemy in enemies:
 		if is_instance_valid(enemy):
 			_store_enemy(enemy)
@@ -1043,12 +2883,28 @@ func _cleanup_run_nodes() -> void:
 	for number in damage_numbers:
 		if is_instance_valid(number):
 			_store_damage_number(number)
+	for burst in visual_bursts:
+		if is_instance_valid(burst):
+			_store_visual_burst(burst)
 	enemies.clear()
 	projectiles.clear()
 	pickups.clear()
 	damage_numbers.clear()
+	visual_bursts.clear()
+	if enemy_world != null:
+		enemy_world.clear()
+	if projectile_world != null:
+		projectile_world.clear()
+	if pickup_world != null:
+		pickup_world.clear()
 	current_upgrade_options.clear()
 	active_boss = null
+	active_run_context = null
+	active_loadout = null
+	build_state = null
+	active_reaction = null
+	pending_finding_definition = null
+	hidden_nest_timers.clear()
 
 func _sanitize_meta() -> void:
 	if meta.active_job_id != &"" and not clinic_definitions.has(meta.active_job_id):
@@ -1073,7 +2929,7 @@ func _pause_smoke_step(delta: float) -> void:
 		pause_smoke_therapy_timer = therapy_timer
 		pause_smoke_phase = 1
 		_set_flow(GameFlowState.State.MANUAL_PAUSE)
-		hud.show_pause(selected_level != null and selected_level.is_tutorial)
+		hud.show_pause(_can_skip_intro(), stats, state)
 	elif pause_smoke_phase == 1:
 		pause_smoke_timer += delta
 		if pause_smoke_timer >= 0.6:
@@ -1094,6 +2950,24 @@ func _register_input_actions() -> void:
 	_add_keys(&"upgrade_2", [KEY_2])
 	_add_keys(&"upgrade_3", [KEY_3])
 	_add_keys(&"reroll_upgrades", [KEY_R])
+	_add_keys(&"active_ability_1", [KEY_Q])
+	_add_keys(&"active_ability_2", [KEY_E])
+	_add_keys(&"ui_accept", [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE])
+	_add_keys(&"ui_cancel", [KEY_ESCAPE])
+	_add_joy_button(&"move_left", JOY_BUTTON_DPAD_LEFT)
+	_add_joy_button(&"move_right", JOY_BUTTON_DPAD_RIGHT)
+	_add_joy_button(&"move_up", JOY_BUTTON_DPAD_UP)
+	_add_joy_button(&"move_down", JOY_BUTTON_DPAD_DOWN)
+	_add_joy_axis(&"move_left", JOY_AXIS_LEFT_X, -1.0)
+	_add_joy_axis(&"move_right", JOY_AXIS_LEFT_X, 1.0)
+	_add_joy_axis(&"move_up", JOY_AXIS_LEFT_Y, -1.0)
+	_add_joy_axis(&"move_down", JOY_AXIS_LEFT_Y, 1.0)
+	_add_joy_button(&"pause_game", JOY_BUTTON_START)
+	_add_joy_button(&"active_ability_1", JOY_BUTTON_LEFT_SHOULDER)
+	_add_joy_button(&"active_ability_2", JOY_BUTTON_RIGHT_SHOULDER)
+	_add_joy_button(&"reroll_upgrades", JOY_BUTTON_Y)
+	_add_joy_button(&"ui_accept", JOY_BUTTON_A)
+	_add_joy_button(&"ui_cancel", JOY_BUTTON_B)
 
 func _add_keys(action: StringName, keycodes: Array) -> void:
 	if not InputMap.has_action(action):
@@ -1103,3 +2977,20 @@ func _add_keys(action: StringName, keycodes: Array) -> void:
 		event.physical_keycode = int(keycode)
 		if not InputMap.action_has_event(action, event):
 			InputMap.action_add_event(action, event)
+
+func _add_joy_button(action: StringName, button_index: JoyButton) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	var event := InputEventJoypadButton.new()
+	event.button_index = button_index
+	if not InputMap.action_has_event(action, event):
+		InputMap.action_add_event(action, event)
+
+func _add_joy_axis(action: StringName, axis: JoyAxis, value: float) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action, 0.22)
+	var event := InputEventJoypadMotion.new()
+	event.axis = axis
+	event.axis_value = value
+	if not InputMap.action_has_event(action, event):
+		InputMap.action_add_event(action, event)
