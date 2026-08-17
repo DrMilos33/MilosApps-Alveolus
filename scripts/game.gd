@@ -2294,7 +2294,13 @@ func _reactions_for_finding(definition: FindingDefinition) -> Array:
 					{"stat_id": &"ability_cooldown", "operation": &"multiply", "value": 0.94},
 				]
 			)
-		result.append(reaction_definitions[adaptive_id])
+		# The finding decision remains a dense three-choice problem. The talent
+		# contributes its flexible option by replacing the final base reaction,
+		# rather than creating a fourth card that breaks the shared UI contract.
+		if result.is_empty():
+			result.append(reaction_definitions[adaptive_id])
+		else:
+			result[result.size() - 1] = reaction_definitions[adaptive_id]
 	return result
 
 func _on_finding_confirmed(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName) -> void:

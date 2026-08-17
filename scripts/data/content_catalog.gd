@@ -296,10 +296,10 @@ static func case_trait_definitions() -> Dictionary:
 static func finding_definitions() -> Dictionary:
 	var all_levels: Array[StringName] = [&"localized_focus", &"spreading_infection", &"severe_pneumonia"]
 	return {
-		&"grouping": FindingDefinition.create(&"grouping", "Gruppenbildung", "Die Bakterienlast sammelt sich vermehrt in lokalen Verbänden.", "Bakteriengruppen treten deutlich häufiger auf.", FindingDefinition.Behavior.GROUPING, 0.18, [&"group_area", &"group_control", &"group_safety"], all_levels),
-		&"acceleration": FindingDefinition.create(&"acceleration", "Beschleunigte Ausbreitung", "Die Belastung nimmt in der zweiten Hälfte schneller zu.", "Die Spawnkurve verschärft sich ab der Runmitte um weitere 15 %.", FindingDefinition.Behavior.ACCELERATION, 0.15, [&"accel_rhythm", &"accel_active", &"accel_priority"], all_levels),
-		&"pressure_surges": FindingDefinition.create(&"pressure_surges", "Belastungsschübe", "Kurze Belastungsspitzen beanspruchen den Zustand zusätzlich.", "Alle 25 Sekunden entsteht ein angekündigtes viersekündiges Gefahrenfenster.", FindingDefinition.Behavior.PRESSURE_SURGES, 0.30, [&"surge_buffer", &"surge_support", &"surge_guard"], all_levels),
-		&"hidden_nests": FindingDefinition.create(&"hidden_nests", "Verdeckte Nester", "Kleine zusätzliche Herde halten die lokale Belastung aufrecht.", "Nach dem Befund erscheinen zwei kleine Herde, die nach 20 Sekunden Gegner freisetzen.", FindingDefinition.Behavior.HIDDEN_NESTS, 2.0, [&"nest_damage", &"nest_range", &"nest_samples"], all_levels),
+		&"grouping": FindingDefinition.create(&"grouping", "Gruppenbildung", "Die Bakterienlast sammelt sich vermehrt in lokalen Verbänden.", "+18 % Bakteriengruppen", FindingDefinition.Behavior.GROUPING, 0.18, [&"group_area", &"group_control", &"group_safety"], all_levels),
+		&"acceleration": FindingDefinition.create(&"acceleration", "Beschleunigte Ausbreitung", "Die Belastung nimmt in der zweiten Hälfte schneller zu.", "+15 % Ausbreitung ab Runmitte", FindingDefinition.Behavior.ACCELERATION, 0.15, [&"accel_rhythm", &"accel_active", &"accel_priority"], all_levels),
+		&"pressure_surges": FindingDefinition.create(&"pressure_surges", "Belastungsschübe", "Kurze Belastungsspitzen beanspruchen den Zustand zusätzlich.", "Alle 25 s · 4 s Belastungsschub", FindingDefinition.Behavior.PRESSURE_SURGES, 0.30, [&"surge_buffer", &"surge_support", &"surge_guard"], all_levels),
+		&"hidden_nests": FindingDefinition.create(&"hidden_nests", "Verdeckte Nester", "Kleine zusätzliche Herde halten die lokale Belastung aufrecht.", "+2 kleine Herde", FindingDefinition.Behavior.HIDDEN_NESTS, 2.0, [&"nest_damage", &"nest_range", &"nest_samples"], all_levels),
 	}
 
 static func reaction_definitions() -> Dictionary:

@@ -61,7 +61,12 @@ func _run() -> void:
 	_check(hud.level_overlay.visible and campus_header_layer.z_index == 0, "Der Fallarchivheader bleibt frei vom abgedunkelten Campusheader")
 	for level in levels:
 		var level_button := hud.level_buttons[level.id] as Button
-		_check(level_button != null and level_button.find_child("CaseIllustration", true, false) == null, "Fallkarten verzichten auf dekorative Fall-Icons")
+		var placeholder: PanelContainer = null
+		var question: Label = null
+		if level_button != null:
+			placeholder = level_button.find_child("CasePlaceholder", true, false) as PanelContainer
+			question = level_button.find_child("QuestionMark", true, false) as Label
+		_check(level_button != null and level_button.find_child("CaseIllustration", true, false) == null and placeholder != null and question != null and question.text == "?", "Fallkarten ersetzen dekorative Icons durch einen klaren Fragezeichen-Platzhalter")
 		_check(level_button != null and level_button.find_child("Title", true, false) != null and level_button.find_child("Status", true, false) != null, "Fallkarten tragen ihren Zustand über klare Text- und Kartenrollen")
 	hud.show_story()
 	await process_frame
@@ -123,14 +128,14 @@ func _run() -> void:
 	hud.show_finding({
 		"title": "Lokaler Herd",
 		"medical_text": "Ein lokaler Entzündungsherd belastet das umliegende Gewebe.",
-		"gameplay_text": "Wähle eine Reaktion für den weiteren Verlauf.",
+		"gameplay_text": "+2 Bakteriengruppen",
 	}, finding_reactions)
 	await process_frame
 	await process_frame
 	_assert_compact_modal(hud.finding_panel, 432.0, "Befund")
-	_check(hud.finding_copy_grid.columns == 2, "Befund trennt medizinische Einordnung und Spielwirkung in zwei kompakte Flächen")
-	for copy_surface in hud.finding_copy_grid.get_children():
-		_check(copy_surface is PanelContainer and copy_surface.get_meta(&"alveolus_component", &"") == &"semantic_copy_section", "Befundtexte bleiben visuell nach Bedeutung abgegrenzt")
+	_check(hud.finding_copy_grid.columns == 1 and hud.finding_copy_grid.get_meta(&"alveolus_component", &"") == &"finding_effect_line", "Befund zeigt nur eine kompakte mechanische Effektzeile")
+	var finding_effect := hud.finding_copy_grid.get_child(0) as Label
+	_check(finding_effect != null and finding_effect.text == "+2 Bakteriengruppen" and hud.finding_copy_grid.find_children("*", "PanelContainer", true, false).is_empty(), "Befund verzichtet auf medizinische und spielerische Erklärungskacheln")
 	hud.show_end(levels[1], false, "Der Zustand ist auf null gefallen.", 95.0, 2, 8, 0, false)
 	await process_frame
 	await process_frame

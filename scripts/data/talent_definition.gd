@@ -52,7 +52,7 @@ static func definitions() -> Array[TalentDefinition]:
 		create(&"guided_choice", "Gezielte Auswahl", "Jeder dritte Levelaufstieg garantiert eine passende Planoption.", Category.PLANNING, 2, &"guaranteed_synergy", 3.0, PackedStringArray(["organization_2"])).place_in_tree(2, 2),
 		create(&"early_classification", "Frühe Einordnung", "Die Befundkategorie ist bereits in der Einsatzplanung sichtbar.", Category.DIAGNOSIS, 2, &"reveal_finding_category").place_in_tree(0, 1),
 		create(&"rapid_evaluation", "Schnellauswertung", "20 % weniger Befundfortschritt nötig.", Category.DIAGNOSIS, 1, &"finding_threshold_multiplier", 0.8, PackedStringArray(["early_classification"])).place_in_tree(1, 1),
-		create(&"broader_perspective", "Weitere Perspektive", "Vier statt drei Befundreaktionen.", Category.DIAGNOSIS, 2, &"finding_reaction_count", 1.0, PackedStringArray(["rapid_evaluation"])).place_in_tree(2, 0),
+		create(&"broader_perspective", "Weitere Perspektive", "Ersetzt eine Befundreaktion durch Flexible Anpassung.", Category.DIAGNOSIS, 2, &"finding_reaction_count", 1.0, PackedStringArray(["rapid_evaluation"])).place_in_tree(2, 0),
 		create(
 			&"immediate_measure",
 			"Sofortmaßnahme",

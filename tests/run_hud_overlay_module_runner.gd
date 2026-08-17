@@ -136,10 +136,12 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 		var track_background := bar.get_theme_stylebox("background") as StyleBoxFlat
 		var track_fill := bar.get_theme_stylebox("fill") as StyleBoxFlat
 		_check(bar.get_meta(&"alveolus_component", &"") == &"ability_cooldown_track", "Cooldown verwendet die explizite kompakte Track-Komponente")
-		_check(track_background != null and track_background.bg_color.a <= 0.19, "Cooldowntrack lässt den Spielhintergrund sichtbar")
-		_check(track_fill != null and track_fill.bg_color.a <= 0.23, "Auch eine bereite Fähigkeit wird nur als zurückhaltender Wash statt als massive Türkiskachel gefüllt")
+		_check(track_background != null and track_background.bg_color.a >= 0.50 and track_background.bg_color.a <= 0.60, "Cooldowntrack besitzt genug dunklen Kontrast über hellem Gewebe")
+		_check(track_background != null and track_background.border_color.a >= 0.75, "Cooldowntrack erhält eine klar lesbare semantische Kontur")
+		_check(track_fill != null and track_fill.bg_color.a >= 0.38 and track_fill.bg_color.a <= 0.45, "Cooldownfortschritt bleibt transparent, ist aber auch auf hellem Gewebe eindeutig sichtbar")
 	for icon in hud.ability_icons():
 		_check(icon.visible and icon.custom_minimum_size.x >= 22.0 and icon.modulate.a > 0.95, "Belegte Fähigkeit zeigt ihr Icon klar über dem Cooldowntrack")
+	_check(hud.ability_key_labels().all(func(label: Label) -> bool: return label.modulate == AlveolusVisualTheme.IVORY), "Shortcuts bleiben unabhängig vom Cooldownzustand kräftig lesbar")
 	_check(hud.ability_key_labels().all(func(label: Label) -> bool: return label.visible), "Shortcuts liegen sichtbar direkt auf dem Cooldowntrack")
 	_check(hud.ability_cooldown_labels().all(func(label: Label) -> bool: return label.visible), "Timer beziehungsweise Bereitstatus liegen sichtbar direkt auf dem Cooldowntrack")
 	_check(hud.ability_cooldown_labels()[0].text == "Ziel wählen", "Targeting wird im ersten Slot eindeutig angezeigt")

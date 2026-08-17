@@ -39,7 +39,9 @@ func _run() -> void:
 	_check(screen.get_scroll_container().follow_focus, "Settings-Scrollfläche folgt Tastatur- und Gamepadfokus")
 	_check(screen.get_scroll_container().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Settings benötigen keinen horizontalen Scrollbereich")
 	_check(screen.get_upper_column_count() == 2, "Audio und Anzeige stehen auf breiten Ansichten in zwei Spalten")
-	_check(screen.get_binding_column_count() == 2, "Steuerungszeilen nutzen auf breiten Ansichten zwei Spalten")
+	_check(screen.get_binding_column_count() == 3, "Steuerungszeilen nutzen auf breiten Ansichten drei kompakte Spalten")
+	var wide_options := screen.find_child("DisplayOptionsGrid", true, false) as GridContainer
+	_check(wide_options != null and wide_options.columns == 2, "UI-Größe und Eingabemodus stehen kompakt nebeneinander")
 	var wide_toggles := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
 	_check(wide_toggles != null and wide_toggles.columns == 2, "Anzeige ordnet vier Schalter platzsparend in zwei Spalten an")
 	_check(screen.control_for_setting(&"binding.ui_info.0") != null, "ui_info besitzt einen zugänglichen ersten Tastaturplatz")
@@ -47,6 +49,12 @@ func _run() -> void:
 	_assert_sections_are_content_driven(screen)
 	_assert_compact_labeled_rows(screen)
 	_assert_intents(screen)
+	_resize_logical_host(host, Vector2i(960, 540))
+	await _settle()
+	_check(screen.get_binding_column_count() == 2, "Steuerung wechselt auf mittlerer Breite responsiv zu zwei Spalten")
+	_resize_logical_host(host, Vector2i(1280, 720))
+	await _settle()
+	_check(screen.get_binding_column_count() == 3, "Steuerung kehrt auf Desktopbreite zu drei Spalten zurück")
 	await _assert_conflict_modal(screen)
 
 	_resize_logical_host(host, Vector2i(480, 270))
@@ -54,6 +62,8 @@ func _run() -> void:
 	_check(screen.is_compact_layout(), "480 logische Pixel bilden die 200-Prozent-Kompaktstruktur ab")
 	_check(screen.get_upper_column_count() == 1, "Audio und Anzeige stapeln bei 200 Prozent einspaltig")
 	_check(screen.get_binding_column_count() == 1, "Steuerung stapelt bei 200 Prozent einspaltig")
+	var compact_options := screen.find_child("DisplayOptionsGrid", true, false) as GridContainer
+	_check(compact_options != null and compact_options.columns == 1, "Anzeigeoptionen stapeln bei 200 Prozent einspaltig")
 	var compact_toggles := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
 	_check(compact_toggles != null and compact_toggles.columns == 1, "Anzeigeschalter bleiben bei 200 Prozent einspaltig lesbar")
 	_check(screen.get_scroll_container().get_v_scroll_bar().max_value > screen.get_scroll_container().size.y, "Kompakte Settings zeigen ihren notwendigen vertikalen Scrollpfad")
@@ -186,8 +196,6 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 		"OptionLayout_ui_scale",
 		"ToggleLayout_reduce_motion",
 		"ToggleLayout_confirm_restart",
-		"BindingLayout_move_up",
-		"BindingLayout_ui_info",
 	]:
 		var row := screen.find_child(row_name, true, false) as HBoxContainer
 		_check(row != null, "%s ist als kompakte Einstellungszeile vorhanden" % row_name)
@@ -201,7 +209,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	var restart_purpose: Label = restart_row.find_child("SettingPurpose", true, false) as Label if restart_row != null else null
 	_check(restart_purpose != null and restart_purpose.text == "Strg+R bestätigen", "Neustartoption erklärt den festen Shortcut direkt in ihrer Zeile")
 	var compact_toggle_labels := {
-		&"reduce_motion": "Weniger Bewegung",
+		&"reduce_motion": "Animationen reduzieren",
 		&"run_stats": "Werte im Run",
 		&"fullscreen": "Vollbild",
 	}
@@ -209,9 +217,25 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 		var toggle_row := screen.find_child("ToggleLayout_%s" % String(setting_id), true, false) as HBoxContainer
 		var toggle_purpose: Label = toggle_row.find_child("SettingPurpose", true, false) as Label if toggle_row != null else null
 		_check(toggle_purpose != null and toggle_purpose.text == compact_toggle_labels[setting_id], "%s bleibt in der zweispaltigen Anzeige vollständig lesbar" % setting_id)
-	var binding_row := screen.find_child("BindingLayout_ui_info", true, false) as HBoxContainer
-	_check(binding_row != null and binding_row.get_child_count() == 2, "Tastenbelegung besteht nur aus Zweck und kompakter Aktion")
-	var binding_purpose := binding_row.find_child("SettingPurpose", true, false) as Label if binding_row != null else null
+	var options_grid := screen.find_child("DisplayOptionsGrid", true, false) as GridContainer
+	for option_id in [&"ui_scale", &"glyph_mode"]:
+		var option_row := screen.find_child("OptionLayout_%s" % String(option_id), true, false) as HBoxContainer
+		var option_purpose := option_row.find_child("SettingPurpose", true, false) as Label if option_row != null else null
+		var option_control := screen.control_for_setting(StringName("option.%s" % String(option_id))) as OptionButton
+		_check(option_row != null and option_row.get_parent() == options_grid, "%s liegt ohne zusätzliche Kachel direkt im kompakten Optionsraster" % option_id)
+		_check(option_row != null and option_row.size_flags_horizontal == Control.SIZE_SHRINK_BEGIN, "%s belegt nicht unnötig die gesamte Anzeigenbreite" % option_id)
+		_check(option_control != null and option_control.custom_minimum_size.x <= 132.0, "%s hält Auswahlwert und Beschriftung eng zusammen" % option_id)
+		_check(option_purpose != null and not option_purpose.clip_text, "%s bleibt links vollständig lesbar" % option_id)
+	var scale_row := screen.find_child("OptionLayout_ui_scale", true, false) as HBoxContainer
+	var glyph_row := screen.find_child("OptionLayout_glyph_mode", true, false) as HBoxContainer
+	var scale_purpose := scale_row.find_child("SettingPurpose", true, false) as Label if scale_row != null else null
+	var glyph_purpose := glyph_row.find_child("SettingPurpose", true, false) as Label if glyph_row != null else null
+	_check(scale_purpose != null and scale_purpose.text == "UI-Größe", "UI-Skalierung verwendet eine knappe eindeutige Beschriftung")
+	_check(glyph_purpose != null and glyph_purpose.text == "Eingabemodus", "Eingabedarstellung wird als verständlicher Eingabemodus benannt")
+	var binding_layout := screen.find_child("BindingLayout_ui_info", true, false) as VBoxContainer
+	_check(binding_layout != null and binding_layout.get_child_count() == 2, "Tastenbelegung stapelt Zweck und zwei nahe Tastaturfelder kompakt")
+	_check(binding_layout != null and binding_layout.get_meta(&"alveolus_component", &"") == &"compact_binding_card", "Tastenbelegung ist als kompakte Kartenstruktur markiert")
+	var binding_purpose := binding_layout.find_child("SettingPurpose", true, false) as Label if binding_layout != null else null
 	_check(binding_purpose != null and binding_purpose.text == "Details anzeigen", "ui_info benennt seinen Spielerzweck statt nur die interne Aktion")
 	for action_id in [
 		"move_up", "move_down", "move_left", "move_right", "active_ability_1",
@@ -226,29 +250,38 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	if binding_card != null:
 		_check(binding_card.get_meta(&"alveolus_component", &"") == &"shortcut_container", "Shortcut-Container ist semantisch als gemeinsame Einstellungsstruktur markiert")
 		_check(binding_card.get_meta(&"alveolus_surface_role", -1) == AlveolusVisualTheme.SurfaceRole.VALUE_ROW, "Shortcut-Container verwendet die zentrale ValueRow-Fläche")
+		_check(binding_card.custom_minimum_size.y <= 80.0, "Shortcut-Container reserviert keinen unnötigen vertikalen Leerraum")
+	var binding_grid := screen.find_child("BindingsGrid", true, false) as GridContainer
+	_check(binding_grid != null and binding_grid.get_theme_constant("h_separation") == AlveolusVisualTheme.GRID_UNIT, "Drei Binding-Spalten verwenden nur den kleinen Rasterabstand")
+	_check(binding_grid != null and binding_grid.get_theme_constant("v_separation") == AlveolusVisualTheme.GRID_UNIT, "Binding-Zeilen verwenden nur den kleinen Rasterabstand")
 	var binding_button := screen.control_for_setting(&"binding.ui_info.0") as Button
 	var second_binding_button := screen.control_for_setting(&"binding.ui_info.1") as Button
 	if binding_purpose != null and binding_button != null:
-		_check(binding_purpose.custom_minimum_size.x <= 188.0 and binding_button.custom_minimum_size.x <= 120.0, "Beschreibung und erster Tastaturplatz bleiben direkt benachbart")
+		_check(binding_purpose.custom_minimum_size.x <= 0.0 and binding_button.custom_minimum_size.x <= 104.0, "Beschreibung und Tastaturplätze bleiben innerhalb der kompakten Karte dicht")
 	for action_id in [&"move_up", &"move_down", &"move_left", &"move_right"]:
-		var movement_row := screen.find_child("BindingLayout_%s" % String(action_id), true, false) as HBoxContainer
-		var movement_purpose := movement_row.find_child("SettingPurpose", true, false) as Label if movement_row != null else null
+		var movement_layout := screen.find_child("BindingLayout_%s" % String(action_id), true, false) as VBoxContainer
+		var movement_purpose := movement_layout.find_child("SettingPurpose", true, false) as Label if movement_layout != null else null
 		_check(
 			movement_purpose != null
 			and not movement_purpose.clip_text
 			and movement_purpose.text_overrun_behavior == TextServer.OVERRUN_NO_TRIMMING
 			and _label_fits_single_line(movement_purpose),
-			"%s bleibt im Desktop-Zweispaltenraster vollständig lesbar" % String(action_id)
+			"%s bleibt im Desktop-Dreispaltenraster vollständig lesbar" % String(action_id)
 		)
 	_check(second_binding_button != null and _button_caption(second_binding_button) == "Nicht belegt", "Ein freier zweiter Tastaturplatz ist ausdrücklich sichtbar")
 	var visible_binding := _button_caption(binding_button)
 	_check(not visible_binding.contains("Y") and not visible_binding.contains("Gamepad"), "Controllerbelegungen sind in der Settings-Zeile visuell ausgeblendet")
+	var toggle_grid := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
 	for setting_id in [&"reduce_motion", &"run_stats", &"fullscreen", &"confirm_restart"]:
 		var toggle := screen.control_for_setting(StringName("toggle.%s" % String(setting_id))) as CheckButton
+		var toggle_row := screen.find_child("ToggleLayout_%s" % String(setting_id), true, false) as HBoxContainer
+		_check(toggle_row != null and toggle_row.get_parent() == toggle_grid, "%s liegt ohne zusätzliche Kachel direkt im Anzeigenraster" % setting_id)
 		_check(toggle != null and toggle.theme_type_variation == &"", "%s verwendet keinen eigenen Kachelhintergrund" % setting_id)
 		_check(toggle != null and toggle.flat, "%s entfernt die umgebende Button-Kachel vollständig" % setting_id)
 		_check(toggle != null and toggle.custom_minimum_size.y >= 44.0, "%s behält trotz flacher Darstellung ein 44-Pixel-Trefferziel" % setting_id)
 		_check(toggle != null and toggle.get_meta(&"alveolus_component", &"") == &"transparent_toggle", "%s ist redundant als transparenter Switch markiert" % setting_id)
+	var reduce_motion := screen.control_for_setting(&"toggle.reduce_motion") as CheckButton
+	_check(reduce_motion != null and reduce_motion.tooltip_text.contains("UI-Animationen"), "Animationen reduzieren erklärt die Wirkung knapp und verständlich")
 	for bus_id in [&"master", &"ui", &"effects", &"music"]:
 		var mute := screen.control_for_setting(StringName("audio.%s.mute" % String(bus_id))) as CheckButton
 		_check(mute != null and mute.theme_type_variation == &"", "%s-Stummschaltung liegt transparent in ihrer Audiozeile" % bus_id)

@@ -42,6 +42,7 @@ func _test_source_boundaries() -> void:
 	_check(not source.contains("func _process") and not source.contains("func _physics_process"), "Pause besitzt keine dauerhafte Prozessschleife")
 	_check(not source.to_lower().contains("runmenü"), "Pause enthält keine überflüssige Runmenü-Überschrift")
 	_check(not source.contains("Behandlung pausiert"), "Pause verwendet keinen alten langen Behandlungstitel")
+	_check(not source.contains("CoffeeSymbol") and not source.contains("☕"), "Pause besitzt kein dekoratives Symbol links vom Titel")
 
 
 func _test_immutable_view_model() -> PauseOverlayViewModel:
@@ -76,10 +77,15 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	_check(overlay.modal_sheet().theme_type_variation == AlveolusVisualTheme.TYPE_MODAL_SHEET, "Pause besitzt die zentrale ModalSheet-Rolle")
 	_check(overlay.modal_sheet().get_meta(&"alveolus_component", &"") == &"modal_sheet", "Pause stammt aus der gemeinsamen ModalSheet-Komponente")
 	_check(overlay.title_text() == "Pause", "Pausenmenü zeigt den knappen Titel Pause")
-	var coffee_symbol := overlay.find_child("CoffeeSymbol", true, false) as Label
+	var title_line := overlay.find_child("PauseTitleLine", true, false) as HBoxContainer
+	var title_label := overlay.find_child("Title", true, false) as Label
+	var doctor_balance := overlay.find_child("DoctorBalance", true, false) as Control
 	var doctor_meta := overlay.find_child("DoctorMeta", true, false) as Label
-	_check(coffee_symbol != null and coffee_symbol.text == "☕" and coffee_symbol.is_visible_in_tree(), "Pausenkopf zeigt ein separates Kaffeesymbol")
+	_check(overlay.find_child("CoffeeSymbol", true, false) == null, "Links neben Pause wird kein Symbol erzeugt")
 	_check(doctor_meta != null and doctor_meta.text == "Doctor Milos" and doctor_meta.is_visible_in_tree(), "Pausenkopf nennt Doctor Milos knapp als Metaangabe")
+	_check(doctor_balance != null and doctor_meta != null and is_equal_approx(doctor_balance.size.x, doctor_meta.size.x), "Unsichtbare Gegenbreite gleicht die rechte Doctor-Metaangabe aus")
+	_check(title_label != null and title_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "Pause verwendet eine echte zentrierte Textausrichtung")
+	_check(title_line != null and title_label != null and absf(title_label.get_global_rect().get_center().x - title_line.get_global_rect().get_center().x) <= 1.0, "Pausentitel liegt geometrisch in der horizontalen Modalmitte")
 	_check(overlay.body_scroll().follow_focus, "Der responsive Inhaltsviewport folgt dem Fokus")
 	_check(overlay.body_scroll().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Pause scrollt niemals horizontal")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Normales Pausenmenü benötigt keinen Scrollmodus")
@@ -122,7 +128,8 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	_check(overlay.set_mode(PauseOverlay.Mode.STATS, false), "Fassade kann die eingebetteten Charakterwerte öffnen")
 	await _settle()
 	_check(overlay.title_text() == "Charakterwerte", "Statmodus besitzt einen einfachen Titel")
-	_check(coffee_symbol != null and not coffee_symbol.visible and doctor_meta != null and not doctor_meta.visible, "Charakterwerte übernehmen keinen dekorativen Pausenmeta-Leerraum")
+	_check(doctor_balance != null and not doctor_balance.visible and doctor_meta != null and not doctor_meta.visible, "Charakterwerte übernehmen keinen Pausenmeta-Leerraum")
+	_check(title_label != null and title_label.horizontal_alignment == HORIZONTAL_ALIGNMENT_LEFT, "Statmodus behält seine bisherige linksbündige Titelhierarchie")
 	_check(not overlay.resume_action().visible and overlay.back_action().visible, "Statmodus ersetzt Weiter durch einen festen Rückweg")
 	_check(overlay.stats_grid().columns == 2, "Breite Charakterwerte verwenden genau zwei Spalten")
 	_check(overlay.stat_rows().size() == view_model.stat_count(), "Jeder View-Model-Wert besitzt genau eine sichtbare Zeile")

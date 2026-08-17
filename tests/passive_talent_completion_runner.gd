@@ -261,7 +261,8 @@ func _test_game_talent_rules() -> void:
 	_near(e.cooldown_remaining, 4.0, "Ein zweiter niedriger Zustandswert setzt E nicht erneut zurück")
 
 	var reactions: Array = game._reactions_for_finding(finding)
-	_equal(reactions.size(), finding.reaction_ids.size() + 1, "Weitere Perspektive ergänzt genau eine vierte Befundreaktion")
+	_equal(reactions.size(), finding.reaction_ids.size(), "Weitere Perspektive bewahrt exakt drei Befundreaktionen")
+	_check(reactions.any(func(reaction: ReactionDefinition) -> bool: return reaction.title == "Flexible Anpassung"), "Weitere Perspektive ersetzt eine Basisreaktion sichtbar durch Flexible Anpassung")
 
 	# Sofortmaßnahme: exact additive, positive multiplier, reduction multiplier,
 	# one-shot shield and expiry behavior against the unboosted reaction baseline.

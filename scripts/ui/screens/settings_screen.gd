@@ -20,8 +20,11 @@ signal quit_requested
 signal back
 
 const COMPACT_WIDTH := 760.0
-const TWO_BINDING_COLUMNS_WIDTH := 1080.0
-const BINDING_PURPOSE_WIDTH_DESKTOP := 188.0
+const TWO_BINDING_COLUMNS_WIDTH := 760.0
+const THREE_BINDING_COLUMNS_WIDTH := 1180.0
+const TWO_UPPER_CONTROL_COLUMNS_WIDTH := 1180.0
+const OPTION_LABEL_WIDTH := 116.0
+const TOGGLE_LABEL_WIDTH := 172.0
 
 var _view_model: SettingsScreenViewModel
 var _applied_revision := -1
@@ -33,12 +36,14 @@ var _header: PanelContainer
 var _scroll: ScrollContainer
 var _settings_stack: VBoxContainer
 var _upper_grid: GridContainer
+var _options_grid: GridContainer
 var _toggles_grid: GridContainer
 var _bindings_grid: GridContainer
 var _back_button: Button
 var _controls: Dictionary = {}
 var _audio_layout_records: Array[Dictionary] = []
 var _option_controls: Array[OptionButton] = []
+var _option_layout_records: Array[Dictionary] = []
 var _binding_layout_records: Array[Dictionary] = []
 var _conflict_layer: ColorRect
 var _conflict_modal: PanelContainer
@@ -212,6 +217,7 @@ func _rebuild_sections() -> void:
 	_controls[&"back"] = _back_button
 	_audio_layout_records.clear()
 	_option_controls.clear()
+	_option_layout_records.clear()
 	_binding_layout_records.clear()
 	_upper_grid = GridContainer.new()
 	_upper_grid.name = "UpperSections"
@@ -233,9 +239,15 @@ func _rebuild_sections() -> void:
 	var display_content := display_section["content"] as VBoxContainer
 	display_panel.name = "DisplaySection"
 	_upper_grid.add_child(display_panel)
+	_options_grid = GridContainer.new()
+	_options_grid.name = "DisplayOptionsGrid"
+	_options_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_options_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_options_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
+	display_content.add_child(_options_grid)
 	for setting in _view_model.get_option_settings():
 		if setting.is_visible():
-			_build_option_row(display_content, setting)
+			_build_option_row(_options_grid, setting)
 	_toggles_grid = GridContainer.new()
 	_toggles_grid.name = "DisplayTogglesGrid"
 	_toggles_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -261,8 +273,8 @@ func _rebuild_sections() -> void:
 	_bindings_grid = GridContainer.new()
 	_bindings_grid.name = "BindingsGrid"
 	_bindings_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bindings_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
-	_bindings_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_bindings_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.GRID_UNIT)
+	_bindings_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
 	controls_content.add_child(_bindings_grid)
 	for binding in _view_model.get_binding_settings():
 		_build_binding_row(binding)
@@ -375,22 +387,40 @@ func _build_audio_row(parent: VBoxContainer, setting: SettingsScreenViewModel.Au
 	})
 
 
-func _build_option_row(parent: VBoxContainer, setting: SettingsScreenViewModel.OptionSettingViewModel) -> void:
+func _build_option_row(parent: Container, setting: SettingsScreenViewModel.OptionSettingViewModel) -> void:
 	var parts := AlveolusUIComponents.option_row(setting.get_label(), setting.get_entries(), setting.get_selected_index())
 	var row := parts["row"] as HBoxContainer
 	var title := parts["label"] as Label
 	var control := parts["control"] as OptionButton
 	row.name = "OptionLayout_%s" % String(setting.get_id())
+	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 	row.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
 	row.set_meta(&"alveolus_component", &"compact_setting_row")
 	title.name = "SettingPurpose"
+	title.text = _option_purpose(setting.get_id(), setting.get_label())
+	title.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	title.custom_minimum_size.x = OPTION_LABEL_WIDTH
+	title.clip_text = false
+	title.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	var key := _option_key(setting.get_id())
 	control.name = "Option_%s" % String(setting.get_id())
+	control.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	control.set_meta(&"setting_id", key)
 	control.item_selected.connect(_on_option_changed.bind(setting.get_id()))
 	_controls[key] = control
 	_option_controls.append(control)
+	_option_layout_records.append({"row": row, "label": title, "control": control})
 	parent.add_child(row)
+
+
+func _option_purpose(setting_id: StringName, fallback: String) -> String:
+	match setting_id:
+		&"ui_scale":
+			return "UI-Größe"
+		&"glyph_mode":
+			return "Eingabemodus"
+	return fallback
 
 
 func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.ToggleSettingViewModel) -> void:
@@ -406,6 +436,17 @@ func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.Toggl
 	var visible_label := _toggle_purpose(setting.get_id(), setting.get_label())
 	var row := _compact_setting_row(visible_label, toggle)
 	row.name = "ToggleLayout_%s" % String(setting.get_id())
+	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	var purpose_label := row.find_child("SettingPurpose", true, false) as Label
+	if purpose_label != null:
+		purpose_label.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		purpose_label.custom_minimum_size.x = TOGGLE_LABEL_WIDTH
+		purpose_label.clip_text = false
+		purpose_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	if setting.get_id() == &"reduce_motion":
+		toggle.tooltip_text = "Reduziert UI-Animationen und Bewegungseffekte."
+		toggle.set_meta(&"alveolus_accessible_name", "Animationen reduzieren: Ein oder Aus")
 	_controls[key] = toggle
 	parent.add_child(row)
 
@@ -413,7 +454,7 @@ func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.Toggl
 func _toggle_purpose(setting_id: StringName, fallback: String) -> String:
 	match setting_id:
 		&"reduce_motion":
-			return "Weniger Bewegung"
+			return "Animationen reduzieren"
 		&"run_stats":
 			return "Werte im Run"
 		&"fullscreen":
@@ -427,7 +468,7 @@ func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel
 	var purpose := _binding_purpose(setting.get_action_id(), setting.get_label())
 	var slots := HBoxContainer.new()
 	slots.name = "BindingSlots_%s" % String(setting.get_action_id())
-	slots.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	slots.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 	var buttons: Array[Button] = []
 	for slot_index in range(2):
@@ -450,6 +491,7 @@ func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel
 		button.clip_text = true
 		button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		button.tooltip_text = "Taste %d · %s" % [slot_index + 1, caption]
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(_on_binding_requested.bind(setting.get_action_id(), slot_index))
 		_controls[key] = button
 		# The former semantic key resolves to the primary keyboard slot so
@@ -458,23 +500,30 @@ func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel
 			_controls[_binding_key(setting.get_action_id())] = button
 		slots.add_child(button)
 		buttons.append(button)
-	var row := _compact_setting_row(purpose, slots)
-	slots.focus_mode = Control.FOCUS_NONE
-	row.name = "BindingLayout_%s" % String(setting.get_action_id())
-	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	var purpose_label := row.find_child("SettingPurpose", true, false) as Label
+	var layout := VBoxContainer.new()
+	layout.name = "BindingLayout_%s" % String(setting.get_action_id())
+	layout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layout.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	layout.set_meta(&"alveolus_component", &"compact_binding_card")
+	var purpose_label := AlveolusUIComponents.label(purpose, AlveolusVisualTheme.TYPE_BODY_LABEL)
+	purpose_label.name = "SettingPurpose"
+	purpose_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	purpose_label.clip_text = false
+	purpose_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	layout.add_child(purpose_label)
+	layout.add_child(slots)
 	var card := AlveolusUIComponents.surface(
 		AlveolusVisualTheme.SurfaceRole.VALUE_ROW,
 		AlveolusVisualTheme.COBALT
 	)
 	card.name = "BindingCard_%s" % String(setting.get_action_id())
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM + 12.0
+	card.custom_minimum_size.y = 80.0
 	card.set_meta(&"alveolus_component", &"shortcut_container")
-	card.add_child(AlveolusUIComponents.margin(row, 6))
+	card.add_child(AlveolusUIComponents.margin(layout, 6))
 	_binding_layout_records.append({
 		"card": card,
-		"row": row,
+		"layout": layout,
 		"purpose": purpose_label,
 		"slots": slots,
 		"buttons": buttons,
@@ -700,10 +749,16 @@ func _refresh_responsive_layout() -> void:
 	AlveolusUIComponents.refresh_page_shell_layout(_shell, _compact_layout)
 	if _upper_grid != null:
 		_upper_grid.columns = 1 if _compact_layout else 2
+	if _options_grid != null:
+		_options_grid.columns = 2 if logical_width >= TWO_UPPER_CONTROL_COLUMNS_WIDTH else 1
 	if _toggles_grid != null:
-		_toggles_grid.columns = 1 if _compact_layout else 2
+		_toggles_grid.columns = 2 if logical_width >= TWO_UPPER_CONTROL_COLUMNS_WIDTH else 1
 	if _bindings_grid != null:
-		_bindings_grid.columns = 1 if logical_width < TWO_BINDING_COLUMNS_WIDTH else 2
+		_bindings_grid.columns = (
+			3
+			if logical_width >= THREE_BINDING_COLUMNS_WIDTH
+			else (2 if logical_width >= TWO_BINDING_COLUMNS_WIDTH else 1)
+		)
 	for record in _audio_layout_records:
 		var audio_layout := record["layout"] as GridContainer
 		var audio_label := record["label"] as Label
@@ -730,28 +785,26 @@ func _refresh_responsive_layout() -> void:
 		audio_value.custom_minimum_size.x = 48.0
 		audio_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		audio_mute.custom_minimum_size.x = 88.0 if _compact_layout else 92.0
-	for option in _option_controls:
-		option.custom_minimum_size.x = 148.0 if _compact_layout else 176.0
+	for record in _option_layout_records:
+		var option_row := record["row"] as HBoxContainer
+		var option_label := record["label"] as Label
+		var option := record["control"] as OptionButton
+		option_row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		option_label.custom_minimum_size.x = OPTION_LABEL_WIDTH
+		option.custom_minimum_size.x = 140.0 if _compact_layout else 132.0
 	for record in _binding_layout_records:
 		var binding_purpose := record["purpose"] as Label
 		var binding_slots := record["slots"] as HBoxContainer
 		var binding_buttons: Array = record["buttons"] as Array
-		# Each shortcut is a compact two-part unit. Fixed local columns keep the
-		# action and both keyboard slots visually adjacent instead of pushing the
-		# bindings to the remote edge of a wide settings section.
-		binding_purpose.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		binding_purpose.custom_minimum_size.x = 116.0 if _compact_layout else BINDING_PURPOSE_WIDTH_DESKTOP
-		binding_purpose.clip_text = _compact_layout
-		binding_purpose.text_overrun_behavior = (
-			TextServer.OVERRUN_TRIM_ELLIPSIS
-			if _compact_layout
-			else TextServer.OVERRUN_NO_TRIMMING
-		)
-		binding_slots.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		binding_purpose.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		binding_purpose.custom_minimum_size.x = 0.0
+		binding_purpose.clip_text = false
+		binding_purpose.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+		binding_slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		for binding_button_value in binding_buttons:
 			var binding_button := binding_button_value as Button
-			binding_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-			binding_button.custom_minimum_size.x = 108.0 if _compact_layout else 120.0
+			binding_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			binding_button.custom_minimum_size.x = 104.0
 
 
 func _focused_setting_id() -> StringName:

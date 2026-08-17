@@ -21,7 +21,7 @@ func _run() -> void:
 
 
 func _assert_immutable_view_model() -> void:
-	var reaction_source := _reaction_fixture(3)
+	var reaction_source := _reaction_fixture(6)
 	var outgoing_source := _outgoing_fixture()
 	var reserve := FindingOverlayViewModel.ReserveSwapViewModel.new(
 		false,
@@ -47,7 +47,9 @@ func _assert_immutable_view_model() -> void:
 	var original_hash := model.content_hash()
 	reaction_source.clear()
 	outgoing_source.clear()
-	_check(model.reactions().size() == 3, "Befund-VM kopiert Reaktionen tief")
+	_check(model.reactions().size() == 3, "Befund-VM begrenzt die stabile Eingabereihenfolge deterministisch auf drei Reaktionen")
+	_check(model.reaction(&"observe") != null and model.reaction(&"protect") != null and model.reaction(&"treat") == null, "Die ersten drei Reaktions-IDs bleiben erhalten; spätere Optionen gelangen nicht in die UI-Grenze")
+	_check(model.mechanical_effect_text() == "Bakteriengruppen treten häufiger auf.", "Mechanischer Effekt bleibt als fertiger Präsentationstext verfügbar")
 	_check(model.reserve_swap().outgoing_options().size() == 2, "Dormante Reserveoptionen bleiben als defensive Kopie erhalten")
 	var returned_reactions := model.reactions()
 	returned_reactions.clear()
@@ -99,11 +101,12 @@ func _assert_finding_interaction() -> void:
 	_check(overlay.modal_sheet().custom_minimum_size.y <= 0.0, "Befund reserviert keine dekorative Leerraumhöhe")
 	_check(overlay.modal_sheet().size.y <= overlay.modal_sheet().get_combined_minimum_size().y + 1.0, "Breiter Befund folgt seiner tatsächlichen Inhaltshöhe")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and not overlay.body_scroll().get_v_scroll_bar().visible, "Kurzer Befund zeigt keine unnötige Scrollbar")
-	_check(overlay.copy_grid().columns == 2 and overlay.copy_grid().get_child_count() == 2, "Medizinische Erklärung und Spielwirkung bleiben getrennte Zweispaltenflächen")
-	_check(overlay.copy_grid().get_index() < overlay.reaction_grid().get_index(), "Breit bleibt die freigegebene Erklärung-vor-Auswahl-Hierarchie erhalten")
-	for section_value in overlay.copy_grid().get_children():
-		var section := section_value as PanelContainer
-		_check(section != null and section.get_meta(&"alveolus_component", &"") == &"semantic_copy_section", "Jede Befunderklärung verwendet die zentrale semantische Komponente")
+	_check(overlay.copy_grid().columns == 1 and overlay.copy_grid().get_child_count() == 1, "Befund zeigt genau eine kompakte mechanische Effektzeile")
+	_check(overlay.copy_grid().get_meta(&"alveolus_component", &"") == &"finding_effect_line", "Effektzeile besitzt keine Karten- oder Erklärungsflächenrolle")
+	_check(overlay.effect_label() != null and overlay.effect_label().text == "Bakteriengruppen treten häufiger auf." and overlay.effect_label().horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "Spielwirkung steht zentral und ohne Überschrift bereit")
+	_check(overlay.copy_grid().find_children("*", "PanelContainer", true, false).is_empty(), "Medizinischer Hintergrund und Im-Spiel-Kachel sind vollständig entfernt")
+	_check(not _contains_label_text(overlay, "Mehrere Erreger sammeln sich im Gewebe."), "Medizinischer Langtext wird im kompakten Befund nicht mehr gerendert")
+	_check(overlay.copy_grid().get_index() < overlay.reaction_grid().get_index(), "Breit steht der kompakte Effekt ohne zusätzlichen Leerraum vor der Auswahl")
 	_check(overlay.reaction_grid().columns == 3 and overlay.reaction_grid().get_child_count() == 3, "Drei Reaktionen bleiben als kompakte Auswahl sichtbar")
 	_check(overlay.reserve_panel() == null, "Dormanter Reservewechsel erzeugt weder Control noch Blank-Space")
 	_check(overlay.confirm_action().disabled, "Ohne Reaktion bleibt die einzige Hauptaktion deaktiviert")
@@ -207,14 +210,21 @@ func _assert_finding_interaction() -> void:
 	_check(overlay.reserve_panel() == null and overlay.selected_outgoing_id() == &"passive_b", "Dormante Darstellung entfernt nur Controls und bewahrt die VM-ID")
 
 	_resize_logical_host(host, Vector2i(480, 270))
-	_check(overlay.apply(_finding_model(5, _reaction_fixture(6), &"observe", _dormant_reserve(), true, "")), "Dichter kompakter Befund wird angewendet")
+	_check(overlay.apply(_finding_model(5, _reaction_fixture(6), &"protect", _dormant_reserve(), true, "")), "Dichter kompakter Befund wird angewendet")
 	await _settle()
 	_check(overlay.is_compact_layout(), "480 × 270 bildet den 200-Prozent-Kompaktfall ab")
-	_check(overlay.copy_grid().columns == 1 and overlay.reaction_grid().columns == 1, "Kompakte Erklärungen und Reaktionen nutzen lesbare Einzelspalten")
+	_check(overlay.copy_grid().columns == 1 and overlay.reaction_grid().columns == 1 and overlay.reaction_grid().get_child_count() == 3, "Kompakt bleiben Effekt und höchstens drei Reaktionen in lesbaren Einzelspalten")
+	_check(overlay.reaction_action(&"treat") == null and overlay.registered_info_source_count() == 3, "Auch ein übergroßes Presenterarray erzeugt stabil nur drei Reaktionen und Tooltipquellen")
 	_check(overlay.action_grid().columns == 2, "Zurück und Anwenden bleiben im 480-Pixel-Kompaktfall nebeneinander")
 	_check(
-		overlay.reaction_grid().get_index() < overlay.copy_grid().get_index(),
-		"Kompakt stehen die entscheidbaren Reaktionen vor den nachgelagerten Erklärungen"
+		overlay.copy_grid().get_index() < overlay.reaction_grid().get_index(),
+		"Kompakt bleibt die knappe mechanische Wirkung vor den Reaktionskarten sichtbar"
+	)
+	var compact_reaction_heading := overlay.find_child("ReactionHeading", true, false) as Label
+	_check(compact_reaction_heading != null and not compact_reaction_heading.visible, "Kompakt entfällt die redundante Reaktionsüberschrift zugunsten der Wirkung und ersten Wahl")
+	_check(
+		_is_visible_in_scroll(overlay.effect_label(), overlay.body_scroll()),
+		"Die mechanische Effektzeile ist beim Öffnen des kompakten Befunds sichtbar"
 	)
 	_check(
 		_is_visible_in_scroll(overlay.reaction_action(&"observe"), overlay.body_scroll()),
@@ -227,6 +237,22 @@ func _assert_finding_interaction() -> void:
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Nur echter kompakter Inhaltsüberlauf aktiviert Scrollen")
 	_check(not overlay.body_scroll().is_ancestor_of(overlay.confirm_action()) and overlay.confirm_action().is_visible_in_tree(), "Hauptaktion bleibt fest außerhalb des Scrollinhalts sichtbar")
 	_check(not overlay.body_scroll().is_ancestor_of(overlay.cancel_action()) and overlay.cancel_action().is_visible_in_tree(), "Zurück bleibt fest außerhalb des Scrollinhalts sichtbar")
+
+	var no_effect_model := FindingOverlayViewModelScript.new(
+		6,
+		&"grouping",
+		"Gruppenbildung",
+		"Dieser medizinische Text bleibt außerhalb des Befunds.",
+		"",
+		_reaction_fixture(3),
+		&"observe",
+		_dormant_reserve(),
+		true,
+		""
+	)
+	_check(overlay.apply(no_effect_model), "Befund ohne mechanischen Präsentationstext wird sicher angewendet")
+	await _settle()
+	_check(overlay.effect_label() == null and overlay.copy_grid() == null, "Leerer Effekt erzeugt weder Platzhalter noch Blank-Space")
 
 	overlay.hide()
 	_check(not overlay.handle_ui_cancel(true), "Verborgenes Befundmodal konsumiert keine Routereingabe")
@@ -341,7 +367,8 @@ func _assert_dependency_contract() -> void:
 	]:
 		_check(not source.contains(forbidden), "Befundmodul bleibt frei von %s" % forbidden)
 	_check(source.contains("AlveolusUIComponents.modal_sheet"), "Befund verwendet die zentrale ModalSheet-Komponente")
-	_check(source.contains("AlveolusUIComponents.semantic_copy_section"), "Befund trennt medizinische und spielerische Erklärung semantisch")
+	_check(not source.contains("AlveolusUIComponents.semantic_copy_section"), "Befund erzeugt keine medizinische oder Im-Spiel-Erklärungskachel")
+	_check(source.contains("finding_effect_line"), "Befund markiert die kartenlose mechanische Effektzeile semantisch")
 	_check(source.contains("AlveolusUIComponents.choice_row"), "Reaktionsauswahl verwendet die zentrale kompakte Auswahlkomponente")
 	_check(source.contains("AlveolusUIComponents.action_button"), "Befund verwendet zentrale semantische Aktionen")
 
@@ -369,6 +396,14 @@ func _is_visible_in_scroll(control: Control, scroll: ScrollContainer) -> bool:
 	if control == null or scroll == null:
 		return false
 	return Rect2(scroll.global_position, scroll.size).intersects(control.get_global_rect())
+
+
+func _contains_label_text(root: Control, expected_text: String) -> bool:
+	for node_value in root.find_children("*", "Label", true, false):
+		var label := node_value as Label
+		if label != null and label.text == expected_text:
+			return true
+	return false
 
 
 func _check(condition: bool, message: String) -> void:

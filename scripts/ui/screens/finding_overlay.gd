@@ -37,6 +37,7 @@ var _body_scroll: ScrollContainer
 var _scrollbar_inset: MarginContainer
 var _body_stack: VBoxContainer
 var _copy_grid: GridContainer
+var _effect_label: Label
 var _reaction_heading: Label
 var _reaction_grid: GridContainer
 var _reaction_group: ButtonGroup
@@ -168,6 +169,10 @@ func body_scroll() -> ScrollContainer:
 
 func copy_grid() -> GridContainer:
 	return _copy_grid
+
+
+func effect_label() -> Label:
+	return _effect_label
 
 
 func reaction_grid() -> GridContainer:
@@ -319,7 +324,7 @@ func _rebuild_modal() -> void:
 	_body_stack.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
 	_scrollbar_inset.add_child(_body_stack)
 
-	_build_explanation_sections()
+	_build_effect_line()
 	_build_reactions()
 	_build_reserve_swap()
 	_build_validation()
@@ -355,6 +360,7 @@ func _reset_control_references() -> void:
 	_scrollbar_inset = null
 	_body_stack = null
 	_copy_grid = null
+	_effect_label = null
 	_reaction_heading = null
 	_reaction_grid = null
 	_reaction_group = null
@@ -367,36 +373,25 @@ func _reset_control_references() -> void:
 	_cancel_button = null
 
 
-func _build_explanation_sections() -> void:
+func _build_effect_line() -> void:
+	var effect_text := _view_model.mechanical_effect_text()
+	if effect_text.is_empty():
+		return
 	_copy_grid = GridContainer.new()
-	_copy_grid.name = "ExplanationSections"
+	_copy_grid.name = "MechanicalEffectLine"
+	_copy_grid.columns = 1
 	_copy_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_copy_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
-	_copy_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
-	if not _view_model.medical_text().is_empty():
-		var medical := AlveolusUIComponents.semantic_copy_section(
-			"Medizinischer Hintergrund",
-			_view_model.medical_text(),
-			&"lexicon",
-			AlveolusVisualTheme.COBALT
-		)
-		var medical_panel := medical["panel"] as PanelContainer
-		medical_panel.name = "MedicalExplanation"
-		medical_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_copy_grid.add_child(medical_panel)
-	if not _view_model.gameplay_text().is_empty():
-		var gameplay := AlveolusUIComponents.semantic_copy_section(
-			"Im Spiel",
-			_view_model.gameplay_text(),
-			&"ability",
-			AlveolusVisualTheme.TEAL
-		)
-		var gameplay_panel := gameplay["panel"] as PanelContainer
-		gameplay_panel.name = "GameplayExplanation"
-		gameplay_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_copy_grid.add_child(gameplay_panel)
-	if _copy_grid.get_child_count() > 0:
-		_body_stack.add_child(_copy_grid)
+	_copy_grid.set_meta(&"alveolus_component", &"finding_effect_line")
+	_effect_label = AlveolusUIComponents.label(effect_text, AlveolusVisualTheme.TYPE_VALUE_LABEL)
+	_effect_label.name = "MechanicalEffect"
+	_effect_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_effect_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_effect_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_effect_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_effect_label.modulate = AlveolusVisualTheme.GOLD
+	_effect_label.set_meta(&"alveolus_accessible_name", "Effekt: %s" % effect_text)
+	_copy_grid.add_child(_effect_label)
+	_body_stack.add_child(_copy_grid)
 
 
 func _build_reactions() -> void:
@@ -728,16 +723,20 @@ func _refresh_responsive_layout() -> void:
 	var sheet_width := minf(MODAL_MAXIMUM_WIDTH, available.x)
 	_modal.custom_minimum_size.x = floorf(sheet_width)
 	_modal.custom_minimum_size.y = 0.0
-	var copy_columns := 1 if _compact_layout else 2
 	var reaction_columns := 1 if _compact_layout else 3
 	# At the 480-pixel logical accessibility canvas both actions still fit side
 	# by side. Stacking them consumed the complete compact viewport and pushed the
 	# actual reaction choices below the fold.
 	var action_columns := 2 if available.x >= 360.0 else 1
+	if _reaction_heading != null:
+		# On the smallest accessibility canvas the three choice cards already
+		# communicate the decision. Omitting the redundant heading keeps the
+		# concise mechanical effect and the first choice visible together.
+		_reaction_heading.visible = not _compact_layout
 	var columns_changed := false
 	if _copy_grid != null:
-		columns_changed = columns_changed or _copy_grid.columns != copy_columns
-		_copy_grid.columns = copy_columns
+		columns_changed = columns_changed or _copy_grid.columns != 1
+		_copy_grid.columns = 1
 	if _reaction_grid != null:
 		columns_changed = columns_changed or _reaction_grid.columns != reaction_columns
 		_reaction_grid.columns = reaction_columns
@@ -773,15 +772,9 @@ func _refresh_responsive_layout() -> void:
 func _apply_responsive_body_order() -> bool:
 	if _body_stack == null:
 		return false
-	var leading_controls: Array[Control] = []
-	if _compact_layout:
-		leading_controls.append(_reaction_heading)
-		leading_controls.append(_reaction_grid)
-		leading_controls.append(_copy_grid)
-	else:
-		leading_controls.append(_copy_grid)
-		leading_controls.append(_reaction_heading)
-		leading_controls.append(_reaction_grid)
+	# The fact line is the compact replacement for the removed medical/gameplay
+	# cards, so it always remains the first piece of finding content.
+	var leading_controls: Array[Control] = [_copy_grid, _reaction_heading, _reaction_grid]
 	var next_index := 0
 	var changed := false
 	for control in leading_controls:

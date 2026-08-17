@@ -5,6 +5,8 @@ extends RefCounted
 ## Only ready-to-render primitives, colours and deeply copied child view models
 ## cross this boundary. Dormant reserve data remains optional presentation data.
 
+const MAX_VISIBLE_REACTIONS := 3
+
 
 class InfoViewModel extends RefCounted:
 	var _title: String
@@ -365,6 +367,13 @@ func gameplay_text() -> String:
 	return _gameplay_text
 
 
+## Ready-to-render mechanical summary. The presenter remains responsible for
+## supplying a concise value such as "+2 Monster-Herden"; this boundary does
+## not infer gameplay numbers from medical prose.
+func mechanical_effect_text() -> String:
+	return _gameplay_text
+
+
 func reactions() -> Array[ReactionViewModel]:
 	return _copy_reactions(_reactions)
 
@@ -427,6 +436,8 @@ func _copy_reactions(source: Array[ReactionViewModel]) -> Array[ReactionViewMode
 	for item in source:
 		if item != null:
 			result.append(item.duplicate_immutable())
+			if result.size() >= MAX_VISIBLE_REACTIONS:
+				break
 	return result
 
 

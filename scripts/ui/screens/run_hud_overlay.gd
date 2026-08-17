@@ -13,8 +13,8 @@ const WIDE_THRESHOLD := 900.0
 const WIDE_MARGIN := 16.0
 const COMPACT_MARGIN := 8.0
 const STAT_COLUMN_COUNT := 4
-const STAT_ROW_WIDTH := 68.0
-const STAT_ROW_HEIGHT := 20.0
+const STAT_ROW_WIDTH := 72.0
+const STAT_ROW_HEIGHT := 22.0
 const STAT_GAP := 4
 const ABILITY_WIDTH := 146.0
 const ABILITY_HEIGHT := 38.0
@@ -325,7 +325,7 @@ func _build_timer() -> void:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_END
 	_timer_panel.add_child(_full_inset(row, 0))
-	_timer_value = AlveolusUIComponents.label("00:00", AlveolusVisualTheme.TYPE_HUD_LABEL)
+	_timer_value = AlveolusUIComponents.label("00:00", AlveolusVisualTheme.TYPE_HUD_VALUE_LABEL)
 	_timer_value.name = "TimerValue"
 	_timer_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_timer_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -443,14 +443,14 @@ func _build_abilities() -> void:
 		title.hide()
 		row.add_child(title)
 		_ability_titles.append(title)
-		var glyph := AlveolusUIComponents.label("Q" if slot == 0 else "E", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
+		var glyph := AlveolusUIComponents.label("Q" if slot == 0 else "E", AlveolusVisualTheme.TYPE_HUD_LABEL)
 		glyph.name = "AbilityGlyph%d" % (slot + 1)
 		glyph.custom_minimum_size.x = 24.0
 		glyph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		glyph.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		row.add_child(glyph)
 		_ability_glyphs.append(glyph)
-		var status := AlveolusUIComponents.label("Nicht belegt", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
+		var status := AlveolusUIComponents.label("Nicht belegt", AlveolusVisualTheme.TYPE_HUD_LABEL)
 		status.name = "AbilityStatus%d" % (slot + 1)
 		status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -590,13 +590,17 @@ func _build_stat_row(stat: RunHUDViewModel.StatValueViewModel) -> void:
 	var icon := _hud_icon("StatIcon", stat.icon_id(), accent, 15.0)
 	row.add_child(icon)
 	_stat_icons.append(icon)
-	var value := AlveolusUIComponents.label(stat.formatted_value(), AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
+	var value := AlveolusUIComponents.label(stat.formatted_value(), AlveolusVisualTheme.TYPE_HUD_LABEL)
 	value.name = "StatValue"
 	value.custom_minimum_size = Vector2(0.0, STAT_ROW_HEIGHT)
 	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	value.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
+	value.add_theme_font_size_override("font_size", 14)
+	value.add_theme_color_override("font_outline_color", Color(AlveolusVisualTheme.PETROL_DEEP, 0.92))
+	value.add_theme_constant_override("outline_size", 2)
 	row.add_child(value)
 	value.modulate = accent
 	_stat_values.append(value)
@@ -613,13 +617,13 @@ func _apply_abilities() -> void:
 			focus_paths_changed = true
 		if should_show:
 			occupied_count += 1
-		var accent := AlveolusVisualTheme.MUTED
+		var accent := AlveolusVisualTheme.SKY_DEEP
 		if ability.targeting():
-			accent = AlveolusVisualTheme.TURQUOISE
+			accent = AlveolusVisualTheme.TURQUOISE.lightened(0.18)
 		elif ability.ready():
-			accent = AlveolusVisualTheme.TEAL
+			accent = AlveolusVisualTheme.TEAL.lightened(0.28)
 		elif ability.occupied():
-			accent = AlveolusVisualTheme.COBALT
+			accent = AlveolusVisualTheme.SKY_DEEP
 		if _ability_cards[slot].get_meta(&"accent", Color.TRANSPARENT) != accent:
 			_ability_cards[slot].set_meta(&"accent", accent)
 		if _ability_icons[slot].kind != ability.icon_id() or _ability_icons[slot].accent != accent:
@@ -629,6 +633,8 @@ func _apply_abilities() -> void:
 		if _ability_titles[slot].modulate != title_color:
 			_ability_titles[slot].modulate = title_color
 		_set_label_text(_ability_glyphs[slot], ability.key_glyph_text())
+		if _ability_glyphs[slot].modulate != AlveolusVisualTheme.IVORY:
+			_ability_glyphs[slot].modulate = AlveolusVisualTheme.IVORY
 		_set_label_text(_ability_statuses[slot], ability.status_text())
 		if _ability_statuses[slot].modulate != accent:
 			_ability_statuses[slot].modulate = accent
@@ -823,15 +829,15 @@ func _fit_stat_columns(available_width: float) -> void:
 func _stat_accent(stat: RunHUDViewModel.StatValueViewModel) -> Color:
 	match stat.icon_id():
 		&"treatment":
-			return AlveolusVisualTheme.TURQUOISE
+			return AlveolusVisualTheme.TURQUOISE.lightened(0.22)
 		&"automatic_therapy":
-			return AlveolusVisualTheme.GOLD
+			return AlveolusVisualTheme.GOLD.lightened(0.12)
 		&"therapy_precision":
-			return AlveolusVisualTheme.SKY_DEEP
+			return Color("8fc9ff")
 		&"immune":
-			return AlveolusVisualTheme.CORAL
+			return AlveolusVisualTheme.CORAL.lightened(0.18)
 		&"sample":
-			return AlveolusVisualTheme.TEAL
+			return AlveolusVisualTheme.TEAL.lightened(0.30)
 	return AlveolusVisualTheme.IVORY
 
 

@@ -11,7 +11,8 @@ func _initialize() -> void:
 func _run() -> void:
 	var screen_source := _read_source("res://scripts/ui/screens/case_archive_screen.gd")
 	_check(not screen_source.contains("LevelCaseIllustration"), "Fallarchiv baut keine Fallillustrationen mehr")
-	_check(not screen_source.contains("add_theme_stylebox_override"), "Fallarchiv erzeugt für iconfreie Karten keine lokalen StyleBoxen")
+	_check(screen_source.contains("AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_DOCUMENT_INSET)"), "Fragezeichen-Platzhalter verwendet die zentrale DocumentInset-Fläche")
+	_check(not screen_source.contains("add_theme_stylebox_override"), "Fallarchiv erzeugt für Platzhalter keine lokalen StyleBoxen")
 	var host := _create_logical_host(Vector2i(1280, 720))
 	var source_entries := _fixture_entries()
 	var view_model := CaseArchiveViewModel.new(7, source_entries, &"case_01")
@@ -56,9 +57,17 @@ func _run() -> void:
 	_check(locked.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTION_CARD, "Gesperrter Fall bleibt eine zentrale Auswahlkarte")
 	var locked_status := locked.find_child("Status", true, false) as Label
 	_check(locked_status != null and locked_status.text.contains("Gesperrt"), "Gesperrt wird zusätzlich zur Farbe als Text genannt")
-	_check(unlocked.find_child("CaseIllustration", true, false) == null and locked.find_child("CaseIllustration", true, false) == null, "Fallkarten verzichten vollständig auf Illustrations- und Icon-Chrome")
-	_check(is_equal_approx(unlocked.custom_minimum_size.y, CaseArchiveScreen.CARD_HEIGHT), "Iconfreie Desktop-Fallkarten besitzen eine inhaltsgerechte Höhe")
-	_check(CaseArchiveScreen.CARD_HEIGHT >= 184.0, "Alle fünf Textzeilen bleiben innerhalb der Fallkarte")
+	_check(unlocked.find_child("CaseIllustration", true, false) == null and locked.find_child("CaseIllustration", true, false) == null, "Fallkarten verwenden weiterhin keine Fallillustration oder externes Bildasset")
+	_assert_case_placeholder(unlocked)
+	_assert_case_placeholder(locked)
+	_check(unlocked.find_child("Facts", true, false) == null, "Minuten- und Bosszeit-Fakten belegen keine sichtbare Kartenzeile mehr")
+	var visible_copy := _visible_label_copy(unlocked)
+	_check(not visible_copy.contains("Boss") and not visible_copy.contains("Min."), "Sichtbare Fallkartencopy enthält weder Boss- noch Minutenzeit")
+	var summary := unlocked.find_child("Summary", true, false) as Label
+	_check(summary != null and summary.max_lines_visible == 2, "Bestwert und Fortschritt sind in einer kompakten, höchstens zweizeiligen Zusammenfassung gebündelt")
+	_check(unlocked.find_child("Best", true, false) == null and unlocked.find_child("Record", true, false) == null, "Fallkarte reserviert keine getrennten Metadatenzeilen")
+	_check(is_equal_approx(unlocked.custom_minimum_size.y, CaseArchiveScreen.CARD_HEIGHT), "Desktop-Fallkarten besitzen eine dichte inhaltsgerechte Höhe")
+	_check(CaseArchiveScreen.CARD_HEIGHT <= 144.0 and CaseArchiveScreen.CARD_HEIGHT_COMPACT < CaseArchiveScreen.CARD_HEIGHT, "Fallkarten bleiben kompakt und werden im kleinen Viewport nochmals dichter")
 
 	var selected_ids: Array[StringName] = []
 	screen.case_selected.connect(func(case_id: StringName) -> void: selected_ids.append(case_id))
@@ -174,6 +183,25 @@ func _right_inside_scroll_content(control: Control, scroll: ScrollContainer, tol
 	if scroll_bar != null and scroll_bar.visible:
 		content_right = minf(content_right, scroll_bar.get_global_rect().position.x)
 	return control.get_global_rect().end.x <= content_right + tolerance
+
+
+func _assert_case_placeholder(card: Button) -> void:
+	var placeholder := card.find_child("CasePlaceholder", true, false) as PanelContainer
+	var center := card.find_child("PlaceholderCenter", true, false) as CenterContainer
+	var question_mark := card.find_child("QuestionMark", true, false) as Label
+	_check(placeholder != null and placeholder.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Fallkarte verwendet einen zentral gestylten Placeholder")
+	_check(placeholder != null and placeholder.get_meta(&"alveolus_component", &"") == &"case_placeholder", "Placeholder ist als gemeinsame semantische Komponente markiert")
+	_check(center != null and question_mark != null and question_mark.text == "?", "Fragezeichen sitzt in einem echten CenterContainer")
+	_check(placeholder != null and placeholder.custom_minimum_size.is_equal_approx(Vector2(CaseArchiveScreen.PLACEHOLDER_SIZE, CaseArchiveScreen.PLACEHOLDER_SIZE)), "Placeholder besitzt eine klare quadratische Zielgröße")
+
+
+func _visible_label_copy(card: Button) -> String:
+	var parts := PackedStringArray()
+	for node in card.find_children("*", "Label", true, false):
+		var label := node as Label
+		if label != null and label.visible:
+			parts.append(label.text)
+	return " ".join(parts)
 
 
 func _check_page_header_contract(shell: PanelContainer, expected_title: String) -> void:

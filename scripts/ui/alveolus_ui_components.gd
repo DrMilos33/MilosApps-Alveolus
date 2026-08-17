@@ -514,18 +514,18 @@ static func apply_progress_accent(control: ProgressBar, accent: Color) -> Progre
 
 
 ## Applies the shared translucent cooldown-track treatment used by occupied
-## run abilities. A full/ready bar remains a restrained wash instead of
-## becoming an opaque card over the playfield.
+## run abilities. The dark carrier keeps glyphs readable over bright tissue,
+## while the coloured fill remains clearly distinct from a full HUD card.
 static func apply_hud_cooldown_track(control: ProgressBar, accent: Color) -> ProgressBar:
 	if control == null:
 		return null
 	if control.get_meta(&"alveolus_hud_cooldown_accent", Color.TRANSPARENT) == accent:
 		return control
-	var background := AlveolusVisualTheme.bar_style(Color(AlveolusVisualTheme.PETROL_DEEP, 0.18), 7, true)
-	background.border_color = Color(accent, 0.30)
+	var background := AlveolusVisualTheme.bar_style(Color(AlveolusVisualTheme.PETROL_DEEP, 0.56), 7, true)
+	background.border_color = Color(accent.lightened(0.18), 0.78)
 	background.set_border_width_all(1)
 	control.add_theme_stylebox_override("background", background)
-	control.add_theme_stylebox_override("fill", AlveolusVisualTheme.bar_style(Color(accent, 0.22), 7, true))
+	control.add_theme_stylebox_override("fill", AlveolusVisualTheme.bar_style(Color(accent.lightened(0.12), 0.42), 7, true))
 	control.set_meta(&"alveolus_hud_cooldown_accent", accent)
 	return control
 

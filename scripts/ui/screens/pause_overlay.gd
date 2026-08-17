@@ -49,7 +49,7 @@ var _sheet: PanelContainer
 var _sheet_margin: MarginContainer
 var _sheet_stack: VBoxContainer
 var _pause_header: VBoxContainer
-var _coffee_symbol: Label
+var _doctor_balance: Control
 var _title_label: Label
 var _doctor_label: Label
 var _body_scroll: ScrollContainer
@@ -291,19 +291,21 @@ func _build() -> void:
 	var title_line := HBoxContainer.new()
 	title_line.name = "PauseTitleLine"
 	title_line.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	_coffee_symbol = AlveolusUIComponents.label("☕", AlveolusVisualTheme.TYPE_TITLE_LABEL)
-	_coffee_symbol.name = "CoffeeSymbol"
-	_coffee_symbol.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_coffee_symbol.set_meta(&"decorative", true)
-	title_line.add_child(_coffee_symbol)
+	_doctor_balance = Control.new()
+	_doctor_balance.name = "DoctorBalance"
+	_doctor_balance.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_doctor_balance.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	title_line.add_child(_doctor_balance)
 	_title_label = AlveolusUIComponents.label("Pause", AlveolusVisualTheme.TYPE_TITLE_LABEL)
 	_title_label.name = "Title"
 	_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_line.add_child(_title_label)
 	_doctor_label = AlveolusUIComponents.label("Doctor Milos", AlveolusVisualTheme.TYPE_MUTED_LABEL)
 	_doctor_label.name = "DoctorMeta"
 	_doctor_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_line.add_child(_doctor_label)
+	_sync_doctor_balance.call_deferred()
 	_pause_header.add_child(title_line)
 	_sheet_stack.add_child(_pause_header)
 	_sheet_stack.move_child(_pause_header, 0)
@@ -467,7 +469,8 @@ func _apply_mode(mode: int) -> void:
 	_mode = mode
 	var menu_visible := mode == Mode.MENU
 	_title_label.text = "Pause" if menu_visible else "Charakterwerte"
-	_coffee_symbol.visible = menu_visible
+	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if menu_visible else HORIZONTAL_ALIGNMENT_LEFT
+	_doctor_balance.visible = menu_visible
 	_doctor_label.visible = menu_visible
 	_menu_body.visible = menu_visible
 	_stats_body.visible = not menu_visible
@@ -522,6 +525,7 @@ func _update_responsive_layout() -> void:
 	)
 	if available.x <= 0.0 or available.y <= 0.0:
 		return
+	_sync_doctor_balance()
 
 	var maximum_width := MENU_MAXIMUM_WIDTH if _mode == Mode.MENU else STATS_MAXIMUM_WIDTH
 	var sheet_width := minf(maximum_width, available.x)
@@ -557,6 +561,14 @@ func _update_responsive_layout() -> void:
 	_scrollbar_inset.add_theme_constant_override("margin_right", scrollbar_inset)
 	if not requires_scroll:
 		_body_scroll.scroll_vertical = 0
+
+
+func _sync_doctor_balance() -> void:
+	if _doctor_balance == null or _doctor_label == null:
+		return
+	# Equal left and right side widths keep "Pause" geometrically centered even
+	# though the Doctor metadata remains aligned at the right edge.
+	_doctor_balance.custom_minimum_size.x = _doctor_label.get_combined_minimum_size().x
 
 
 func _set_compact_menu_layout(compact: bool) -> void:

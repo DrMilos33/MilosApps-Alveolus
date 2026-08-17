@@ -6,8 +6,9 @@ signal replay_story
 signal back
 
 const CARD_MINIMUM_WIDTH := 260.0
-const CARD_HEIGHT := 188.0
-const CARD_HEIGHT_COMPACT := 180.0
+const CARD_HEIGHT := 144.0
+const CARD_HEIGHT_COMPACT := 132.0
+const PLACEHOLDER_SIZE := 64.0
 
 var _applied_revision := -1
 var _applied_content_hash := 0
@@ -131,7 +132,7 @@ func _build_interface() -> void:
 	content.name = "ArchiveContent"
 	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
 	var guidance := AlveolusUIComponents.label(
-		"Wähle einen dokumentierten Fall. Ein Sieg schaltet den nächsten frei.",
+		"Wähle einen Fall. Siege schalten weitere Fälle frei.",
 		AlveolusVisualTheme.TYPE_MUTED_LABEL
 	)
 	guidance.name = "Guidance"
@@ -199,7 +200,29 @@ func _build_case_card(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: 
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
 
+	# Until bespoke case art exists, every card uses the same semantic inset and
+	# a clear text glyph. This keeps the placeholder in the central theme system
+	# without introducing an external asset or a local StyleBox copy.
+	var placeholder := AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_DOCUMENT_INSET)
+	placeholder.name = "CasePlaceholder"
+	placeholder.custom_minimum_size = Vector2(PLACEHOLDER_SIZE, PLACEHOLDER_SIZE)
+	placeholder.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	placeholder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	placeholder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	placeholder.set_meta(&"alveolus_component", &"case_placeholder")
+	var placeholder_center := CenterContainer.new()
+	placeholder_center.name = "PlaceholderCenter"
+	placeholder_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var question_mark := AlveolusUIComponents.label("?", AlveolusVisualTheme.TYPE_TITLE_LABEL)
+	question_mark.name = "QuestionMark"
+	question_mark.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	question_mark.modulate = entry.get_accent().lightened(0.12)
+	placeholder_center.add_child(question_mark)
+	placeholder.add_child(placeholder_center)
+	row.add_child(placeholder)
+
 	var copy := VBoxContainer.new()
+	copy.name = "CaseCopy"
 	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	copy.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
@@ -215,29 +238,23 @@ func _build_case_card(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: 
 
 	var title := AlveolusUIComponents.label(entry.get_title(), AlveolusVisualTheme.TYPE_SECTION_LABEL)
 	title.name = "Title"
-	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.max_lines_visible = 2
+	title.autowrap_mode = TextServer.AUTOWRAP_OFF
+	title.max_lines_visible = 1
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	copy.add_child(title)
 
-	var facts := AlveolusUIComponents.label(entry.get_facts_text(), AlveolusVisualTheme.TYPE_MUTED_LABEL)
-	facts.name = "Facts"
-	facts.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	facts.max_lines_visible = 2
-	copy.add_child(facts)
-
-	var best := AlveolusUIComponents.label(entry.get_best_text(), AlveolusVisualTheme.TYPE_BODY_LABEL)
-	best.name = "Best"
-	best.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	copy.add_child(best)
-
-	var record := AlveolusUIComponents.label(entry.get_record_text(), AlveolusVisualTheme.TYPE_MUTED_LABEL)
-	record.name = "Record"
-	record.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	copy.add_child(record)
+	var summary := AlveolusUIComponents.label(
+		_compact_summary(entry.get_best_text(), entry.get_record_text()),
+		AlveolusVisualTheme.TYPE_MUTED_LABEL
+	)
+	summary.name = "Summary"
+	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	summary.max_lines_visible = 2
+	summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	copy.add_child(summary)
 
 	if not entry.is_unlocked():
-		copy.modulate = Color(0.66, 0.72, 0.73, 0.58)
+		row.modulate = Color(0.66, 0.72, 0.73, 0.58)
 
 	var card_margin := AlveolusUIComponents.margin(row, 12)
 	card_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -247,6 +264,14 @@ func _build_case_card(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: 
 
 func _emit_case_selected(case_id: StringName) -> void:
 	case_selected.emit(case_id)
+
+
+func _compact_summary(best_text: String, record_text: String) -> String:
+	if best_text.is_empty():
+		return record_text
+	if record_text.is_empty():
+		return best_text
+	return "%s · %s" % [best_text, record_text]
 
 
 func _refresh_card_widths() -> void:
@@ -309,4 +334,4 @@ func _fit_shell_to_host() -> void:
 
 func _accessible_name(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: bool) -> String:
 	var state := "Ausgewählt" if selected else entry.get_status_text()
-	return "%s. %s. %s. %s" % [entry.get_title(), state, entry.get_facts_text(), entry.get_record_text()]
+	return "%s. %s. %s" % [entry.get_title(), state, entry.get_record_text()]

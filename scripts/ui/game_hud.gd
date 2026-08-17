@@ -847,7 +847,7 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 		),
 	]
 	var toggle_settings: Array[SettingsScreenViewModel.ToggleSettingViewModel] = [
-		SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Bewegung reduzieren", current_ui_settings.reduce_motion),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Animationen reduzieren", current_ui_settings.reduce_motion),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", run_stats_enabled),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"fullscreen", "Vollbild", current_ui_settings.fullscreen, not OS.has_feature("web")),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"confirm_restart", "Neustart bestätigen", current_ui_settings.confirm_run_restart),
@@ -2417,7 +2417,7 @@ func show_level_select(meta: MetaProgressionState, levels: Array[LevelDefinition
 			level.order,
 			_level_card_title(level),
 			"%s · %s" % ["INTRO" if level.is_tutorial else "FALL %02d" % level.order, status],
-			"%s · BOSS %s" % [level.duration_text().to_upper(), level.boss_time_text().to_upper()],
+			"",
 			best,
 			"%d Siege · Lv %d · %d Bakt. · Ziele %d/%d" % [record.victories, record.highest_analysis, record.best_defeats, mastery_done, mastery_total],
 			level.is_tutorial,
