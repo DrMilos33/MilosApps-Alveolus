@@ -164,6 +164,36 @@ func _build_components_view() -> Control:
 	]:
 		palette.add_child(_color_swatch(swatch[0], swatch[1]))
 	page.add_child(palette)
+	page.add_child(AlveolusUIComponents.section_header(
+		"Semantische Kampfrollen",
+		"Schadenstypen",
+		"Form, ausgeschriebener Name und Wert bleiben zusätzlich zur Farbe sichtbar.",
+		true
+	))
+	var damage_types := GridContainer.new()
+	damage_types.name = "DamageTypeGallery"
+	damage_types.columns = 4
+	damage_types.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	damage_types.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	var damage_values := {
+		&"fire": ["15 %", "Resistenz", "+"],
+		&"water": ["10 %", "Verwundbarkeit", "−"],
+		&"earth": ["5 %", "Resistenz", "+"],
+		&"wind": ["0 %", "Neutral", ""],
+	}
+	for damage_type_id in AlveolusVisualTheme.DAMAGE_TYPE_ORDER:
+		var damage_data: Array = damage_values[damage_type_id]
+		var parts := AlveolusUIComponents.damage_type_chip(
+			damage_type_id,
+			"",
+			String(damage_data[0]),
+			String(damage_data[1]),
+			String(damage_data[2])
+		)
+		var chip := parts["panel"] as PanelContainer
+		chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		damage_types.add_child(chip)
+	page.add_child(damage_types)
 	page.add_child(AlveolusUIComponents.section_header("Flächenrollen", "Dossier statt Kachelwand", "Elevation folgt Bedeutung, nicht jedem Inhaltsblock.", true))
 	var surfaces := HBoxContainer.new()
 	surfaces.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)

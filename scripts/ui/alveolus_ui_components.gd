@@ -427,6 +427,42 @@ static func value_row(name_text: String, value_text: String, highlighted: bool =
 static func stat_row(name_text: String, value_text: String, highlighted: bool = false) -> PanelContainer:
 	return value_row(name_text, value_text, highlighted)
 
+## Structured, non-interactive damage presentation. Callers pass a display-ready
+## value (for example "+10 %" or "0 %"); this component never receives raw
+## ratings and never evaluates combat formulas. The semantic type role owns the
+## colour and glyph so screens do not need per-ID branches.
+static func damage_type_row(
+	damage_type_id: StringName,
+	name_text: String,
+	formatted_value: String,
+	meaning_text: String = "",
+	indicator_text: String = ""
+) -> Dictionary:
+	return _damage_type_presentation(
+		damage_type_id,
+		name_text,
+		formatted_value,
+		meaning_text,
+		indicator_text,
+		false
+	)
+
+static func damage_type_chip(
+	damage_type_id: StringName,
+	name_text: String,
+	formatted_value: String,
+	meaning_text: String = "",
+	indicator_text: String = ""
+) -> Dictionary:
+	return _damage_type_presentation(
+		damage_type_id,
+		name_text,
+		formatted_value,
+		meaning_text,
+		indicator_text,
+		true
+	)
+
 static func semantic_copy_section(
 	title_text: String,
 	body_text: String,
@@ -666,6 +702,90 @@ static func _information_card(
 		stack.add_child(meta_label)
 	card.add_child(margin(stack, padding))
 	return {"panel": card, "content": stack, "title": title, "body": body, "meta": meta_label}
+
+static func _damage_type_presentation(
+	damage_type_id: StringName,
+	name_text: String,
+	formatted_value: String,
+	meaning_text: String,
+	indicator_text: String,
+	compact: bool
+) -> Dictionary:
+	var accent := AlveolusVisualTheme.damage_type_accent(damage_type_id)
+	var icon_kind := AlveolusVisualTheme.damage_type_icon_kind(damage_type_id)
+	var resolved_name := name_text if not name_text.is_empty() else AlveolusVisualTheme.damage_type_display_name(damage_type_id)
+	var resolved_value := formatted_value if not formatted_value.is_empty() else "—"
+	var component_name := &"damage_type_chip" if compact else &"damage_type_row"
+	var control := PanelContainer.new()
+	control.name = "%s_%s" % ["DamageTypeChip" if compact else "DamageTypeRow", damage_type_id]
+	control.theme_type_variation = AlveolusVisualTheme.TYPE_DAMAGE_TYPE_CHIP if compact else AlveolusVisualTheme.TYPE_DAMAGE_TYPE_ROW
+	control.custom_minimum_size.y = 44.0 if compact else 52.0
+	control.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN if compact else Control.SIZE_EXPAND_FILL
+	control.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	control.set_meta(&"alveolus_component", component_name)
+	control.set_meta(&"damage_type_id", damage_type_id)
+	control.set_meta(&"damage_type_accent", accent)
+	control.set_meta(&"damage_type_icon_kind", icon_kind)
+	control.set_meta(&"damage_type_value_is_formatted", true)
+	var accessible_value := "%s%s" % [indicator_text, resolved_value]
+	var accessible_name := "%s, %s" % [resolved_name, accessible_value]
+	if not meaning_text.is_empty():
+		accessible_name += ", %s" % meaning_text
+	control.set_meta(&"alveolus_accessible_name", accessible_name)
+
+	var row := HBoxContainer.new()
+	row.name = "DamageTypeContent"
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	var icon := SimpleIcon.new()
+	icon.name = "DamageTypeIcon"
+	icon.custom_minimum_size = Vector2(24.0, 24.0)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon.configure(icon_kind, accent)
+	row.add_child(icon)
+
+	var identity := VBoxContainer.new()
+	identity.name = "DamageTypeIdentity"
+	identity.add_theme_constant_override("separation", 0)
+	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var name_label := label(resolved_name, AlveolusVisualTheme.TYPE_BODY_LABEL)
+	name_label.name = "DamageTypeName"
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	identity.add_child(name_label)
+	var meaning_label: Label = null
+	if not meaning_text.is_empty():
+		meaning_label = label(meaning_text, AlveolusVisualTheme.TYPE_MUTED_LABEL)
+		meaning_label.name = "DamageTypeMeaning"
+		meaning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		identity.add_child(meaning_label)
+	row.add_child(identity)
+
+	var value_group := HBoxContainer.new()
+	value_group.name = "DamageTypeValueGroup"
+	value_group.alignment = BoxContainer.ALIGNMENT_END
+	value_group.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	value_group.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var indicator_label: Label = null
+	if not indicator_text.is_empty():
+		indicator_label = label(indicator_text, AlveolusVisualTheme.TYPE_VALUE_LABEL)
+		indicator_label.name = "DamageTypeIndicator"
+		indicator_label.add_theme_color_override("font_color", accent)
+		value_group.add_child(indicator_label)
+	var value_label := label(resolved_value, AlveolusVisualTheme.TYPE_VALUE_LABEL)
+	value_label.name = "DamageTypeValue"
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.add_theme_color_override("font_color", accent)
+	value_group.add_child(value_label)
+	row.add_child(value_group)
+	control.add_child(margin(row, 8))
+	return {
+		"panel": control,
+		"row": row,
+		"icon": icon,
+		"name": name_label,
+		"meaning": meaning_label,
+		"indicator": indicator_label,
+		"value": value_label,
+	}
 
 static func _build_action_button(
 	text_value: String,

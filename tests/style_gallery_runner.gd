@@ -42,6 +42,8 @@ func _run() -> void:
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_TOGGLE_ROW) == &"CheckButton", "ToggleRow behält native Toggle-Semantik")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_OPTION_ROW) == &"OptionButton", "OptionRow behält native Auswahlsemantik")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_SLIDER_ROW) == &"HSlider", "SliderRow behält native Range-Semantik")
+	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_DAMAGE_TYPE_ROW) == &"PanelContainer", "DamageTypeRow besitzt eine zentrale semantische Theme-Variante")
+	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_DAMAGE_TYPE_CHIP) == &"PanelContainer", "DamageTypeChip besitzt eine zentrale semantische Theme-Variante")
 	var line_edit_style := visual_theme.get_stylebox("normal", &"LineEdit") as StyleBoxFlat
 	_check(line_edit_style != null and _contrast_ratio(visual_theme.get_color("font_color", &"LineEdit"), line_edit_style.bg_color) >= 4.5, "Formfelder nutzen lesbare Bio-Lumen-Schrift auf dunkler Fläche")
 	_check(visual_theme.has_stylebox("focus", AlveolusVisualTheme.TYPE_SLIDER_ROW), "SliderRow besitzt einen sichtbaren Fokusvertrag")
@@ -167,6 +169,27 @@ func _run() -> void:
 	var selected_card_focus := visual_theme.get_stylebox("focus", AlveolusVisualTheme.TYPE_SELECTED_CARD) as StyleBoxFlat
 	_check(selected_card_focus.bg_color.a <= 0.12 and selected_card_focus.border_color.is_equal_approx(AlveolusVisualTheme.FOCUS_RING), "Der Kartenfokus bleibt ein transparenter Ring über dem sichtbaren Auswahlzustand")
 
+	_check(AlveolusVisualTheme.DAMAGE_TYPE_ORDER == [&"fire", &"water", &"earth", &"wind"], "Schadenstypen besitzen die verbindliche Reihenfolge Feuer, Wasser, Erde, Wind")
+	var expected_damage_accents := {
+		&"fire": AlveolusVisualTheme.DAMAGE_FIRE_ACCENT,
+		&"water": AlveolusVisualTheme.DAMAGE_WATER_ACCENT,
+		&"earth": AlveolusVisualTheme.DAMAGE_EARTH_ACCENT,
+		&"wind": AlveolusVisualTheme.DAMAGE_WIND_ACCENT,
+	}
+	_check(AlveolusVisualTheme.DAMAGE_FIRE_ACCENT.is_equal_approx(AlveolusVisualTheme.CORAL), "Feuer verwendet zentral Koralle/Orange")
+	_check(AlveolusVisualTheme.DAMAGE_EARTH_ACCENT.is_equal_approx(AlveolusVisualTheme.GOLD), "Erde verwendet zentral Honiggold/Ocker")
+	_check(AlveolusVisualTheme.DAMAGE_WIND_ACCENT.is_equal_approx(AlveolusVisualTheme.TURQUOISE), "Wind verwendet zentral Türkis/Mint")
+	_check(AlveolusVisualTheme.DAMAGE_WATER_ACCENT.b > AlveolusVisualTheme.DAMAGE_WATER_ACCENT.r and AlveolusVisualTheme.DAMAGE_WATER_ACCENT.b > AlveolusVisualTheme.DAMAGE_WATER_ACCENT.g, "Wasser verwendet zentral Kobalt/Cyan")
+	var damage_icon_kinds: Dictionary = {}
+	for damage_type_id in AlveolusVisualTheme.DAMAGE_TYPE_ORDER:
+		var icon_kind := AlveolusVisualTheme.damage_type_icon_kind(damage_type_id)
+		damage_icon_kinds[icon_kind] = true
+		_check(AlveolusVisualTheme.is_damage_type_role(damage_type_id), "%s besitzt eine zentrale Schadenstyp-Rolle" % damage_type_id)
+		_check(AlveolusVisualTheme.damage_type_accent(damage_type_id).is_equal_approx(expected_damage_accents[damage_type_id]), "%s nutzt ausschließlich seinen zentralen Akzent" % damage_type_id)
+		_check(not AlveolusVisualTheme.damage_type_display_name(damage_type_id).is_empty(), "%s besitzt einen ausgeschriebenen Namen" % damage_type_id)
+		_check(SimpleIcon.supports(icon_kind), "%s besitzt ein registriertes SimpleIcon" % damage_type_id)
+	_check(damage_icon_kinds.size() == AlveolusVisualTheme.DAMAGE_TYPE_ORDER.size(), "Alle vier Schadenstypen besitzen eindeutig verschiedene Glyphen")
+
 	var page_canvas := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.PAGE_CANVAS)
 	var section_group := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.SECTION_GROUP)
 	var action_card := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.ACTION_CARD)
@@ -224,6 +247,10 @@ func _run() -> void:
 	var slider_parts := AlveolusUIComponents.slider_row("Menülautstärke", 0.0, 100.0, 65.0)
 	var choice_row := AlveolusUIComponents.choice_row("Bakterium", "Pneumokokke")
 	var choice_card := AlveolusUIComponents.choice_card("Fokusfeld", "Verstärkt den Zielbereich")
+	var damage_row_parts := AlveolusUIComponents.damage_type_row(&"water", "", "10 %", "Resistenz", "+")
+	var damage_row := damage_row_parts["panel"] as PanelContainer
+	var damage_chip_parts := AlveolusUIComponents.damage_type_chip(&"fire", "", "15 %", "Verwundbarkeit", "−")
+	var damage_chip := damage_chip_parts["panel"] as PanelContainer
 	_check(primary_action.custom_minimum_size.y >= 48.0 and primary_action.get_meta(&"alveolus_action_role") == AlveolusUIComponents.ACTION_PRIMARY, "ActionButton bündelt Rolle und Mindestziel")
 	_check(primary_action.scale == Vector2.ONE and bool(primary_action.get_meta(&"disable_motion_scale", false)), "Hover und Fokus verändern niemals die Buttongeometrie")
 	var bio_lumen_fill := primary_action.get_node_or_null("BioLumenFill") as BioLumenButtonFill
@@ -361,6 +388,16 @@ func _run() -> void:
 	_check(choice_row.custom_minimum_size.y == 64.0 and choice_card.custom_minimum_size.y == 88.0, "ChoiceRow und ChoiceCard besitzen getrennte feste Dichten")
 	_check(choice_row.theme_type_variation == AlveolusVisualTheme.TYPE_CHOICE_ROW, "ChoiceRow nutzt die kompakte zentrale Kartenrolle")
 	_check(choice_card.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTION_CARD, "ChoiceCard behält die ausführliche zentrale Kartenrolle")
+	_check(damage_row.theme_type_variation == AlveolusVisualTheme.TYPE_DAMAGE_TYPE_ROW and damage_row.get_meta(&"damage_type_id") == &"water", "DamageTypeRow transportiert seine semantische Rolle")
+	_check((damage_row_parts["icon"] as SimpleIcon).kind == &"damage_water" and (damage_row_parts["name"] as Label).text == "Wasser" and (damage_row_parts["value"] as Label).text == "10 %", "DamageTypeRow enthält Icon, ausgeschriebenen Namen und fertig formatierten Wert")
+	_check((damage_row_parts["indicator"] as Label).text == "+" and (damage_row_parts["meaning"] as Label).text == "Resistenz", "DamageTypeRow unterstützt Vorzeichen und Bedeutungslabel")
+	_check(damage_chip.theme_type_variation == AlveolusVisualTheme.TYPE_DAMAGE_TYPE_CHIP and String(damage_chip.get_meta(&"alveolus_accessible_name", "")).contains("Feuer"), "DamageTypeChip bleibt strukturiert und zugänglich benannt")
+	_check(not damage_row.has_theme_stylebox_override("panel") and damage_row.material == null and damage_row.get_node_or_null("BioLumenSurface") == null, "DamageTypeRow erzeugt keine lokale StyleBox- oder Shaderkopie")
+	_check(not damage_chip.has_theme_stylebox_override("panel") and damage_chip.material == null and damage_chip.get_node_or_null("BioLumenSurface") == null, "DamageTypeChip erzeugt keine lokale StyleBox- oder Shaderkopie")
+	var gallery_damage_ids: Array[StringName] = []
+	for candidate in gallery.find_children("DamageTypeChip_*", "PanelContainer", true, false):
+		gallery_damage_ids.append((candidate as PanelContainer).get_meta(&"damage_type_id", &""))
+	_check(gallery_damage_ids == AlveolusVisualTheme.DAMAGE_TYPE_ORDER, "Die Stilgalerie zeigt alle vier Schadenstypen in verbindlicher Reihenfolge")
 	primary_action.free()
 	second_primary.free()
 	planning_start.free()
@@ -375,6 +412,8 @@ func _run() -> void:
 	(slider_parts["row"] as Control).free()
 	choice_row.free()
 	choice_card.free()
+	damage_row.free()
+	damage_chip.free()
 
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
 	for viewport_size in [Vector2i(1280, 720), Vector2i(1280, 800), Vector2i(1024, 576), Vector2i(960, 540)]:

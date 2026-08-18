@@ -17,6 +17,8 @@ const DRAWN_KINDS: Array[StringName] = [
 	&"unlock_treatment_line", &"unlock_protection_field", &"unlock_sample_pull", &"quick_test",
 	&"reserve_buffer", &"defense_readiness", &"deployment_routine", &"experience_gain",
 	&"defense_training", &"life_regeneration",
+	&"damage_fire", &"damage_water", &"damage_earth", &"damage_wind",
+	&"fire", &"water", &"earth", &"wind",
 	&"locked", &"check", &"remove", &"restart", &"diamond", &"circle", &"target",
 ]
 
@@ -162,6 +164,14 @@ func _draw() -> void:
 		&"deployment_routine":
 			_draw_clock()
 			_draw_spark(Vector2(16, -15), 3.5)
+		&"damage_fire", &"fire":
+			_draw_damage_fire()
+		&"damage_water", &"water":
+			_draw_damage_water()
+		&"damage_earth", &"earth":
+			_draw_damage_earth()
+		&"damage_wind", &"wind":
+			_draw_damage_wind()
 		&"locked":
 			_draw_lock()
 		&"check":
@@ -346,6 +356,54 @@ func _draw_treatment_line() -> void:
 	draw_line(Vector2(-21, 8), Vector2(14, -8), accent, 4.0, true)
 	draw_colored_polygon(PackedVector2Array([Vector2(10, -13), Vector2(22, -12), Vector2(15, -2)]), accent)
 	draw_line(Vector2(-19, 14), Vector2(16, -2), Color(accent, 0.35), 2.0, true)
+
+func _draw_damage_fire() -> void:
+	var flame := PackedVector2Array([
+		Vector2(1, -21), Vector2(13, -8), Vector2(16, 3), Vector2(11, 16),
+		Vector2(0, 21), Vector2(-12, 16), Vector2(-17, 5), Vector2(-12, -7),
+		Vector2(-4, -15), Vector2(-2, -5), Vector2(5, 1), Vector2(8, -7),
+	])
+	draw_colored_polygon(flame, Color(accent, 0.20))
+	var outline := flame.duplicate()
+	outline.append(flame[0])
+	draw_polyline(outline, accent, 2.4, true)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(1, -3), Vector2(8, 7), Vector2(5, 15), Vector2(-2, 18),
+		Vector2(-8, 12), Vector2(-7, 5),
+	]), Color(accent, 0.72))
+
+func _draw_damage_water() -> void:
+	var drop := PackedVector2Array([
+		Vector2(0, -21), Vector2(15, 0), Vector2(15, 9), Vector2(9, 18),
+		Vector2(0, 21), Vector2(-9, 18), Vector2(-15, 9), Vector2(-15, 0),
+	])
+	draw_colored_polygon(drop, Color(accent, 0.18))
+	var outline := drop.duplicate()
+	outline.append(drop[0])
+	draw_polyline(outline, accent, 2.4, true)
+	draw_arc(Vector2(0, 6), 8.0, PI * 0.10, PI * 0.90, 12, Color(accent, 0.82), 2.2, true)
+	draw_line(Vector2(-8, 6), Vector2(8, 6), Color(accent, 0.42), 1.5, true)
+
+func _draw_damage_earth() -> void:
+	var crystal := PackedVector2Array([
+		Vector2(0, -20), Vector2(15, -10), Vector2(19, 8),
+		Vector2(8, 19), Vector2(-10, 17), Vector2(-19, 4), Vector2(-13, -12),
+	])
+	draw_colored_polygon(crystal, Color(accent, 0.18))
+	var outline := crystal.duplicate()
+	outline.append(crystal[0])
+	draw_polyline(outline, accent, 2.4, true)
+	draw_line(Vector2(0, -20), Vector2(-3, 8), Color(accent, 0.76), 2.0, true)
+	draw_line(Vector2(-3, 8), Vector2(-19, 4), Color(accent, 0.76), 2.0, true)
+	draw_line(Vector2(-3, 8), Vector2(8, 19), Color(accent, 0.46), 2.0, true)
+	draw_line(Vector2(-13, -12), Vector2(-3, 8), Color(accent, 0.46), 2.0, true)
+
+func _draw_damage_wind() -> void:
+	draw_arc(Vector2(-3, -8), 11.0, -PI * 0.52, PI * 0.42, 14, accent, 2.5, true)
+	draw_line(Vector2(-20, -3), Vector2(7, -3), accent, 2.5, true)
+	draw_arc(Vector2(7, 4), 8.0, -PI * 0.48, PI * 0.56, 12, Color(accent, 0.78), 2.3, true)
+	draw_line(Vector2(-16, 10), Vector2(7, 10), Color(accent, 0.78), 2.3, true)
+	draw_line(Vector2(-21, 3), Vector2(17, 3), Color(accent, 0.42), 1.6, true)
 
 func _draw_spark(center: Vector2, radius: float) -> void:
 	draw_line(center + Vector2(-radius, 0), center + Vector2(radius, 0), accent, 1.8, true)

@@ -29,6 +29,34 @@ const FOCUS_RING := GOLD
 const SHADOW := Color(0.055, 0.12, 0.14, 0.22)
 const HAIRLINE := Color(0.071, 0.239, 0.275, 0.16)
 
+# The four active damage types own one stable semantic accent each. UI screens
+# consume the role helpers below instead of re-creating palettes or branching
+# on damage IDs locally. Every presentation still pairs the accent with a
+# glyph, written name and value; these colours are never the sole signal.
+const DAMAGE_FIRE_ACCENT := CORAL
+const DAMAGE_WATER_ACCENT := Color("4a9fe3")
+const DAMAGE_EARTH_ACCENT := GOLD
+const DAMAGE_WIND_ACCENT := TURQUOISE
+const DAMAGE_TYPE_ORDER: Array[StringName] = [&"fire", &"water", &"earth", &"wind"]
+const DAMAGE_TYPE_ACCENTS := {
+	&"fire": DAMAGE_FIRE_ACCENT,
+	&"water": DAMAGE_WATER_ACCENT,
+	&"earth": DAMAGE_EARTH_ACCENT,
+	&"wind": DAMAGE_WIND_ACCENT,
+}
+const DAMAGE_TYPE_ICON_KINDS := {
+	&"fire": &"damage_fire",
+	&"water": &"damage_water",
+	&"earth": &"damage_earth",
+	&"wind": &"damage_wind",
+}
+const DAMAGE_TYPE_DISPLAY_NAMES := {
+	&"fire": "Feuer",
+	&"water": "Wasser",
+	&"earth": "Erde",
+	&"wind": "Wind",
+}
+
 const SCREEN_MARGIN := 24
 const SCREEN_MARGIN_COMPACT := 16
 const HEADER_HEIGHT := 76
@@ -108,6 +136,8 @@ const TYPE_HUD_ALERT := &"HudAlert"
 const TYPE_PAGE_HEADER := &"PageHeader"
 const TYPE_FORM_CONTROL := &"FormControl"
 const TYPE_VALUE_ROW := &"ValueRow"
+const TYPE_DAMAGE_TYPE_ROW := &"DamageTypeRow"
+const TYPE_DAMAGE_TYPE_CHIP := &"DamageTypeChip"
 const TYPE_TOOLTIP_CARD := &"TooltipCard"
 const TYPE_DETAIL_CARD := &"DetailCard"
 const TYPE_SEGMENTED_TAB := &"SegmentedTab"
@@ -224,6 +254,8 @@ static func _configure_variations(theme: Theme) -> void:
 	_register_panel_variation(theme, TYPE_PAGE_HEADER, surface_role_style(SurfaceRole.PAGE_HEADER))
 	_register_panel_variation(theme, TYPE_FORM_CONTROL, surface_role_style(SurfaceRole.FORM_CONTROL, COBALT))
 	_register_panel_variation(theme, TYPE_VALUE_ROW, surface_role_style(SurfaceRole.VALUE_ROW))
+	_register_panel_variation(theme, TYPE_DAMAGE_TYPE_ROW, surface_role_style(SurfaceRole.VALUE_ROW))
+	_register_panel_variation(theme, TYPE_DAMAGE_TYPE_CHIP, surface_role_style(SurfaceRole.DOCUMENT_INSET))
 	_register_panel_variation(theme, TYPE_TOOLTIP_CARD, surface_role_style(SurfaceRole.TOOLTIP_CARD, TURQUOISE))
 	_register_panel_variation(theme, TYPE_DETAIL_CARD, surface_role_style(SurfaceRole.DETAIL_CARD, COBALT))
 
@@ -392,6 +424,21 @@ static func _configure_scrollbars(theme: Theme) -> void:
 		theme.set_stylebox("grabber_highlight", type_name, grabber_hover)
 		theme.set_stylebox("grabber_pressed", type_name, grabber_hover)
 		theme.set_constant("minimum_grab_length", type_name, 36)
+
+static func is_damage_type_role(damage_type_id: StringName) -> bool:
+	return DAMAGE_TYPE_ORDER.has(damage_type_id)
+
+static func damage_type_accent(damage_type_id: StringName) -> Color:
+	var accent: Color = DAMAGE_TYPE_ACCENTS.get(damage_type_id, MUTED)
+	return accent
+
+static func damage_type_icon_kind(damage_type_id: StringName) -> StringName:
+	var icon_kind: StringName = DAMAGE_TYPE_ICON_KINDS.get(damage_type_id, &"circle")
+	return icon_kind
+
+static func damage_type_display_name(damage_type_id: StringName) -> String:
+	var display_name: String = DAMAGE_TYPE_DISPLAY_NAMES.get(damage_type_id, "Unbekannt")
+	return display_name
 
 static func surface_role_style(
 	role: int,
