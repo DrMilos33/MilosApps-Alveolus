@@ -144,12 +144,21 @@ func _run() -> void:
 		Vector2(480.0, 320.0)
 	)
 	_check(
-		is_equal_approx(wide_fallback.x, wide_source_rect.end.x - wide_card_size.x),
-		"Eine fast vollbreite Quelle richtet den Tooltip deterministisch oberhalb rechtsbündig aus"
+		is_equal_approx(wide_fallback.x, 480.0 - ContextDetailController.VIEWPORT_MARGIN - wide_card_size.x),
+		"Nach beiden diagonalen Kandidaten wird die bevorzugte Rechtsposition deterministisch an den Viewport gebunden"
 	)
 	_check(
 		wide_fallback.y + wide_card_size.y <= wide_source_rect.position.y - ContextDetailController.SOURCE_GAP + 0.5,
 		"Der Vollbreiten-Fallback bleibt vollständig oberhalb der Quelle"
+	)
+	var top_bound_fallback := controller._contained_position(
+		Rect2(Vector2(24.0, 18.0), Vector2(62.0, 40.0)),
+		Vector2(220.0, 84.0),
+		Vector2(480.0, 320.0)
+	)
+	_check(
+		top_bound_fallback == Vector2(92.0, ContextDetailController.VIEWPORT_MARGIN),
+		"Fehlt oberhalb vertikaler Platz, bleibt AUTO beim bevorzugten Rechtskandidaten und klemmt ihn reproduzierbar in den Viewport"
 	)
 
 	var ability_strip := PanelContainer.new()
@@ -179,8 +188,8 @@ func _run() -> void:
 	await _settle()
 	_check(controller.is_open() and not controller.header.visible, "Body-only-Tooltip entfernt den vollständigen leeren Header")
 	_check(controller.body_label.text == "Abklingzeit: 10 s\nSchaden: 55" and not controller.meta_label.visible, "Kompakter Tooltip zeigt ausschließlich Faktenzeilen")
-	_check(controller.card.get_global_rect().end.y <= ability_strip.get_global_rect().position.y + 0.5, "ABOVE_CENTER setzt den Tooltip oberhalb des gemeinsamen Ankers")
-	_check(absf(controller.card.get_global_rect().get_center().x - ability_strip.get_global_rect().get_center().x) <= 1.0, "Gemeinsamer Anker zentriert beide Fähigkeitstooltips identisch")
+	_check(controller.card.get_global_rect().end.y <= ability_source.get_global_rect().position.y + 0.5, "Auch ein alter ABOVE_CENTER-Aufruf hält den Tooltip oberhalb der tatsächlichen Quelle")
+	_check(is_equal_approx(controller.card.get_global_rect().end.x, 480.0 - ContextDetailController.VIEWPORT_MARGIN), "Veraltete Ability-Anker werden ignoriert und AUTO bleibt viewportgebunden an der tatsächlichen Quelle")
 	_check(is_equal_approx(controller.card.self_modulate.a, 0.86), "Tooltipfläche respektiert die angeforderte Halbtransparenz")
 	var tooltip_membrane := controller.card.get_node_or_null("BioLumenSurface") as CanvasItem
 	_check(tooltip_membrane == null or not tooltip_membrane.visible, "Dekorative Bio-Lumen-Füllung überdeckt die halbtransparente Faktenfläche nicht")

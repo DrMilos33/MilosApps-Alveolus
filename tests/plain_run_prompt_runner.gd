@@ -51,7 +51,7 @@ func _assert_presentation_contract() -> void:
 	_check(prompt.find_children("*", "Panel", true, false).is_empty(), "Prompt enthält keinerlei Panel")
 	_check(prompt.find_children("*", "ColorRect", true, false).is_empty(), "Prompt enthält keinerlei Hintergrundfläche")
 	_check(prompt.set_content("  Beobachtung läuft.  "), "Presentertext wird erstmalig angewendet")
-	prompt.set_content_band(44.0, 102.0)
+	prompt.use_run_hud_band()
 	_check(prompt.message_label().text == "Beobachtung läuft.", "Presentertext wird nur an den Rändern normalisiert")
 	_check(prompt.message_label().modulate.is_equal_approx(AlveolusVisualTheme.IVORY), "Normalmodus bleibt ruhig und lesbar")
 	_check(prompt.semantic_mode() == PlainRunPrompt.MODE_NORMAL, "Normalmodus ist semantisch abfragbar")
@@ -65,7 +65,7 @@ func _assert_presentation_contract() -> void:
 	_check(prompt.message_label().horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "Run-Prompt ist als Textblock zentriert")
 	_check(prompt.get_global_rect().is_equal_approx(host.get_global_rect()), "Die transparente Prompt-Ebene deckt trotz begrenzter Textzone den vollständigen Eingaberaum ab")
 	var message_rect := prompt.message_label().get_global_rect()
-	_check(message_rect.position.y >= 44.0 and message_rect.end.y <= 102.0, "Der Host kann die Plain-Copy direkt unter dem Lebensbalken in eine feste Bandzone legen")
+	_check(message_rect.position.y >= PlainRunPrompt.RUN_HUD_BAND_TOP and message_rect.end.y <= PlainRunPrompt.RUN_HUD_BAND_BOTTOM, "Der Host kann die Plain-Copy direkt unter dem Lebensbalken in eine feste Bandzone legen")
 
 	_check(prompt.set_content("Infektionssignal", PlainRunPrompt.MODE_CORAL), "Korallenmodus kann in-place gesetzt werden")
 	_check(prompt.message_label().modulate.is_equal_approx(AlveolusVisualTheme.CORAL), "Warntext verwendet die zentrale Korallenrolle")

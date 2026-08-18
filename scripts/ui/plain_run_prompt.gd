@@ -15,6 +15,8 @@ const MODE_NORMAL := &"normal"
 const MODE_CORAL := &"coral"
 
 const MAXIMUM_TEXT_WIDTH := 720.0
+const RUN_HUD_BAND_TOP := 44.0
+const RUN_HUD_BAND_BOTTOM := 102.0
 
 var _semantic_mode := MODE_NORMAL
 var _confirmation_required := false
@@ -116,6 +118,12 @@ func set_content_band(top_offset: float, bottom_offset: float) -> void:
 	_content_band_top = top_offset
 	_content_band_bottom = bottom_offset
 	_refresh_layout()
+
+
+## Applies the single product reading zone shared by every intro and boss
+## prompt. The full-rect control still owns blocking input when required.
+func use_run_hud_band() -> void:
+	set_content_band(RUN_HUD_BAND_TOP, RUN_HUD_BAND_BOTTOM)
 
 
 ## Hides the view and safely returns focus to the control that preceded a

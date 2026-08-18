@@ -79,6 +79,26 @@ func _test_immutable_view_model() -> UpgradeOverlayViewModel:
 	_check(ordinary.option_count() == 1, "Zurückgegebene Optionsarrays sind defensive Kopien")
 	_check(ordinary.option_at(0).title() == "Schnellere Impulse", "Spätere Quellmutationen erreichen das View-Model nicht")
 
+	var value_source: Array = [{
+		"id": &"defense_cells_radius",
+		"title": "Abwehrzellen",
+		"effect": "Größeres Schutzgebiet.",
+		"icon_id": &"neutrophil_orbit",
+		"value_rows": [
+			{"id": &"radius", "label": "Radius", "value": "4", "accent_role": &"gold"},
+			{"id": &"rate", "label": "Rate", "before": "1,4/s", "value": "1,7/s", "accent_role": &"turquoise"},
+		],
+	}]
+	var values_model: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(value_source, 8)
+	var mutable_value_rows := value_source[0]["value_rows"] as Array
+	var mutable_radius_row := mutable_value_rows[0] as Dictionary
+	mutable_radius_row["value"] = "Fremde Mutation"
+	var returned_value_rows := values_model.option_at(0).value_rows()
+	returned_value_rows.clear()
+	_check(values_model.option_at(0).value_rows().size() == 2, "Darstellungsfertige Wertzeilen werden defensiv kopiert")
+	_check(values_model.option_at(0).value_rows()[0].label() == "Radius" and values_model.option_at(0).value_rows()[0].value() == "4", "Radius liegt als fertige Label-Wert-Zeile ohne UI-Umrechnung vor")
+	_check(values_model.option_at(0).value_rows()[1].label() == "Rate" and values_model.option_at(0).value_rows()[1].value() == "1,7/s", "Rate liegt mit sichtbarer /s-Einheit statt Intervallcopy vor")
+
 	var equivalent: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create([
 		{
 			"id": &"faster_impulse",
@@ -171,7 +191,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var generic_numeric := UpgradeOverlayViewModelScript.create([{
 		"id": &"future_upgrade_without_special_case",
 		"title": "Kräftigere Streuung",
-		"effect": "Stufe 2: +3 Schaden.",
+		"effect": "Ausbau 2: +3 Schaden.",
 		"before": "8 Schaden",
 		"after": "11 Schaden",
 		"icon_id": &"treatment",
@@ -181,7 +201,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var generic_card := overlay.cards()[0]
 	var numeric_effect := generic_card.find_child("UpgradeEffect", true, false) as RichTextLabel
 	var numeric_comparison := generic_card.find_child("UpgradeComparison", true, false) as RichTextLabel
-	_check(numeric_effect != null and numeric_effect.get_parsed_text() == "Stufe 2: +3 Schaden.", "RichText-Ausbauwert bewahrt den vollständigen sichtbaren Text")
+	_check(numeric_effect != null and numeric_effect.get_parsed_text() == "Ausbau 2: +3 Schaden.", "RichText-Ausbauwert bewahrt den vollständigen sichtbaren Text")
 	_check(numeric_effect != null and numeric_effect.get_meta(&"semantic_highlights", PackedStringArray()) == PackedStringArray(["+3"]), "Generischer Zahlenparser hebt oben nur das vorzeichenbehaftete Delta hervor")
 	_check(numeric_effect != null and numeric_effect.get_theme_font_size("normal_font_size") == AlveolusVisualTheme.TEXT_CAPTION, "Ausbauwirkung verwendet die kompakte zentrale Caption-Größe")
 	_check(numeric_comparison != null and numeric_comparison.get_parsed_text().contains("8 Schaden") and numeric_comparison.get_parsed_text().contains("11 Schaden"), "Vorher-nachher-Zeile bleibt vollständig lesbar")
@@ -196,6 +216,34 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 		_check(arrow_color.is_equal_approx(AlveolusVisualTheme.MUTED), "Pfeil verwendet exakt die unaufdringliche Muted-Farbe")
 		_check(after_color.is_equal_approx(AlveolusVisualTheme.GOLD), "Nur der rechte Zielwert verwendet den Goldakzent")
 		_check(not before_color.is_equal_approx(AlveolusVisualTheme.TURQUOISE) and not arrow_color.is_equal_approx(AlveolusVisualTheme.TURQUOISE), "Vorwert und Pfeil konkurrieren nicht mehr mit den beiden gewünschten Highlights")
+
+	var data_driven_values := UpgradeOverlayViewModelScript.create([{
+		"id": &"defense_cells_radius",
+		"title": "Abwehrzellen",
+		"effect": "Größeres Schutzgebiet.",
+		"icon_id": &"neutrophil_orbit",
+		"accent_role": &"cobalt",
+		"value_rows": [
+			{"id": &"radius", "label": "Radius", "value": "4", "accent_role": &"gold"},
+			{"id": &"rate", "label": "Rate", "before": "1,4/s", "value": "1,7/s", "accent_role": &"turquoise"},
+		],
+	}], 9)
+	_check(overlay.present(data_driven_values, false), "Datengetriebene Icon- und Wertzeilen werden präsentiert")
+	await _settle()
+	var value_card := overlay.cards()[0]
+	var value_icon := value_card.find_child("UpgradeIcon", true, false) as SimpleIcon
+	var value_title := value_card.find_child("UpgradeTitle", true, false) as Label
+	var radius_row := value_card.find_child("UpgradeValue_radius", true, false) as RichTextLabel
+	var rate_row := value_card.find_child("UpgradeValue_rate", true, false) as RichTextLabel
+	var value_focus := value_card.find_child("KeyboardFocus", true, false) as Control
+	_check(value_icon != null and value_icon.kind == &"neutrophil_orbit" and value_icon.custom_minimum_size == Vector2(34.0, 34.0), "Ausbaukarte rendert das Presenter-Icon deutlich größer ohne lokale ID-Zuordnung")
+	_check(value_title != null and value_title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Komponentenname verwendet die kleinere zentrale Body-Typografie")
+	_check(radius_row != null and radius_row.get_parsed_text().replace("  ", " ") == "Radius 4", "Abwehrzellen zeigen die fertige Copy Radius 4")
+	_check(rate_row != null and rate_row.get_parsed_text().contains("Rate") and rate_row.get_parsed_text().contains("1,7/s"), "Rate bleibt als /s-Wert sichtbar")
+	_check(radius_row != null and not radius_row.get_parsed_text().contains("px") and not radius_row.get_parsed_text().contains("Stufe"), "Wertzeilen zeigen weder Pixel- noch Stufencopy")
+	_check(value_card.custom_minimum_size.y == UpgradeOverlay.CARD_HEIGHT + UpgradeOverlay.EXTRA_VALUE_ROW_HEIGHT, "Eine zweite Wertzeile vergrößert die Karte exakt um ihren zentralen Zeilenbedarf")
+	_check(rate_row != null and value_card.get_global_rect().encloses(rate_row.get_global_rect()), "Die zweite darstellungsfertige Wertzeile bleibt vollständig innerhalb der Karte sichtbar")
+	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Radius 4") and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Rate 1,4/s zu 1,7/s"), "Fokusname enthält dieselben darstellungsfertigen Wertfakten")
 
 	var scripted: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
 		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Änderung."
@@ -282,11 +330,14 @@ func _assert_card_contract(card: Button, option_id: StringName) -> void:
 	_check(card.get_meta(&"upgrade_id", &"") == option_id, "Ausbaukarte trägt ausschließlich ihre stabile ID")
 	_check(card.focus_mode == Control.FOCUS_NONE, "Mauskarten übernehmen keinen Keyboardfokus")
 	_check(card.scale.is_equal_approx(Vector2.ONE), "Ausbaukarte bleibt ohne Scale-Transform")
-	_check(card.custom_minimum_size.y <= 104.0, "Ausbaukarte bleibt typografisch kompakt")
+	_check(card.custom_minimum_size.y <= 112.0, "Ausbaukarte bleibt trotz größerem Icon typografisch kompakt")
 	var title := card.find_child("UpgradeTitle", true, false) as Label
+	var icon := card.find_child("UpgradeIcon", true, false) as SimpleIcon
 	var effect := card.find_child("UpgradeEffect", true, false) as RichTextLabel
 	var comparison := card.find_child("UpgradeComparison", true, false) as RichTextLabel
 	_check(title != null and effect != null and comparison != null, "Karte besitzt Iconzeile, Kurztext und Vorher-nachher-Wert")
+	_check(icon != null and icon.kind != &"" and icon.custom_minimum_size == Vector2(34.0, 34.0), "Karte übernimmt ein sichtbares 34-Pixel-Icon direkt aus dem View-Model")
+	_check(title != null and title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Kartenname bleibt mit zentraler Body-Typografie etwas kleiner als der Wertakzent")
 	if effect != null:
 		_check(effect.fit_content and not effect.scroll_active and effect.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Kurze Wirkung wächst in höchstens den verfügbaren Kartenraum statt intern zu scrollen")
 

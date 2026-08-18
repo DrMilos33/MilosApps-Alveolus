@@ -6,6 +6,44 @@ extends RefCounted
 ## No upgrade definition, player-stat object or catalog reference crosses this
 ## boundary. At most three copied rows become immutable child view models.
 
+class ValueRowViewModel:
+	extends RefCounted
+
+	var _id: StringName
+	var _label: String
+	var _value: String
+	var _before_value: String
+	var _accent_role: StringName
+
+	func _init(
+		row_id: StringName,
+		label_value: String,
+		value_text: String,
+		before_text: String = "",
+		accent_value: StringName = &"gold"
+	) -> void:
+		_id = row_id
+		_label = label_value
+		_value = value_text
+		_before_value = before_text
+		_accent_role = accent_value
+
+	func id() -> StringName:
+		return _id
+
+	func label() -> String:
+		return _label
+
+	func value() -> String:
+		return _value
+
+	func before_value() -> String:
+		return _before_value
+
+	func accent_role() -> StringName:
+		return _accent_role
+
+
 class UpgradeOptionViewModel:
 	extends RefCounted
 
@@ -16,6 +54,7 @@ class UpgradeOptionViewModel:
 	var _after_value: String
 	var _icon_id: StringName
 	var _accent_role: StringName
+	var _value_rows: Array[ValueRowViewModel]
 
 	func _init(
 		option_id: StringName,
@@ -24,7 +63,8 @@ class UpgradeOptionViewModel:
 		before_value: String,
 		after_value: String,
 		icon_value: StringName,
-		accent_value: StringName
+		accent_value: StringName,
+		value_rows_value: Array[ValueRowViewModel] = []
 	) -> void:
 		_id = option_id
 		_title = title_value
@@ -33,6 +73,7 @@ class UpgradeOptionViewModel:
 		_after_value = after_value
 		_icon_id = icon_value
 		_accent_role = accent_value
+		_value_rows.assign(value_rows_value)
 
 	func id() -> StringName:
 		return _id
@@ -62,6 +103,14 @@ class UpgradeOptionViewModel:
 	func accent_role() -> StringName:
 		return _accent_role
 
+	func value_rows() -> Array[ValueRowViewModel]:
+		var result: Array[ValueRowViewModel] = []
+		result.assign(_value_rows)
+		return result
+
+	func has_value_rows() -> bool:
+		return not _value_rows.is_empty()
+
 
 var _options: Array[UpgradeOptionViewModel] = []
 var _scripted_intro := false
@@ -72,8 +121,10 @@ var _revision := 0
 var _content_hash := ""
 
 
-## Accepted row keys: id, title, effect, before, after, icon_id and
-## accent_role. Invalid or duplicate IDs are discarded and the visible contract
+## Accepted row keys: id, title, effect, before, after, icon_id, accent_role and
+## value_rows. Each value row is already display-ready and accepts id, label,
+## value, optional before and accent_role. The UI never derives units or maps
+## content IDs. Invalid or duplicate IDs are discarded and the visible contract
 ## is capped at three choices.
 static func create(
 	option_rows: Array,
@@ -110,6 +161,7 @@ static func create(
 		var accent_value := StringName(String(row.get("accent_role", "turquoise")))
 		if accent_value == &"":
 			accent_value = &"turquoise"
+		var value_rows := _copy_value_rows(row.get("value_rows", []), accent_value)
 		result._options.append(UpgradeOptionViewModel.new(
 			option_id,
 			title_value,
@@ -117,7 +169,8 @@ static func create(
 			String(row.get("before", "")).strip_edges(),
 			String(row.get("after", "")).strip_edges(),
 			icon_value,
-			accent_value
+			accent_value,
+			value_rows
 		))
 	result._content_hash = result._calculate_content_hash()
 	return result
@@ -171,6 +224,37 @@ func allow_cancel() -> bool:
 	return _allow_cancel
 
 
+static func _copy_value_rows(source_value: Variant, fallback_accent: StringName) -> Array[ValueRowViewModel]:
+	var result: Array[ValueRowViewModel] = []
+	if not source_value is Array:
+		return result
+	var copied_rows: Array = (source_value as Array).duplicate(true)
+	var seen_ids: Dictionary = {}
+	for row_value in copied_rows:
+		if result.size() >= 3:
+			break
+		if not row_value is Dictionary:
+			continue
+		var row := row_value as Dictionary
+		var row_id := StringName(String(row.get("id", "")))
+		var label_value := String(row.get("label", "")).strip_edges()
+		var value_text := String(row.get("value", "")).strip_edges()
+		if row_id == &"" or label_value.is_empty() or value_text.is_empty() or seen_ids.has(row_id):
+			continue
+		seen_ids[row_id] = true
+		var accent_value := StringName(String(row.get("accent_role", fallback_accent)))
+		if accent_value == &"":
+			accent_value = fallback_accent
+		result.append(ValueRowViewModel.new(
+			row_id,
+			label_value,
+			value_text,
+			String(row.get("before", "")).strip_edges(),
+			accent_value
+		))
+	return result
+
+
 func _calculate_content_hash() -> String:
 	var canonical := PackedStringArray([
 		"1" if _scripted_intro else "0",
@@ -186,6 +270,13 @@ func _calculate_content_hash() -> String:
 		canonical.append(_length_prefixed(option.after_value()))
 		canonical.append(_length_prefixed(String(option.icon_id())))
 		canonical.append(_length_prefixed(String(option.accent_role())))
+		canonical.append(str(option.value_rows().size()))
+		for row in option.value_rows():
+			canonical.append(_length_prefixed(String(row.id())))
+			canonical.append(_length_prefixed(row.label()))
+			canonical.append(_length_prefixed(row.value()))
+			canonical.append(_length_prefixed(row.before_value()))
+			canonical.append(_length_prefixed(String(row.accent_role())))
 	return "|".join(canonical).sha256_text()
 
 

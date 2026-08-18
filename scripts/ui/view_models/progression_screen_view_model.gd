@@ -83,6 +83,7 @@ class ResearchItemViewModel extends RefCounted:
 	var _state: int
 	var _interactive: bool
 	var _info: InfoViewModel
+	var _total_effect_text: String
 
 
 	static func create(
@@ -93,7 +94,8 @@ class ResearchItemViewModel extends RefCounted:
 		icon_kind_value: StringName,
 		state_value: int,
 		interactive_value: bool,
-		info_value: InfoViewModel
+		info_value: InfoViewModel,
+		total_effect_text_value: String = ""
 	) -> ResearchItemViewModel:
 		var model := ResearchItemViewModel.new()
 		model._id = id_value
@@ -104,6 +106,7 @@ class ResearchItemViewModel extends RefCounted:
 		model._state = clampi(state_value, ItemState.ACTIVE, ItemState.LOCKED)
 		model._interactive = interactive_value and id_value != &"" and model._state == ItemState.AVAILABLE
 		model._info = info_value.duplicate_value() if info_value != null else InfoViewModel.create(title_value, "", "", icon_kind_value, Color.TRANSPARENT)
+		model._total_effect_text = total_effect_text_value
 		return model
 
 
@@ -139,12 +142,34 @@ class ResearchItemViewModel extends RefCounted:
 		return _info.duplicate_value()
 
 
+	## Ready-to-render total effect supplied by the progression presenter. The
+	## view-model only composes presentation copy; it never derives rank values.
+	func total_effect_text() -> String:
+		return _total_effect_text
+
+
+	func detail_info() -> InfoViewModel:
+		if _total_effect_text.is_empty():
+			return _info.duplicate_value()
+		var detail_body := _info.body()
+		if not detail_body.is_empty():
+			detail_body += "\n"
+		detail_body += "Gesamt: %s" % _total_effect_text
+		return InfoViewModel.create(
+			_info.title(),
+			detail_body,
+			_info.meta(),
+			_info.icon_kind(),
+			_info.accent()
+		)
+
+
 	func duplicate_value() -> ResearchItemViewModel:
-		return create(_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info)
+		return create(_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info, _total_effect_text)
 
 
 	func content_signature() -> Array:
-		return [_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info.content_signature()]
+		return [_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info.content_signature(), _total_effect_text]
 
 
 class TalentNodeViewModel extends RefCounted:
@@ -158,6 +183,8 @@ class TalentNodeViewModel extends RefCounted:
 	var _state: int
 	var _interactive: bool
 	var _info: InfoViewModel
+	var _rank_current: int
+	var _rank_maximum: int
 
 
 	static func create(
@@ -170,7 +197,9 @@ class TalentNodeViewModel extends RefCounted:
 		required_ids_value: PackedStringArray,
 		state_value: int,
 		interactive_value: bool,
-		info_value: InfoViewModel
+		info_value: InfoViewModel,
+		rank_current_value: int = 0,
+		rank_maximum_value: int = 0
 	) -> TalentNodeViewModel:
 		var model := TalentNodeViewModel.new()
 		model._id = id_value
@@ -183,6 +212,8 @@ class TalentNodeViewModel extends RefCounted:
 		model._state = clampi(state_value, ItemState.ACTIVE, ItemState.LOCKED)
 		model._interactive = interactive_value and id_value != &"" and model._state != ItemState.LOCKED
 		model._info = info_value.duplicate_value() if info_value != null else InfoViewModel.create(title_value, "", "", icon_kind_value, Color.TRANSPARENT)
+		model._rank_maximum = maxi(0, rank_maximum_value)
+		model._rank_current = clampi(rank_current_value, 0, model._rank_maximum)
 		return model
 
 
@@ -226,6 +257,16 @@ class TalentNodeViewModel extends RefCounted:
 		return _info.duplicate_value()
 
 
+	## Already resolved rank primitives supplied by the presenter. The screen
+	## only turns these into pips; cost, effect and prerequisites stay in detail.
+	func rank_current() -> int:
+		return _rank_current
+
+
+	func rank_maximum() -> int:
+		return _rank_maximum
+
+
 	func duplicate_value() -> TalentNodeViewModel:
 		return create(
 			_id,
@@ -237,7 +278,9 @@ class TalentNodeViewModel extends RefCounted:
 			_required_ids,
 			_state,
 			_interactive,
-			_info
+			_info,
+			_rank_current,
+			_rank_maximum
 		)
 
 
@@ -253,6 +296,8 @@ class TalentNodeViewModel extends RefCounted:
 			_state,
 			_interactive,
 			_info.content_signature(),
+			_rank_current,
+			_rank_maximum,
 		]
 
 

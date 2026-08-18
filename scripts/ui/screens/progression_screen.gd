@@ -19,6 +19,8 @@ const ProgressionScreenViewModelType := preload("res://scripts/ui/view_models/pr
 const TalentTreeBranchType := preload("res://scripts/ui/talent_tree_branch.gd")
 const ROUTE_ID := &"research"
 const CONTEXT_DETAIL_SCOPE_ID := &"progression"
+const RESEARCH_WIDE_COLUMNS := 4
+const RESEARCH_CARD_HEIGHT := 68.0
 const TALENT_SYMBOLS_BY_ID := {
 	&"treatment_damage_training": &"treatment",
 	&"manual_treatment_aim": &"target",
@@ -342,7 +344,7 @@ func _build_research_view(parent: VBoxContainer) -> void:
 	_research_reset_row.add_child(_research_reset_button)
 	_research_grid = GridContainer.new()
 	_research_grid.name = "ResearchGrid"
-	_research_grid.columns = 3
+	_research_grid.columns = RESEARCH_WIDE_COLUMNS
 	_research_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_research_grid.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_research_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
@@ -420,7 +422,7 @@ func _sync_research(items: Array) -> void:
 		if button == null:
 			button = AlveolusUIComponents.selection_card("", "", "", false, false)
 			button.name = "Research_%s" % String(item.id())
-			button.custom_minimum_size.y = 76.0
+			button.custom_minimum_size.y = RESEARCH_CARD_HEIGHT
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			button.clip_contents = true
 			button.tooltip_text = ""
@@ -455,7 +457,7 @@ func _update_research_button(button: Button, item: Variant) -> void:
 	_register_info_source(
 		button,
 		_stable_info_id(&"research", item.id()),
-		item.info(),
+		item.detail_info(),
 		_research_info_source_ids
 	)
 
@@ -469,13 +471,12 @@ func _rebuild_talents(branches: Array) -> void:
 	_branch_order.clear()
 	var used_symbols: Dictionary = {}
 	for branch_model in branches:
-		var panel := AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
-		panel.name = "TalentBranch_%s" % String(branch_model.id())
-		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		_talent_grid.add_child(panel)
 		var stack := VBoxContainer.new()
+		stack.name = "TalentBranch_%s" % String(branch_model.id())
+		stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stack.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		stack.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+		_talent_grid.add_child(stack)
 		var heading := HBoxContainer.new()
 		heading.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 		stack.add_child(heading)
@@ -493,7 +494,6 @@ func _rebuild_talents(branches: Array) -> void:
 		tree.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		tree.configure_accent(branch_model.accent())
 		stack.add_child(tree)
-		panel.add_child(AlveolusUIComponents.margin(stack, AlveolusVisualTheme.CARD_PADDING))
 		for node_model in branch_model.nodes():
 			var state := int(node_model.state())
 			var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
@@ -507,14 +507,18 @@ func _rebuild_talents(branches: Array) -> void:
 			button.set_meta(&"item_state", _state_name(state))
 			button.set_meta(&"item_interactive", node_model.interactive())
 			button.set_meta(&"talent_symbol_kind", symbol_kind)
-			button.set_meta(&"alveolus_accessible_name", "%s, %s, %s" % [node_model.title(), node_model.cost_text(), _accessible_state_name(state)])
+			button.set_meta(&"talent_rank_current", node_model.rank_current())
+			button.set_meta(&"talent_rank_maximum", node_model.rank_maximum())
+			button.set_meta(&"alveolus_accessible_name", _talent_accessible_name(node_model, state))
 			button.set_meta(&"ui_sound_cue", &"confirm" if node_model.interactive() else &"error")
 			button.pressed.connect(_on_talent_pressed.bind(node_model.id()))
 			_build_talent_symbol_content(
 				button,
 				symbol_kind,
 				state,
-				branch_model.accent()
+				branch_model.accent(),
+				node_model.rank_current(),
+				node_model.rank_maximum()
 			)
 			tree.add_talent_node(
 				node_model.id(),
@@ -532,9 +536,10 @@ func _rebuild_talents(branches: Array) -> void:
 				node_model.info(),
 				_talent_info_source_ids
 			)
-		panel.custom_minimum_size.y = tree.custom_minimum_size.y + 68.0
+		stack.custom_minimum_size.y = tree.custom_minimum_size.y + 36.0
 		_talent_branches[branch_model.id()] = tree
 		_branch_order.append(branch_model.id())
+	_update_responsive_layout()
 	_configure_branch_exits.call_deferred()
 
 
@@ -547,9 +552,9 @@ func _refresh_talents(branches: Array) -> void:
 			# _rebuild_talents. Keep this guard safe for malformed external models.
 			_rebuild_talents(branches)
 			return
-		var panel := tree.get_parent() as Control
-		var branch_icon := panel.find_child("BranchIcon", true, false) as SimpleIcon if panel != null else null
-		var branch_title := panel.find_child("BranchTitle", true, false) as Label if panel != null else null
+		var branch_container := tree.get_parent() as Control
+		var branch_icon := branch_container.find_child("BranchIcon", true, false) as SimpleIcon if branch_container != null else null
+		var branch_title := branch_container.find_child("BranchTitle", true, false) as Label if branch_container != null else null
 		if branch_icon != null:
 			branch_icon.configure(branch_model.icon_kind(), branch_model.accent())
 		if branch_title != null:
@@ -568,11 +573,20 @@ func _refresh_talents(branches: Array) -> void:
 			button.set_meta(&"item_state", _state_name(state))
 			button.set_meta(&"item_interactive", node_model.interactive())
 			button.set_meta(&"talent_symbol_kind", symbol_kind)
-			button.set_meta(&"alveolus_accessible_name", "%s, %s, %s" % [node_model.title(), node_model.cost_text(), _accessible_state_name(state)])
+			button.set_meta(&"talent_rank_current", node_model.rank_current())
+			button.set_meta(&"talent_rank_maximum", node_model.rank_maximum())
+			button.set_meta(&"alveolus_accessible_name", _talent_accessible_name(node_model, state))
 			button.set_meta(&"ui_sound_cue", &"confirm" if node_model.interactive() else &"error")
 			_talent_interactive[node_model.id()] = node_model.interactive()
 			_free_children(button)
-			_build_talent_symbol_content(button, symbol_kind, state, branch_model.accent())
+			_build_talent_symbol_content(
+				button,
+				symbol_kind,
+				state,
+				branch_model.accent(),
+				node_model.rank_current(),
+				node_model.rank_maximum()
+			)
 			AlveolusUIComponents.refresh_button_state(button)
 			tree._states[node_model.id()] = _state_name(state)
 			_register_info_source(
@@ -604,7 +618,9 @@ func _build_talent_symbol_content(
 	button: Button,
 	icon_kind: StringName,
 	state: int,
-	accent: Color
+	accent: Color,
+	rank_current: int,
+	rank_maximum: int
 ) -> void:
 	var locked := state == ProgressionScreenViewModelType.ItemState.LOCKED
 	var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
@@ -616,23 +632,41 @@ func _build_talent_symbol_content(
 	button.add_child(center)
 	var icon := SimpleIcon.new()
 	icon.name = "TalentSymbol"
-	icon.custom_minimum_size = Vector2.ONE * 40.0
+	icon.custom_minimum_size = Vector2.ONE * 36.0
 	icon.configure(icon_kind, accent if not locked else AlveolusVisualTheme.MUTED)
 	icon.modulate = content_modulate
 	center.add_child(icon)
-	if active or locked:
-		var state_icon := SimpleIcon.new()
-		state_icon.name = "StateIcon"
-		state_icon.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		state_icon.offset_left = -22.0
-		state_icon.offset_top = 6.0
-		state_icon.offset_right = -6.0
-		state_icon.offset_bottom = 22.0
-		state_icon.configure(
-			&"check" if active else &"locked",
-			AlveolusVisualTheme.TEAL if active else AlveolusVisualTheme.MUTED
-		)
-		button.add_child(state_icon)
+	if rank_maximum > 0:
+		var rank_center := CenterContainer.new()
+		rank_center.name = "TalentRankPips"
+		rank_center.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		rank_center.offset_top = -14.0
+		rank_center.offset_bottom = -4.0
+		rank_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		button.add_child(rank_center)
+		var pips := HBoxContainer.new()
+		pips.add_theme_constant_override("separation", 2)
+		pips.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rank_center.add_child(pips)
+		for rank_index in range(rank_maximum):
+			var pip := SimpleIcon.new()
+			pip.name = "RankPip_%d" % rank_index
+			pip.custom_minimum_size = Vector2.ONE * 7.0
+			pip.configure(&"circle", accent if rank_index < rank_current else AlveolusVisualTheme.MUTED)
+			pip.modulate = content_modulate
+			pips.add_child(pip)
+	var state_icon := SimpleIcon.new()
+	state_icon.name = "StateIcon"
+	state_icon.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	state_icon.offset_left = -22.0
+	state_icon.offset_top = 6.0
+	state_icon.offset_right = -6.0
+	state_icon.offset_bottom = 22.0
+	state_icon.configure(
+		&"check" if active else (&"locked" if locked else &"diamond"),
+		AlveolusVisualTheme.TEAL if active else (AlveolusVisualTheme.MUTED if locked else AlveolusVisualTheme.GOLD)
+	)
+	button.add_child(state_icon)
 
 
 func _talent_symbol_kind(id: StringName, source_kind: StringName, used_symbols: Dictionary) -> StringName:
@@ -861,8 +895,9 @@ func _update_responsive_layout() -> void:
 	var logical_width := size.x
 	if logical_width <= 0.0 and get_viewport() != null:
 		logical_width = get_viewport_rect().size.x
-	_research_grid.columns = 3 if logical_width >= 1000.0 else (2 if logical_width >= 680.0 else 1)
-	_talent_grid.columns = 3 if logical_width >= 1080.0 else (2 if logical_width >= 760.0 else 1)
+	_research_grid.columns = RESEARCH_WIDE_COLUMNS if logical_width >= 1100.0 else (3 if logical_width >= 900.0 else (2 if logical_width >= 680.0 else 1))
+	var requested_talent_columns := 3 if logical_width >= 1080.0 else (2 if logical_width >= 760.0 else 1)
+	_talent_grid.columns = mini(requested_talent_columns, maxi(1, _branch_order.size()))
 	var compact := logical_width < 620.0
 	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, compact)
 	_tab_row.columns = 2 if compact else 3
@@ -925,6 +960,17 @@ func _accessible_state_name(state: int) -> String:
 		ProgressionScreenViewModelType.ItemState.AVAILABLE:
 			return "verfügbar"
 	return "gesperrt"
+
+
+func _talent_accessible_name(node_model: Variant, state: int) -> String:
+	var parts := PackedStringArray([
+		String(node_model.title()),
+		String(node_model.cost_text()),
+		_accessible_state_name(state),
+	])
+	if node_model.rank_maximum() > 0:
+		parts.append("Rang %d von %d" % [node_model.rank_current(), node_model.rank_maximum()])
+	return ", ".join(parts)
 
 
 func _free_children(parent: Node) -> void:

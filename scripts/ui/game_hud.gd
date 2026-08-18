@@ -3230,10 +3230,10 @@ func show_run_prompt(
 	if run_prompt == null:
 		return
 	boss_announcement_time = 0.0
-	if semantic_mode == PlainRunPrompt.MODE_CORAL:
-		run_prompt.set_content_band(44.0, 102.0)
-	else:
-		run_prompt.set_content_band(-1.0, -1.0)
+	# All run-learning copy shares one quiet reading zone immediately below the
+	# centered life bar. Keeping normal and coral prompts in the same band avoids
+	# covering Doctor Milos while preserving the containerless presentation.
+	run_prompt.use_run_hud_band()
 	run_prompt.set_content(text, semantic_mode, requires_left_click, mouse_hint)
 	run_prompt.show_prompt(requires_left_click, requires_left_click)
 

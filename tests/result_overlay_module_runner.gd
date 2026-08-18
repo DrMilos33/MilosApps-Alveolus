@@ -11,6 +11,9 @@ func _initialize() -> void:
 func _run() -> void:
 	var host := _create_logical_host(Vector2i(1280, 720))
 	var stats_source := _stats_fixture()
+	var reward_source: Array[ResultOverlayViewModel.RewardViewModel] = [
+		ResultOverlayViewModel.RewardViewModel.new(&"research", &"research", "+22", &"gold", "Forschung +22"),
+	]
 	var success_model := ResultOverlayViewModel.new(
 		1,
 		true,
@@ -20,14 +23,20 @@ func _run() -> void:
 		stats_source,
 		"+22 Forschung",
 		"Fall 02 ist jetzt verfügbar.",
-		"Erster Sieg · +1 Talentpunkt"
+		"Erster Sieg · +1 Talentpunkt",
+		reward_source
 	)
 	var success_hash := success_model.get_content_hash()
 	stats_source.clear()
+	reward_source.clear()
 	_check(success_model.get_stats().size() == 3, "Ergebniswerte werden tief kopiert")
+	_check(success_model.get_reward_items().size() == 1 and success_model.get_reward_items()[0].get_value() == "+22", "Reward-DTOs werden tief und wertfertig kopiert")
 	var returned_stats := success_model.get_stats()
 	returned_stats.clear()
+	var returned_rewards := success_model.get_reward_items()
+	returned_rewards.clear()
 	_check(success_model.get_stats().size() == 3, "Ergebnis-VM gibt keine veränderbare interne Collection frei")
+	_check(success_model.get_reward_items().size() == 1, "Ergebnis-VM gibt keine veränderbare Reward-Collection frei")
 	_check(success_model.get_content_hash() == success_hash, "Externe Mutationen verändern den Content-Hash nicht")
 
 	var overlay := ResultOverlay.new()
@@ -49,7 +58,16 @@ func _run() -> void:
 	_check(overlay.get_modal().is_ancestor_of(overlay.get_scroll_container()), "Ergebnis besitzt einen internen Body-Scroll innerhalb des ModalSheets")
 	_check(result_actions != null and not overlay.get_scroll_container().is_ancestor_of(result_actions), "Ergebnisaktionen liegen als fester Footer außerhalb des Body-Scrolls")
 	_check(overlay.get_scroll_container().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Breiter kurzer Ergebnisinhalt erzeugt keinen unnötigen Scrollbereich")
-	_check(_optional_section_count(overlay) == 3, "Belohnung, Freischaltung und Meisterschaft erscheinen nur bei vorhandenem Inhalt")
+	_check(_optional_section_count(overlay) == 2, "Nur Freischaltung und Meisterschaft bleiben optionale Textsektionen")
+	var reward_strip := overlay.find_child("RewardStrip", true, false) as GridContainer
+	_check(reward_strip != null and overlay.get_reward_column_count() == 4, "Rewardstrip besitzt breit exakt vier Spalten")
+	_check(not overlay.find_children("*", "Label", true, false).any(func(node: Node) -> bool: return (node as Label).text == "Belohnung"), "Ergebnis reserviert keine Überschrift Belohnung")
+	var reward_column := overlay.find_child("Reward_research", true, false) as VBoxContainer
+	var reward_icon := reward_column.find_child("RewardIcon", true, false) as SimpleIcon if reward_column != null else null
+	var reward_value := overlay.find_child("Optional_reward_Body", true, false) as Label
+	_check(reward_icon != null and reward_icon.kind == &"research" and reward_value != null and reward_value.text == "+22", "Forschungsreward zeigt ausschließlich Datenicon und Wert darunter")
+	_check(reward_column != null and reward_column.get_meta(&"alveolus_accessible_name", "") == "Forschung +22", "Iconreward transportiert einen redundanten Accessible Name")
+	_check(_reward_placeholder_texts(overlay) == PackedStringArray(["+ irgendwas", "+ maybe nochwas", "+ idk"]), "Drei zusätzliche Rewardspalten besitzen exakt die freigegebene Placeholder-Copy")
 	_check(_primary_action_count(overlay) == 1, "Genau eine Folgeaktion ist visuell primär")
 	_check(overlay.get_default_focus_control() == overlay.find_child("LevelsButton", true, false), "Fallübersicht ist die dominante Defaultaktion")
 	overlay.grab_initial_focus()
@@ -64,6 +82,7 @@ func _run() -> void:
 	await _settle()
 	_check(overlay.is_compact_layout(), "480 logische Pixel bilden die 200-Prozent-Kompaktansicht ab")
 	_check(overlay.get_stats_column_count() == 1, "Ergebniswerte stapeln kompakt einspaltig")
+	_check(overlay.get_reward_column_count() == 2, "Der Vierer-Rewardstrip bricht kompakt ohne horizontales Scrollen zweispaltig um")
 	_check(overlay.get_action_column_count() == 2, "Sekundäre Ergebnisaktionen sparen kompakt in zwei Spalten Platz für die Begründung")
 	_check(overlay.get_modal().size.x <= overlay.size.x + 0.5, "ModalSheet bleibt vollständig in der kompakten Layerbreite")
 	_check(_is_fully_visible(result_actions, overlay), "Der kompakte Aktionsfooter bleibt vollständig im sichtbaren Ergebnislayer")
@@ -100,6 +119,7 @@ func _run() -> void:
 	await _settle()
 	_check(not bool(overlay.get_modal().get_meta(&"result_success", true)), "Niederlage besitzt die semantische Gefahrenrolle")
 	_check(_optional_section_count(overlay) == 0, "Leere Belohnungssektionen erzeugen weder Karten noch Blank-Space")
+	_check(overlay.find_child("RewardStrip", true, false) == null, "Ohne Reward-DTO entsteht weder Strip noch Placeholder-Leerraum")
 	var failure_title := overlay.find_child("OutcomeTitle", true, false) as Label
 	_check(failure_title != null and failure_title.text == "You suck", "Niederlagen-View-Model stellt den verbindlichen Titel exakt dar")
 	_check(overlay.find_child("Reason", true, false) == null, "Leerer Niederlagengrund erzeugt keinen Untertitelknoten")
@@ -161,6 +181,16 @@ func _primary_action_count(overlay: ResultOverlay) -> int:
 		if button != null and button.theme_type_variation == AlveolusVisualTheme.TYPE_PRIMARY_BUTTON:
 			count += 1
 	return count
+
+
+func _reward_placeholder_texts(overlay: ResultOverlay) -> PackedStringArray:
+	var result := PackedStringArray()
+	for index in range(1, 4):
+		var column := overlay.find_child("RewardPlaceholder%d" % index, true, false) as VBoxContainer
+		var value := column.find_child("PlaceholderValue", true, false) as Label if column != null else null
+		if value != null:
+			result.append(value.text)
+	return result
 
 
 func _is_visible_in_scroll(control: Control, scroll: ScrollContainer) -> bool:

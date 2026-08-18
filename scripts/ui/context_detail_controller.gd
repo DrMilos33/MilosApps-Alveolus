@@ -80,8 +80,10 @@ func register_source(
 				_disconnect_if_connected(source.mouse_exited, exited)
 		existing["provider"] = provider
 		existing["hover_enabled"] = hover_enabled
-		existing["anchor"] = weakref(anchor) if anchor != null and is_instance_valid(anchor) else null
-		existing["placement"] = Placement.ABOVE_CENTER if placement == Placement.ABOVE_CENTER else Placement.AUTO
+		# `anchor` and `placement` remain accepted for facade compatibility. All
+		# context details now share AUTO at the actual source Control.
+		existing["anchor"] = null
+		existing["placement"] = Placement.AUTO
 		_registrations[source_id] = existing
 		if _active_source_id == source_id and is_open():
 			_refresh_active_payload(source_id)
@@ -106,8 +108,8 @@ func register_source(
 		"visibility_changed": visibility_changed,
 		"tree_exiting": tree_exiting,
 		"hover_enabled": hover_enabled,
-		"anchor": weakref(anchor) if anchor != null and is_instance_valid(anchor) else null,
-		"placement": Placement.ABOVE_CENTER if placement == Placement.ABOVE_CENTER else Placement.AUTO,
+		"anchor": null,
+		"placement": Placement.AUTO,
 	}
 	if hover_enabled:
 		_schedule_hover_recovery()
@@ -370,17 +372,14 @@ func _measure_and_place(source_id: int, generation: int, phase: int) -> void:
 		return
 	var card_height := ceilf(card.get_combined_minimum_size().y)
 	card.size = Vector2(width, card_height)
-	var registration: Dictionary = _registrations.get(source_id, {})
-	var placement := int(registration.get("placement", Placement.AUTO))
-	var anchor := _anchor_for_registration(source_id, source)
-	card.position = _contained_position(_source_rect_in_controller(anchor), card.size, viewport_size, placement)
+	card.position = _contained_position(_source_rect_in_controller(source), card.size, viewport_size)
 
 
 func _contained_position(
 	source_rect: Rect2,
 	card_size: Vector2,
 	viewport_size: Vector2,
-	placement: int = Placement.AUTO
+	_placement: int = Placement.AUTO
 ) -> Vector2:
 	var bounds := Rect2(
 		Vector2(VIEWPORT_MARGIN, VIEWPORT_MARGIN),
@@ -389,26 +388,14 @@ func _contained_position(
 			maxf(0.0, viewport_size.y - VIEWPORT_MARGIN * 2.0)
 		)
 	)
-	var candidates: Array[Vector2] = []
-	if placement == Placement.ABOVE_CENTER:
-		var centered_x := source_rect.get_center().x - card_size.x * 0.5
-		candidates.append(Vector2(centered_x, source_rect.position.y - card_size.y - SOURCE_GAP))
-		candidates.append(Vector2(centered_x, source_rect.end.y + SOURCE_GAP))
-	candidates.append_array([
-		# Default information cards sit diagonally above the source: right first,
-		# then left. This keeps the source visible and follows reading direction.
+	# AUTO is one global rule for every context source: diagonally above and
+	# right first, then diagonally above and left. If neither complete rectangle
+	# fits, the preferred right-hand position is clamped deterministically to
+	# the viewport instead of switching to a screen-specific side/below layout.
+	var candidates: Array[Vector2] = [
 		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.position.y - card_size.y - SOURCE_GAP),
 		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.position.y - card_size.y - SOURCE_GAP),
-		# A wide compact choice can leave no horizontal room on either side. Keep
-		# the detail above it and align to its right/left edge before considering
-		# same-height or below-source fallbacks.
-		Vector2(source_rect.end.x - card_size.x, source_rect.position.y - card_size.y - SOURCE_GAP),
-		Vector2(source_rect.position.x, source_rect.position.y - card_size.y - SOURCE_GAP),
-		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.position.y),
-		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.position.y),
-		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.end.y + SOURCE_GAP),
-		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.end.y + SOURCE_GAP),
-	])
+	]
 	for candidate in candidates:
 		if bounds.encloses(Rect2(candidate, card_size)):
 			return candidate
@@ -419,18 +406,6 @@ func _contained_position(
 		clampf(candidates[0].x, bounds.position.x, maximum.x),
 		clampf(candidates[0].y, bounds.position.y, maximum.y)
 	)
-
-
-func _anchor_for_registration(source_id: int, fallback: Control) -> Control:
-	var registration: Dictionary = _registrations.get(source_id, {})
-	var anchor_ref := registration.get("anchor") as WeakRef
-	if anchor_ref == null:
-		return fallback
-	var anchor_value: Variant = anchor_ref.get_ref()
-	var anchor := anchor_value as Control if anchor_value != null and is_instance_valid(anchor_value) else null
-	if anchor == null or not anchor.is_inside_tree() or not anchor.is_visible_in_tree():
-		return fallback
-	return anchor
 
 
 func _set_surface_opacity(opacity: float) -> void:

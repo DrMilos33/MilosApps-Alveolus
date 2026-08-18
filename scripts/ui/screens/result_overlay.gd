@@ -10,6 +10,11 @@ const COMPACT_WIDTH := 700.0
 const MODAL_MAXIMUM_WIDTH := 660.0
 const MODAL_PADDING := 16
 const MINIMUM_BODY_VIEWPORT_HEIGHT := 34.0
+const REWARD_PLACEHOLDERS: Array[String] = [
+	"+ irgendwas",
+	"+ maybe nochwas",
+	"+ idk",
+]
 
 var _view_model: ResultOverlayViewModel
 var _applied_revision := -1
@@ -22,6 +27,7 @@ var _modal: PanelContainer
 var _body_content: VBoxContainer
 var _action_row: HBoxContainer
 var _stats_grid: GridContainer
+var _reward_grid: GridContainer
 var _action_grid: GridContainer
 var _compact_secondary_grid: GridContainer
 var _levels_button: Button
@@ -120,6 +126,10 @@ func get_action_column_count() -> int:
 	return _action_grid.columns if _action_grid != null else 0
 
 
+func get_reward_column_count() -> int:
+	return _reward_grid.columns if _reward_grid != null else 0
+
+
 func is_compact_layout() -> bool:
 	return _compact_layout
 
@@ -215,7 +225,7 @@ func _rebuild_modal() -> void:
 	if _stats_grid.get_child_count() > 0:
 		_body_content.add_child(_stats_grid)
 
-	_add_optional_section(_body_content, &"reward", "Belohnung", _view_model.get_reward_text(), &"research", AlveolusVisualTheme.GOLD)
+	_build_reward_strip(_body_content)
 	_add_optional_section(_body_content, &"unlock", "Freigeschaltet", _view_model.get_unlock_text(), &"archive", AlveolusVisualTheme.COBALT)
 	_add_optional_section(_body_content, &"mastery", "Meisterschaft", _view_model.get_mastery_text(), &"check", AlveolusVisualTheme.TURQUOISE)
 
@@ -321,6 +331,81 @@ func _add_optional_section(
 	parent.add_child(panel)
 
 
+func _build_reward_strip(parent: VBoxContainer) -> void:
+	_reward_grid = null
+	var rewards := _view_model.get_reward_items()
+	if rewards.is_empty():
+		return
+	_reward_grid = GridContainer.new()
+	_reward_grid.name = "RewardStrip"
+	_reward_grid.columns = 4
+	_reward_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_reward_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_reward_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_reward_grid.set_meta(&"alveolus_component", &"content_driven_reward_strip")
+	_reward_grid.add_child(_build_reward_item(rewards[0]))
+	for index in range(REWARD_PLACEHOLDERS.size()):
+		_reward_grid.add_child(_build_reward_placeholder(index, REWARD_PLACEHOLDERS[index]))
+	parent.add_child(_reward_grid)
+
+
+func _build_reward_item(reward: ResultOverlayViewModel.RewardViewModel) -> VBoxContainer:
+	var column := VBoxContainer.new()
+	column.name = "Reward_%s" % String(reward.get_id())
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	column.set_meta(&"reward_id", reward.get_id())
+	column.set_meta(&"alveolus_accessible_name", reward.get_accessible_name())
+	var icon_center := CenterContainer.new()
+	icon_center.name = "IconCenter"
+	icon_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon := SimpleIcon.new()
+	icon.name = "RewardIcon"
+	icon.custom_minimum_size = Vector2(30.0, 30.0)
+	icon.configure(reward.get_icon_id(), _accent_color(reward.get_accent_role()))
+	icon.set_meta(&"reward_icon_id", reward.get_icon_id())
+	icon_center.add_child(icon)
+	column.add_child(icon_center)
+	var value := AlveolusUIComponents.label(reward.get_value(), AlveolusVisualTheme.TYPE_VALUE_LABEL)
+	# Compatibility target retained for the existing discovery anchor facade.
+	value.name = "Optional_reward_Body" if reward.get_id() == &"research" else "RewardValue"
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(value)
+	return column
+
+
+func _build_reward_placeholder(index: int, text_value: String) -> VBoxContainer:
+	var column := VBoxContainer.new()
+	column.name = "RewardPlaceholder%d" % (index + 1)
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	column.set_meta(&"reward_placeholder", true)
+	var label := AlveolusUIComponents.label(text_value, AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	label.name = "PlaceholderValue"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_child(label)
+	return column
+
+
+func _accent_color(role: StringName) -> Color:
+	match role:
+		&"teal":
+			return AlveolusVisualTheme.TEAL
+		&"turquoise":
+			return AlveolusVisualTheme.TURQUOISE
+		&"cobalt":
+			return AlveolusVisualTheme.COBALT
+		&"coral":
+			return AlveolusVisualTheme.CORAL
+	return AlveolusVisualTheme.GOLD
+
+
 func _refresh_responsive_layout() -> void:
 	if _safe_area == null:
 		return
@@ -337,6 +422,8 @@ func _refresh_responsive_layout() -> void:
 		_modal.custom_minimum_size.y = 0.0
 	if _stats_grid != null:
 		_stats_grid.columns = 1 if _compact_layout else maxi(1, mini(3, _stats_grid.get_child_count()))
+	if _reward_grid != null:
+		_reward_grid.columns = 2 if _compact_layout else 4
 	if _apply_action_layout():
 		_refresh_responsive_layout.call_deferred()
 		return

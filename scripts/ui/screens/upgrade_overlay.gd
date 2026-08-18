@@ -17,7 +17,9 @@ const SINGLE_EDUCATION_WIDTH := 520.0
 const DOUBLE_WIDTH := 680.0
 const TRIPLE_WIDTH := 940.0
 const MINIMUM_CARD_WIDTH := 240.0
-const CARD_HEIGHT := 104.0
+const CARD_HEIGHT := 112.0
+const EXTRA_VALUE_ROW_HEIGHT := 20.0
+const UPGRADE_ICON_SIZE := 34.0
 const MODAL_PADDING := 20
 const FOCUS_LINE_WIDTH := 2.0
 
@@ -325,7 +327,10 @@ func _rebuild_cards() -> void:
 func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Button:
 	var card := AlveolusUIComponents.choice_card("", "")
 	card.name = "Upgrade_%s" % String(option.id())
-	card.custom_minimum_size = Vector2(0.0, CARD_HEIGHT)
+	# One display-ready value row fits the compact base card. Every additional
+	# row grows the card uniformly instead of being clipped below the inset.
+	var extra_value_rows := maxi(0, option.value_rows().size() - 1)
+	card.custom_minimum_size = Vector2(0.0, CARD_HEIGHT + extra_value_rows * EXTRA_VALUE_ROW_HEIGHT)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.focus_mode = Control.FOCUS_NONE
 	card.scale = Vector2.ONE
@@ -351,11 +356,12 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	content.add_child(heading)
 	var icon := SimpleIcon.new()
 	icon.name = "UpgradeIcon"
-	icon.custom_minimum_size = Vector2(22.0, 22.0)
+	icon.custom_minimum_size = Vector2(UPGRADE_ICON_SIZE, UPGRADE_ICON_SIZE)
 	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon.configure(option.icon_id(), _accent_color(option.accent_role()))
+	icon.set_meta(&"upgrade_icon_id", option.icon_id())
 	heading.add_child(icon)
-	var title := AlveolusUIComponents.label(option.title(), AlveolusVisualTheme.TYPE_VALUE_LABEL)
+	var title := AlveolusUIComponents.label(option.title(), AlveolusVisualTheme.TYPE_BODY_LABEL)
 	title.name = "UpgradeTitle"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -365,7 +371,10 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	var effect := _build_effect_copy(option.effect())
 	content.add_child(effect)
 
-	if not option.comparison_text().is_empty():
+	if option.has_value_rows():
+		for value_row in option.value_rows():
+			content.add_child(_build_value_copy(value_row))
+	elif not option.comparison_text().is_empty():
 		var comparison := _build_comparison_copy(option.before_value(), option.after_value())
 		content.add_child(comparison)
 
@@ -377,13 +386,45 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	focus_target.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	focus_target.focus_mode = Control.FOCUS_ALL
 	focus_target.set_meta(&"upgrade_id", option.id())
-	focus_target.set_meta(&"alveolus_accessible_name", "%s: %s" % [option.title(), option.effect()])
+	focus_target.set_meta(&"alveolus_accessible_name", _card_accessible_name(option))
 	focus_target.focus_entered.connect(_on_card_focus_entered.bind(focus_target, focus_ring))
 	focus_target.focus_exited.connect(func() -> void: focus_ring.hide())
 	focus_target.gui_input.connect(_on_focus_target_input.bind(focus_target, option.id()))
 	card.add_child(focus_target)
 	_focus_targets.append(focus_target)
 	return card
+
+
+func _card_accessible_name(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> String:
+	var parts := PackedStringArray([option.title(), option.effect()])
+	for row in option.value_rows():
+		if row.before_value().is_empty():
+			parts.append("%s %s" % [row.label(), row.value()])
+		else:
+			parts.append("%s %s zu %s" % [row.label(), row.before_value(), row.value()])
+	return ". ".join(parts)
+
+
+## Value rows arrive fully formatted from the presenter. The overlay only lays
+## out label, optional previous value and result value; it never derives units
+## or branches on a content ID.
+func _build_value_copy(row: UpgradeOverlayViewModel.ValueRowViewModel) -> RichTextLabel:
+	var copy := _rich_copy(
+		"UpgradeValue_%s" % String(row.id()),
+		AlveolusVisualTheme.heading_font(),
+		AlveolusVisualTheme.TEXT_BODY
+	)
+	_append_colored_text(copy, "%s  " % row.label(), AlveolusVisualTheme.IVORY_DEEP)
+	if not row.before_value().is_empty():
+		_append_colored_text(copy, row.before_value(), AlveolusVisualTheme.IVORY_DEEP)
+		_append_colored_text(copy, "  →  ", AlveolusVisualTheme.MUTED)
+	_append_colored_text(copy, row.value(), _accent_color(row.accent_role()))
+	copy.set_meta(&"value_row_id", row.id())
+	copy.set_meta(&"semantic_label", row.label())
+	copy.set_meta(&"semantic_before", row.before_value())
+	copy.set_meta(&"semantic_value", row.value())
+	copy.set_meta(&"semantic_value_role", row.accent_role())
+	return copy
 
 
 ## Highlights one meaningful delta in the upper effect copy by content, never

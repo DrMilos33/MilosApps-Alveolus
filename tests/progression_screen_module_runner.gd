@@ -26,15 +26,15 @@ func _run() -> void:
 	_check(screen.talent_scroll().follow_focus, "Talentscroll folgt Tastatur- und Gamepadfokus")
 
 	var fixture: Variant = _fixture(1, &"research", "Forschung 18", "4 Talentpunkte · 2 frei")
-	_check(fixture.research_item_count() == 3, "ViewModel bewahrt alle Forschungskarten")
-	_check(fixture.talent_branch_count() == 3, "ViewModel bewahrt genau drei Talentäste")
+	_check(fixture.research_item_count() == 4, "ViewModel bewahrt alle vier Forschungskarten")
+	_check(fixture.talent_branch_count() == 1, "ViewModel bündelt Root und drei Abzweigungen in einem Talentbaum")
 	var copied_research: Array = fixture.research_items()
 	copied_research.clear()
-	_check(fixture.research_item_count() == 3, "Ausgelesene Forschungsliste verändert das ViewModel nicht")
+	_check(fixture.research_item_count() == 4, "Ausgelesene Forschungsliste verändert das ViewModel nicht")
 	var copied_branches: Array = fixture.talent_branches()
 	var first_branch_copy: Variant = copied_branches[0]
 	copied_branches.clear()
-	_check(fixture.talent_branch_count() == 3, "Ausgelesene Astliste verändert das ViewModel nicht")
+	_check(fixture.talent_branch_count() == 1, "Ausgelesene Astliste verändert das ViewModel nicht")
 	_check(first_branch_copy != fixture.talent_branches()[0], "Ast- und Knotendaten werden bei jedem Auslesen tief kopiert")
 
 	_check(screen.apply_view_model(fixture), "Erstes Progression-ViewModel wird angewendet")
@@ -43,8 +43,8 @@ func _run() -> void:
 	_check(screen.selected_tab() == &"research", "ViewModel bestimmt den sichtbaren Tab")
 	_check(screen.research_tab_action().theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB, "Aktiver Forschungstab verwendet den lesbaren Selected-Zustand")
 	_check(screen.talent_tab_action().theme_type_variation == AlveolusVisualTheme.TYPE_SEGMENTED_TAB, "Inaktiver Talenttab bleibt visuell getrennt")
-	_check(screen.research_columns() == 3, "Breite Forschung nutzt drei Spalten")
-	_check(screen.talent_columns() == 3, "Breiter Talentbaum nutzt drei Äste nebeneinander")
+	_check(screen.research_columns() == 4, "Forschung nutzt bei 1280×720 exakt vier kompakte Spalten")
+	_check(screen.talent_columns() == 1, "Der gemeinsame Root-Baum nutzt die verfügbare Breite")
 
 	var active_research := screen.research_action(&"research_active")
 	var available_research := screen.research_action(&"research_available")
@@ -56,10 +56,11 @@ func _run() -> void:
 	_check(_state_icon_kind(locked_research) == &"locked", "Gesperrte Forschung ist zusätzlich mit Schloss markiert")
 	_check(locked_research.focus_mode == Control.FOCUS_ALL, "Gesperrte Forschung bleibt für ui_info fokussierbar")
 	_check(String(locked_research.get_meta(&"alveolus_accessible_name", "")).contains("gesperrt"), "Nicht sichtbarer zugänglicher Name benennt den Zustand ausdrücklich")
-	_check(active_research.custom_minimum_size.y <= 76.0, "Forschungskarten bleiben kompakt")
+	_check(active_research.custom_minimum_size.y <= 68.0, "Forschungskarten bleiben kompakt")
 	for card in [active_research, available_research, locked_research]:
 		var card_text := _descendant_text(card).to_lower()
 		_check(not card_text.contains("aktiv") and not card_text.contains("verfügbar") and not card_text.contains("gesperrt"), "Karten wiederholen ihren Zustand nicht als Statuswort")
+		_check(not card_text.contains("gesamt") and not card_text.contains("+9"), "Gesamtwirkung belegt nie dauerhaften Platz auf der Forschungskarte")
 
 	var tooltip_provider := screen.tooltip_provider_for(available_research)
 	var explicit_provider := screen.ui_info_provider_for(available_research)
@@ -68,6 +69,9 @@ func _run() -> void:
 	_check(tooltip_provider == explicit_provider, "Hover und ui_info verwenden exakt denselben Provider")
 	_check(tooltip_provider.call() == explicit_provider.call(), "Hover und ui_info liefern inhaltsgleiche Payloads")
 	_check(screen.info_payload_for(available_research).get("title", "") == "Schnellauswertung", "Informationspayload bleibt quellenspezifisch")
+	var active_research_payload := screen.info_payload_for(active_research)
+	_check(String(active_research_payload.get("body", "")).contains("Gesamt: +9 Leben"), "Tooltip ergänzt den vorberechneten Gesamtwert mit dem exakten Präfix")
+	_check(fixture.research_items()[0].total_effect_text() == "+9 Leben", "ViewModel transportiert Gesamtwirkung darstellungsfertig und ohne UI-Berechnung")
 	_check(available_research.tooltip_text.is_empty(), "Native Dauertooltips bleiben deaktiviert")
 	_check(screen.registered_info_source_count() == 8, "Alle Forschungs- und Talentknoten besitzen eine Informationsquelle")
 	var registrations := screen.context_detail_registrations()
@@ -78,7 +82,7 @@ func _run() -> void:
 		var registration_id := StringName(registration.get("id", &""))
 		_check(registration_id != &"" and not registration_ids.has(registration_id), "Jede Kontextquelle besitzt eine eindeutige stabile ID")
 		registration_ids[registration_id] = true
-	_check(registration_ids.has(&"research:research_available") and registration_ids.has(&"talent:plan_child"), "Stabile IDs unterscheiden Forschungs- und Talentquellen")
+	_check(registration_ids.has(&"research:research_available") and registration_ids.has(&"talent:manual_treatment_aim"), "Stabile IDs unterscheiden Forschungs- und Talentquellen")
 
 	var intents := {
 		"tab": StringName(),
@@ -98,26 +102,37 @@ func _run() -> void:
 	_check(intents["research"] == &"research_available", "Verfügbare Forschung emittiert ihre stabile ID")
 	screen.talent_tab_action().pressed.emit()
 	_check(intents["tab"] == &"talents" and screen.selected_tab() == &"talents", "Tabaktion wechselt sichtbar und emittiert eine Absicht")
-	var available_talent := screen.talent_action(&"plan_child")
+	var available_talent := screen.talent_action(&"manual_treatment_aim")
 	available_talent.pressed.emit()
-	_check(intents["talent"] == &"plan_child", "Verfügbares Talent emittiert seine stabile ID")
+	_check(intents["talent"] == &"manual_treatment_aim", "Verfügbares Talent emittiert seine stabile ID")
 	screen.talent_reset_action().pressed.emit()
 	screen.back_action().pressed.emit()
 	_check(int(intents["reset"]) == 1, "Neu verteilen emittiert genau eine Absicht")
 	_check(int(intents["back"]) == 1, "Rückkehr emittiert genau eine Absicht")
 
-	var planning_tree := screen.talent_branch(&"planning")
-	_check(planning_tree != null and planning_tree.edge_count() == 2, "Talentast zeichnet jede Voraussetzung als Verbindung")
-	var root_talent := screen.talent_action(&"plan_root")
-	var child_talent := screen.talent_action(&"plan_child")
+	var planning_tree := screen.talent_branch(&"treatment")
+	_check(planning_tree != null and planning_tree.edge_count() == 3, "Root zeichnet alle drei Voraussetzungen als Abwärtsverbindungen")
+	_check(screen.find_child("TalentBranch_treatment", true, false) is VBoxContainer, "Talentbaum verzichtet auf eine große umgebende ActionCard")
+	var root_talent := screen.talent_action(&"treatment_damage_training")
+	var left_talent := screen.talent_action(&"spread_penetration")
+	var child_talent := screen.talent_action(&"manual_treatment_aim")
+	var right_talent := screen.talent_action(&"piercing_persistence")
 	var bottom_target := root_talent.get_node_or_null(root_talent.focus_neighbor_bottom)
 	var top_target := child_talent.get_node_or_null(child_talent.focus_neighbor_top)
 	_check(bottom_target == child_talent, "D-Pad nach unten folgt der Talenttopologie")
 	_check(top_target == root_talent, "D-Pad nach oben kehrt zum vorausgesetzten Talent zurück")
+	_check(left_talent.get_node_or_null(left_talent.focus_neighbor_right) == child_talent, "Der linke Ast erreicht horizontal den mittleren Ast")
+	_check(child_talent.get_node_or_null(child_talent.focus_neighbor_left) == left_talent and child_talent.get_node_or_null(child_talent.focus_neighbor_right) == right_talent, "Der mittlere Ast erreicht beide seitlichen Spezialisierungen")
+	_check(right_talent.get_node_or_null(right_talent.focus_neighbor_left) == child_talent, "Der rechte Ast kehrt horizontal zum mittleren Ast zurück")
+	for branch_talent in [left_talent, child_talent, right_talent]:
+		_check(branch_talent.get_node_or_null(branch_talent.focus_neighbor_top) == root_talent, "Jede Spezialisierung kehrt per D-Pad zum Root zurück")
 	_check(_state_icon_kind(root_talent) == &"check", "Aktives Talent besitzt Check plus Auswahlfarbe")
-	_check(_state_icon_kind(screen.talent_action(&"plan_locked")) == &"locked", "Gesperrtes Talent besitzt Schloss plus gedämpfte Farbe")
+	_check(root_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD, "Aktiver Root besitzt den zentralen Selected-Ring")
+	_check(String(root_talent.get_meta(&"alveolus_accessible_name", "")).contains("Rang 1 von 1"), "Der zugängliche Rootname nennt den visuellen Rang ausdrücklich")
+	_check(_state_icon_kind(child_talent) == &"diamond", "Verfügbares Talent ist zusätzlich zur Farbe mit einem Marker gekennzeichnet")
+	_check(_state_icon_kind(screen.talent_action(&"piercing_persistence")) == &"locked", "Gesperrtes Talent besitzt Schloss plus gedämpfte Farbe")
 	var talent_symbols: Dictionary = {}
-	for talent_id in [&"plan_root", &"plan_child", &"plan_locked", &"diagnosis_root", &"deployment_root"]:
+	for talent_id in [&"treatment_damage_training", &"spread_penetration", &"manual_treatment_aim", &"piercing_persistence"]:
 		var talent_button := screen.talent_action(talent_id)
 		var symbol := talent_button.find_child("TalentSymbol", true, false) as SimpleIcon
 		_check(symbol != null, "Jeder Talentknoten besitzt ein eigenes Hauptsymbol")
@@ -125,11 +140,12 @@ func _run() -> void:
 			talent_symbols[symbol.kind] = true
 		_check(_descendant_text(talent_button).is_empty(), "Talentknoten zeigt weder Titel, Kosten noch Beschreibung dauerhaft")
 		_check(is_equal_approx(talent_button.custom_minimum_size.x, TalentTreeBranch.NODE_WIDTH) and is_equal_approx(talent_button.custom_minimum_size.y, TalentTreeBranch.NODE_HEIGHT), "Talentknoten bleibt ein kompakter quadratischer Symbolknoten")
-	_check(talent_symbols.size() == 5, "Alle sichtbaren Talentknoten verwenden eindeutig verschiedene Symbole")
+		_check(_rank_pip_count(talent_button) == int(talent_button.get_meta(&"talent_rank_maximum", 0)), "Mehrfachränge werden als kompakte Pips sichtbar")
+	_check(talent_symbols.size() == 4, "Alle sichtbaren Talentknoten verwenden eindeutig verschiedene Symbole")
 	var talent_tooltip := screen.tooltip_provider_for(child_talent)
 	_check(talent_tooltip.is_valid() and talent_tooltip == screen.ui_info_provider_for(child_talent), "Talent-Hover und ui_info teilen exakt dieselbe Informationsquelle")
 	var talent_payload := screen.info_payload_for(child_talent)
-	_check(String(talent_payload.get("body", "")).contains("+2") and String(talent_payload.get("meta", "")).contains("2 P"), "Talentbeschreibung bleibt kurz und nennt Zahlen als Fakten")
+	_check(String(talent_payload.get("body", "")).contains("+2") and String(talent_payload.get("meta", "")).contains("1 P"), "Talentbeschreibung bleibt kurz und nennt Zahlen als Fakten")
 
 	var research_instance := available_research.get_instance_id()
 	var talent_instance := child_talent.get_instance_id()
@@ -152,19 +168,20 @@ func _run() -> void:
 	_check(screen.apply_view_model(rank_change), "Rang- und Zustandsänderungen werden sichtbar angewendet")
 	await process_frame
 	_check(screen.research_action(&"research_available").get_instance_id() == research_instance, "Forschungsrang aktualisiert die bestehende Buttoninstanz in-place")
-	_check(screen.talent_action(&"plan_child").get_instance_id() == talent_instance, "Talentrang aktualisiert die bestehende Buttoninstanz in-place")
+	_check(screen.talent_action(&"manual_treatment_aim").get_instance_id() == talent_instance, "Talentrang aktualisiert die bestehende Buttoninstanz in-place")
 	_check(get_root().gui_get_focus_owner() == child_talent, "In-place-Rangupdate bewahrt den Fokus am Ausgangselement")
 	_check(screen.tooltip_provider_for(screen.research_action(&"research_available")) == research_provider_before, "Forschungsquelle bewahrt ihren stabilen Provider")
-	_check(screen.tooltip_provider_for(screen.talent_action(&"plan_child")) == talent_provider_before, "Talentquelle bewahrt ihren stabilen Provider")
+	_check(screen.tooltip_provider_for(screen.talent_action(&"manual_treatment_aim")) == talent_provider_before, "Talentquelle bewahrt ihren stabilen Provider")
 	var updated_research_payload := screen.info_payload_for(screen.research_action(&"research_available"))
 	_check(String(updated_research_payload.get("body", "")).contains("+25 %") and String(updated_research_payload.get("meta", "")) == "3 Forschung", "Stabiler Forschungsprovider liefert die neuen Rangfakten")
-	var updated_talent_payload := screen.info_payload_for(screen.talent_action(&"plan_child"))
+	var updated_talent_payload := screen.info_payload_for(screen.talent_action(&"manual_treatment_aim"))
 	_check(String(updated_talent_payload.get("body", "")).contains("+3") and String(updated_talent_payload.get("meta", "")) == "3 P", "Stabiler Talentprovider liefert die neuen Rangfakten")
-	_check(_state_icon_kind(screen.talent_action(&"plan_child")) == &"check", "In-place-Talentupdate aktualisiert den sichtbaren Zustand")
+	_check(_state_icon_kind(screen.talent_action(&"manual_treatment_aim")) == &"check", "In-place-Talentupdate aktualisiert den sichtbaren Zustand")
+	_check(int(screen.talent_action(&"manual_treatment_aim").get_meta(&"talent_rank_current", 0)) == 1, "In-place-Talentupdate aktualisiert die sichtbaren Rangpips")
 
 	screen.size = Vector2(850.0, 720.0)
 	await process_frame
-	_check(screen.research_columns() == 2 and screen.talent_columns() == 2, "Mittlere Breite verwendet zwei Spalten")
+	_check(screen.research_columns() == 2 and screen.talent_columns() == 1, "Mittlere Breite nutzt zwei Forschungsspalten und einen Root-Baum")
 	screen.size = Vector2(640.0, 720.0)
 	await process_frame
 	_check(screen.research_columns() == 1 and screen.talent_columns() == 1, "Kompakte Breite verwendet eine Spalte")
@@ -177,9 +194,10 @@ func _run() -> void:
 
 func _fixture(revision: int, tab: StringName, research_balance: String, talent_balance: String) -> Variant:
 	var research: Array = [
-		_research_item(&"research_active", "Frühe Einordnung", "Rang 2/2", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false),
-		_research_item(&"research_available", "Schnellauswertung", "Rang 0/2", "2 Forschung", ProgressionViewModelScript.ItemState.AVAILABLE, true),
-		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false),
+		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben"),
+		_research_item(&"research_available", "Schnellauswertung", "Rang 0/2", "2 Forschung", ProgressionViewModelScript.ItemState.AVAILABLE, true, "+0 % Befundfortschritt"),
+		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+0 Analyse"),
+		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit"),
 	]
 	return ProgressionViewModelScript.create(
 		revision,
@@ -194,7 +212,7 @@ func _fixture(revision: int, tab: StringName, research_balance: String, talent_b
 
 func _rank_change_fixture(revision: int, tab: StringName) -> Variant:
 	var research: Array = [
-		_research_item(&"research_active", "Frühe Einordnung", "Rang 2/2", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false),
+		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben"),
 		ProgressionViewModelScript.ResearchItemViewModel.create(
 			&"research_available",
 			"Schnellauswertung",
@@ -203,26 +221,31 @@ func _rank_change_fixture(revision: int, tab: StringName) -> Variant:
 			&"research",
 			ProgressionViewModelScript.ItemState.AVAILABLE,
 			true,
-			_info("Schnellauswertung", "+25 % Befundfortschritt.", "3 Forschung", &"research", AlveolusVisualTheme.GOLD)
+			_info("Schnellauswertung", "+25 % Befundfortschritt.", "3 Forschung", &"research", AlveolusVisualTheme.GOLD),
+			"+25 % Befundfortschritt"
 		),
-		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false),
+		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+0 Analyse"),
+		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit"),
 	]
 	var branches := _fixture_branches()
-	branches[0] = _branch(&"planning", "Planung", &"plan", AlveolusVisualTheme.GOLD, [
-		_talent(&"plan_root", "Organisation I", "2 P", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.ACTIVE, true),
+	branches[0] = _branch(&"treatment", "Behandlung", &"treatment", AlveolusVisualTheme.TEAL, [
+		_talent(&"treatment_damage_training", "Behandlungstraining", "1/1 · Max", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.ACTIVE, false, 1, 1),
+		_talent(&"spread_penetration", "Streudurchdringung", "0/3 · 1 P", 1, 0, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.AVAILABLE, true, 0, 3),
 		ProgressionViewModelScript.TalentNodeViewModel.create(
-			&"plan_child",
-			"Organisation II",
-			"3 P",
-			&"plan",
+			&"manual_treatment_aim",
+			"Manuelles Behandlungsziel",
+			"1/1 · Max",
+			&"target",
 			1,
-			0,
-			PackedStringArray(["plan_root"]),
+			1,
+			PackedStringArray(["treatment_damage_training"]),
 			ProgressionViewModelScript.ItemState.ACTIVE,
-			true,
-			_info("Organisation II", "+3 Kapazität.", "3 P", &"plan", AlveolusVisualTheme.COBALT)
+			false,
+			_info("Manuelles Behandlungsziel", "+3 Zielpräzision.", "3 P", &"target", AlveolusVisualTheme.TEAL),
+			1,
+			1
 		),
-		_talent(&"plan_locked", "Karte halten", "1 P", 1, 2, PackedStringArray(["plan_root"]), ProgressionViewModelScript.ItemState.LOCKED, false),
+		_talent(&"piercing_persistence", "Durchdringende Ausdauer", "0/2 · 1 P", 1, 2, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.LOCKED, false, 0, 2),
 	])
 	return ProgressionViewModelScript.create(
 		revision,
@@ -235,7 +258,15 @@ func _rank_change_fixture(revision: int, tab: StringName) -> Variant:
 	)
 
 
-func _research_item(id: StringName, title: String, rank: String, cost: String, state: int, interactive: bool) -> Variant:
+func _research_item(
+	id: StringName,
+	title: String,
+	rank: String,
+	cost: String,
+	state: int,
+	interactive: bool,
+	total_effect: String
+) -> Variant:
 	return ProgressionViewModelScript.ResearchItemViewModel.create(
 		id,
 		title,
@@ -244,22 +275,18 @@ func _research_item(id: StringName, title: String, rank: String, cost: String, s
 		&"research",
 		state,
 		interactive,
-		_info(title, "Vollständige Wirkung von %s." % title, cost, &"research", AlveolusVisualTheme.GOLD)
+		_info(title, "Wirkung pro Rang von %s." % title, cost, &"research", AlveolusVisualTheme.GOLD),
+		total_effect
 	)
 
 
 func _fixture_branches() -> Array:
 	return [
-		_branch(&"planning", "Planung", &"plan", AlveolusVisualTheme.GOLD, [
-			_talent(&"plan_root", "Organisation I", "2 P", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.ACTIVE, true),
-			_talent(&"plan_child", "Organisation II", "2 P", 1, 0, PackedStringArray(["plan_root"]), ProgressionViewModelScript.ItemState.AVAILABLE, true),
-			_talent(&"plan_locked", "Karte halten", "1 P", 1, 2, PackedStringArray(["plan_root"]), ProgressionViewModelScript.ItemState.LOCKED, false),
-		]),
-		_branch(&"diagnosis", "Diagnose", &"finding", AlveolusVisualTheme.CORAL, [
-			_talent(&"diagnosis_root", "Frühe Einordnung", "2 P", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.AVAILABLE, true),
-		]),
-		_branch(&"deployment", "Einsatz", &"ability", AlveolusVisualTheme.COBALT, [
-			_talent(&"deployment_root", "Wechselrhythmus", "1 P", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.LOCKED, false),
+		_branch(&"treatment", "Behandlung", &"treatment", AlveolusVisualTheme.TEAL, [
+			_talent(&"treatment_damage_training", "Behandlungstraining", "1/1 · Max", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.ACTIVE, false, 1, 1),
+			_talent(&"spread_penetration", "Streudurchdringung", "0/3 · 1 P", 1, 0, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.AVAILABLE, true, 0, 3),
+			_talent(&"manual_treatment_aim", "Manuelles Behandlungsziel", "0/1 · 1 P", 1, 1, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.AVAILABLE, true, 0, 1),
+			_talent(&"piercing_persistence", "Durchdringende Ausdauer", "0/2 · 1 P", 1, 2, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.LOCKED, false, 0, 2),
 		]),
 	]
 
@@ -276,7 +303,9 @@ func _talent(
 	lane: int,
 	required_ids: PackedStringArray,
 	state: int,
-	interactive: bool
+	interactive: bool,
+	rank_current: int,
+	rank_maximum: int
 ) -> Variant:
 	return ProgressionViewModelScript.TalentNodeViewModel.create(
 		id,
@@ -288,7 +317,9 @@ func _talent(
 		required_ids,
 		state,
 		interactive,
-		_info(title, "+2 Kapazität.", cost, &"plan", AlveolusVisualTheme.COBALT)
+		_info(title, "+2 Kapazität.", cost, &"treatment", AlveolusVisualTheme.TEAL),
+		rank_current,
+		rank_maximum
 	)
 
 
@@ -308,6 +339,13 @@ func _descendant_text(root: Node) -> String:
 	return " ".join(parts)
 
 
+func _rank_pip_count(root: Node) -> int:
+	var rank_strip := root.find_child("TalentRankPips", true, false)
+	if rank_strip == null or rank_strip.get_child_count() != 1:
+		return 0
+	return rank_strip.get_child(0).get_child_count()
+
+
 func _check_source_contracts() -> void:
 	var screen_source := FileAccess.get_file_as_string("res://scripts/ui/screens/progression_screen.gd")
 	var model_source := FileAccess.get_file_as_string("res://scripts/ui/view_models/progression_screen_view_model.gd")
@@ -324,8 +362,13 @@ func _check_source_contracts() -> void:
 	_check(screen_source.contains("_sync_research") and screen_source.contains("_refresh_talents"), "Rangänderungen aktualisieren vorhandene Karten differenziell")
 	_check(screen_source.contains("context_detail_id") and screen_source.contains("_info_payload_for_stable_id"), "Kontextprovider werden über stabile fachliche IDs aufgelöst")
 	_check(screen_source.contains("TALENT_SYMBOLS_BY_ID") and screen_source.contains("_build_talent_symbol_content"), "Talentbaum baut seine Knoten ausschließlich aus eindeutigen Symbolen")
+	_check(screen_source.contains("RESEARCH_WIDE_COLUMNS := 4") and screen_source.contains("logical_width >= 1100.0"), "Breite Forschung besitzt einen expliziten Vier-Spalten-Vertrag")
+	_check(screen_source.contains("TalentRankPips") and screen_source.contains("talent_rank_current"), "Talentknoten stellen Mehrfachränge redundant als Pips dar")
+	_check(not screen_source.contains("AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)"), "Talentbaum erzeugt keine große ActionCard-Fläche")
 	_check(branch_source.contains("draw_polyline") and not branch_source.contains("draw_circle"), "Talentverbindungen verwenden Linien ohne Kreispunkte")
 	_check(model_source.contains("Array[ResearchItemViewModel]") and model_source.contains("Array[TalentBranchViewModel]"), "ViewModel hält Kindeinträge typisiert")
+	_check(model_source.contains("total_effect_text_value") and model_source.contains("Gesamt: %s"), "Gesamtwirkung wird als vorbereiteter Wert ausschließlich im Detailpayload ergänzt")
+	_check(model_source.contains("rank_current_value") and model_source.contains("rank_maximum_value"), "Talentränge gelangen als reine Präsentationsprimitive ins ViewModel")
 
 
 func _check(condition: bool, message: String) -> void:

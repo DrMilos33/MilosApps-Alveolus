@@ -1,5 +1,27 @@
 extends SceneTree
 
+class RelatedTermPresentationStub:
+	extends RefCounted
+
+	var id: StringName
+	var display_name: String
+	var explanation: String
+
+	func _init(id_value: StringName, display_name_value: String, explanation_value: String) -> void:
+		id = id_value
+		display_name = display_name_value
+		explanation = explanation_value
+
+
+class RelatedLexiconViewModelStub:
+	extends LexiconEntryViewModel
+
+	var _related_presentations: Array = []
+
+	func related_term_presentations() -> Array:
+		return _related_presentations.duplicate()
+
+
 var assertions := 0
 var failures: Array[String] = []
 
@@ -16,6 +38,7 @@ func _run() -> void:
 	await process_frame
 
 	_test_master_detail_structure(lexicon)
+	await _test_related_term_chips(lexicon)
 	_test_lock_and_selection(lexicon)
 	await _test_mouse_and_focus_navigation(lexicon)
 	await _test_responsive_detail_density(lexicon)
@@ -77,6 +100,7 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	var context_sources := lexicon.context_detail_sources()
 	_check(context_sources.size() == lexicon.entry_buttons.size(), "Jede sichtbare Lexikonzeile stellt eine registrierbare ui_info-Quelle bereit")
 	if not context_sources.is_empty():
+		_check(String(context_sources[0].get("id", &"")).begins_with("lexicon:entry:"), "Jede Kontextquelle transportiert eine stabile, screenlokale ID")
 		_check(not bool(context_sources[0].get("hover_enabled", true)), "Der gemeinsame Detailcontroller bleibt für Lexikoneinträge explizit; Maus-Hover nutzt ausschließlich den nativen Kurztooltip")
 		var content_provider: Callable = context_sources[0].get("provider", Callable())
 		var payload: Dictionary = content_provider.call() if content_provider.is_valid() else {}
@@ -86,6 +110,61 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 		_check(semantic_panel is PanelContainer and semantic_panel.get_meta(&"alveolus_component", &"") == &"semantic_copy_section", "Jede Bedeutungsebene verwendet die semantische Textflächen-Komponente")
 	_check(lexicon.detail_gameplay_panel.is_ancestor_of(lexicon.detail_gameplay_text), "Der Spieltext bleibt innerhalb seiner semantischen Fläche")
 	_check(lexicon.detail_medical_panel.is_ancestor_of(lexicon.detail_medical_text), "Der medizinische Text bleibt innerhalb seiner semantischen Fläche")
+
+
+func _test_related_term_chips(lexicon: LexiconMasterDetail) -> void:
+	var emitted_registrations: Array[Dictionary] = []
+	var capture := func(source: Control, content_provider: Callable, hover_enabled: bool) -> void:
+		emitted_registrations.append({
+			"source": source,
+			"provider": content_provider,
+			"hover_enabled": hover_enabled,
+		})
+	lexicon.context_detail_source_available.connect(capture)
+	var view_model := RelatedLexiconViewModelStub.new()
+	view_model.id = &"test_parent"
+	view_model.category = LexiconEntryDefinition.CATEGORY_GAMEPLAY
+	view_model.display_name = "Testeintrag"
+	view_model.summary = "Test für DTO-basierte verwandte Begriffe."
+	view_model._related_presentations = [
+		RelatedTermPresentationStub.new(&"term_treatment_speed", "Behandlungstempo", "Bestimmt die Zeit zwischen automatischen Impulsen."),
+		RelatedTermPresentationStub.new(&"term_radius", "Radius", "Bestimmt die Größe einer Flächenwirkung."),
+	]
+	lexicon._show_detail(view_model)
+	await process_frame
+	lexicon.context_detail_source_available.disconnect(capture)
+
+	var chips: Array[Node] = lexicon.detail_related_chips.get_children()
+	_check(chips.size() == 2 and lexicon.detail_related_title.visible, "Verwandte DTOs werden als kompakte fokussierbare Chips statt als Fließtext dargestellt")
+	_check(emitted_registrations.size() == 2, "Jeder verwandte Begriff wird über denselben zentralen Kontextdetailweg registriert")
+	if chips.size() == 2 and emitted_registrations.size() == 2:
+		var first_chip := chips[0] as Button
+		_check(first_chip != null and first_chip.focus_mode == Control.FOCUS_ALL, "Verwandte Begriffe sind per Tastatur fokussierbar")
+		_check(first_chip.tooltip_text.is_empty(), "Verwandte Chips erzeugen keinen konkurrierenden nativen Tooltip")
+		_check(first_chip.get_meta(&"lexicon_related_term_id", &"") == &"term_treatment_speed", "Der Chip bewahrt die stabile Term-ID des DTOs")
+		_check(String(first_chip.get_meta(&"context_detail_stable_id", &"")).begins_with("lexicon:related:test_parent:"), "Die Controllerregistrierung besitzt eine stabile Parent-/Term-ID")
+		_check(bool(emitted_registrations[0].get("hover_enabled", false)), "Mouse-Hover ist ausschließlich für verwandte Begriffschips aktiviert")
+		var provider: Callable = emitted_registrations[0].get("provider", Callable())
+		var hover_payload: Dictionary = provider.call() if provider.is_valid() else {}
+		_check(String(hover_payload.get("title", "")) == "Behandlungstempo" and String(hover_payload.get("body", "")).contains("automatischen Impulsen"), "Hover und ui_info erhalten dieselbe fertige DTO-Erklärung")
+
+		var controller := ContextDetailController.new()
+		get_root().add_child(controller)
+		await process_frame
+		controller.register_source(first_chip, provider, true)
+		first_chip.grab_focus()
+		await process_frame
+		_check(not controller.is_open(), "Fokus allein öffnet auch bei verwandten Begriffen keine Detailkarte")
+		first_chip.mouse_entered.emit()
+		await process_frame
+		_check(controller.is_open() and not controller.is_explicit(), "Mouse-Hover öffnet die Erklärung über den globalen Controller")
+		controller.close_all()
+		_check(controller.toggle_focused(first_chip), "ui_info löst den fokussierten verwandten Begriff über dieselbe Registrierung auf")
+		_check(controller.is_explicit() and controller.current_payload().get("body", "") == hover_payload.get("body", ""), "ui_info zeigt exakt dieselbe Erklärung wie Hover")
+		controller.queue_free()
+		await process_frame
+
+	lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
 
 func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.select_entry(&"pneumococcus"), "Entdecktes Bakterium ist auswählbar")

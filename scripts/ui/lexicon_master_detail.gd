@@ -46,7 +46,7 @@ var detail_medical_title: Label
 var detail_medical_text: Label
 var detail_medical_panel: PanelContainer
 var detail_related_title: Label
-var detail_related_text: Label
+var detail_related_chips: HFlowContainer
 var empty_detail_label: Label
 var _context_detail_sources: Dictionary = {}
 var _detail_type_grids: Array[GridContainer] = []
@@ -138,14 +138,16 @@ func context_detail_sources() -> Array[Dictionary]:
 		var content_provider: Callable = registration.get("provider", Callable())
 		if source != null and is_instance_valid(source) and content_provider.is_valid():
 			result.append({
+				"id": StringName(registration.get("id", &"")),
 				"source": source,
 				"provider": content_provider,
-				# Eligible entries retain their concise native mouse tooltip. The
-				# shared controller therefore supplies explicit ui_info only;
-				# glossary terms are intentionally never registered here.
-				"hover_enabled": false,
+				"hover_enabled": bool(registration.get("hover_enabled", false)),
 			})
 	return result
+
+
+func context_detail_scope_id() -> StringName:
+	return &"lexicon"
 
 ## Provides a detached data snapshot for the explicit ui_info detail card.
 ## Glossary terms deliberately return no payload because their row and detail
@@ -388,11 +390,12 @@ func _build_detail_content() -> void:
 
 	detail_related_title = AlveolusUIComponents.label("Verwandte Begriffe", AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
 	detail_content.add_child(detail_related_title)
-	detail_related_text = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_BODY_LABEL)
-	detail_related_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	detail_related_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	detail_related_text.add_theme_color_override("font_color", AlveolusVisualTheme.COBALT)
-	detail_content.add_child(detail_related_text)
+	detail_related_chips = HFlowContainer.new()
+	detail_related_chips.name = "RelatedTermChips"
+	detail_related_chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_related_chips.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	detail_related_chips.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
+	detail_content.add_child(detail_related_chips)
 
 	empty_detail_label = AlveolusUIComponents.label("Eintrag auswählen.", AlveolusVisualTheme.TYPE_MUTED_LABEL)
 	empty_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -457,9 +460,14 @@ func _rebuild_entry_list() -> void:
 
 		if exposes_context_detail:
 			var content_provider := context_detail_payload.bind(definition.id)
-			_context_detail_sources[definition.id] = {
+			var stable_source_id := StringName("lexicon:entry:%s" % String(definition.id))
+			button.set_meta(&"context_detail_stable_id", stable_source_id)
+			_context_detail_sources[stable_source_id] = {
+				"id": stable_source_id,
 				"source": button,
 				"provider": content_provider,
+				"hover_enabled": false,
+				"kind": &"entry",
 			}
 			context_detail_source_available.emit(button, content_provider, false)
 
@@ -493,8 +501,9 @@ func _show_empty_detail() -> void:
 	detail_medical_title.hide()
 	detail_medical_text.hide()
 	detail_medical_panel.hide()
+	_clear_related_term_chips()
 	detail_related_title.hide()
-	detail_related_text.hide()
+	detail_related_chips.hide()
 	empty_detail_label.show()
 	detail_scroll.scroll_vertical = 0
 
@@ -547,10 +556,110 @@ func _show_detail(view_model: LexiconEntryViewModel) -> void:
 	detail_medical_title.visible = not view_model.medical_text.is_empty() and not view_model.locked
 	detail_medical_text.visible = detail_medical_title.visible
 	detail_medical_panel.visible = detail_medical_title.visible
-	detail_related_text.text = "  ·  ".join(view_model.related_names)
-	detail_related_title.visible = not view_model.related_names.is_empty() and not view_model.locked
-	detail_related_text.visible = detail_related_title.visible
+	_rebuild_related_term_chips(view_model)
 	detail_scroll.scroll_vertical = 0
+
+
+func _rebuild_related_term_chips(view_model: LexiconEntryViewModel) -> void:
+	_clear_related_term_chips()
+	if view_model == null or view_model.locked or not view_model.has_method(&"related_term_presentations"):
+		detail_related_title.hide()
+		detail_related_chips.hide()
+		return
+	var provided: Variant = view_model.call(&"related_term_presentations")
+	if not provided is Array:
+		detail_related_title.hide()
+		detail_related_chips.hide()
+		return
+	var presentations := provided as Array
+	var chips: Array[Button] = []
+	for dto in presentations:
+		var snapshot := _related_term_snapshot(dto)
+		if snapshot.is_empty():
+			continue
+		var term_id := StringName(snapshot["id"])
+		var display_name := String(snapshot["display_name"])
+		var stable_source_id := StringName("lexicon:related:%s:%s" % [String(view_model.id), String(term_id)])
+		var chip := AlveolusUIComponents.action_button(
+			display_name,
+			AlveolusUIComponents.ACTION_QUIET,
+			&"lexicon",
+			AlveolusVisualTheme.COBALT
+		)
+		chip.name = "Related_%s" % String(term_id).replace("/", "_")
+		chip.custom_minimum_size.y = 36.0
+		chip.focus_mode = Control.FOCUS_ALL
+		chip.tooltip_text = ""
+		chip.set_meta(&"lexicon_related_term_id", term_id)
+		chip.set_meta(&"context_detail_stable_id", stable_source_id)
+		chip.set_meta(&"alveolus_accessible_name", "%s. Erklärung mit I anzeigen." % display_name)
+		detail_related_chips.add_child(chip)
+		chips.append(chip)
+
+		var content_provider := _related_term_context_payload.bind(snapshot)
+		_context_detail_sources[stable_source_id] = {
+			"id": stable_source_id,
+			"source": chip,
+			"provider": content_provider,
+			"hover_enabled": true,
+			"kind": &"related_term",
+		}
+		context_detail_source_available.emit(chip, content_provider, true)
+
+	for index in range(chips.size()):
+		var chip := chips[index]
+		if chips.size() > 1:
+			chip.focus_neighbor_left = chip.get_path_to(chips[(index - 1 + chips.size()) % chips.size()])
+			chip.focus_neighbor_right = chip.get_path_to(chips[(index + 1) % chips.size()])
+	var has_related_terms := not chips.is_empty()
+	detail_related_title.visible = has_related_terms
+	detail_related_chips.visible = has_related_terms
+
+
+func _clear_related_term_chips() -> void:
+	if detail_related_chips != null:
+		_clear_children(detail_related_chips)
+	var stale_source_ids: Array[StringName] = []
+	for source_id_value in _context_detail_sources:
+		var source_id := StringName(source_id_value)
+		var registration := _context_detail_sources[source_id] as Dictionary
+		if StringName(registration.get("kind", &"")) == &"related_term":
+			stale_source_ids.append(source_id)
+	for source_id in stale_source_ids:
+		_context_detail_sources.erase(source_id)
+
+
+func _related_term_snapshot(dto: Variant) -> Dictionary:
+	var term_id := StringName(_dto_value(dto, &"id", &""))
+	var display_name := String(_dto_value(dto, &"display_name", "")).strip_edges()
+	var explanation := String(_dto_value(dto, &"explanation", "")).strip_edges()
+	if term_id == &"" or display_name.is_empty() or explanation.is_empty():
+		return {}
+	return {
+		"id": term_id,
+		"display_name": display_name,
+		"explanation": explanation,
+	}
+
+
+func _related_term_context_payload(snapshot: Dictionary) -> Dictionary:
+	return {
+		"entry_id": StringName(snapshot.get("id", &"")),
+		"title": String(snapshot.get("display_name", "")),
+		"body": String(snapshot.get("explanation", "")),
+		"meta": "Lexikon",
+		"accent": AlveolusVisualTheme.COBALT,
+		"icon_kind": &"lexicon",
+	}
+
+
+func _dto_value(dto: Variant, field: StringName, fallback: Variant) -> Variant:
+	if dto is Dictionary:
+		return (dto as Dictionary).get(field, fallback)
+	if typeof(dto) == TYPE_OBJECT and dto != null:
+		var value: Variant = (dto as Object).get(field)
+		return fallback if value == null else value
+	return fallback
 
 func _rebuild_type_presentations(
 	presentations: Array[LexiconEntryViewModel.TypePresentation]
