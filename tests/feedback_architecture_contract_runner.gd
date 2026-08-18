@@ -40,7 +40,7 @@ func _test_distance_and_body_catalogs() -> void:
 
 func _test_balance_and_movement_plumbing() -> void:
 	var treatments := TreatmentDefinition.catalog()
-	_near(treatments[&"treatment_precision"].base_damage, 16.0, "Präzise Grundbehandlung besitzt 16 Schaden")
+	_near(treatments[&"treatment_precision"].base_damage, 12.8, "Impuls besitzt den um 20 Prozent reduzierten Schaden")
 	_near(treatments[&"treatment_spread"].base_damage, 5.0, "Streubehandlung besitzt 5 Schaden")
 	_near(treatments[&"treatment_pierce"].base_damage, 9.0, "Durchdringende Behandlung besitzt 9 Schaden")
 	_near(treatments[&"treatment_pierce"].base_interval, 1.65, "Durchdringende Behandlung besitzt 1,65 Sekunden Intervall")

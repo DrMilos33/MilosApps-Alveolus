@@ -253,7 +253,7 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 	var before_text := _formatted_number(before, definition.preview_decimals)
 	var after_text := _formatted_number(after, definition.preview_decimals)
 	var delta := after - before
-	var effect_text := "%s%s %s" % [_sign(delta), _formatted_number(absf(delta), definition.preview_decimals), label]
+	var effect_text := "%s%s %s" % [_sign(delta), _formatted_effect_number(absf(delta), definition.preview_decimals), label]
 	var formatted_before := "%s %s" % [before_text, comparison_label]
 	var formatted_after := "%s %s" % [after_text, comparison_label]
 	match definition.preview_style:
@@ -304,6 +304,14 @@ func _formatted_number(value: float, decimals: int) -> String:
 	if decimals <= 0:
 		return str(roundi(value))
 	return ("%.*f" % [decimals, value]).replace(".", ",")
+
+func _formatted_effect_number(value: float, decimals: int) -> String:
+	var formatted := _formatted_number(value, decimals)
+	while formatted.contains(",") and formatted.ends_with("0"):
+		formatted = formatted.left(-1)
+	if formatted.ends_with(","):
+		formatted = formatted.left(-1)
+	return formatted
 
 func _sign(value: float) -> String:
 	return "+" if value >= 0.0 else "-"

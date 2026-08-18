@@ -163,6 +163,8 @@ func _test_projectile_discovery_timing() -> void:
 	projectile._physics_process(0.03)
 	_assert_equal(announcements[0], 0, "Therapiehinweis erscheint nicht unsichtbar am Avatar")
 	projectile._physics_process(0.03)
+	_assert_equal(announcements[0], 0, "Langsamer Impuls löst den Hinweis nicht vor dem sichtbaren Abstand aus")
+	projectile._physics_process(0.03)
 	_assert_equal(announcements[0], 1, "Therapiehinweis erscheint bei einem sichtbaren Projektil")
 	_assert_true(projectile.position.length() >= 52.0, "Markiertes Projektil hat sichtbaren Abstand zum Avatar")
 	projectile.free()
@@ -175,7 +177,7 @@ func _test_upgrade_application_and_caps() -> void:
 	var potency: UpgradeDefinition = _find_upgrade(definitions, &"potency")
 	var rhythm: UpgradeDefinition = _find_upgrade(definitions, &"rhythm")
 	_assert_true(stats.apply_upgrade(potency), "Wirksamkeitsupgrade kann angewendet werden")
-	_assert_equal(stats.therapy_damage, 23.0, "Wirksamkeitsupgrade verändert den Schaden")
+	_assert_equal(stats.therapy_damage, 19.8, "Wirksamkeitsupgrade verändert den Schaden")
 	stats.apply_upgrade(potency)
 	stats.apply_upgrade(potency)
 	_assert_true(not stats.apply_upgrade(potency), "Upgrade respektiert die Maximalstufe")
@@ -257,13 +259,13 @@ func _test_character_stat_rows() -> void:
 	var sections := stats.stat_sections(80.0, 90.0)
 	_assert_equal(sections[0].id(), &"general", "Allgemeine Werte besitzen eine stabile Section-ID")
 	_assert_equal(sections[1].id(), &"treatment:treatment_precision", "Behandlungswerte besitzen eine content-stabile Section-ID")
-	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "16", "Behandlungsschaden entspricht dem echten Basiswert")
+	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "12,8", "Behandlungsschaden entspricht dem echten Basiswert")
 	var copied_rows := sections[1].rows()
 	copied_rows[0]["value"] = "verändert"
-	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "16", "Section-Zeilen werden defensiv kopiert")
+	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "12,8", "Section-Zeilen werden defensiv kopiert")
 	stats.immune_level = 1
 	var compact := stats.compact_stat_text(80.0, 90.0)
-	_assert_true(compact.contains("Schaden  16"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
+	_assert_true(compact.contains("Schaden  12,8"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
 	_assert_true(compact.contains("Abwehrzellen  2"), "Kompakte Anzeige aktualisiert Ausbauwerte")
 
 func _test_level_catalog_and_run_config() -> void:

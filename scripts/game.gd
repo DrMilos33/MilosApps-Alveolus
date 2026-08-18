@@ -22,6 +22,8 @@ const INTRO_ROLE_FOLLOWUP := &"followup"
 const INTRO_ROLE_BOSS := &"boss"
 const INTRO_CONFIRM_ATTACK := &"enable_autoattack"
 const INTRO_CONFIRM_BOSS := &"start_boss"
+const SPAWN_GOLDEN_ANGLE := 2.399963229728653
+const SPAWN_ANGLE_JITTER := 0.18
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := true
@@ -32,6 +34,9 @@ var config: RunConfig
 var state: RunState
 var stats: PlayerStats
 var rng := RandomNumberGenerator.new()
+var spawn_rng := RandomNumberGenerator.new()
+var spawn_attempt_index: int = 0
+var spawn_angle_cursor: float = 0.0
 var enemy_definitions: Dictionary
 var clinic_definitions: Dictionary
 var research_definitions: Array[ResearchDefinition]
@@ -1263,6 +1268,7 @@ func start_run(run_context: RunContext = null) -> void:
 	avatar.show()
 	avatar.queue_redraw()
 	rng.seed = config.random_seed
+	_reset_spawn_position_sequence()
 	spawn_accumulator = config.initial_spawn_interval
 	therapy_timer = 0.18
 	immune_timer = 0.75
@@ -3431,8 +3437,23 @@ func _pickup_targetable_for_handle(handle: int) -> bool:
 
 func _spawn_position_around_avatar(distance: float) -> Vector2:
 	var safe_distance := minf(distance, minf(config.arena_size.x, config.arena_size.y) * 0.5 - 70.0)
-	var angle := rng.randf_range(0.0, TAU)
+	# Preserve the established content-RNG sequence. Spawn geometry uses its own
+	# stream, but this draw keeps later enemy types and upgrade rolls unchanged.
+	var _content_rng_compatibility_draw: float = rng.randf_range(0.0, TAU)
+	var angle := fposmod(
+		spawn_angle_cursor + spawn_rng.randf_range(-SPAWN_ANGLE_JITTER, SPAWN_ANGLE_JITTER),
+		TAU
+	)
+	spawn_angle_cursor = fposmod(spawn_angle_cursor + SPAWN_GOLDEN_ANGLE, TAU)
 	return topology.wrap_position(avatar.global_position + Vector2.from_angle(angle) * safe_distance)
+
+func _reset_spawn_position_sequence() -> void:
+	spawn_attempt_index += 1
+	spawn_rng.seed = config.random_seed
+	spawn_angle_cursor = fposmod(
+		spawn_rng.randf_range(0.0, TAU) + float(spawn_attempt_index - 1) * SPAWN_GOLDEN_ANGLE,
+		TAU
+	)
 
 func _visible_discovery_spawn_position(radius: float) -> Vector2:
 	var safe_bounds := config.arena_rect().grow(-(radius + 42.0))

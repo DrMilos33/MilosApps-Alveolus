@@ -44,7 +44,7 @@ func _test_catalog_contract() -> void:
 	_near(PlayerStats.BASE_MOVEMENT_SPEED, 180.0, "Doctor Milos verwendet die neue Basisgeschwindigkeit")
 
 	var treatments := TreatmentDefinition.catalog()
-	_near((treatments[&"treatment_precision"] as TreatmentDefinition).base_damage, 16.0, "Impuls bleibt unverändert")
+	_near((treatments[&"treatment_precision"] as TreatmentDefinition).base_damage, 12.8, "Impuls verwendet den um 20 Prozent reduzierten Schaden")
 	_near((treatments[&"treatment_spread"] as TreatmentDefinition).base_damage, 5.0, "Streuimpuls verwendet den neuen Schaden")
 	_near((treatments[&"treatment_pierce"] as TreatmentDefinition).base_damage, 9.0, "Durchdringender Impuls verwendet den neuen Schaden")
 
@@ -140,6 +140,26 @@ func _test_runtime_config_and_double_boss() -> void:
 	game.set_physics_process(false)
 	game.treatment_controller.enabled = false
 	game.spawn_accumulator = 999999.0
+	var run_seed_before: int = game.config.random_seed
+	game._reset_spawn_position_sequence()
+	var expected_content_rng := RandomNumberGenerator.new()
+	expected_content_rng.state = game.rng.state
+	expected_content_rng.randf_range(0.0, TAU)
+	expected_content_rng.randf_range(0.0, TAU)
+	var first_attempt_position: Vector2 = game._spawn_position_around_avatar(500.0)
+	var second_position: Vector2 = game._spawn_position_around_avatar(500.0)
+	_true(
+		game.topology.shortest_delta(first_attempt_position, second_position).length() > 100.0,
+		"Aufeinanderfolgende Gegner verteilen sich deutlich auf dem Spawnring"
+	)
+	_equal(game.rng.state, expected_content_rng.state, "Räumliche Verteilung verschiebt keine späteren Inhaltswürfe")
+	game._reset_spawn_position_sequence()
+	var retry_position: Vector2 = game._spawn_position_around_avatar(500.0)
+	_true(
+		game.topology.shortest_delta(first_attempt_position, retry_position).length() > 1.0,
+		"Ein neuer Versuch beginnt an einer anderen räumlichen Position"
+	)
+	_equal(game.config.random_seed, run_seed_before, "Die räumliche Variation verändert den reproduzierbaren Fall-Seed nicht")
 	_equal(game.config.boss_count, 2, "Der Doppelboss-Vertrag erreicht RunConfig")
 	_equal(game.state.boss_count_target, 2, "RunState erwartet beide Bosse")
 	game.stats.immune_level = 1

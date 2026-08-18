@@ -110,7 +110,7 @@ ohne stabile IDs aus älteren Spielständen umzubenennen.
 
 | Behandlung | Verfügbarkeit | Typ | Schaden | Intervall | Reichweite | Projektile | Treffer je Projektil |
 |---|---|---|---:|---:|---:|---:|---:|
-| Impuls | sofort | Wasser | 16 | 0,82 s | Stufe 16 | 1 | 1 |
+| Impuls | sofort | Wasser | 12,8 | 0,82 s | Stufe 16 | 1 | 1 |
 | Streuimpuls | Forschung für 60 | Feuer | 7 je Strahl | 1,00 s | Stufe 15 | 3 | 1 |
 | Durchdringender Impuls | Forschung für 100 | Wind | 14 je Treffer | 1,65 s | Stufe 17 | 1 | 4 |
 

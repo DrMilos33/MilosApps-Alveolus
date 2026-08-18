@@ -57,14 +57,14 @@ func _test_treatment_preview_application() -> void:
 	var potency := _find(definitions, &"potency")
 	var preview := stats.preview_upgrade(potency)
 	_assert_equal(preview.effect_text, "+7 Schaden", "Prepared treatment preview shows the exact delta")
-	_assert_equal(preview.before_after_text, "16 Schaden  >  23 Schaden", "Prepared treatment preview shows exact before/after values")
+	_assert_equal(preview.before_after_text, "12,8 Schaden  >  19,8 Schaden", "Prepared treatment preview shows exact before/after values")
 	var range_preview := stats.preview_upgrade(_find(definitions, &"penetration"))
 	_assert_equal(range_preview.effect_text, "+3", "Distance upgrade effect exposes only the central stage delta")
 	_assert_equal(range_preview.before_after_text, "16  >  19", "Distance upgrade comparison exposes naked stage values without UI unit copy")
 	_assert_true(stats.apply_upgrade(potency), "Prepared treatment modifier applies")
-	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, precision.tags), 23.0, "Treatment controller sees the previewed damage")
+	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, precision.tags), 19.8, "Treatment controller sees the previewed damage")
 	_assert_true(stats.apply_upgrade(potency), "Repeated upgrade level stacks")
-	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, precision.tags), 30.0, "Repeated levels add once without rebasing resolved stats")
+	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, precision.tags), 26.8, "Repeated levels add once without rebasing resolved stats")
 
 	var spread: TreatmentDefinition = TreatmentDefinition.catalog()[&"treatment_spread"]
 	var spread_stats := PlayerStats.new()

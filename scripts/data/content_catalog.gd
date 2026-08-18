@@ -146,7 +146,7 @@ static func discovery_definitions() -> Dictionary:
 		&"character_stats": DiscoveryDefinition.create(
 			&"character_stats", &"catalog", "Doctor Milos",
 			"Der beste Doctor mit Bandana.",
-			"GRUNDWERTE\n100 Leben · Geschwindigkeit 300 · Schaden 16 · Rate 1,22/s · Reichweite 16 · 1 Ziel · Erfahrungsradius 6. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", ""
+			"GRUNDWERTE\n100 Leben · Geschwindigkeit 180 · Schaden 12,8 · Rate 1,22/s · Reichweite 16 · 1 Ziel · Erfahrungsradius 6. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", ""
 		),
 		&"patient_stability": DiscoveryDefinition.create(
 			&"patient_stability", &"run_started", "Leben",
@@ -212,7 +212,7 @@ static func arena_visual_definitions() -> Dictionary:
 static func upgrade_definitions() -> Array[UpgradeDefinition]:
 	var treatments: Array[StringName] = [&"treatment_precision", &"treatment_spread", &"treatment_pierce"]
 	return [
-		_run_upgrade(&"potency", "Stärkerer Impuls", "+7 Schaden pro Treffer.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"damage", 7.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 16.0, 0, &"enemy", PackedStringArray(["treatment"])),
+		_run_upgrade(&"potency", "Stärkerer Impuls", "+7 Schaden pro Treffer.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"damage", 7.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 12.8, 1, &"enemy", PackedStringArray(["treatment"])),
 		_run_upgrade(&"rhythm", "Schnellere Impulse", "16 % häufigere Anwendung.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"cooldown_multiplier", 0.84, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"multiply", 0.84, &"tempo", "Rate", "Rate", 0.82, 2, &"", PackedStringArray(["treatment"])),
 		_run_upgrade(&"penetration", "Mehr Reichweite", "+3 Reichweitenstufen.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"range", 90.0, "Gewebegängigkeit", treatments, [&"treatment", &"range"], RunBuildState.TREATMENT_RANGE, &"add", 90.0, &"distance_stage", "Stufen", "Reichweitenstufen", 480.0, 0, &"enemy", PackedStringArray(["treatment"])),
 		_run_upgrade(&"parallel_sites", "Zusätzliches Ziel", "Ein zusätzliches Ziel je Impuls.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"targets", 1.0, "Parallele Wirkorte", [&"treatment_precision"], [&"precise", &"targets"], RunBuildState.TREATMENT_TARGETS, &"add", 1.0, &"count", "Projektil", "Ziele", 1.0, 0, &"enemy", PackedStringArray(["precise"])),
@@ -223,7 +223,7 @@ static func upgrade_definitions() -> Array[UpgradeDefinition]:
 
 		# Behandlungsspezifische Angebote. Nur die vorbereitete Grundbehandlung
 		# kann sie ziehen.
-		_run_upgrade(&"precision_refinement", "Ruhiger Fokus", "+18 % Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 1.18, "Präzisionssteigerung", [&"treatment_precision"], [&"precise", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"multiply", 1.18, &"percent", "Schaden", "Schaden", 16.0, 1, &"enemy", PackedStringArray(["precise"])),
+		_run_upgrade(&"precision_refinement", "Ruhiger Fokus", "+18 % Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 1.18, "Präzisionssteigerung", [&"treatment_precision"], [&"precise", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"multiply", 1.18, &"percent", "Schaden", "Schaden", 12.8, 1, &"enemy", PackedStringArray(["precise"])),
 		_run_upgrade(&"spread_density", "Dichter Streuimpuls", "+1 Projektil.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 1.0, "Erweiterte Wirkverteilung", [&"treatment_spread"], [&"spread", &"area"], RunBuildState.TREATMENT_PROJECTILES, &"add", 1.0, &"count", "Projektil", "Projektile", 3.0, 0, &"enemy", PackedStringArray(["spread"])),
 		_run_upgrade(&"spread_effect", "Kräftigere Streuung", "+2 Schaden pro Projektil.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 2.0, "Breitenwirkung", [&"treatment_spread"], [&"spread", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 2.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["spread"])),
 		_run_upgrade(&"pierce_depth", "Tieferer Impuls", "+2 Durchdringungen.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"run_modifier", 2.0, "Erhöhte Gewebegängigkeit", [&"treatment_pierce"], [&"piercing", &"line"], RunBuildState.TREATMENT_MAX_HITS, &"add", 2.0, &"count", "Durchdringungen", "Treffer", 4.0, 0, &"enemy", PackedStringArray(["piercing"])),
