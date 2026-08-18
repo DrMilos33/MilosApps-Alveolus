@@ -16,6 +16,18 @@ static func quantize_world(world_value: float) -> float:
 	return world_from_stage(stage_from_world(world_value))
 
 
+static func formatted_stage(world_value: float) -> String:
+	return str(stage_from_world(world_value))
+
+
+static func formatted_radius(world_value: float) -> String:
+	return "Radius %s" % formatted_stage(world_value)
+
+
+static func formatted_range(world_value: float) -> String:
+	return "Reichweite %s" % formatted_stage(world_value)
+
+
 static func is_staged_stat(stat_id: StringName) -> bool:
 	return stat_id in [
 		&"therapy_range",

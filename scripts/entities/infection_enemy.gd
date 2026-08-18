@@ -24,6 +24,8 @@ var health: float
 var max_health: float
 var speed_multiplier: float = 1.0
 var damage_multiplier: float = 1.0
+var runtime_resistance_profile: ResistanceProfile
+var runtime_defense: float = 0.0
 var phase_minions: PackedInt32Array = PackedInt32Array()
 var next_phase_index: int = 0
 var contact_cooldown: float = 0.0
@@ -68,7 +70,9 @@ func configure(
 	health_scale: float = 1.0,
 	movement_scale: float = 1.0,
 	contact_scale: float = 1.0,
-	boss_phases: PackedInt32Array = PackedInt32Array()
+	boss_phases: PackedInt32Array = PackedInt32Array(),
+	resistance_profile: ResistanceProfile = null,
+	defense_rating: float = 0.0
 ) -> void:
 	activation_generation += 1
 	activation_active = true
@@ -80,6 +84,8 @@ func configure(
 	health = max_health
 	speed_multiplier = movement_scale
 	damage_multiplier = contact_scale
+	runtime_resistance_profile = resistance_profile if resistance_profile != null else definition.resistance_profile
+	runtime_defense = maxf(0.0, defense_rating)
 	phase_minions = boss_phases
 	next_phase_index = 0
 	contact_cooldown = 0.0
@@ -113,6 +119,8 @@ func recycle() -> void:
 	hide()
 	target = null
 	topology = null
+	runtime_resistance_profile = null
+	runtime_defense = 0.0
 	_arena_size = Vector2.ZERO
 	_arena_half_size = Vector2.ZERO
 	phase_minions = PackedInt32Array()
@@ -124,6 +132,14 @@ func recycle() -> void:
 
 func is_targetable() -> bool:
 	return activation_active and spawn_timer <= 0.0 and not dying and health > 0.0
+
+
+func combat_resistance_profile() -> ResistanceProfile:
+	return runtime_resistance_profile
+
+
+func combat_defense() -> float:
+	return runtime_defense
 
 func current_handle() -> Dictionary:
 	return {

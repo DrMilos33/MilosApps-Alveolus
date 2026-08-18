@@ -173,8 +173,8 @@ func _test_abilities() -> void:
 	enemies = [close_enemy]
 	controller.equip(AbilityController.SLOT_Q, abilities[&"ability_defense_burst"])
 	controller.use_slot(AbilityController.SLOT_Q, Vector2(-480.0, 0.0))
-	_assert_near(close_enemy.health, 162.0, "Defense burst deals 38 area damage")
-	_assert_true(close_enemy.displacement.length() > 70.0, "Defense burst applies short knockback")
+	_assert_near(close_enemy.health, 175.0, "Defense burst deals 25 area damage")
+	_assert_near(close_enemy.displacement.length(), 120.0, "Defense burst applies the stronger 120 displacement")
 
 	close_enemy.position = Vector2(-450.0, 0.0)
 	controller.equip(AbilityController.SLOT_Q, abilities[&"ability_protection_field"])
@@ -200,7 +200,7 @@ func _test_abilities() -> void:
 	close_enemy.position = Vector2(-470.0, 0.0)
 	controller.equip(AbilityController.SLOT_Q, abilities[&"ability_treatment_line"])
 	controller.use_slot(AbilityController.SLOT_Q, Vector2(-450.0, 0.0))
-	_assert_near(close_enemy.health, 150.0, "Treatment line deals 50 damage through the torus seam")
+	_assert_near(close_enemy.health, 170.0, "Treatment line deals 30 damage through the torus seam")
 
 	close_enemy.health = 200.0
 	var fallback_burst := AbilityDefinition.create(
@@ -209,7 +209,7 @@ func _test_abilities() -> void:
 	)
 	controller.equip(AbilityController.SLOT_Q, fallback_burst)
 	var burst_result := controller.execute_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2(-480.0, 0.0), 1001))
-	_assert_near(float(burst_result.values.damage), 38.0, "Defense-burst fallback uses the current 38 damage contract")
+	_assert_near(float(burst_result.values.damage), 25.0, "Defense-burst fallback uses the current 25 damage contract")
 	_assert_near(burst_result.radius, CombatDistanceScale.world_from_stage(5), "Defense-burst fallback radius comes from central distance stage five")
 
 	close_enemy.health = 200.0
@@ -219,7 +219,7 @@ func _test_abilities() -> void:
 	)
 	controller.equip(AbilityController.SLOT_Q, fallback_line)
 	var line_result := controller.execute_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2(-450.0, 0.0), 1002))
-	_assert_near(float(line_result.values.damage), 50.0, "Treatment-line fallback uses the current 50 damage contract")
+	_assert_near(float(line_result.values.damage), 30.0, "Treatment-line fallback uses the current 30 damage contract")
 
 	controller.queue_free()
 	avatar.queue_free()

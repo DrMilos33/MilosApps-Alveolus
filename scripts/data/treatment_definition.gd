@@ -71,14 +71,14 @@ static func catalog() -> Dictionary:
 		),
 		&"treatment_spread": create(
 			&"treatment_spread", "Streuimpuls", Mode.SPREAD,
-			7.0, 1.0, 450.0, 3, 1, 60,
+			5.0, 1.0, 450.0, 3, 1, 60,
 			PackedStringArray(["treatment", "spread", "area"]),
 			"Drei kurze Impulse decken einen breiten Winkel ab.", "Breit angelegte antibiotische Therapie",
 			DamageProfile.single(&"treatment_spread_damage", &"fire")
 		),
 		&"treatment_pierce": create(
 			&"treatment_pierce", "Durchdringender Impuls", Mode.PIERCING,
-			14.0, 1.65, 510.0, 1, 4, 100,
+			9.0, 1.65, 510.0, 1, 4, 100,
 			PackedStringArray(["treatment", "piercing", "line"]),
 			"Durchdringt bis zu vier Bakterien in einer Linie.", "Gewebegängige antibiotische Therapie",
 			DamageProfile.single(&"treatment_pierce_damage", &"wind")

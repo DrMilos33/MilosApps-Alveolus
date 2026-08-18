@@ -5,7 +5,7 @@ extends RefCounted
 # live in TerminologyDefinition instances below.
 const ENTRIES := {
 	&"patient_stability": {"simple": "Leben", "medical": "Lebenspunkte"},
-	&"analysis": {"simple": "Probe", "medical": "Analysepunkt"},
+	&"analysis": {"simple": "Erfahrung", "medical": "Analysepunkt"},
 	&"level": {"simple": "Level", "medical": "Fortschrittsstufe"},
 	&"run": {"simple": "Run", "medical": "Behandlungsdurchlauf"},
 	&"case": {"simple": "Fall", "medical": "Patientenfall"},
@@ -13,7 +13,7 @@ const ENTRIES := {
 	&"reaction": {"simple": "Reaktion", "medical": "Reaktion auf einen Befund"},
 	&"boss": {"simple": "Boss", "medical": "Zentraler Infektionsherd"},
 	&"effect": {"simple": "Schaden", "medical": "Therapeutischer Schaden"},
-	&"treatment_speed": {"simple": "Behandlungstempo", "medical": "Applikationsfrequenz"},
+	&"treatment_speed": {"simple": "Behandlungsrate", "medical": "Applikationsfrequenz"},
 	&"interval": {"simple": "Intervall", "medical": "Zeitabstand"},
 	&"range": {"simple": "Reichweite", "medical": "Wirkradius"},
 	&"targets": {"simple": "Ziele", "medical": "Zielzahl"},
@@ -80,26 +80,26 @@ static func all() -> Array[TerminologyDefinition]:
 static func _build_definitions() -> Dictionary:
 	var result := {}
 	_add(result, &"patient_stability", "Die Lebenspunkte von Doctor Milos.", "Gegnerschaden senkt das Leben. Erreicht es null, endet der Fall.", [&"enemy_damage", &"defense", &"life_regeneration", &"shield"], "Punkte", &"patient_stability")
-	_add(result, &"analysis", "Die Erfahrung eines laufenden Falls.", "Kontrollierte Gegner hinterlassen Proben. Gesammelte Proben füllen die Leiste für das nächste Level.", [&"level", &"finding"], "Punkte", &"analysis_pickup")
-	_add(result, &"level", "Die aktuelle Fortschrittsstufe im Run.", "Eine volle Probenleiste erhöht das Level und bietet einen neuen Ausbau an.", [&"analysis", &"effect"], "Stufe", &"analysis_pickup")
-	_add(result, &"run", "Ein einzelner Durchlauf durch ein Lungenmodell.", "Vorbereitung und Forschung bleiben zwischen Runs erhalten. Proben, Level und Ausbauten beginnen bei jedem neuen Run von vorn.", [&"case", &"analysis", &"upgrade"], "", &"character_stats")
+	_add(result, &"analysis", "Die Erfahrung eines laufenden Falls.", "Kontrollierte Gegner hinterlassen Erfahrung. Gesammelte Erfahrung füllt die Leiste für das nächste Level.", [&"level", &"finding"], "Punkte", &"analysis_pickup")
+	_add(result, &"level", "Die aktuelle Fortschrittsstufe im Run.", "Eine volle Erfahrungsleiste erhöht das Level und bietet einen neuen Ausbau an.", [&"analysis", &"effect"], "Stufe", &"analysis_pickup")
+	_add(result, &"run", "Ein einzelner Durchlauf durch ein Lungenmodell.", "Vorbereitung und Forschung bleiben zwischen Runs erhalten. Erfahrung, Level und Ausbauten beginnen bei jedem neuen Run von vorn.", [&"case", &"analysis", &"upgrade"], "", &"character_stats")
 	_add(result, &"case", "Ein auswählbarer Patientenfall mit eigenen Bedingungen.", "Jeder Fall besitzt einen Bosszeitpunkt und kann nach dem ersten Abschluss Fallmerkmale erhalten. Freigeschaltete Fälle können wiederholt werden.", [&"run", &"case_trait", &"boss"], "", &"boss_phases")
 	_add(result, &"upgrade", "Eine vorübergehende Verbesserung im laufenden Run.", "Beim Levelaufstieg wird ein Ausbau gewählt. Er wirkt nur bis zum Ende dieses Runs.", [&"level", &"run", &"effect"], "", &"automatic_therapy")
 	_add(result, &"reaction", "Eine Entscheidung nach einem abgeschlossenen Befund.", "Die gewählte Reaktion verändert den aktuellen Run und kann mit dem vorbereiteten Plan zusammenwirken.", [&"finding", &"run"], "", &"analysis_pickup")
 	_add(result, &"boss", "Das zentrale Ziel eines regulären Falls.", "Der Boss besitzt viel Leben und kann mehrere Belastungsphasen auslösen. Ein Sieg erfordert seine vollständige Kontrolle.", [&"boss_phase", &"case"], "", &"infection_focus")
 	_add(result, &"effect", "Die Stärke eines offensiven Treffers.", "Mehr Schaden zieht einem getroffenen Gegner mehr Leben ab. Schadenstyp und Resistenz bestimmen, wie viel davon tatsächlich ankommt.", [&"basic_treatment", &"resistance"], "Punkte", &"automatic_therapy")
-	_add(result, &"treatment_speed", "Wie häufig die automatische Behandlung ausgelöst wird.", "Mehr Behandlungstempo verkürzt das Intervall. Dadurch entstehen in derselben Zeit mehr Impulse.", [&"interval", &"cooldown"], "Prozent", &"automatic_therapy")
+	_add(result, &"treatment_speed", "Wie häufig die automatische Behandlung ausgelöst wird.", "Eine höhere Behandlungsrate erzeugt in derselben Zeit mehr Impulse.", [&"interval", &"cooldown"], "Prozent", &"automatic_therapy")
 	_add(result, &"interval", "Der Zeitabstand zwischen zwei automatischen Impulsen.", "Ein kleineres Intervall bedeutet eine häufigere Behandlung.", [&"treatment_speed", &"basic_treatment"], "Sekunden", &"automatic_therapy")
 	_add(result, &"range", "Die maximale Distanzstufe, in der ein Effekt ein Ziel erreicht.", "Ziele außerhalb der Reichweitenstufe werden von der jeweiligen Behandlung oder Fähigkeit nicht erfasst.", [&"targets", &"basic_treatment"], "Stufe", &"automatic_therapy")
 	_add(result, &"targets", "Die Zahl gleichzeitig ausgewählter Gegner.", "Zusätzliche Ziele verteilen einen Behandlungsimpuls auf mehrere Gegner, sofern genug gültige Ziele vorhanden sind.", [&"projectiles", &"range"], "Anzahl", &"automatic_therapy")
 	_add(result, &"projectiles", "Die Zahl sichtbarer Impulse pro Auslösung.", "Mehrere Projektile können verschiedene Richtungen oder Ziele abdecken. Die Behandlung legt ihr genaues Verhalten fest.", [&"targets", &"penetration"], "Anzahl", &"automatic_therapy")
 	_add(result, &"penetration", "Wie viele Gegner ein Impuls nacheinander treffen kann.", "Ein durchdringender Impuls endet erst nach seiner maximalen Trefferzahl oder am Ende seiner Reichweite.", [&"projectiles", &"range"], "Treffer", &"automatic_therapy")
-	_add(result, &"antibiotic_path", "Der direkte Weg gegen Bakterien.", "Behandlung verbessert Schaden, Tempo, Reichweite und Zielabdeckung der Grundbehandlung.", [&"basic_treatment", &"effect"], "", &"automatic_therapy")
+	_add(result, &"antibiotic_path", "Der direkte Weg gegen Bakterien.", "Behandlung verbessert Schaden, Rate, Reichweite und Zielabdeckung der Grundbehandlung.", [&"basic_treatment", &"effect"], "", &"automatic_therapy")
 	_add(result, &"immune_path", "Nahbereichsangriff durch Abwehrzellen.", "Abwehrzellen umkreisen Doctor Milos. Eine Zelle verursacht nur dann Schaden, wenn sie einen Gegner tatsächlich trifft.", [&"neutrophil_orbit", &"effect"], "", &"neutrophil_orbit")
 	_add(result, &"support_path", "Stellt verlorenes Leben mit der Zeit wieder her.", "Regeneration heilt Doctor Milos regelmäßig. Sie verursacht keinen direkten Schaden an Gegnern.", [&"patient_stability", &"life_regeneration"], "", &"supportive_oxygenation")
 	_add(result, &"shield", "Ein zusätzlicher vorübergehender Puffer.", "Das Schild fängt Schaden ab, bevor das Leben sinkt. Es ist von den maximalen Lebenspunkten getrennt.", [&"patient_stability", &"defense"], "Punkte", &"patient_stability")
 	_add(result, &"finding", "Eine neue Beobachtung während eines Falls.", "Ein abgeschlossener Befund bietet Reaktionen an, die den laufenden Run verändern können.", [&"finding_progress", &"case_trait"], "", &"analysis_pickup")
-	_add(result, &"finding_progress", "Der Fortschritt bis zur nächsten Beobachtung.", "Bestimmte Proben, Fähigkeiten und Module beschleunigen den Befund. Bei vollem Fortschritt wird eine Reaktion gewählt.", [&"finding", &"analysis"], "Punkte", &"analysis_pickup")
+	_add(result, &"finding_progress", "Der Fortschritt bis zur nächsten Beobachtung.", "Bestimmte Erfahrung, Fähigkeiten und Module beschleunigen den Befund. Bei vollem Fortschritt wird eine Reaktion gewählt.", [&"finding", &"analysis"], "Punkte", &"analysis_pickup")
 	_add(result, &"case_trait", "Eine bekannte Besonderheit des gewählten Falls.", "Das Merkmal ist bereits in der Einsatzplanung sichtbar und hilft bei der Auswahl passender Komponenten.", [&"finding", &"capacity"], "", &"boss_phases")
 	_add(result, &"basic_treatment", "Die ständig automatisch eingesetzte Behandlung.", "Jeder Plan benötigt genau eine Grundbehandlung. Ihre Werte bilden die Basis für Ausbauten im Run.", [&"antibiotic_path", &"interval", &"effect"], "", &"automatic_therapy")
 	_add(result, &"active_ability", "Eine bewusst ausgelöste Maßnahme.", "Aktive Fähigkeiten werden mit Q oder E eingesetzt und benötigen danach ihre Abklingzeit.", [&"cooldown", &"capacity"], "", &"automatic_therapy")

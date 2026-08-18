@@ -74,29 +74,29 @@ static func catalog() -> Dictionary:
 			"Stellt 14 Leben wieder her und gewährt 8 Schild."
 		),
 		&"ability_defense_burst": create(
-			&"ability_defense_burst", "Abwehrstoß", TargetMode.CURSOR_AREA, 14.0, &"defense_burst",
-			{"damage": 38.0, "radius": 150.0, "knockback": 75.0}, 50,
+			&"ability_defense_burst", "idk name stoß", TargetMode.CURSOR_AREA, 14.0, &"defense_burst",
+			{"damage": 25.0, "radius": 150.0, "knockback": 120.0}, 50,
 			PackedStringArray(["active", "defense", "area", "control"]),
-			"38 AoE-Schaden und Rückstoß im Zielbereich.", "",
+			"25 Schaden und starker Rückstoß im Zielbereich.", "",
 			DamageProfile.single(&"ability_defense_burst_damage", &"earth")
 		),
 		&"ability_treatment_line": create(
-			&"ability_treatment_line", "Behandlungslinie", TargetMode.CURSOR_DIRECTION, 18.0, &"treatment_line",
-			{"damage": 50.0, "range": 630.0, "width": 38.0}, 80,
+			&"ability_treatment_line", "Fetter lazer", TargetMode.CURSOR_DIRECTION, 18.0, &"treatment_line",
+			{"damage": 30.0, "range": 630.0, "width": 38.0}, 80,
 			PackedStringArray(["active", "treatment", "line", "precise"]),
-			"50 Schaden in einer durchdringenden Linie.", "",
+			"30 Schaden in einer durchdringenden Linie.", "",
 			DamageProfile.single(&"ability_treatment_line_damage", &"water")
 		),
 		&"ability_protection_field": create(
 			&"ability_protection_field", "Schildfeld", TargetMode.CURSOR_AREA, 20.0, &"protective_field",
 			{"radius": 180.0, "duration": 6.0, "speed_multiplier": 0.65, "contact_multiplier": 0.65}, 70,
 			PackedStringArray(["active", "support", "area", "control"]),
-			"Gegner im Feld: −35 % Tempo und Schaden."
+			"Gegner im Feld: −35 % Geschwindigkeit und Schaden."
 		),
 		&"ability_sample_pull": create(
-			&"ability_sample_pull", "Probenzug", TargetMode.CURSOR_AREA, 18.0, &"sample_pull",
+			&"ability_sample_pull", "Erfahrungszug", TargetMode.CURSOR_AREA, 18.0, &"sample_pull",
 			{"radius": 240.0, "finding_progress": 6.0}, 70,
 			PackedStringArray(["active", "sample", "diagnosis"]),
-			"Zieht Proben im Zielgebiet an und beschleunigt den Befund."
+			"Zieht Erfahrung im Zielgebiet an und beschleunigt den Befund."
 		),
 	}

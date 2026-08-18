@@ -44,7 +44,7 @@ func make_view_model(entry: LexiconEntryDefinition, seen_discovery_ids: Variant 
 		_apply_discovery_source(view_model, entry.source_id)
 	elif entry.source_kind == LexiconEntryDefinition.SOURCE_TERMINOLOGY:
 		_apply_terminology_source(view_model, entry.source_id)
-	view_model.related_names = _related_names(entry.related_ids)
+	view_model.set_related_term_presentations(related_term_presentations(entry.related_ids))
 	return view_model
 
 func _apply_enemy_source(view_model: LexiconEntryViewModel, enemy_id: StringName) -> void:
@@ -61,11 +61,11 @@ func _apply_enemy_source(view_model: LexiconEntryViewModel, enemy_id: StringName
 	view_model.set_type_presentations(presentations)
 	view_model.stat_rows = [
 		StatRowViewModel.number(&"health", "Leben", definition.max_health, "", 0, definition.id, &"max_health"),
-		StatRowViewModel.number(&"speed", "Tempo", definition.speed, "", 0, definition.id, &"speed"),
+		StatRowViewModel.number(&"speed", "Geschwindigkeit", definition.speed, "", 0, definition.id, &"speed"),
 		StatRowViewModel.number(&"damage", "Schaden", definition.base_damage, "", 1, definition.id, &"base_damage"),
 		StatRowViewModel.text(&"damage_types", "Schadenstyp", _damage_profile_text(definition.damage_profile), definition.id, &"damage_profile"),
 		StatRowViewModel.text(&"resistances", "Resistenzen", _resistance_profile_text(definition.resistance_profile), definition.id, &"resistance_profile"),
-		StatRowViewModel.integer(&"sample_value", "Probenwert", definition.analysis_value, "", definition.id, &"analysis_value"),
+		StatRowViewModel.integer(&"sample_value", "Erfahrung", definition.analysis_value, "", definition.id, &"analysis_value"),
 		StatRowViewModel.text(&"body_size", "Körpergröße", BodySizeCatalog.display_name(definition.body_size_class), definition.id, &"body_size_class"),
 		StatRowViewModel.boolean(&"boss", "Boss", definition.is_boss, definition.id, &"is_boss"),
 	]
@@ -81,17 +81,17 @@ func _apply_player_source(view_model: LexiconEntryViewModel) -> void:
 		presentations = damage_presentations
 	view_model.set_type_presentations(presentations)
 	var rows: Array[StatRowViewModel] = [
-		StatRowViewModel.number(&"movement_speed", "Bewegung", player_stats.movement_speed, "", 1, &"player_stats", &"movement_speed"),
+		StatRowViewModel.number(&"movement_speed", "Geschwindigkeit", player_stats.movement_speed, "", 1, &"player_stats", &"movement_speed"),
 		StatRowViewModel.number(&"max_life", "Leben", PlayerStats.BASE_MAX_HEALTH + player_stats.max_stability_bonus, "", 0, &"player_stats", &"max_stability_bonus"),
 		StatRowViewModel.number(&"defense", "Verteidigung", MitigationCurve.defense_effective_percent(player_stats.defense), "%", 1, &"player_stats", &"defense"),
 		StatRowViewModel.number(&"life_regeneration", "Lebensregeneration", player_stats.life_regeneration_per_second, "/s", 2, &"player_stats", &"life_regeneration_per_second"),
 		StatRowViewModel.text(&"resistances", "Resistenzen", _resistance_profile_text(player_stats.resistances), &"player_stats", &"resistances"),
 		StatRowViewModel.number(&"treatment_damage", "Schaden", player_stats.therapy_damage, "", 0, &"player_stats", &"therapy_damage"),
-		StatRowViewModel.number(&"treatment_interval", "Intervall", player_stats.therapy_cooldown, "s", 2, &"player_stats", &"therapy_cooldown"),
+		StatRowViewModel.text(&"treatment_interval", "Rate", CombatRateScale.formatted_per_second(player_stats.therapy_cooldown), &"player_stats", &"therapy_cooldown"),
 		StatRowViewModel.integer(&"treatment_range", "Reichweite", CombatDistanceScale.stage_from_world(player_stats.therapy_range), "", &"player_stats", &"therapy_range_stage"),
 		StatRowViewModel.integer(&"treatment_targets", "Ziele", player_stats.therapy_targets, "", &"player_stats", &"therapy_targets"),
 		StatRowViewModel.integer(&"treatment_projectiles", "Projektile", player_stats.therapy_projectiles, "", &"player_stats", &"therapy_projectiles"),
-		StatRowViewModel.integer(&"pickup_range", "Probenradius", CombatDistanceScale.stage_from_world(player_stats.pickup_range), "", &"player_stats", &"pickup_range_stage"),
+		StatRowViewModel.integer(&"pickup_range", "Erfahrungsradius", CombatDistanceScale.stage_from_world(player_stats.pickup_range), "", &"player_stats", &"pickup_range_stage"),
 	]
 	if treatment != null:
 		rows.insert(6, StatRowViewModel.text(
@@ -124,7 +124,7 @@ func _apply_discovery_source(view_model: LexiconEntryViewModel, discovery_id: St
 			view_model.stat_rows = [
 				StatRowViewModel.integer(&"cells", "Abwehrzellen", immune_stats.immune_cell_count(), "", &"player_stats", &"immune_cell_count"),
 				StatRowViewModel.number(&"immune_damage", "Schaden", immune_stats.immune_damage, "", 0, &"player_stats", &"immune_damage"),
-				StatRowViewModel.number(&"immune_interval", "Intervall", immune_stats.immune_interval(), "s", 2, &"player_stats", &"immune_interval"),
+				StatRowViewModel.text(&"immune_interval", "Rate", CombatRateScale.formatted_per_second(immune_stats.immune_interval()), &"player_stats", &"immune_interval"),
 				StatRowViewModel.integer(&"immune_radius", "Radius", CombatDistanceScale.stage_from_world(immune_stats.immune_radius()), "", &"player_stats", &"immune_radius_stage"),
 			]
 		&"supportive_oxygenation":
@@ -153,7 +153,7 @@ func _treatment_rows(definition: TreatmentDefinition) -> Array[StatRowViewModel]
 	return [
 		StatRowViewModel.number(&"damage", "Schaden", definition.base_damage, "", 0, definition.id, &"base_damage"),
 		StatRowViewModel.text(&"damage_type", "Schadenstyp", _damage_profile_text(definition.damage_profile), definition.id, &"damage_profile"),
-		StatRowViewModel.number(&"interval", "Intervall", definition.base_interval, "s", 2, definition.id, &"base_interval"),
+		StatRowViewModel.text(&"interval", "Rate", CombatRateScale.formatted_per_second(definition.base_interval), definition.id, &"base_interval"),
 		StatRowViewModel.integer(&"range", "Reichweite", definition.base_range_stage(), "", definition.id, &"base_range_stage"),
 		StatRowViewModel.integer(&"projectiles", "Projektile", definition.base_projectiles, "", definition.id, &"base_projectiles"),
 		StatRowViewModel.integer(&"max_hits", "Maximale Treffer", definition.max_hits, "", definition.id, &"max_hits"),
@@ -235,12 +235,22 @@ func _is_unlocked(entry: LexiconEntryDefinition, seen_discovery_ids: Variant) ->
 		return (seen_discovery_ids as Array).has(entry.discovery_id) or (seen_discovery_ids as Array).has(String(entry.discovery_id))
 	return false
 
-func _related_names(ids: Array[StringName]) -> PackedStringArray:
-	var names := PackedStringArray()
+func related_term_presentations(ids: Array[StringName]) -> Array[LexiconEntryViewModel.RelatedTermPresentation]:
+	var result: Array[LexiconEntryViewModel.RelatedTermPresentation] = []
 	for id in ids:
 		var terminology := TerminologyCatalog.definition(id)
 		if terminology != null:
-			names.append(terminology.display_name)
+			result.append(LexiconEntryViewModel.RelatedTermPresentation.create(
+				id,
+				terminology.display_name,
+				terminology.summary,
+				terminology.visual_id
+			))
 		else:
-			names.append(TerminologyCatalog.simple(id, String(id).capitalize()))
-	return names
+			result.append(LexiconEntryViewModel.RelatedTermPresentation.create(
+				id,
+				TerminologyCatalog.simple(id, String(id).capitalize()),
+				"",
+				id
+			))
+	return result

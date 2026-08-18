@@ -10,6 +10,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_test_structured_type_presentations()
+	_test_related_term_presentations()
 	_test_units_and_retired_terms()
 	if failures.is_empty():
 		print("ALVEOLUS_LEXICON_PRESENTATION_OK assertions=%d" % assertions)
@@ -50,6 +51,25 @@ func _test_structured_type_presentations() -> void:
 	_equal(items[6].meaning, "Minderung", "Minderung liefert die ausgeschriebene Bedeutung")
 	items.pop_back()
 	_equal(model.type_presentations().size(), 8, "Der ViewModel-Getter liefert ein defensiv kopiertes Array")
+
+
+func _test_related_term_presentations() -> void:
+	var provider := LexiconViewModelProvider.create_default()
+	var entry: LexiconEntryDefinition = LexiconCatalog.entries_by_id()[&"automatic_therapy"]
+	var model := provider.make_view_model(entry, [&"automatic_therapy"])
+	var related := model.related_term_presentations()
+	_equal(related.size(), 3, "Verwandte Begriffe werden als strukturierte Production-DTOs geliefert")
+	_equal(related[0].id, &"basic_treatment", "Related-Term-DTO bewahrt die stabile Terminologie-ID")
+	_equal(related[0].display_name, TerminologyCatalog.definition(&"basic_treatment").display_name, "Related-Term-DTO liefert den ausgeschriebenen Namen")
+	_equal(related[0].explanation, TerminologyCatalog.definition(&"basic_treatment").summary, "Related-Term-DTO liefert die zentrale Kurzerklärung")
+	_equal(related[0].meaning, related[0].explanation, "Tooltip und ui_info teilen dieselbe Bedeutungsquelle")
+	_equal(related[0].icon_id, TerminologyCatalog.definition(&"basic_treatment").visual_id, "Related-Term-DTO liefert die zentrale semantische Icon-ID")
+	_equal(model.related_names.size(), related.size(), "Die bestehende Namensfassade bleibt kompatibel")
+	var first_item := related[0]
+	related.pop_back()
+	var second_read := model.related_term_presentations()
+	_equal(second_read.size(), 3, "Related-Term-Getter liefert ein defensiv kopiertes Array")
+	_true(second_read[0] != first_item, "Related-Term-Getter kopiert auch die immutable DTO-Instanzen defensiv")
 
 
 func _test_units_and_retired_terms() -> void:

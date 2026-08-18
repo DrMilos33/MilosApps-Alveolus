@@ -29,3 +29,23 @@ static func resolve(
 
 static func defense_multiplier(defense: float) -> float:
 	return MitigationCurve.defense_multiplier(defense)
+
+
+static func resolve_against_enemy(
+	base_amount: float,
+	damage_profile: DamageProfile,
+	enemy: Object
+) -> float:
+	if enemy == null:
+		return resolve(base_amount, damage_profile)
+	var resistance_profile: ResistanceProfile
+	var defense := 0.0
+	if enemy.has_method("combat_resistance_profile"):
+		resistance_profile = enemy.call("combat_resistance_profile") as ResistanceProfile
+	else:
+		var enemy_definition: Variant = enemy.get("definition")
+		if enemy_definition is Object:
+			resistance_profile = (enemy_definition as Object).get("resistance_profile") as ResistanceProfile
+	if enemy.has_method("combat_defense"):
+		defense = float(enemy.call("combat_defense"))
+	return resolve(base_amount, damage_profile, resistance_profile, defense)

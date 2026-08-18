@@ -271,8 +271,8 @@ func _execute_effect(command: AbilityCommand, definition: AbilityDefinition, tar
 			result.values = {"recovery": recovery, "shield": shield_amount}
 		&"defense_burst":
 			var burst_radius := build.value(RunBuildState.ABILITY_RADIUS, float(values.get("radius", CombatDistanceScale.world_from_stage(5))), definition.tags)
-			var burst_damage := build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 38.0)), definition.tags)
-			var knockback := build.value(RunBuildState.ABILITY_KNOCKBACK, float(values.get("knockback", 75.0)), definition.tags)
+			var burst_damage := build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 25.0)), definition.tags)
+			var knockback := build.value(RunBuildState.ABILITY_KNOCKBACK, float(values.get("knockback", 120.0)), definition.tags)
 			result.affected_handles = _damage_circle(target, burst_radius, burst_damage, definition.id, knockback, definition.damage_profile)
 			result.radius = burst_radius
 			result.duration = 0.34
@@ -359,7 +359,7 @@ func _damage_line(target: Vector2, values: Dictionary, source: StringName, damag
 	var shot := TreatmentShot.line(
 		avatar.global_position,
 		direction,
-		build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 50.0)), tags),
+		build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 30.0)), tags),
 		build.value(RunBuildState.ABILITY_RANGE, float(values.get("range", 620.0)), tags),
 		2147483647,
 		source
@@ -473,11 +473,7 @@ func _apply_damage_and_displacement(
 	var resolved_amount := amount
 	if _enemy_definition_id(enemy) == &"bacterial_cluster":
 		resolved_amount *= build.value(&"group_area_effect", 1.0)
-	var enemy_definition: Variant = enemy.get("definition")
-	if enemy_definition is Object:
-		var resistance_value: Variant = (enemy_definition as Object).get("resistance_profile")
-		var resistance_profile := resistance_value as ResistanceProfile
-		resolved_amount = CombatDamageResolver.resolve(resolved_amount, damage_profile, resistance_profile, 0.0)
+	resolved_amount = CombatDamageResolver.resolve_against_enemy(resolved_amount, damage_profile, enemy)
 	enemy.take_damage(resolved_amount, source)
 	if knockback > 0.0 and enemy.has_method("apply_displacement"):
 		var direction := topology.shortest_delta(center, enemy.global_position).normalized()

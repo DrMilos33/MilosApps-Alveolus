@@ -43,7 +43,7 @@ static func _append_enemy_entries(result: Array[LexiconEntryDefinition]) -> void
 	var enemies := ContentCatalog.enemy_definitions()
 	var roles := {
 		&"pneumococcus": ["Schneller Einzelerreger", "Bewegt sich direkt auf Doctor Milos zu und verursacht Schaden, wenn er ihn erreicht."],
-		&"bacterial_cluster": ["Widerstandsfähige Gruppe", "Bewegt sich langsamer, hält mehr aus und hinterlässt mehrere Proben."],
+		&"bacterial_cluster": ["Widerstandsfähige Gruppe", "Bewegt sich langsamer, hält mehr aus und hinterlässt mehr Erfahrung."],
 		&"minor_focus": ["Langsames Nebenziel", "Bewegt sich langsam und setzt nach einiger Zeit weitere Bakterien frei, wenn es nicht rechtzeitig kontrolliert wird."],
 		&"infection_focus": ["Bossgegner", "Seine Phasen erhöhen den Druck im Fall. Die tatsächlichen Werte werden je Fall skaliert."],
 	}
@@ -86,9 +86,9 @@ static func _append_character_entries(result: Array[LexiconEntryDefinition]) -> 
 static func _append_gameplay_entries(result: Array[LexiconEntryDefinition]) -> void:
 	var discoveries := ContentCatalog.discovery_definitions()
 	var copy := {
-		&"analysis_pickup": ["Erfahrung im laufenden Fall", "Gesammelte Proben füllen die Leiste für das nächste Level."],
+		&"analysis_pickup": ["Erfahrung im laufenden Fall", "Gesammelte Erfahrung füllt die Leiste für das nächste Level."],
 		&"patient_stability": ["Leben von Doctor Milos", "Gegnerschaden senkt das Leben. Bei null endet der Fall."],
-		&"automatic_therapy": ["Automatische Grundbehandlung", "Wählt gültige Ziele selbstständig aus. Bewegung, aktive Fähigkeiten und Ausbau bleiben deine Entscheidungen."],
+		&"automatic_therapy": ["Automatische Grundbehandlung", "Wählt gültige Ziele selbstständig aus. Steuerung, aktive Fähigkeiten und Ausbau bleiben deine Entscheidungen."],
 		&"neutrophil_orbit": ["Abwehr im Nahbereich", "Abwehrzellen umkreisen Doctor Milos und verursachen nur bei einer tatsächlichen Kollision Schaden."],
 		&"supportive_oxygenation": ["Automatische Heilung", "Regeneration stellt jede Sekunde Leben wieder her. Forschung erhöht die geheilte Menge pro Sekunde."],
 		&"boss_phases": ["Belastungsschübe des Bosses", "Phasengrenzen verändern den Kampf und können zusätzliche Bakterien freisetzen."],

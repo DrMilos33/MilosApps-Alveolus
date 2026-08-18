@@ -38,6 +38,36 @@ static func neutral(profile_id: StringName = &"neutral") -> ResistanceProfile:
 	return from_components(profile_id)
 
 
+static func with_effective_percentage_bonus(
+	profile_id: StringName,
+	source: ResistanceProfile,
+	bonus_percent_points: float
+) -> ResistanceProfile:
+	var base := source if source != null else neutral(StringName("%s_base" % String(profile_id)))
+	var profile := ResistanceProfile.new()
+	profile.id = profile_id
+	profile.ratings.resize(DamageTypeCatalog.count())
+	profile.effective_percentages.resize(DamageTypeCatalog.count())
+	profile.multipliers.resize(DamageTypeCatalog.count())
+	for type_index in range(DamageTypeCatalog.count()):
+		var effective := clampf(
+			base.effective_percent_at(type_index) + bonus_percent_points,
+			MitigationCurve.MIN_RESISTANCE_RATING,
+			MitigationCurve.RESISTANCE_CAP_PERCENT
+		)
+		profile.ratings[type_index] = _rating_from_effective_percent(effective)
+		profile.effective_percentages[type_index] = effective
+		profile.multipliers[type_index] = 1.0 - effective / 100.0
+	return profile
+
+
+static func _rating_from_effective_percent(effective: float) -> float:
+	if effective <= 0.0:
+		return effective
+	var capped := minf(effective, MitigationCurve.RESISTANCE_CAP_PERCENT - 0.0001)
+	return MitigationCurve.RESISTANCE_CAP_PERCENT * capped / maxf(MitigationCurve.RESISTANCE_CAP_PERCENT - capped, 0.0001)
+
+
 func is_valid() -> bool:
 	return (
 		id != &""

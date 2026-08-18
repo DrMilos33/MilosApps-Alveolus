@@ -47,7 +47,7 @@ func _run() -> void:
 
 	var nest: InfectionEnemy = game.hidden_nest_timers.keys()[0]
 	_equal(nest.definition.id, &"minor_focus", "The timer belongs to the spawned minor focus")
-	_near(nest.definition.speed, 24.0, "The blue minor focus uses the current intentional movement speed")
+	_near(nest.definition.speed, 20.0, "The blue minor focus uses the current intentional movement speed")
 	_near(nest.definition.base_damage, 0.0, "The moving nest itself deals no damage")
 	var before_movement := nest.global_position
 	nest.step_fixed(1.0)

@@ -106,8 +106,25 @@ func resolved_component_name(prepared_treatment: TreatmentDefinition, component_
 		return prepared_treatment.display_name
 	match component_id:
 		&"defense_cells": return "Abwehrzellen"
-		&"movement": return "Bewegung"
+		&"movement": return "Geschwindigkeit"
 	return String(component_titles.get(component_id, title))
+
+
+func resolved_icon_id(prepared_treatment: TreatmentDefinition = null) -> StringName:
+	var component_id := heading_component_id(prepared_treatment.id if prepared_treatment != null else &"")
+	match component_id:
+		&"defense_cells":
+			return &"neutrophil_orbit"
+		&"movement":
+			return &"movement_training"
+	if component_id != &"":
+		return component_id
+	match path:
+		Path.IMMUNE:
+			return &"neutrophil_orbit"
+		Path.SUPPORT:
+			return &"supportive_oxygenation"
+	return prepared_treatment.id if prepared_treatment != null else &"treatment_precision"
 
 func path_name() -> String:
 	match path:

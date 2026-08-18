@@ -88,15 +88,15 @@ func _test_active_preview_application() -> void:
 	stats.bind_run_build(build, precision, [burst])
 	var effect := _find(definitions, &"burst_effect")
 	var preview := stats.preview_upgrade(effect)
-	_assert_equal(preview.effect_text, "+12 Schaden", "Active card shows the exact effect delta")
-	_assert_equal(preview.before_after_text, "38 Schaden  >  50 Schaden", "Active preview uses the selected ability base value")
+	_assert_equal(preview.effect_text, "+8 Schaden", "Active card shows the exact effect delta")
+	_assert_equal(preview.before_after_text, "25 Schaden  >  33 Schaden", "Active preview uses the selected ability base value")
 	stats.apply_upgrade(effect)
-	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 38.0, burst.tags), 50.0, "Ability controller resolves the same value as the card")
+	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 25.0, burst.tags), 33.0, "Ability controller resolves the same value as the card")
 	var line: AbilityDefinition = AbilityDefinition.catalog()[&"ability_treatment_line"]
 	stats.bind_run_build(build, precision, [burst, line])
 	var line_effect := _find(definitions, &"line_effect")
 	_assert_true(stats.apply_upgrade(line_effect), "Treatment-line damage upgrade applies")
-	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 50.0, line.tags), 66.0, "Treatment-line upgrade resolves in the selected ability context")
+	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 30.0, line.tags), 40.0, "Treatment-line upgrade resolves in the selected ability context")
 
 func _test_upgrade_prerequisites() -> void:
 	var definitions := ContentCatalog.upgrade_definitions()

@@ -38,3 +38,49 @@ func cost_for_rank(current_rank: int) -> int:
 	if current_rank < 0 or current_rank >= costs.size():
 		return 0
 	return costs[current_rank]
+
+
+func total_value_for_rank(rank: int) -> float:
+	var resolved_rank := clampi(rank, 0, max_level)
+	if effect == &"unlock":
+		return 1.0 if resolved_rank > 0 else 0.0
+	return magnitude * float(resolved_rank)
+
+
+func total_effect_text(rank: int) -> String:
+	var total := total_value_for_rank(rank)
+	match effect:
+		&"max_health":
+			return "+%s Leben" % _number(total)
+		&"damage_multiplier":
+			return "+%s %% Schaden" % _number(total * 100.0)
+		&"experience_multiplier":
+			return "+%s %% Erfahrung" % _number(total * 100.0)
+		&"defense":
+			return "+%s Verteidigung" % _number(total)
+		&"life_regeneration":
+			return "+%s/s" % _number(total, 2)
+		&"movement_speed_multiplier":
+			return "+%s %% Geschwindigkeit" % _number(total * 100.0)
+		&"unlock":
+			return "Freigeschaltet" if total > 0.0 else "Noch nicht freigeschaltet"
+	return _number(total)
+
+
+func total_effect_presentation(rank: int) -> Dictionary:
+	return {
+		"stable_id": id,
+		"value": total_value_for_rank(rank),
+		"formatted_value": total_effect_text(rank),
+		"semantic_role": &"positive" if rank > 0 else &"neutral",
+	}
+
+
+func _number(value: float, maximum_decimals: int = 1) -> String:
+	if is_equal_approx(value, roundf(value)):
+		return str(roundi(value))
+	var digits := maxi(1, maximum_decimals)
+	var text := ("%.*f" % [digits, value]).replace(".", ",")
+	while text.ends_with("0"):
+		text = text.left(-1)
+	return text.trim_suffix(",")

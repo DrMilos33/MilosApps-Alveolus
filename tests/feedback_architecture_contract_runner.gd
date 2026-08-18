@@ -13,6 +13,7 @@ func _run() -> void:
 	_test_balance_and_movement_plumbing()
 	_test_reward_preview()
 	_test_stat_sections_and_headings()
+	_test_presentation_apis()
 	if failures.is_empty():
 		print("ALVEOLUS_FEEDBACK_ARCHITECTURE_OK assertions=%d" % assertions)
 		quit(0)
@@ -40,27 +41,29 @@ func _test_distance_and_body_catalogs() -> void:
 func _test_balance_and_movement_plumbing() -> void:
 	var treatments := TreatmentDefinition.catalog()
 	_near(treatments[&"treatment_precision"].base_damage, 16.0, "Präzise Grundbehandlung besitzt 16 Schaden")
-	_near(treatments[&"treatment_spread"].base_damage, 7.0, "Streubehandlung besitzt 7 Schaden")
+	_near(treatments[&"treatment_spread"].base_damage, 5.0, "Streubehandlung besitzt 5 Schaden")
+	_near(treatments[&"treatment_pierce"].base_damage, 9.0, "Durchdringende Behandlung besitzt 9 Schaden")
 	_near(treatments[&"treatment_pierce"].base_interval, 1.65, "Durchdringende Behandlung besitzt 1,65 Sekunden Intervall")
 	var abilities := AbilityDefinition.catalog()
-	_near(float(abilities[&"ability_defense_burst"].parameters["damage"]), 38.0, "Abwehrstoß besitzt 38 Schaden")
-	_near(float(abilities[&"ability_treatment_line"].parameters["damage"]), 50.0, "Behandlungslinie besitzt 50 Schaden")
+	_near(float(abilities[&"ability_defense_burst"].parameters["damage"]), 25.0, "Abwehrstoß besitzt 25 Schaden")
+	_near(float(abilities[&"ability_defense_burst"].parameters["knockback"]), 120.0, "Abwehrstoß besitzt den stärkeren Rückstoß")
+	_near(float(abilities[&"ability_treatment_line"].parameters["damage"]), 30.0, "Behandlungslinie besitzt 30 Schaden")
 	var enemies := ContentCatalog.enemy_definitions()
-	_near(enemies[&"pneumococcus"].speed, 66.0, "Bakterium besitzt Tempo 66")
-	_near(enemies[&"bacterial_cluster"].speed, 50.0, "Bakteriengruppe besitzt Tempo 50")
-	_near(enemies[&"minor_focus"].speed, 24.0, "Kleiner Herd besitzt Tempo 24")
-	_near(enemies[&"infection_focus"].speed, 34.0, "Boss besitzt Tempo 34")
+	_near(enemies[&"pneumococcus"].speed, 60.0, "Bakterium besitzt Geschwindigkeit 60")
+	_near(enemies[&"bacterial_cluster"].speed, 45.0, "Bakteriengruppe besitzt Geschwindigkeit 45")
+	_near(enemies[&"minor_focus"].speed, 20.0, "Kleiner Herd besitzt Geschwindigkeit 20")
+	_near(enemies[&"infection_focus"].speed, 30.0, "Boss besitzt Geschwindigkeit 30")
 	var stats := PlayerStats.new()
 	stats.configure_prepared_treatment(treatments[&"treatment_precision"])
 	stats.apply_meta_progression({&"movement_training": 3})
-	_near(stats.movement_speed, 338.0 * 1.09, "Bewegungsforschung addiert drei Prozent je Rang auf Basis 338")
+	_near(stats.movement_speed, 300.0 * 1.09, "Geschwindigkeitsforschung addiert drei Prozent je Rang auf Basis 300")
 	var build := RunBuildState.from_treatment(treatments[&"treatment_precision"])
 	stats.bind_run_build(build, treatments[&"treatment_precision"])
 	var mobility := _upgrade(&"mobility")
 	for rank in range(3):
 		_true(stats.apply_upgrade(mobility), "Mobilitätsausbau Rang %d wird angewandt" % (rank + 1))
-	_near(stats.movement_speed, 338.0 * 1.09 * pow(1.05, 3), "Mobilitätsausbau multipliziert den aufgelösten Bewegungsstat je Rang")
-	_equal(PlayerStats.BASE_MOVEMENT_SPEED, 338.0, "Doctor-Basisbewegung ist zentral 338")
+	_near(stats.movement_speed, 300.0 * 1.09 * pow(1.05, 3), "Mobilitätsausbau multipliziert den aufgelösten Geschwindigkeitsstat je Rang")
+	_equal(PlayerStats.BASE_MOVEMENT_SPEED, 300.0, "Doctor-Basisgeschwindigkeit ist zentral 300")
 	_equal(TherapyAvatar.MOVE_SPEED, PlayerStats.BASE_MOVEMENT_SPEED, "Avatar-Fallback ist an die zentrale Doctor-Basis gekoppelt")
 	_equal(treatments[&"treatment_precision"].display_name, "Impuls", "Die stabile Behandlungs-ID erhält den sichtbaren Namen Impuls")
 	_equal(ContentCatalog.loadout_module_definitions()[&"treatment_precision"].title, "Impuls", "Einsatzplanung verwendet denselben sichtbaren Namen")
@@ -98,7 +101,51 @@ func _test_stat_sections_and_headings() -> void:
 	_equal(potency.heading_component_id(treatment.id), treatment.id, "Allgemeines Behandlungsupgrade folgt dynamisch der vorbereiteten Behandlung")
 	_equal(potency.resolved_component_name(treatment), "Impuls", "UI erhält nur den aufgelösten Komponentennamen")
 	var mobility := _upgrade(&"mobility")
-	_equal(mobility.resolved_component_name(treatment), "Bewegung", "Allgemeiner Bewegungsausbau benennt seine Komponente stabil")
+	_equal(mobility.resolved_component_name(treatment), "Geschwindigkeit", "Allgemeiner Geschwindigkeitsausbau benennt seine Komponente stabil")
+
+
+func _test_presentation_apis() -> void:
+	var research_by_id: Dictionary = {}
+	for definition in ContentCatalog.research_definitions():
+		research_by_id[definition.id] = definition
+	var expected_totals := {
+		&"stability_reserve": "+9 Leben",
+		&"therapy_precision": "+6 % Schaden",
+		&"experience_gain": "+15 % Erfahrung",
+		&"defense_training": "+6 Verteidigung",
+		&"life_regeneration": "+0,75/s",
+		&"movement_training": "+9 % Geschwindigkeit",
+		&"unlock_spread_treatment": "Freigeschaltet",
+		&"unlock_piercing_treatment": "Freigeschaltet",
+	}
+	for id in expected_totals:
+		var definition := research_by_id[id] as ResearchDefinition
+		_equal(definition.total_effect_text(definition.max_level), expected_totals[id], "Forschung %s liefert die fertige Gesamtwirkung" % String(id))
+	_equal((research_by_id[&"stability_reserve"] as ResearchDefinition).total_value_for_rank(3), 9.0, "Forschungswert wird zentral über den Rang aufgelöst")
+
+	var treatment := TreatmentDefinition.catalog()[&"treatment_precision"] as TreatmentDefinition
+	_equal(_upgrade(&"potency").resolved_icon_id(treatment), &"treatment_precision", "Allgemeines Behandlungsupgrade erbt die vorbereitete Komponenten-ID")
+	_equal(_upgrade(&"burst_effect").resolved_icon_id(treatment), &"ability_defense_burst", "Aktivupgrade liefert direkt die stabile Ability-ID")
+	_equal(_upgrade(&"phagocytosis").resolved_icon_id(treatment), &"neutrophil_orbit", "Abwehrzellenupgrade liefert das zentrale Neutrophilen-Icon")
+	_equal(_upgrade(&"mobility").resolved_icon_id(treatment), &"movement_training", "Geschwindigkeitsupgrade liefert das zentrale Forschungs-Icon")
+	_equal(CombatRateScale.formatted_per_second(0.82), "1,22/s", "Interne Behandlung 0,82 s wird zentral als sichtbare Rate formatiert")
+	_equal(CombatRateScale.formatted_per_second(0.1), "10/s", "Abwehrzellen-Hitlimit wird als Rate statt Intervall präsentiert")
+	var defense_stats := PlayerStats.new()
+	var defense_preview := defense_stats.preview_upgrade(_upgrade(&"neutrophils"))
+	_true(defense_preview.after_value.contains("Radius 4"), "Abwehrzellen-Vorschau liefert den zentralen Radius 4")
+	var spread := TreatmentDefinition.catalog()[&"treatment_spread"] as TreatmentDefinition
+	var spread_stats := PlayerStats.new()
+	spread_stats.configure_prepared_treatment(spread)
+	_equal(spread_stats.preview_upgrade(_upgrade(&"potency")).presentation_icon_id, &"treatment_spread", "Preview-Icon folgt auch bei allgemeinen Upgrades der vorbereiteten Behandlung")
+
+	var research_reward := RewardPresentation.research(12)
+	_equal(research_reward.stable_id(), &"research", "Forschungsbelohnung besitzt eine stabile DTO-ID")
+	_equal(research_reward.icon_id(), &"research", "Forschungsbelohnung besitzt die zentrale Icon-ID")
+	_equal(research_reward.value(), "+12", "Forschungsbelohnung trennt den reinen Wert von der Beschriftung")
+	_equal(research_reward.accessibility_text(), "Forschung: +12", "Forschungsbelohnung liefert fertige Accessibility-Copy")
+	var experience_reward := RewardPresentation.experience(9)
+	_equal(experience_reward.value(), "+9", "Erfahrungsbelohnung liefert ebenfalls nur den reinen Wert")
+	_equal(experience_reward.icon_id(), &"analysis_pickup", "Erfahrungsbelohnung bewahrt die stabile interne Icon-ID")
 
 
 func _upgrade(id: StringName) -> UpgradeDefinition:

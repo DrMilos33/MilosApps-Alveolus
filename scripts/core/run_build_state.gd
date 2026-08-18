@@ -37,6 +37,8 @@ const FINDING_PROGRESS := &"finding_progress"
 const SUPPORT_EFFECT := &"support_effect"
 const PICKUP_RANGE := &"pickup_range"
 const MOVEMENT_SPEED := &"movement_speed"
+const BASE_DEFENSE_CELL_DAMAGE := 5.4
+const BASE_DEFENSE_CELL_RADIUS_STAGE := 4
 
 var _base_values: Dictionary = {}
 var _modifiers: Array[ModifierDefinition] = []
@@ -60,8 +62,8 @@ static func from_treatment(definition: TreatmentDefinition) -> RunBuildState:
 		TREATMENT_BEAM_TICK: 0.25,
 		TREATMENT_BEAM_RETURN: 0.0,
 		TREATMENT_MANUAL_AIM: 0.0,
-		DEFENSE_CELL_DAMAGE: 9.0,
-		DEFENSE_CELL_RADIUS: CombatDistanceScale.world_from_stage(1),
+		DEFENSE_CELL_DAMAGE: BASE_DEFENSE_CELL_DAMAGE,
+		DEFENSE_CELL_RADIUS: CombatDistanceScale.world_from_stage(BASE_DEFENSE_CELL_RADIUS_STAGE),
 		DEFENSE_CELL_PROJECTILES: 2.0,
 		DEFENSE_CELL_HIT_INTERVAL: 0.1,
 		ACTIVE_COOLDOWN: 1.0,
@@ -252,40 +254,51 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 	var after_text := _formatted_number(after, definition.preview_decimals)
 	var delta := after - before
 	var effect_text := "%s%s %s" % [_sign(delta), _formatted_number(absf(delta), definition.preview_decimals), label]
-	var comparison := "%s %s  >  %s %s" % [before_text, comparison_label, after_text, comparison_label]
+	var formatted_before := "%s %s" % [before_text, comparison_label]
+	var formatted_after := "%s %s" % [after_text, comparison_label]
 	match definition.preview_style:
 		&"distance_stage":
 			var before_stage := CombatDistanceScale.stage_from_world(before)
 			var after_stage := CombatDistanceScale.stage_from_world(after)
-			# The card heading/row label already names Reichweite or Radius. UI-facing
-			# distance values therefore stay as naked central stages without repeating
-			# implementation units or a second semantic label.
 			effect_text = "%s%d" % [_sign(float(after_stage - before_stage)), absi(after_stage - before_stage)]
-			comparison = "%d  >  %d" % [before_stage, after_stage]
+			formatted_before = str(before_stage)
+			formatted_after = str(after_stage)
 		&"tempo":
 			var percent := roundi((1.0 - after / maxf(before, 0.001)) * 100.0)
-			effect_text = "+%d %% Tempo" % percent
-			comparison = "%s s  >  %s s %s" % [before_text, after_text, comparison_label]
+			effect_text = "+%d %% Rate" % percent
+			formatted_before = CombatRateScale.formatted_per_second(before)
+			formatted_after = CombatRateScale.formatted_per_second(after)
 		&"cooldown":
 			var percent := roundi((1.0 - after / maxf(before, 0.001)) * 100.0)
 			effect_text = "-%d %% Abklingzeit" % percent
-			comparison = "%s s  >  %s s %s" % [before_text, after_text, comparison_label]
+			formatted_before = "%s s" % before_text
+			formatted_after = "%s s" % after_text
 		&"percent":
 			var percent := roundi(absf(after / maxf(before, 0.001) - 1.0) * 100.0)
 			effect_text = "%s%d %% %s" % [_sign(delta), percent, label]
 		&"seconds":
 			effect_text = "%s%s s %s" % [_sign(delta), _formatted_number(absf(delta), definition.preview_decimals), label]
-			comparison = "%s s  >  %s s %s" % [before_text, after_text, comparison_label]
+			formatted_before = "%s s %s" % [before_text, comparison_label]
+			formatted_after = "%s s %s" % [after_text, comparison_label]
 		&"count":
 			effect_text = "%s%d %s" % [_sign(delta), roundi(absf(delta)), label]
 			if comparison_label == "Ziele":
-				comparison = "%d %s  >  %d %s" % [
-					roundi(before), "Ziel" if roundi(before) == 1 else "Ziele",
-					roundi(after), "Ziel" if roundi(after) == 1 else "Ziele",
-				]
+				formatted_before = "%d %s" % [roundi(before), "Ziel" if roundi(before) == 1 else "Ziele"]
+				formatted_after = "%d %s" % [roundi(after), "Ziel" if roundi(after) == 1 else "Ziele"]
 			else:
-				comparison = "%d  >  %d %s" % [roundi(before), roundi(after), comparison_label]
-	return UpgradePreview.create(effect_text, comparison, level_text, definition.preview_target)
+				formatted_before = str(roundi(before))
+				formatted_after = "%d %s" % [roundi(after), comparison_label]
+	var comparison := "%s  >  %s" % [formatted_before, formatted_after]
+	return UpgradePreview.create(
+		effect_text,
+		comparison,
+		level_text,
+		definition.preview_target,
+		PackedStringArray(),
+		formatted_before,
+		formatted_after,
+		definition.resolved_icon_id()
+	)
 
 func _formatted_number(value: float, decimals: int) -> String:
 	if decimals <= 0:

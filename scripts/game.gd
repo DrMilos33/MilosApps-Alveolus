@@ -89,6 +89,10 @@ var visual_bursts: Array[VisualBurst] = []
 var visual_burst_pool: Array[VisualBurst] = []
 var current_upgrade_options: Array[UpgradeDefinition] = []
 var active_boss: InfectionEnemy
+var active_boss_handles: PackedInt64Array = PackedInt64Array()
+var active_boss_handle_by_instance: Dictionary = {}
+var boss_aggregate_maximum: float = 0.0
+var enemy_runtime_resistance_profiles: Dictionary = {}
 
 var pending_run_context: RunContext
 var active_run_context: RunContext
@@ -1205,6 +1209,7 @@ func start_run(run_context: RunContext = null) -> void:
 		_apply_case_trait_to_config(active_run_context.visible_trait_id)
 	if stress_test:
 		_configure_stress_run_config()
+	_compile_enemy_runtime_resistance_profiles()
 	topology.bounds = config.arena_rect()
 	combat_query.configure(
 		topology,
@@ -1240,8 +1245,6 @@ func start_run(run_context: RunContext = null) -> void:
 		# Forschung ist dauerhafte Charakterprogression. Sie wirkt unabhängig von
 		# der Einsatzplanung; Passivmodule sind im aktuellen Ausbau deaktiviert.
 		stats.apply_meta_progression(meta.research_ranks)
-		if active_run_context != null and active_run_context.visible_trait_id == &"fragile_condition":
-			stats.support_effect_multiplier *= 1.20
 	if completion_smoke:
 		stats.therapy_damage = 250.0
 		stats.therapy_cooldown = 0.28
@@ -1273,6 +1276,9 @@ func start_run(run_context: RunContext = null) -> void:
 	reroll_used = false
 	current_upgrade_options.clear()
 	active_boss = null
+	active_boss_handles.clear()
+	active_boss_handle_by_instance.clear()
+	boss_aggregate_maximum = 0.0
 	intro_lesson = 1 if selected_level.is_tutorial else 0
 	intro_phase = &"await_primary_materialization" if selected_level.is_tutorial else &""
 	intro_primary_enemy = null
@@ -1307,7 +1313,7 @@ func start_run(run_context: RunContext = null) -> void:
 	state.reset(config, 0, stats.max_stability_bonus)
 	if selected_level.is_tutorial:
 		state.set_analysis_target(INTRO_ANALYSIS_TARGET)
-	state.set_analysis_gain_multiplier(stats.experience_gain_multiplier)
+	state.set_analysis_gain_multiplier(stats.experience_gain_multiplier * config.experience_gain_multiplier)
 	if run_session != null:
 		run_session.reset()
 		run_session.start(active_run_context)
@@ -1497,10 +1503,22 @@ func _apply_case_trait_to_config(trait_id: StringName) -> void:
 			&"enemy_health":
 				config.enemy_health_start = _apply_scalar_modifier(config.enemy_health_start, operation, value)
 				config.enemy_health_end = _apply_scalar_modifier(config.enemy_health_end, operation, value)
+			&"boss_health":
+				config.boss_health_multiplier = _apply_scalar_modifier(config.boss_health_multiplier, operation, value)
 			&"enemy_speed":
 				config.enemy_speed_multiplier = _apply_scalar_modifier(config.enemy_speed_multiplier, operation, value)
 			&"contact_damage", &"enemy_damage":
 				config.contact_damage_multiplier = _apply_scalar_modifier(config.contact_damage_multiplier, operation, value)
+			&"enemy_resistance_effective":
+				config.enemy_resistance_effective_bonus = _apply_scalar_modifier(config.enemy_resistance_effective_bonus, operation, value)
+			&"enemy_defense":
+				config.enemy_defense = maxf(0.0, _apply_scalar_modifier(config.enemy_defense, operation, value))
+			&"boss_count":
+				config.boss_count = maxi(1, roundi(_apply_scalar_modifier(float(config.boss_count), operation, value)))
+			&"spawn_rate":
+				config.spawn_rate_multiplier = maxf(0.01, _apply_scalar_modifier(config.spawn_rate_multiplier, operation, value))
+			&"experience_gain":
+				config.experience_gain_multiplier = maxf(0.0, _apply_scalar_modifier(config.experience_gain_multiplier, operation, value))
 
 func _apply_scalar_modifier(current: float, operation: StringName, value: float) -> float:
 	match operation:
@@ -1509,6 +1527,22 @@ func _apply_scalar_modifier(current: float, operation: StringName, value: float)
 		&"override":
 			return value
 	return current + value
+
+
+func _compile_enemy_runtime_resistance_profiles() -> void:
+	enemy_runtime_resistance_profiles.clear()
+	for id in enemy_definitions:
+		var definition := enemy_definitions[id] as EnemyDefinition
+		if definition == null:
+			continue
+		if is_zero_approx(config.enemy_resistance_effective_bonus):
+			enemy_runtime_resistance_profiles[id] = definition.resistance_profile
+		else:
+			enemy_runtime_resistance_profiles[id] = ResistanceProfile.with_effective_percentage_bonus(
+				StringName("%s_runtime" % String(id)),
+				definition.resistance_profile,
+				config.enemy_resistance_effective_bonus
+			)
 
 func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 	build_state = RunBuildState.from_treatment(treatment)
@@ -1654,6 +1688,7 @@ func _spawn_step(delta: float) -> void:
 	if finding != null and finding.behavior == FindingDefinition.Behavior.ACCELERATION and progress >= 0.5:
 		var late_factor := inverse_lerp(0.5, 1.0, progress)
 		interval *= lerpf(1.0, 1.0 - finding.magnitude, late_factor)
+	interval /= maxf(config.spawn_rate_multiplier, 0.01)
 	spawn_accumulator += interval
 	var batch := 1
 	if progress > 0.58 and rng.randf() < 0.22:
@@ -1921,7 +1956,7 @@ func _resolved_treatment_damage(base_damage: float, enemy: InfectionEnemy) -> fl
 	if build_state != null and enemy.definition.id == &"minor_focus":
 		result *= build_state.value(&"nest_damage", 1.0)
 	var profile := stats.prepared_treatment.damage_profile if stats != null and stats.prepared_treatment != null else null
-	return CombatDamageResolver.resolve(result, profile, enemy.definition.resistance_profile, 0.0)
+	return CombatDamageResolver.resolve_against_enemy(result, profile, enemy)
 
 func _on_projectile_discovery_ready(projectile: TherapyProjectile) -> void:
 	if selected_level != null and selected_level.is_tutorial:
@@ -1953,7 +1988,7 @@ func _immune_step(delta: float) -> void:
 func _on_defense_cell_hit(handle: int, damage: float) -> void:
 	var enemy := enemy_world.resolve(handle) as InfectionEnemy
 	if is_instance_valid(enemy) and enemy.is_targetable():
-		var resolved := CombatDamageResolver.resolve(damage, defense_cell_damage_profile, enemy.definition.resistance_profile, 0.0)
+		var resolved := CombatDamageResolver.resolve_against_enemy(damage, defense_cell_damage_profile, enemy)
 		enemy.take_damage(resolved, &"immune")
 
 func _life_regeneration_step(delta: float) -> void:
@@ -2106,7 +2141,17 @@ func _spawn_enemy(
 		enemy.damage_applied.connect(_on_enemy_damage_applied)
 		simulation_root.add_child(enemy)
 	enemy.global_position = wrapped_position
-	enemy.configure(definition, avatar, topology, health_scale, movement_scale, damage_scale, phases)
+	enemy.configure(
+		definition,
+		avatar,
+		topology,
+		health_scale,
+		movement_scale,
+		damage_scale,
+		phases,
+		enemy_runtime_resistance_profiles.get(type) as ResistanceProfile,
+		config.enemy_defense
+	)
 	_apply_group_control_to_enemy(enemy)
 	enemy.global_position = wrapped_position
 	enemy.reset_physics_interpolation()
@@ -2132,12 +2177,26 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 func _spawn_boss() -> void:
 	if state == null or not state.active:
 		return
-	active_boss = _spawn_enemy(&"infection_focus", _spawn_position_around_avatar(600.0))
-	if active_boss != null:
+	active_boss_handles.clear()
+	active_boss_handle_by_instance.clear()
+	active_boss = null
+	boss_aggregate_maximum = 0.0
+	for boss_index in range(maxi(1, config.boss_count)):
+		var boss := _spawn_enemy(
+			&"infection_focus",
+			_spawn_position_around_avatar(600.0 + float(boss_index) * 36.0),
+			-1.0,
+			true,
+			false
+		)
+		if boss == null:
+			continue
+		_register_active_boss(boss)
 		if selected_level.is_tutorial:
-			intro_enemy_roles[active_boss] = INTRO_ROLE_BOSS
+			intro_enemy_roles[boss] = INTRO_ROLE_BOSS
+	if active_boss != null:
 		mastery_tracker.record_boss_spawned(state.elapsed)
-		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
+		_show_active_boss_hud()
 	if selected_level.is_tutorial and active_boss != null:
 		intro_lesson = 3
 		intro_phase = &"await_boss_confirmation"
@@ -2146,6 +2205,72 @@ func _spawn_boss() -> void:
 		discovery_manager.mark_seen(&"infection_focus")
 		_set_intro_prompt("Infektionsherd erkannt", &"coral", true, "Linksklick zum Fortfahren")
 		_set_flow(GameFlowState.State.INTRO_CONFIRMATION)
+
+
+func _register_active_boss(enemy: InfectionEnemy) -> void:
+	if enemy == null or enemy_world == null:
+		return
+	var handle := enemy_world.handle_for(enemy)
+	if not EntityHandle.is_valid(handle) or active_boss_handles.has(handle):
+		return
+	active_boss_handles.append(handle)
+	active_boss_handle_by_instance[enemy.get_instance_id()] = handle
+	boss_aggregate_maximum += maxf(enemy.max_health, 0.0)
+	if active_boss == null:
+		active_boss = enemy
+
+
+func _remove_active_boss(enemy: InfectionEnemy) -> bool:
+	if enemy == null:
+		return false
+	var handle := int(active_boss_handle_by_instance.get(enemy.get_instance_id(), EntityHandle.INVALID))
+	active_boss_handle_by_instance.erase(enemy.get_instance_id())
+	var index := active_boss_handles.find(handle)
+	if index >= 0:
+		active_boss_handles.remove_at(index)
+	_refresh_active_boss_reference()
+	return index >= 0
+
+
+func _refresh_active_boss_reference() -> void:
+	active_boss = null
+	for handle in active_boss_handles:
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy
+		if is_instance_valid(enemy):
+			active_boss = enemy
+			return
+
+
+func active_boss_health_snapshot() -> Dictionary:
+	var current := 0.0
+	var maximum := boss_aggregate_maximum
+	var remaining := 0
+	if enemy_world != null:
+		for handle in active_boss_handles:
+			var enemy := enemy_world.resolve(handle) as InfectionEnemy
+			if not is_instance_valid(enemy):
+				continue
+			current += maxf(enemy.health, 0.0)
+			remaining += 1
+	return {
+		"current": current,
+		"maximum": maximum,
+		"remaining": remaining,
+		"target": state.boss_count_target if state != null else maxi(1, config.boss_count),
+	}
+
+
+func active_boss_handle_snapshot() -> PackedInt64Array:
+	return active_boss_handles.duplicate()
+
+
+func _show_active_boss_hud() -> void:
+	var snapshot := active_boss_health_snapshot()
+	var maximum := float(snapshot.get("maximum", 0.0))
+	if maximum <= 0.0:
+		return
+	hud.show_boss(maximum, config.boss_phase_minions.size())
+	hud.update_boss_health(float(snapshot.get("current", 0.0)), maximum)
 
 func _on_minions_requested(origin: Vector2, count: int) -> void:
 	if _fixed_step_active:
@@ -2225,8 +2350,9 @@ func _on_discovery_seen(_id: StringName) -> void:
 	_save_meta()
 
 func _on_enemy_health_changed(current: float, maximum: float, enemy: InfectionEnemy) -> void:
-	if enemy == active_boss:
-		hud.update_boss_health(current, maximum)
+	if enemy != null and active_boss_handle_by_instance.has(enemy.get_instance_id()):
+		var snapshot := active_boss_health_snapshot()
+		hud.update_boss_health(float(snapshot.get("current", current)), float(snapshot.get("maximum", maximum)))
 
 func _on_enemy_damage_feedback(_position: Vector2, _amount: float) -> void:
 	# Intentionally quiet: damage numbers, hit particles and scale impulses made
@@ -2292,9 +2418,12 @@ func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss:
 			intro_followup_defeats += 1
 		intro_enemy_roles.erase(enemy)
 	if was_boss:
-		active_boss = null
-		mastery_tracker.record_boss_defeated(state.elapsed if state != null else 0.0)
-		state.mark_boss_defeated()
+		_remove_active_boss(enemy)
+		var final_boss_defeated := state.mark_boss_defeated()
+		if final_boss_defeated:
+			mastery_tracker.record_boss_defeated(state.elapsed if state != null else 0.0)
+		else:
+			_show_active_boss_hud()
 	_store_enemy(enemy)
 
 
@@ -2697,9 +2826,7 @@ func _on_finding_confirmed(reaction_id: StringName, incoming_id: StringName, out
 	hud.hide_finding()
 	hud.hide_finding_progress()
 	hud.show_running_hud()
-	if active_boss != null and is_instance_valid(active_boss):
-		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
-		hud.update_boss_health(active_boss.health, active_boss.max_health)
+	_show_active_boss_hud()
 	ui_router.close_modal(get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.RUNNING)
 
@@ -2898,6 +3025,14 @@ func _refresh_defeat_research_preview() -> void:
 	var reward := MetaProgressionState.calculate_run_reward(false, state.elapsed, state.level, defeats, multiplier)
 	hud.update_defeat_research_reward(reward)
 
+
+func result_reward_presentations(research_reward: int) -> Array[RewardPresentation]:
+	var result: Array[RewardPresentation] = [
+		RewardPresentation.research(research_reward),
+		RewardPresentation.experience(state.total_experience_gained if state != null else 0),
+	]
+	return result
+
 func _on_level_up_requested(level: int) -> void:
 	if selected_level.is_tutorial:
 		if intro_phase != &"await_intro_upgrade":
@@ -2984,9 +3119,7 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	if not selected_level.is_tutorial:
 		hud.configure_active_abilities(_active_ability_hud_views())
 	hud.show_running_hud()
-	if active_boss != null and is_instance_valid(active_boss):
-		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
-		hud.update_boss_health(active_boss.health, active_boss.max_health)
+	_show_active_boss_hud()
 	var completes_intro_upgrade := selected_level.is_tutorial \
 		and intro_phase == &"await_intro_upgrade" \
 		and current_upgrade_options.has(definition)
@@ -3030,6 +3163,8 @@ func _on_run_finished(success: bool, reason: String) -> void:
 	_set_flow(GameFlowState.State.RESULT)
 	ui_router.replace_screen(&"result", null, get_viewport().gui_get_focus_owner())
 	hud.show_end(selected_level, success, reason, state.elapsed, state.level, defeats, reward, unlocked_new)
+	if hud.has_method("set_result_reward_presentations"):
+		hud.call("set_result_reward_presentations", result_reward_presentations(reward))
 	if ui_sound_service != null:
 		ui_sound_service.play(UISoundService.REWARD)
 	if not new_mastery_ids.is_empty():
@@ -3352,6 +3487,10 @@ func _cleanup_run_nodes() -> void:
 		pickup_world.clear()
 	current_upgrade_options.clear()
 	active_boss = null
+	active_boss_handles.clear()
+	active_boss_handle_by_instance.clear()
+	boss_aggregate_maximum = 0.0
+	enemy_runtime_resistance_profiles.clear()
 	intro_enemy_roles.clear()
 	intro_pickup_roles.clear()
 	intro_confirmation_kind = &""

@@ -18,8 +18,11 @@ var active: bool = false
 var level_up_pending: bool = false
 var boss_spawned: bool = false
 var boss_defeated: bool = false
+var boss_count_target: int = 1
+var bosses_defeated: int = 0
 var analysis_gain_multiplier: float = 1.0
 var analysis_gain_carry: float = 0.0
+var total_experience_gained: int = 0
 
 func reset(run_config: RunConfig, initial_analysis: int = 0, stability_bonus: float = 0.0) -> void:
 	config = run_config
@@ -33,7 +36,10 @@ func reset(run_config: RunConfig, initial_analysis: int = 0, stability_bonus: fl
 	level_up_pending = false
 	boss_spawned = false
 	boss_defeated = false
+	boss_count_target = maxi(1, config.boss_count)
+	bosses_defeated = 0
 	analysis_gain_carry = 0.0
+	total_experience_gained = 0
 	stability_changed.emit(stability, max_stability)
 	analysis_changed.emit(analysis, analysis_target, level)
 
@@ -84,6 +90,7 @@ func add_analysis(amount: int) -> void:
 	if awarded <= 0:
 		return
 	analysis += awarded
+	total_experience_gained += awarded
 	analysis_changed.emit(analysis, analysis_target, level)
 	_request_level_if_ready()
 
@@ -100,11 +107,15 @@ func resolve_level_up() -> void:
 	level_up_pending = false
 	_request_level_if_ready()
 
-func mark_boss_defeated() -> void:
+func mark_boss_defeated() -> bool:
 	if not active:
-		return
+		return false
+	bosses_defeated = mini(bosses_defeated + 1, boss_count_target)
+	if bosses_defeated < boss_count_target:
+		return false
 	boss_defeated = true
 	finish(true, "Der Infektionsherd ist kontrolliert.")
+	return true
 
 func trigger_event_boss() -> void:
 	if not active or boss_spawned:

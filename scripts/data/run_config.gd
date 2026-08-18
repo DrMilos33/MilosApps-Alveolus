@@ -19,6 +19,11 @@ extends Resource
 @export var boss_phase_minions: PackedInt32Array = PackedInt32Array()
 @export var reward_multiplier: float = 1.0
 @export var event_driven_intro: bool = false
+@export var enemy_resistance_effective_bonus: float = 0.0
+@export var enemy_defense: float = 0.0
+@export var boss_count: int = 1
+@export var spawn_rate_multiplier: float = 1.0
+@export var experience_gain_multiplier: float = 1.0
 
 func arena_rect() -> Rect2:
 	return Rect2(-arena_size * 0.5, arena_size)
