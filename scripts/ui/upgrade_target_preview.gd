@@ -47,7 +47,7 @@ func _draw() -> void:
 			var segment_width := minf(28.0, bar.size.x * 0.18)
 			draw_rect(Rect2(bar.end.x - segment_width, bar.position.y, segment_width, bar.size.y), Color("76aaff"), true)
 			_draw_arrow(target_position + Vector2(145.0, 74.0), Vector2(bar.end.x + 4.0, target_position.y), Color("76aaff"))
-			_draw_caption(Vector2(bar.end.x + 4.0, bar.end.y + 12.0), "+4 Stabilität", Color("76aaff"))
+			_draw_caption(Vector2(bar.end.x + 4.0, bar.end.y + 12.0), "+4 Leben", Color("76aaff"))
 		&"enemy":
 			var radius := highlighter.bounds().size.x * 0.5
 			_draw_arrow(target_position + Vector2(95.0, -62.0), target_position + Vector2(radius * 0.70, -radius * 0.55), accent)

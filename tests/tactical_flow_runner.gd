@@ -17,6 +17,7 @@ func _run() -> void:
 	game.meta.highest_unlocked_level = 1
 	game.meta.research_ranks[&"stability_reserve"] = 1
 	game.meta.research_ranks[&"sample_logistics"] = 1
+	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(StringName(discovery_id))
 	await process_frame
@@ -25,7 +26,7 @@ func _run() -> void:
 	_test_quick_restart_contract(game)
 	await _test_run_abilities_finding_and_mastery(game)
 	await _test_pause_abort_and_intro_regression(game)
-	_test_save_v5_roundtrip(game)
+	_test_save_v6_roundtrip(game)
 
 	game.queue_free()
 	await process_frame
@@ -39,39 +40,59 @@ func _run() -> void:
 		quit(1)
 
 func _test_preparation_and_determinism(game: Node) -> void:
-	var historical_plan: PreparedLoadout = game.meta.get_prepared_loadout(&"localized_focus")
-	historical_plan.reserve_id = &"sample_logistics"
+	var historical_plan := PreparedLoadout.create(
+		&"treatment_spread",
+		[&"ability_focus_field", &"ability_emergency_support"],
+		[&"stability_reserve", &"sample_logistics"],
+		&"sample_logistics"
+	)
 	game.meta.set_prepared_loadout(&"localized_focus", historical_plan)
-	_check(game.meta.get_prepared_loadout(&"localized_focus").reserve_id == &"sample_logistics", "Ein historischer Spielstand darf seine Reserve weiterhin laden")
+	_check(game.meta.get_prepared_loadout(&"localized_focus").to_dict() == historical_plan.to_dict(), "Ein historischer Spielstand darf seinen vollständigen alten Plan weiterhin laden")
 	game._show_level_select()
 	game._on_level_selected(&"localized_focus")
 	_check(game.flow_state == GameFlowState.State.PREPARATION, "Fall 1 öffnet direkt die Einsatzplanung")
 	_check(game.pending_run_context != null, "Vorbereitung erzeugt einen RunContext")
-	_check(game.pending_preparation_loadout.reserve_id == &"" and game.pending_run_context.loadout_snapshot.reserve_id == &"", "Die aktuelle Planung übernimmt eine historische Reserve nicht in einen neuen Run")
+	_check(game.pending_preparation_loadout.treatment_id == &"treatment_spread", "Die aktuelle Planung bewahrt eine der drei erlaubten Behandlungen")
+	_check(game.pending_preparation_loadout.ability_ids.is_empty(), "Die aktuelle Planung entfernt alte Aktive, ohne freie Plätze heimlich zu befüllen")
+	_check(game.pending_preparation_loadout.passive_ids.is_empty() and game.pending_preparation_loadout.reserve_id == &"" and game.pending_run_context.loadout_snapshot.reserve_id == &"", "Die aktuelle Planung übernimmt keine historischen Passiven oder Reserve in einen neuen Run")
+	_check(game.meta.get_prepared_loadout(&"localized_focus").to_dict() == historical_plan.to_dict(), "Bloßes Öffnen bereinigt den gespeicherten Altplan nicht destruktiv")
 	_check(game.hud.planning_snapshot.mode == PlanningSnapshot.Mode.COMPONENT_PICK and game.hud.planning_snapshot.selected_slot_id == LoadoutSlotId.TREATMENT, "Die Planung startet direkt am markierten Behandlungsplatz")
 	_check(bool((game.hud.preparation_slot_buttons[LoadoutSlotId.TREATMENT] as Button).get_meta(&"selected_slot", false)), "Der zuerst bediente Behandlungsplatz ist sichtbar ausgewählt")
 	var first_seed: int = game.pending_run_context.seed
-	var first_trait: StringName = game.pending_run_context.visible_trait_id
-	var first_finding: StringName = game.pending_run_context.hidden_finding_id
 	_check(first_seed != 0, "Der vorbereitete Fall besitzt einen stabilen Seed")
-	_check(first_trait != &"" and game.case_traits.has(first_trait), "Das sichtbare Fallmerkmal stammt aus dem Katalog")
-	_check(first_finding != &"" and game.finding_definitions.has(first_finding), "Der verborgene Befund stammt aus dem Katalog")
-	_check(game.meta.validate_prepared_loadout(game.pending_preparation_loadout, game.loadout_modules, game.research_definitions).valid, "Das Default-Loadout ist gültig")
+	_check(game.pending_run_context.visible_trait_id == &"" and game.pending_run_context.hidden_finding_id == &"", "Vor dem ersten Abschluss besitzt der Fall keine Zufallsparameter")
+	_check(game.pending_loadout_draft.validate().valid, "Das Default-Loadout ist gegen den aktuellen Testkatalog gültig")
 
 	game._on_back_requested()
 	_check(game.flow_state == GameFlowState.State.LEVEL_SELECT, "Zurück aus der Vorbereitung führt ohne altes Briefing zur Fallauswahl")
+	_check(game.meta.get_prepared_loadout(&"localized_focus").to_dict() == historical_plan.to_dict(), "Zurück bewahrt den historischen Plan und alle alten Werte")
+	var level: LevelDefinition = ContentCatalog.level_definitions()[1]
+	game.meta.register_level_result(level, true, 120.0, 3, 20)
+	game.meta.advance_case_seed(level.id)
 	game._on_level_selected(&"localized_focus")
-	_check(game.pending_run_context.seed == first_seed, "Erneutes Öffnen bewahrt den Fall-Seed")
+	first_seed = game.pending_run_context.seed
+	var first_trait: StringName = game.pending_run_context.visible_trait_id
+	var first_finding: StringName = game.pending_run_context.hidden_finding_id
+	_check(first_trait != &"" and game.case_traits.has(first_trait), "Nach einem Abschluss stammt das sichtbare Fallmerkmal aus dem Katalog")
+	_check(first_finding != &"" and game.finding_definitions.has(first_finding), "Nach einem Abschluss stammt der verborgene Befund aus dem Katalog")
+	game._on_back_requested()
+	game._on_level_selected(&"localized_focus")
+	_check(game.pending_run_context.seed == first_seed, "Erneutes Öffnen ohne Sieg bewahrt den Fall-Seed")
 	_check(game.pending_run_context.visible_trait_id == first_trait, "Fallmerkmal ist für denselben Seed deterministisch")
 	_check(game.pending_run_context.hidden_finding_id == first_finding, "Befund ist für denselben Seed deterministisch")
 
 	var loadout: PreparedLoadout = game.pending_preparation_loadout.duplicate_loadout()
-	var validation: LoadoutValidationResult = game.meta.validate_prepared_loadout(loadout, game.loadout_modules, game.research_definitions)
+	game._on_preparation_slot_component_requested(LoadoutSlotId.ACTIVE_1, &"ability_defense_burst")
+	game._on_preparation_slot_component_requested(LoadoutSlotId.ACTIVE_2, &"ability_treatment_line")
+	loadout = game.pending_loadout_draft.to_prepared()
+	var validation: LoadoutValidationResult = LoadoutValidator.validate(loadout, game.loadout_modules, LoadoutAvailabilityPolicy.selectable_ids(game.loadout_modules, game.meta.research_ranks), game.meta.preparation_capacity())
 	_check(validation.valid and loadout.reserve_id == &"", "Ein reservefreier neuer Plan ist gültig")
 	game._on_preparation_start_requested(loadout.to_dict())
 	_check(game.flow_state == GameFlowState.State.RUNNING, "Ein gültiger Plan startet den Run")
 	_check(game.active_run_context.seed == first_seed, "Der Run verwendet exakt den vorbereiteten Seed")
-	_check(game.active_loadout.reserve_id == &"", "Der neue Run bleibt auch nach dem Start reservefrei")
+	_check(game.active_loadout.ability_ids == [&"ability_defense_burst", &"ability_treatment_line"], "Der Run startet ausschließlich mit den beiden aktiven Testfähigkeiten")
+	_check(game.active_loadout.passive_ids.is_empty() and game.active_loadout.reserve_id == &"", "Der neue Run bleibt auch nach dem Start passiv- und reservefrei")
+	_check(not game.reroll_available and game.state.analysis == 0 and game.stats.immune_level == 0, "Keine versteckte Passivwirkung wird beim Runstart aktiviert")
 	_check(game.build_state != null and game.treatment_controller.enabled, "Grundbehandlung und Buildzustand sind aktiv")
 	_check(game.ability_controller.runtime(0) != null and game.ability_controller.runtime(1) != null, "Q und E sind mit den vorbereiteten Fähigkeiten belegt")
 
@@ -147,7 +168,7 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	var ability_buttons: Array[Button] = game.hud.run_hud_screen.ability_buttons()
 	_check(ability_buttons.size() == 2 and not ability_buttons[0].disabled and not ability_buttons[1].disabled, "Das RunHUDOverlay exponiert beide belegten Fähigkeiten als aktive UI-Aktionen")
 	ability_buttons[0].pressed.emit()
-	_check(game.targeting_ability_slot == AbilityController.SLOT_Q, "Die erste Run-HUD-Aktion öffnet für das Fokusfeld die Zielvorschau")
+	_check(game.targeting_ability_slot == AbilityController.SLOT_Q, "Die erste Run-HUD-Aktion öffnet für den Abwehrstoß die Zielvorschau")
 	_check(game.ability_target_preview.is_targeting(), "Die gezielte Fähigkeit besitzt eine sichtbare Vorschaugeometrie")
 	var q_echo := InputEventKey.new()
 	q_echo.physical_keycode = KEY_Q
@@ -155,7 +176,7 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	q_echo.echo = true
 	game._unhandled_input(q_echo)
 	_check(game.ability_controller.queued_command_count() == 0 and game.targeting_ability_slot == AbilityController.SLOT_Q, "Tastenwiederholung erzeugt keinen zweiten Fähigkeitsbefehl")
-	# Fokusfeld ist eine gezielte Fähigkeit: Die erste Aktivierung öffnet die
+	# Abwehrstoß ist eine gezielte Fähigkeit: Die erste Aktivierung öffnet die
 	# Vorschau, dieselbe UI-Aktion bestätigt sie anschließend deterministisch.
 	ability_buttons[0].pressed.emit()
 	_check(game.targeting_ability_slot == -1 and game.ability_controller.queued_command_count() == 1, "Die zweite Aktivierung bestätigt das Ziel und reiht genau einen Q-Command ein")
@@ -163,11 +184,16 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	e_event.action = &"active_ability_2"
 	e_event.pressed = true
 	game._unhandled_input(e_event)
-	_check(game.ability_controller.queued_command_count() == 2, "Die Selbstfähigkeit E wird ohne Zielvorschau eingereiht")
+	_check(game.targeting_ability_slot == AbilityController.SLOT_E and game.ability_controller.queued_command_count() == 1, "Die Behandlungslinie E öffnet ihre gerichtete Zielvorschau")
+	var e_release := InputEventAction.new()
+	e_release.action = &"active_ability_2"
+	e_release.pressed = false
+	game._unhandled_input(e_release)
+	_check(game.targeting_ability_slot == -1 and game.ability_controller.queued_command_count() == 2, "Das Loslassen von E bestätigt die Behandlungslinie")
 	game.run_session.step_fixed(1.0 / 60.0)
 	_check(game.ability_controller.queued_command_count() == 0, "Der feste Physiktakt verarbeitet die Ability-Commandqueue")
 	_check(game.ability_feedback_world.active_count() >= 2, "Beide Fähigkeiten erzeugen unterscheidbares zentrales Feedback")
-	_check(game.ability_controller.shield > 0.0 and game.hud.shield_panel.visible, "Notfallhilfe zeigt ihren wirksamen Schutz im Run-HUD")
+	_check(is_zero_approx(game.ability_controller.shield) and not game.hud.shield_panel.visible, "Der neue Standardplan erzeugt keinen versteckten Schutz")
 	var q_runtime: AbilityRuntime = game.ability_controller.runtime(0)
 	var e_runtime: AbilityRuntime = game.ability_controller.runtime(1)
 	_check(q_runtime.cooldown_remaining > 0.0, "Q aktiviert die erste Fähigkeit und startet ihren Cooldown")
@@ -265,15 +291,15 @@ func _test_pause_abort_and_intro_regression(game: Node) -> void:
 	await process_frame
 	_check(game.flow_state == GameFlowState.State.LEVEL_SELECT, "Auch das Intro lässt sich weiterhin sauber abbrechen")
 
-func _test_save_v5_roundtrip(game: Node) -> void:
-	var save_path := "user://alveolus_tactical_flow_v5_test.json"
+func _test_save_v6_roundtrip(game: Node) -> void:
+	var save_path := "user://alveolus_tactical_flow_v6_test.json"
 	var repository := MetaSaveRepository.new(save_path)
 	_check(repository.save(game.meta), "Der integrierte Fortschritt lässt sich lokal speichern")
 	var restored := MetaProgressionState.new(func() -> int: return 710000)
-	_check(repository.load_into(restored), "Der lokale Save-v5-Roundtrip lässt sich laden")
-	_check(int(restored.to_dict().get("version", 0)) == 5, "Der integrierte Spielstand verwendet Version 5")
-	_check(restored.has_completed_mastery(&"fall_1_first_victory"), "Save-v5 bewahrt Ergebnis-Meisterschaft")
-	_check(restored.get_prepared_loadout(&"localized_focus").reserve_id == &"", "Save-v5 bewahrt den für neue Runs reservefreien Behandlungsplan")
+	_check(repository.load_into(restored), "Der lokale Save-v6-Roundtrip lässt sich laden")
+	_check(int(restored.to_dict().get("version", 0)) == 6, "Der integrierte Spielstand verwendet Version 6")
+	_check(restored.has_completed_mastery(&"fall_1_first_victory"), "Save v6 bewahrt Ergebnis-Meisterschaft")
+	_check(restored.get_prepared_loadout(&"localized_focus").reserve_id == &"", "Save v6 bewahrt den für neue Runs reservefreien Behandlungsplan")
 	var absolute_path := ProjectSettings.globalize_path(save_path)
 	if FileAccess.file_exists(save_path):
 		DirAccess.remove_absolute(absolute_path)

@@ -83,6 +83,16 @@ func circle(center: Vector2, radius: float, max_results: int = -1) -> PackedInt6
 
 func line(origin: Vector2, heading: Vector2, length: float, half_width: float, max_hits: int = -1) -> PackedInt64Array:
 	var result := PackedInt64Array()
+	for item in line_hits(origin, heading, length, half_width, max_hits):
+		result.append(int(item.handle))
+	return result
+
+## Ordered torus-aware line contacts. Besides the stable entity handle, every
+## record exposes center-forward, body-surface entry and exit distances. This
+## lets a renderer end a ray at exactly the same resolved collision used by
+## gameplay, without a second spatial query.
+func line_hits(origin: Vector2, heading: Vector2, length: float, half_width: float, max_hits: int = -1) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
 	if not _configured() or length < 0.0 or half_width < 0.0 or max_hits == 0:
 		return result
 	_prepare()
@@ -94,8 +104,6 @@ func line(origin: Vector2, heading: Vector2, length: float, half_width: float, m
 		absf(direction.y) * length * 0.5 + absf(perpendicular.y) * half_width + maximum_body_radius
 	)
 	var candidates := grid.query_aabb_candidates(Rect2(center - half_extent, half_extent * 2.0))
-	var forwards: Array[float] = []
-	var bounded_ordered := max_hits > 0 and max_hits < 128
 	for handle in candidates:
 		if not _targetable(handle):
 			continue
@@ -103,21 +111,28 @@ func line(origin: Vector2, heading: Vector2, length: float, half_width: float, m
 		var forward := delta.dot(direction)
 		if forward < 0.0 or forward > length:
 			continue
-		if absf(delta.cross(direction)) > half_width + _radius(handle):
+		var lateral := absf(delta.cross(direction))
+		var body_radius := _radius(handle)
+		var combined_radius := half_width + body_radius
+		if lateral > combined_radius:
 			continue
-		if not bounded_ordered:
-			result.append(handle)
-			continue
-		var insertion_index := 0
-		while insertion_index < forwards.size() and forwards[insertion_index] <= forward:
-			insertion_index += 1
-		if insertion_index >= max_hits:
-			continue
-		result.insert(insertion_index, handle)
-		forwards.insert(insertion_index, forward)
-		if result.size() > max_hits:
-			result.resize(max_hits)
-			forwards.resize(max_hits)
+		var half_chord := sqrt(maxf(combined_radius * combined_radius - lateral * lateral, 0.0))
+		result.append({
+			"handle": int(handle),
+			"forward": forward,
+			"entry_distance": clampf(forward - half_chord, 0.0, length),
+			"exit_distance": clampf(forward + half_chord, 0.0, length),
+			"body_radius": body_radius,
+		})
+	result.sort_custom(func(left: Dictionary, right: Dictionary) -> bool:
+		var left_entry := float(left.entry_distance)
+		var right_entry := float(right.entry_distance)
+		if not is_equal_approx(left_entry, right_entry):
+			return left_entry < right_entry
+		return int(left.handle) < int(right.handle)
+	)
+	if max_hits > 0 and result.size() > max_hits:
+		result.resize(max_hits)
 	return result
 
 func resolve(handle: int) -> Variant:

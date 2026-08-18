@@ -213,7 +213,7 @@ func _build_components_view() -> Control:
 	information_row.add_child(tooltip_panel)
 	var detail_parts := AlveolusUIComponents.detail_card(
 		"Notfallhilfe",
-		"Stellt Zustand wieder her und erzeugt einen Schutzpuffer.",
+		"Stellt Leben wieder her und erzeugt einen Schildpuffer.",
 		"I · Information",
 		AlveolusVisualTheme.COBALT
 	)
@@ -233,7 +233,7 @@ func _build_components_view() -> Control:
 	var regular_card := AlveolusUIComponents.selection_card("Fokusfeld", "Verstärkt die Behandlung im Zielbereich.", "2 Kapazität")
 	regular_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card_row.add_child(regular_card)
-	var selected_card := AlveolusUIComponents.selection_card("Notfallhilfe", "Stellt sofort Zustand wieder her.", "Aktiv 2", true)
+	var selected_card := AlveolusUIComponents.selection_card("Notfallhilfe", "Stellt sofort Leben wieder her.", "Aktiv 2", true)
 	selected_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card_row.add_child(selected_card)
 	card_group.add_child(card_row)
@@ -243,7 +243,7 @@ func _build_components_view() -> Control:
 	stat_group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stat_group.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	stat_group.add_child(AlveolusUIComponents.section_header("Lesbarkeit", "Werte und Fortschritt", "", true))
-	stat_group.add_child(AlveolusUIComponents.stat_row("Wirkung", "18 > 26", true))
+	stat_group.add_child(AlveolusUIComponents.stat_row("Schaden", "18 > 26", true))
 	stat_group.add_child(AlveolusUIComponents.stat_row("Behandlungstempo", "0,82 s"))
 	var progress := AlveolusUIComponents.progress(64.0)
 	progress.custom_minimum_size.y = 14.0
@@ -294,7 +294,7 @@ func _build_preparation_view() -> Control:
 	var catalog_content := catalog.get_meta("content") as VBoxContainer
 	for data in [
 		["Behandlungslinie", "Trifft alle Bakterien in einer Linie.", "Aktiv · 2"],
-		["Schutzfeld", "Verlangsamt Gegner im Bereich.", "Aktiv · 2"],
+		["Schildfeld", "Verlangsamt Gegner im Bereich.", "Aktiv · 2"],
 		["Schnelltest", "Proben füllen den Befund schneller.", "Passiv · 1"],
 	]:
 		catalog_content.add_child(AlveolusUIComponents.selection_card(data[0], data[1], data[2]))
@@ -345,7 +345,7 @@ func _build_lexicon_view() -> Control:
 	stats.columns = 2
 	stats.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	stats.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
-	for data in [["Zustand", "18"], ["Tempo", "72"], ["Kontaktschaden", "5"], ["Proben", "1"]]:
+	for data in [["Leben", "18"], ["Tempo", "72"], ["Schaden", "5"], ["Proben", "1"]]:
 		var row := AlveolusUIComponents.stat_row(data[0], data[1])
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stats.add_child(row)

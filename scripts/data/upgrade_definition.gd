@@ -17,6 +17,7 @@ enum Path {
 @export var visual_id: StringName
 @export var medical_name: String
 @export var required_component_ids: Array[StringName] = []
+@export var required_upgrade_ids: Array[StringName] = []
 @export var synergy_tags: Array[StringName] = []
 @export var modifiers: Array[Dictionary] = []
 @export var preview_stat: StringName
@@ -55,6 +56,10 @@ func configure_pool(requirements: Array[StringName] = [], tags: Array[StringName
 	synergy_tags = tags.duplicate()
 	return self
 
+func require_upgrades(ids: Array[StringName]) -> UpgradeDefinition:
+	required_upgrade_ids = ids.duplicate()
+	return self
+
 func configure_modifiers(values: Array[Dictionary]) -> UpgradeDefinition:
 	modifiers = values.duplicate(true)
 	return self
@@ -89,7 +94,7 @@ func path_name() -> String:
 		Path.IMMUNE:
 			return "ABWEHR"
 		Path.SUPPORT:
-			return "ATEMHILFE"
+			return "REGENERATION"
 	return "BEHANDLUNG"
 
 func medical_path_name() -> String:

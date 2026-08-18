@@ -42,9 +42,9 @@ static func category_name(category: StringName) -> String:
 static func _append_enemy_entries(result: Array[LexiconEntryDefinition]) -> void:
 	var enemies := ContentCatalog.enemy_definitions()
 	var roles := {
-		&"pneumococcus": ["Schneller Einzelerreger", "Bewegt sich direkt auf Doctor Milos zu und verursacht bei Kontakt eine kleine Belastung."],
+		&"pneumococcus": ["Schneller Einzelerreger", "Bewegt sich direkt auf Doctor Milos zu und verursacht Schaden, wenn er ihn erreicht."],
 		&"bacterial_cluster": ["Widerstandsfähige Gruppe", "Bewegt sich langsamer, hält mehr aus und hinterlässt mehrere Proben."],
-		&"minor_focus": ["Stationäres Nebenziel", "Setzt nach einiger Zeit weitere Bakterien frei, wenn es nicht rechtzeitig kontrolliert wird."],
+		&"minor_focus": ["Langsames Nebenziel", "Bewegt sich langsam und setzt nach einiger Zeit weitere Bakterien frei, wenn es nicht rechtzeitig kontrolliert wird."],
 		&"infection_focus": ["Bossgegner", "Seine Phasen erhöhen den Druck im Fall. Die tatsächlichen Werte werden je Fall skaliert."],
 	}
 	for id in [&"pneumococcus", &"bacterial_cluster", &"minor_focus", &"infection_focus"]:
@@ -63,7 +63,7 @@ static func _append_enemy_entries(result: Array[LexiconEntryDefinition]) -> void
 			enemy.id,
 			enemy.discovery_id,
 			false,
-			[&"contact_damage", &"analysis"]
+			[&"enemy_damage", &"resistance", &"analysis"]
 		))
 
 static func _append_character_entries(result: Array[LexiconEntryDefinition]) -> void:
@@ -71,26 +71,26 @@ static func _append_character_entries(result: Array[LexiconEntryDefinition]) -> 
 		&"character_stats",
 		LexiconEntryDefinition.CATEGORY_CHARACTER,
 		"Doctor Milos",
-		"Therapieavatar",
-		"Koordiniert die Behandlung im Lungenmodell.",
-		"Doctor Milos besitzt keine eigene Lebensleiste. Der Zustand gehört zum Patienten. Die hier gezeigten Werte sind die Basis vor Forschung und Ausbauten im Run.",
+		"",
+		"Der beste Doctor mit Bandana.",
+		"Doctor Milos besitzt eigenes Leben, Verteidigung, Lebensregeneration und Resistenzen. Die hier gezeigten Werte sind seine aktuelle Datenbasis vor Ausbauten im Run.",
 		"Die Spielfigur stellt die koordinierende Rolle des Behandlungsteams vereinfacht dar.",
 		&"character_stats",
 		LexiconEntryDefinition.SOURCE_PLAYER,
 		&"player_stats",
 		&"character_stats",
 		true,
-		[&"patient_stability", &"basic_treatment", &"active_ability"]
+		[&"patient_stability", &"defense", &"life_regeneration", &"resistance", &"basic_treatment", &"active_ability"]
 	))
 
 static func _append_gameplay_entries(result: Array[LexiconEntryDefinition]) -> void:
 	var discoveries := ContentCatalog.discovery_definitions()
 	var copy := {
 		&"analysis_pickup": ["Erfahrung im laufenden Fall", "Gesammelte Proben füllen die Leiste für das nächste Level."],
-		&"patient_stability": ["Gemeinsamer Zustand des Patienten", "Gegnerkontakt senkt den Zustand. Bei null endet der Fall."],
+		&"patient_stability": ["Leben von Doctor Milos", "Gegnerschaden senkt das Leben. Bei null endet der Fall."],
 		&"automatic_therapy": ["Automatische Grundbehandlung", "Wählt gültige Ziele selbstständig aus. Bewegung, aktive Fähigkeiten und Ausbau bleiben deine Entscheidungen."],
-		&"neutrophil_orbit": ["Abwehr im Nahbereich", "Abwehrzellen umkreisen Doctor Milos und wirken regelmäßig auf Gegner in ihrer Nähe."],
-		&"supportive_oxygenation": ["Regelmäßige Stabilisierung", "Atemhilfe stellt Zustand wieder her, verursacht aber keinen direkten Gegnerschaden."],
+		&"neutrophil_orbit": ["Abwehr im Nahbereich", "Abwehrzellen umkreisen Doctor Milos und verursachen nur bei einer tatsächlichen Kollision Schaden."],
+		&"supportive_oxygenation": ["Automatische Heilung", "Regeneration stellt jede Sekunde Leben wieder her. Forschung erhöht die geheilte Menge pro Sekunde."],
 		&"boss_phases": ["Belastungsschübe des Bosses", "Phasengrenzen verändern den Kampf und können zusätzliche Bakterien freisetzen."],
 		&"research_reward": ["Dauerhafter Fortschritt", "Forschung wird zwischen den Fällen für Freischaltungen und Verbesserungen ausgegeben."],
 	}
@@ -101,15 +101,15 @@ static func _append_gameplay_entries(result: Array[LexiconEntryDefinition]) -> v
 			discovery.id,
 			LexiconEntryDefinition.CATEGORY_GAMEPLAY,
 			discovery.title,
-			discovery.medical_name,
+			"Lebensregeneration" if discovery.id == &"supportive_oxygenation" else discovery.medical_name,
 			String(text[0]),
 			String(text[1]),
-			discovery.medical_text,
+			"Regeneration ist im Spiel eine abstrahierte, dauerhafte Erholung von Doctor Milos." if discovery.id == &"supportive_oxygenation" else discovery.medical_text,
 			_illustration_id(discovery.id),
 			LexiconEntryDefinition.SOURCE_DISCOVERY,
 			discovery.id,
 			discovery.id,
-			ContentCatalog.is_discovery_unlocked_by_default(discovery.id),
+			discovery.id == &"supportive_oxygenation" or ContentCatalog.is_discovery_unlocked_by_default(discovery.id),
 			_gameplay_related_ids(discovery.id)
 		))
 
@@ -145,13 +145,13 @@ static func _gameplay_related_ids(id: StringName) -> Array[StringName]:
 		&"analysis_pickup":
 			return [&"analysis", &"level", &"finding"]
 		&"patient_stability":
-			return [&"patient_stability", &"contact_damage", &"support_path"]
+			return [&"patient_stability", &"enemy_damage", &"defense", &"life_regeneration"]
 		&"automatic_therapy":
 			return [&"basic_treatment", &"effect", &"interval"]
 		&"neutrophil_orbit":
 			return [&"immune_path", &"effect", &"range"]
 		&"supportive_oxygenation":
-			return [&"support_path", &"patient_stability", &"interval"]
+			return [&"life_regeneration", &"patient_stability", &"research"]
 		&"boss_phases":
 			return [&"boss_phase", &"case_trait"]
 		&"research_reward":

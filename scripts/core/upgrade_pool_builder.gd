@@ -21,6 +21,8 @@ static func choose(
 			continue
 		if excluded_ids.has(definition.id):
 			continue
+		if not _upgrade_requirements_met(definition, levels):
+			continue
 		if not _requirements_met(definition, prepared_component_ids):
 			continue
 		candidates.append(definition)
@@ -29,8 +31,15 @@ static func choose(
 
 	var selected: Array[UpgradeDefinition] = []
 	if guarantee_treatment:
+		var prepared_treatment_id := &""
+		for component_id in prepared_component_ids:
+			if String(component_id).begins_with("treatment_"):
+				prepared_treatment_id = component_id
+				break
 		var treatment_candidates := candidates.filter(func(item: UpgradeDefinition) -> bool:
-			return item.path == UpgradeDefinition.Path.ANTIBIOTIC and _matches_prepared(item, prepared_component_ids)
+			return prepared_treatment_id != &"" \
+				and item.path == UpgradeDefinition.Path.ANTIBIOTIC \
+				and item.required_component_ids.has(prepared_treatment_id)
 		)
 		if not treatment_candidates.is_empty():
 			var guaranteed := _weighted_pick(treatment_candidates, rng, prepared_component_ids, prepared_tags)
@@ -74,6 +83,12 @@ static func _requirements_met(definition: UpgradeDefinition, prepared_component_
 		if prepared_component_ids.has(required_id):
 			return true
 	return false
+
+static func _upgrade_requirements_met(definition: UpgradeDefinition, levels: Dictionary) -> bool:
+	for required_id in definition.required_upgrade_ids:
+		if int(levels.get(required_id, 0)) <= 0:
+			return false
+	return true
 
 static func _matches_prepared(definition: UpgradeDefinition, prepared_component_ids: Array[StringName]) -> bool:
 	for component_id in definition.required_component_ids:

@@ -13,6 +13,14 @@ const TREATMENT_TARGETS := &"therapy_targets"
 const TREATMENT_PROJECTILES := &"therapy_projectiles"
 const TREATMENT_MAX_HITS := &"treatment_max_hits"
 const TREATMENT_SPREAD := &"treatment_spread"
+const TREATMENT_BEAM_DURATION := &"treatment_beam_duration"
+const TREATMENT_BEAM_TICK := &"treatment_beam_tick"
+const TREATMENT_BEAM_RETURN := &"treatment_beam_return"
+const TREATMENT_MANUAL_AIM := &"treatment_manual_aim"
+const DEFENSE_CELL_DAMAGE := &"defense_cell_damage"
+const DEFENSE_CELL_RADIUS := &"defense_cell_radius"
+const DEFENSE_CELL_PROJECTILES := &"defense_cell_projectiles"
+const DEFENSE_CELL_HIT_INTERVAL := &"defense_cell_hit_interval"
 const ACTIVE_COOLDOWN := &"ability_cooldown"
 const ABILITY_DAMAGE := &"ability_damage"
 const ABILITY_RADIUS := &"ability_radius"
@@ -47,6 +55,14 @@ static func from_treatment(definition: TreatmentDefinition) -> RunBuildState:
 		TREATMENT_PROJECTILES: definition.base_projectiles,
 		TREATMENT_MAX_HITS: definition.max_hits,
 		TREATMENT_SPREAD: definition.spread_degrees,
+		TREATMENT_BEAM_DURATION: 0.0,
+		TREATMENT_BEAM_TICK: 0.25,
+		TREATMENT_BEAM_RETURN: 0.0,
+		TREATMENT_MANUAL_AIM: 0.0,
+		DEFENSE_CELL_DAMAGE: 10.0,
+		DEFENSE_CELL_RADIUS: 15.0,
+		DEFENSE_CELL_PROJECTILES: 2.0,
+		DEFENSE_CELL_HIT_INTERVAL: 0.1,
 		ACTIVE_COOLDOWN: 1.0,
 		FINDING_PROGRESS: 1.0,
 		SUPPORT_EFFECT: 1.0,

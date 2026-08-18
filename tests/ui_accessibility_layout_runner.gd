@@ -22,12 +22,12 @@ func _run() -> void:
 	var discoveries := ContentCatalog.discovery_definitions()
 	var upgrades := ContentCatalog.upgrade_definitions()
 	var finding_reactions: Array = [reactions[&"group_area"], reactions[&"group_control"], reactions[&"group_safety"]]
-	var swappable_passives: Array = [loadout_modules[&"defense_readiness"], loadout_modules[&"quick_test"]]
+	var swappable_passives: Array = []
 	var prepared := PreparedLoadout.default_loadout()
 	var prep_view := {
 		"level_title": "Die Ausbreitung",
 		"level_description": "Eine zunehmende Belastung erfordert einen klaren Plan.",
-		"duration_text": "4:00 Min.",
+		"duration_text": "Ohne Zeitlimit",
 		"boss_time_text": "3:00 Min.",
 		"trait": ContentCatalog.case_trait_definitions()[&"high_load"],
 		"validation": LoadoutValidator.validate(prepared, loadout_modules, {}, 8),
@@ -105,7 +105,7 @@ func _run() -> void:
 			{"id": "preparation_intro_locked", "overlay": hud.preparation_overlay, "show": show_intro_preparation},
 			{"id": "lexicon", "overlay": hud.lexicon_overlay, "show": func() -> void: hud.show_lexicon(meta)},
 			{"id": "settings", "overlay": hud.settings_overlay, "show": func() -> void: hud.show_settings(false, true)},
-			{"id": "finding", "overlay": hud.finding_overlay, "show": func() -> void: hud.show_finding(findings[&"grouping"], finding_reactions, loadout_modules[&"reserve_buffer"], swappable_passives)},
+			{"id": "finding", "overlay": hud.finding_overlay, "show": func() -> void: hud.show_finding(findings[&"grouping"], finding_reactions, null, swappable_passives)},
 			{"id": "discovery", "overlay": hud.discovery_tooltip, "show": show_discovery_screen},
 			{"id": "run", "overlay": hud.gameplay_hud, "show": show_run_screen},
 			{"id": "upgrade", "overlay": hud.upgrade_overlay, "show": show_upgrade_screen},

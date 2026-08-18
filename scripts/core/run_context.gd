@@ -26,7 +26,10 @@ static func create(
 	return context
 
 func has_talent(id: StringName) -> bool:
-	return bool(talent_snapshot.get(id, false))
+	return talent_rank(id) > 0
+
+func talent_rank(id: StringName) -> int:
+	return maxi(0, int(talent_snapshot.get(id, talent_snapshot.get(String(id), 0))))
 
 func duplicate_context() -> RunContext:
 	return create(level_id, seed, loadout_snapshot, talent_snapshot, visible_trait_id, hidden_finding_id)

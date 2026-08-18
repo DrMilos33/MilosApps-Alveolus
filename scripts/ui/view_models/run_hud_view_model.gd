@@ -45,6 +45,29 @@ class StatValueViewModel:
 		return _priority
 
 
+class AbilityFactRowViewModel:
+	extends RefCounted
+
+	var _label: String
+	var _value: String
+
+	func _init(label_value: String, value_value: String) -> void:
+		_label = label_value.strip_edges()
+		_value = value_value.strip_edges()
+
+	func label() -> String:
+		return _label
+
+	func value() -> String:
+		return _value
+
+	func formatted_text() -> String:
+		return "%s: %s" % [_label, _value]
+
+	func duplicate_immutable() -> AbilityFactRowViewModel:
+		return AbilityFactRowViewModel.new(_label, _value)
+
+
 class AbilitySlotViewModel:
 	extends RefCounted
 
@@ -58,6 +81,7 @@ class AbilitySlotViewModel:
 	var _cooldown_total: float
 	var _targeting: bool
 	var _key_glyph_text: String
+	var _fact_rows: Array[AbilityFactRowViewModel]
 
 	func _init(
 		slot_value: int,
@@ -69,7 +93,8 @@ class AbilitySlotViewModel:
 		remaining_value: float,
 		total_value: float,
 		targeting_value: bool,
-		glyph_value: String
+		glyph_value: String,
+		fact_rows_value: Array = []
 	) -> void:
 		_slot = slot_value
 		_title = title_value
@@ -81,6 +106,9 @@ class AbilitySlotViewModel:
 		_cooldown_total = maxf(0.0, total_value)
 		_targeting = targeting_value and occupied_value
 		_key_glyph_text = glyph_value
+		_fact_rows = _copy_fact_rows(fact_rows_value)
+		if not occupied_value:
+			_fact_rows.clear()
 
 	func slot() -> int:
 		return _slot
@@ -112,6 +140,20 @@ class AbilitySlotViewModel:
 	func key_glyph_text() -> String:
 		return _key_glyph_text
 
+	func fact_rows() -> Array[AbilityFactRowViewModel]:
+		var result: Array[AbilityFactRowViewModel] = []
+		for row in _fact_rows:
+			result.append(row.duplicate_immutable())
+		return result
+
+	func facts_text() -> String:
+		if _fact_rows.is_empty():
+			return _effect_text
+		var lines := PackedStringArray()
+		for row in _fact_rows:
+			lines.append(row.formatted_text())
+		return "\n".join(lines)
+
 	func cooldown_progress() -> float:
 		if not _occupied:
 			return 0.0
@@ -127,6 +169,24 @@ class AbilitySlotViewModel:
 		if _ready:
 			return "Bereit"
 		return "%.1f s" % _cooldown_remaining
+
+	static func _copy_fact_rows(source: Array) -> Array[AbilityFactRowViewModel]:
+		var result: Array[AbilityFactRowViewModel] = []
+		for row_value in source:
+			var label_value := ""
+			var value_value := ""
+			if row_value is AbilityFactRowViewModel:
+				var fact_row := row_value as AbilityFactRowViewModel
+				label_value = fact_row.label()
+				value_value = fact_row.value()
+			elif row_value is Dictionary:
+				var fact_data := row_value as Dictionary
+				label_value = String(fact_data.get("label", fact_data.get("name", ""))).strip_edges()
+				value_value = String(fact_data.get("value", "")).strip_edges()
+			if label_value.is_empty() or value_value.is_empty():
+				continue
+			result.append(AbilityFactRowViewModel.new(label_value, value_value))
+		return result
 
 
 var _stability_current := 0.0
@@ -154,7 +214,8 @@ var _content_hash := ""
 ## boss_visible/title/current/maximum/phase, analysis_current/target/level.
 ## Stat rows accept id, icon_id, value, accessible_name and priority.
 ## Ability rows accept slot (0/1), title, icon_id, occupied, ready,
-## effect_text, cooldown_remaining/total, targeting and key_glyph_text.
+## effect_text, fact_rows ({label, value}), cooldown_remaining/total, targeting
+## and key_glyph_text.
 static func create(
 	vital_snapshot: Dictionary,
 	stat_rows: Array,
@@ -391,6 +452,10 @@ func _copy_abilities(source_rows: Array) -> void:
 		var glyph_value := String(row.get("key_glyph_text", glyph_default)).strip_edges()
 		if glyph_value.is_empty():
 			glyph_value = glyph_default
+		var fact_rows_value: Array = []
+		var raw_fact_rows: Variant = row.get("fact_rows", [])
+		if raw_fact_rows is Array:
+			fact_rows_value = raw_fact_rows as Array
 		_abilities.append(AbilitySlotViewModel.new(
 			slot_value,
 			title_value,
@@ -401,7 +466,8 @@ func _copy_abilities(source_rows: Array) -> void:
 			float(row.get("cooldown_remaining", 0.0)),
 			float(row.get("cooldown_total", 0.0)),
 			bool(row.get("targeting", false)),
-			glyph_value
+			glyph_value,
+			fact_rows_value
 		))
 
 
@@ -439,6 +505,9 @@ func _calculate_content_hash() -> String:
 		canonical.append(_float_key(ability.cooldown_total()))
 		canonical.append("1" if ability.targeting() else "0")
 		canonical.append(_length_prefixed(ability.key_glyph_text()))
+		for fact in ability.fact_rows():
+			canonical.append(_length_prefixed(fact.label()))
+			canonical.append(_length_prefixed(fact.value()))
 	return "|".join(canonical).sha256_text()
 
 

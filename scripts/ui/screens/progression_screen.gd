@@ -10,6 +10,7 @@ extends Control
 
 signal tab_changed(tab: StringName)
 signal research_purchase(id: StringName)
+signal research_reset
 signal talent_toggle(id: StringName)
 signal talent_reset
 signal back
@@ -18,18 +19,10 @@ const ProgressionScreenViewModelType := preload("res://scripts/ui/view_models/pr
 const TalentTreeBranchType := preload("res://scripts/ui/talent_tree_branch.gd")
 const ROUTE_ID := &"research"
 const TALENT_SYMBOLS_BY_ID := {
-	&"organization_1": &"plan",
-	&"organization_2": &"components",
-	&"hold_card": &"reserve",
-	&"guided_choice": &"target",
-	&"early_classification": &"preanalysis",
-	&"rapid_evaluation": &"quick_test",
-	&"broader_perspective": &"second_opinion",
-	&"immediate_measure": &"reaction",
-	&"alternating_rhythm": &"clock",
-	&"linked_deployment": &"deployment_routine",
-	&"finding_readiness": &"finding_progress",
-	&"emergency_window": &"ability_emergency_support",
+	&"manual_treatment_aim": &"target",
+	&"spread_penetration": &"treatment_spread",
+	&"piercing_persistence": &"treatment_pierce",
+	&"piercing_return": &"return",
 }
 const TALENT_SYMBOL_FALLBACKS: Array[StringName] = [
 	&"plan", &"components", &"reserve", &"target",
@@ -49,6 +42,8 @@ var _balance_label: Label
 var _research_scroll: ScrollContainer
 var _research_stack: VBoxContainer
 var _research_inline_balance: Label
+var _research_reset_row: HBoxContainer
+var _research_reset_button: Button
 var _research_grid: GridContainer
 var _talent_scroll: ScrollContainer
 var _talent_stack: VBoxContainer
@@ -173,6 +168,9 @@ func talent_tab_action() -> Button:
 
 func talent_reset_action() -> Button:
 	return _talent_reset_button
+
+func research_reset_action() -> Button:
+	return _research_reset_button
 
 
 func research_action(id: StringName) -> Button:
@@ -308,6 +306,23 @@ func _build_research_view(parent: VBoxContainer) -> void:
 	_research_inline_balance.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_research_inline_balance.hide()
 	_research_stack.add_child(_research_inline_balance)
+	_research_reset_row = HBoxContainer.new()
+	_research_reset_row.name = "ResearchResetRow"
+	_research_reset_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	_research_stack.add_child(_research_reset_row)
+	var reset_spacer := Control.new()
+	reset_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reset_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_research_reset_row.add_child(reset_spacer)
+	_research_reset_button = AlveolusUIComponents.action_button(
+		"Forschung zurücksetzen",
+		AlveolusUIComponents.ACTION_SECONDARY,
+		&"restart",
+		AlveolusVisualTheme.COBALT
+	)
+	_research_reset_button.name = "ResearchResetAction"
+	_research_reset_button.pressed.connect(func() -> void: research_reset.emit())
+	_research_reset_row.add_child(_research_reset_button)
 	_research_grid = GridContainer.new()
 	_research_grid.name = "ResearchGrid"
 	_research_grid.columns = 3

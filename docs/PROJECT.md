@@ -1,6 +1,6 @@
 # ALVEOLUS – Projektstand
 
-Letzte inhaltliche Aktualisierung: 17. August 2026
+Letzte inhaltliche Aktualisierung: 18. August 2026
 
 Dieses Dokument ist die einzige veränderliche Quelle für Produktstatus,
 Prioritäten, bekannte Grenzen und dauerhafte Entscheidungen. Technische
@@ -20,7 +20,8 @@ entsteht durch:
 - einen begrenzten Behandlungsplan vor jedem Fall;
 - zwei bewusst eingesetzte aktive Fähigkeiten;
 - Fallmerkmale, Befunde und Reaktionen während des Runs;
-- Forschung als Freischaltung neuer Optionen statt endloser Stärke;
+- sieben globale Forschungen für intrinsische Werte und
+  Behandlungsfreischaltungen;
 - zufällige Run-Ausbaustufen, die mit dem vorbereiteten Plan interagieren.
 
 ## Aktuell spielbarer Stand
@@ -28,12 +29,23 @@ entsteht durch:
 - Vollständiger lokaler Ablauf:
   `Prolog → Campus → Fallarchiv → Einsatzplanung → Run → Ergebnis`.
 - Vier wiederholbare Fälle einschließlich ereignisgesteuertem Intro und Bossen.
-- Einsatzplan mit einer Grundbehandlung, zwei aktiven Fähigkeiten und zwei
-  Passivmodulen. Die technisch weiterhin kompatible Reserve ruht vorerst.
-- Drei Behandlungen, sechs aktive Fähigkeiten, neun Passivmodule, zwölf
-  Talente und katalogisierte Run-Ausbaustufen.
+- Einsatzplan mit einer Grundbehandlung und bis zu zwei aktiven Fähigkeiten.
+  Präziser Impuls ist sofort verfügbar; Streuimpuls und Durchdringender Impuls
+  werden durch Forschung freigeschaltet. Abwehrstoß und Behandlungslinie sind
+  auswählbar, vier weitere aktive Fähigkeiten bleiben sichtbar gesperrt.
+  Passive Module gehören nicht mehr zum aktiven Produktkatalog; technisch
+  verbliebene Passiv- und Reservefelder dienen ausschließlich der
+  Save-/Schema-Kompatibilität.
+- Der aktuelle Produktkatalog umfasst drei Behandlungen, sechs sichtbare aktive
+  Fähigkeiten, sieben globale Forschungen, vier Rangtalente und 17
+  Run-Ausbaustufen.
 - Praxis mit Offline-Forschung und Klinikfällen, Forschungsbrett, Talente,
-  Meisterschaft, kategorisiertes Lexikon und lokale Savegame-Version 5.
+  Meisterschaft, kategorisiertes Lexikon und lokale Savegame-Version 6.
+- Hauptfälle haben keine Zeitbegrenzung; ihr Boss erscheint nach 180 Sekunden.
+  Doctor Milos startet mit 100 Leben.
+- Die sichtbaren Kampfbegriffe lauten Leben, Schaden, Regeneration, Schild und
+  Verteidigung. Feuer, Wasser, Erde, Wind, Blut, Holy und Undead sind die sieben
+  festen Schadenstypen.
 - Maus, Tastatur und Gamepad, UI-Sounds, Audioeinstellungen, UI-Skalierung von
   75 bis 200 Prozent,
   reduzierte Bewegung und anpassbare Eingaben.
@@ -49,8 +61,9 @@ konkretes Feedback zu Bedienung, Verständlichkeit, Fähigkeiten und Spielfluss
 sammeln. Bestätigte Fehler werden zuerst reproduziert und gezielt behoben.
 
 Für diesen Systemtest sind Forschung und Talentpunkte absichtlich unbegrenzt.
-Balancingentscheidungen werden erst getroffen, nachdem alle Grundsysteme
-verständlich und zuverlässig funktionieren.
+Der Testpool beträgt jeweils 1.000.000.000 Punkte und beide Bereiche lassen
+sich zurücksetzen. Balancingentscheidungen werden erst getroffen, nachdem alle
+Grundsysteme verständlich und zuverlässig funktionieren.
 
 Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 älterer Vergleichsstand und wird nur nach ausdrücklicher Freigabe aktualisiert.
@@ -129,6 +142,13 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-037 | Plankapazität wird als hervorgehobener Gesamtwert benannt; einzelne Plan- und Kandidatenkosten zeigen ausschließlich die Zahl ohne das Kürzel `K`. |
 | D-038 | Spielernahe Aktivfähigkeitstexte nennen knapp und direkt die mechanische Wirkung; der verständliche Begriff lautet `Kontaktschaden` statt `Kontaktdruck`. Die behandelnde Figur heißt durchgängig „Doctor Milos“, und das Laufzeitmenü trägt den zentrierten Titel „Pause“ ohne dekoratives Titelsymbol. |
 | D-039 | Ein Befund zeigt genau drei Reaktionen und nur eine kompakte mechanische Effektzeile. Medizinischer Hintergrund bleibt im Lexikon; `Weitere Perspektive` ersetzt die letzte Basisreaktion durch `Flexible Anpassung`, statt eine vierte Karte anzuhängen. |
+| D-040 | Für den aktuellen Balance-Meilenstein ist Auswahlverfügbarkeit von Forschungseigentum getrennt. Auswählbar sind alle drei Behandlungen sowie Abwehrstoß und Behandlungslinie. Fokusfeld, Notfallhilfe, Schutzfeld, Probenzug und alle Passivmodule behalten IDs, Werte, Forschung und Save-Daten, bleiben in der Einsatzplanung aber sichtbar gesperrt. Neue effektive Pläne verwenden Präziser Impuls, Abwehrstoß und Behandlungslinie ohne Passive; historische Pläne werden erst für Planung oder Run als Kopie bereinigt und nicht beim Laden zerstört. |
+| D-041 | Ersetzt die sichtbare Terminologie aus D-036 und D-038: `Leben`, `Schaden`, `Regeneration`, `Schild` und `Verteidigung` sind die spielernahen Begriffe. Gegner zeigen Schaden mit Schadenstypen statt eines separaten Werts `Kontaktschaden`. Historische interne IDs dürfen für Save-Kompatibilität bestehen bleiben, dürfen aber keine alte sichtbare Sprache erzwingen. |
+| D-042 | Ersetzt D-005, die Fünf-Platz-Angaben aus D-017 und D-019, die Kapazitätsbedeutung aus D-037 sowie D-040 für den aktuellen Progressionsumfang; deren übrige Interaktionsregeln bleiben anwendbar. Sieben globale Forschungen wirken intrinsisch und ohne Passivmodule; fünf verbessern Leben, Behandlungsschaden, Probengewinn, Verteidigung oder Regeneration, zwei schalten Streuimpuls und Durchdringenden Impuls frei. Der aktive Plan umfasst eine Behandlung und bis zu zwei aktive Fähigkeiten. Passivmodule sind nicht sichtbar oder auswählbar; verbliebene Passiv- und Reservefelder sind reine Schema-Kompatibilität. |
+| D-043 | Ersetzt D-021, D-023, D-024 und D-034 inhaltlich: Es gibt zunächst genau einen Behandlungs-Talentbaum mit vier Rangtalenten für Mausziel, zusätzliche Streuimpuls-Durchdringung, längere tickende Laserwirkung und den zurückkehrenden Laser. Die Baumrevision verwirft beziehungsweise erstattet frühere Talentbelegungen, ohne Meisterschaft zu verlieren. |
+| D-044 | Ersetzt D-006 und die Versionsangabe aus D-035 hinsichtlich des aktuellen Formats: Savegame-Version 6 und Talentbaum-Revision 3 sind verbindlich. Migrationen bewahren Forschung, Meisterschaft und übrigen Fortschritt; entfernte alte Talentbelegungen werden erstattet. |
+| D-045 | Hauptfälle besitzen keine Ablaufzeit und rufen den Boss nach 180 Sekunden. Doctor Milos hat 100 Basisleben. Beim ersten Abschluss eines Falls ist noch keine Variation aktiv; danach wird die Variation aus dem Fallseed erzeugt, und dieser Seed rotiert ausschließlich nach einem Sieg. `minor_focus` bleibt ein freisetzendes Nebenziel, besitzt aber eine mobile Basisgeschwindigkeit von 12 px/s, bevor Fallmodifikatoren wirken. |
+| D-046 | Feuer, Wasser, Erde, Wind, Blut, Holy und Undead bilden ein festes Set aus sieben Schadenstypen. Angriffe und Gegner besitzen explizite Schadensprofile, Spieler und Gegner explizite Resistenzen; allgemeine Verteidigung reduziert eingehenden Schaden zusätzlich, bevor Schild absorbiert. Abwehrzellen treffen nur über die tatsächliche Geometrie jeder einzelnen Zelle und können je Zelle höchstens einmal pro 0,1 Sekunden Schaden auslösen. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

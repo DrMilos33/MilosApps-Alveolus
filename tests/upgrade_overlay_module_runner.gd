@@ -119,7 +119,12 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 
 	_check(overlay.modal_sheet().theme_type_variation == AlveolusVisualTheme.TYPE_MODAL_SHEET, "Ausbauwahl besitzt die zentrale ModalSheet-Rolle")
 	_check(overlay.modal_sheet().get_meta(&"alveolus_component", &"") == &"modal_sheet", "Ausbauwahl stammt aus der gemeinsamen ModalSheet-Komponente")
-	_check(overlay.modal_sheet().find_child("Title", true, false) == null, "Ausbauwahl reserviert keine sichtbare Überschrift")
+	_check(
+		overlay.modal_sheet().find_children("*", "Label", true, false).any(
+			func(node: Node) -> bool: return (node as Label).text == "Level Up!"
+		),
+		"Ausbauwahl benennt den Levelaufstieg knapp und eindeutig"
+	)
 	_check(overlay.body_scroll().follow_focus, "Responsiver Inhaltsviewport folgt Tastatur- und Gamepadfokus")
 	_check(overlay.body_scroll().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Ausbauwahl scrollt niemals horizontal")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Eine normale einzelne Option benötigt keinen Scrollmodus")
@@ -155,9 +160,9 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var generic_numeric := UpgradeOverlayViewModelScript.create([{
 		"id": &"future_upgrade_without_special_case",
 		"title": "Kräftigere Streuung",
-		"effect": "Stufe 2: +3 Wirkung.",
-		"before": "8 Wirkung",
-		"after": "11 Wirkung",
+		"effect": "Stufe 2: +3 Schaden.",
+		"before": "8 Schaden",
+		"after": "11 Schaden",
 		"icon_id": &"treatment",
 	}], 9)
 	_check(overlay.present(generic_numeric, false), "Beliebige zukünftige Ausbau-ID erhält die semantische Zahlenhierarchie")
@@ -165,11 +170,11 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var generic_card := overlay.cards()[0]
 	var numeric_effect := generic_card.find_child("UpgradeEffect", true, false) as RichTextLabel
 	var numeric_comparison := generic_card.find_child("UpgradeComparison", true, false) as RichTextLabel
-	_check(numeric_effect != null and numeric_effect.get_parsed_text() == "Stufe 2: +3 Wirkung.", "RichText-Ausbauwirkung bewahrt den vollständigen sichtbaren Text")
+	_check(numeric_effect != null and numeric_effect.get_parsed_text() == "Stufe 2: +3 Schaden.", "RichText-Ausbauwert bewahrt den vollständigen sichtbaren Text")
 	_check(numeric_effect != null and numeric_effect.get_meta(&"semantic_highlights", PackedStringArray()) == PackedStringArray(["+3"]), "Generischer Zahlenparser hebt oben nur das vorzeichenbehaftete Delta hervor")
 	_check(numeric_effect != null and numeric_effect.get_theme_font_size("normal_font_size") == AlveolusVisualTheme.TEXT_CAPTION, "Ausbauwirkung verwendet die kompakte zentrale Caption-Größe")
-	_check(numeric_comparison != null and numeric_comparison.get_parsed_text().contains("8 Wirkung") and numeric_comparison.get_parsed_text().contains("11 Wirkung"), "Vorher-nachher-Zeile bleibt vollständig lesbar")
-	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_after", "") == "11 Wirkung", "Nur der vollständige rechte Zielwert wird semantisch als Ergebnis hervorgehoben")
+	_check(numeric_comparison != null and numeric_comparison.get_parsed_text().contains("8 Schaden") and numeric_comparison.get_parsed_text().contains("11 Schaden"), "Vorher-nachher-Zeile bleibt vollständig lesbar")
+	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_after", "") == "11 Schaden", "Nur der vollständige rechte Zielwert wird semantisch als Ergebnis hervorgehoben")
 	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_before_role", &"") == &"body", "Linker Ausgangswert bleibt neutraler Fließtext statt Farbakzent")
 	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_arrow_role", &"") == &"muted_separator", "Vergleichspfeil bleibt ein unauffälliger Trenner")
 	if numeric_comparison != null:
@@ -182,7 +187,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 		_check(not before_color.is_equal_approx(AlveolusVisualTheme.TURQUOISE) and not arrow_color.is_equal_approx(AlveolusVisualTheme.TURQUOISE), "Vorwert und Pfeil konkurrieren nicht mehr mit den beiden gewünschten Highlights")
 
 	var scripted: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
-		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Wirkung."
+		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Änderung."
 	)
 	_check(overlay.present(scripted, false), "Expliziter Einführungssnapshot wird angewendet")
 	await _settle()
@@ -221,7 +226,10 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.cards_grid().columns == 1, "Bei 200 Prozent stapeln sich die Ausbaukarten lesbar")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Nur der überlange kompakte Inhalt aktiviert Scrollen")
 	_check(overlay.body_scroll().get_v_scroll_bar().visible, "Der notwendige Scrollbereich ist sichtbar erkennbar")
-	_check(overlay.modal_sheet().size.x <= host.size.x + 0.5 and overlay.modal_sheet().size.y <= host.size.y + 0.5, "Kompaktes Modal bleibt vollständig im logischen Viewport")
+	_check(
+		overlay.modal_sheet().size.x <= host.size.x + 0.5 and overlay.modal_sheet().size.y <= host.size.y + 0.5,
+		"Kompaktes Modal bleibt vollständig im logischen Viewport (Modal %s, Viewport %s)" % [overlay.modal_sheet().size, host.size]
+	)
 	_check(overlay.reroll_action().is_visible_in_tree(), "Neu würfeln bleibt außerhalb des Scrollinhalts erreichbar")
 	_check(overlay.grab_initial_focus(), "Kompaktes Layout behält einen sichtbaren Fokusstart")
 	await process_frame
@@ -274,7 +282,7 @@ func _single_option_rows() -> Array:
 func _three_option_rows() -> Array:
 	return [
 		{"id": &"faster_impulse", "title": "Schnellere Impulse", "effect": "Behandlung erfolgt häufiger.", "before": "0,82 s", "after": "0,69 s", "icon_id": &"treatment"},
-		{"id": &"stronger_impulse", "title": "Stärkerer Impuls", "effect": "Erhöht die Grundwirkung.", "before": "18", "after": "26", "icon_id": &"ability", "accent_role": &"gold"},
+		{"id": &"stronger_impulse", "title": "Stärkerer Impuls", "effect": "Erhöht den Grundschaden.", "before": "18", "after": "26", "icon_id": &"ability", "accent_role": &"gold"},
 		{"id": &"wider_field", "title": "Breiteres Feld", "effect": "Erreicht mehr Ziele.", "before": "1 Ziel", "after": "3 Ziele", "icon_id": &"target", "accent_role": &"cobalt"},
 	]
 

@@ -233,6 +233,8 @@ func context_detail_registrations() -> Array[Dictionary]:
 			"source": _ability_buttons[slot],
 			"provider": _ability_info_payload.bind(slot),
 			"hover_enabled": true,
+			"anchor": _ability_panel,
+			"placement": ContextDetailController.Placement.ABOVE_CENTER,
 		})
 	return result
 
@@ -297,7 +299,7 @@ func _build_stability() -> void:
 	_stability_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_stability_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	stack.add_child(_stability_bar)
-	_stability_panel.set_meta(&"alveolus_accessible_name", "Zustand")
+	_stability_panel.set_meta(&"alveolus_accessible_name", "Leben")
 
 
 func _build_shield() -> void:
@@ -316,7 +318,7 @@ func _build_shield() -> void:
 	_shield_value = _hud_value("0", 28.0)
 	_shield_value.name = "ShieldValue"
 	row.add_child(_shield_value)
-	_shield_panel.set_meta(&"alveolus_accessible_name", "Schutz")
+	_shield_panel.set_meta(&"alveolus_accessible_name", "Schild")
 
 
 func _build_timer() -> void:
@@ -687,11 +689,13 @@ func _ability_info_payload(slot: int) -> Dictionary:
 	if ability == null or not ability.occupied():
 		return {}
 	return {
-		"title": ability.title(),
-		"body": ability.effect_text(),
-		"meta": "%s · %s" % [ability.key_glyph_text(), ability.status_text()],
-		"icon_kind": ability.icon_id(),
+		"title": "",
+		"body": ability.facts_text(),
+		"meta": "",
+		"icon_kind": &"",
 		"accent": AlveolusVisualTheme.TURQUOISE if ability.ready() else AlveolusVisualTheme.COBALT,
+		"maximum_width": 244.0,
+		"surface_opacity": 0.86,
 	}
 
 

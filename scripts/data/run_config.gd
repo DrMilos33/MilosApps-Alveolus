@@ -23,6 +23,9 @@ extends Resource
 func arena_rect() -> Rect2:
 	return Rect2(-arena_size * 0.5, arena_size)
 
+func has_deadline() -> bool:
+	return final_deadline_seconds > 0.0
+
 static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunConfig:
 	var config := RunConfig.new()
 	config.level_id = level.id

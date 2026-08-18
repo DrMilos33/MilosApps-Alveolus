@@ -63,19 +63,16 @@ func _run() -> void:
 		_equal(int(result.counts.projectile_visuals), PROJECTILE_COUNT, "%s keeps every projectile visual" % tier_name)
 		_equal(int(result.counts.existing_feedback), EXISTING_FEEDBACK_COUNT, "%s preserves the existing feedback load" % tier_name)
 		_equal(int(result.counts.feedback_renderer), EXISTING_FEEDBACK_COUNT, "%s keeps existing feedback registered" % tier_name)
-		_equal(int(result.counts.command_failures), 0, "%s executes every queued field command" % tier_name)
-		_true(int(result.counts.command_successes) >= 5, "%s repeatedly executes both field abilities" % tier_name)
-		_true(int(result.counts.focus_commands) >= 2, "%s repeatedly executes focus commands" % tier_name)
-		_true(int(result.counts.protection_commands) >= 2, "%s repeatedly executes protection commands" % tier_name)
-		_true(int(result.counts.focus_zones) > 0, "%s retains an active focus gameplay zone" % tier_name)
-		_true(int(result.counts.protection_zones) > 0, "%s retains an active protection gameplay zone" % tier_name)
-		_true(int(result.counts.protected_enemies) > 0, "%s protection queries and marks real enemies" % tier_name)
-		_true(int(result.counts.protection_query_hits) > 0, "%s protection target hits the spatial grid" % tier_name)
-		_true(float(result.focus_multiplier) > 1.0, "%s focus zone changes gameplay priority/damage lookup" % tier_name)
-		_true(bool(result.focus_feedback_critical), "%s keeps focus geometry critical" % tier_name)
-		_true(bool(result.protection_feedback_critical), "%s keeps protection geometry critical" % tier_name)
-		_true(bool(result.focus_feedback_visible), "%s keeps focus geometry registered" % tier_name)
-		_true(bool(result.protection_feedback_visible), "%s keeps protection geometry registered" % tier_name)
+		_equal(int(result.counts.command_failures), 0, "%s executes every queued active command" % tier_name)
+		_true(int(result.counts.command_successes) >= 5, "%s repeatedly executes both available active abilities" % tier_name)
+		_true(int(result.counts.burst_commands) >= 2, "%s repeatedly executes defense-burst commands" % tier_name)
+		_true(int(result.counts.line_commands) >= 2, "%s repeatedly executes treatment-line commands" % tier_name)
+		_true(int(result.counts.burst_hits) > 0, "%s defense burst damages spatial-query targets" % tier_name)
+		_true(int(result.counts.line_hits) > 0, "%s treatment line damages spatial-query targets" % tier_name)
+		_true(int(result.counts.burst_feedback_started) >= 2, "%s starts distinct defense-burst feedback" % tier_name)
+		_true(int(result.counts.line_feedback_started) >= 2, "%s starts distinct treatment-line feedback" % tier_name)
+		_true(bool(result.burst_feedback_critical), "%s keeps defense-burst geometry critical" % tier_name)
+		_true(bool(result.line_feedback_critical), "%s keeps treatment-line geometry critical" % tier_name)
 		_equal(int(result.node_delta), 0, "%s allocates no Nodes during ability spam" % tier_name)
 		_equal(int(result.queued_commands), 0, "%s drains the deterministic command queue" % tier_name)
 		_true(bool(result.session_running), "%s run remains active for the full stress trace" % tier_name)
@@ -107,7 +104,7 @@ func _run() -> void:
 			"projectiles": PROJECTILE_COUNT,
 			"existing_feedback": EXISTING_FEEDBACK_COUNT,
 			"measured_frames": MEASURED_FRAMES,
-			"field_command_interval_frames": COMMAND_INTERVAL_FRAMES,
+			"active_command_interval_frames": COMMAND_INTERVAL_FRAMES,
 		},
 		"reference_targets_ms": {
 			"combined_avg": MAX_AVERAGE_FRAME_MS,
@@ -154,7 +151,7 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 		game.discovery_manager.mark_seen(discovery_id)
 
 	game.selected_level = game.levels[1]
-	var active_ids: Array[StringName] = [&"ability_focus_field", &"ability_protection_field"]
+	var active_ids: Array[StringName] = [&"ability_defense_burst", &"ability_treatment_line"]
 	var loadout := PreparedLoadout.create(&"treatment_precision", active_ids)
 	var context := RunContext.create(game.selected_level.id, RUN_SEED, loadout, {}, &"", &"")
 	game.start_run(context)
@@ -177,6 +174,8 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 	for enemy in game.enemies:
 		enemy.speed_multiplier = 0.0
 		enemy.damage_multiplier = 0.0
+		enemy.max_health = 1000000000.0
+		enemy.health = enemy.max_health
 	_spawn_pickup_load(game)
 	_spawn_projectile_load(game)
 	_spawn_existing_feedback_load(game)
@@ -206,28 +205,35 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 	var command_counts := {
 		"successes": 0,
 		"failures": 0,
-		"focus": 0,
-		"protection": 0,
+		"burst": 0,
+		"line": 0,
+		"burst_hits": 0,
+		"line_hits": 0,
 	}
-	var feedback_handles: Dictionary = {
-		&"ability_focus_field": PackedInt64Array(),
-		&"ability_protection_field": PackedInt64Array(),
+	var feedback_counts: Dictionary = {
+		&"ability_defense_burst": 0,
+		&"ability_treatment_line": 0,
+	}
+	var feedback_critical: Dictionary = {
+		&"ability_defense_burst": false,
+		&"ability_treatment_line": false,
 	}
 	game.ability_controller.execution_completed.connect(func(result: AbilityExecutionResult) -> void:
 		if result.success:
 			command_counts.successes = int(command_counts.successes) + 1
-			if result.ability_id == &"ability_focus_field":
-				command_counts.focus = int(command_counts.focus) + 1
-			elif result.ability_id == &"ability_protection_field":
-				command_counts.protection = int(command_counts.protection) + 1
+			if result.ability_id == &"ability_defense_burst":
+				command_counts.burst = int(command_counts.burst) + 1
+				command_counts.burst_hits = int(command_counts.burst_hits) + result.affected_handles.size()
+			elif result.ability_id == &"ability_treatment_line":
+				command_counts.line = int(command_counts.line) + 1
+				command_counts.line_hits = int(command_counts.line_hits) + result.affected_handles.size()
 		else:
 			command_counts.failures = int(command_counts.failures) + 1
 	)
 	game.ability_feedback_world.feedback_started.connect(func(handle: int, source_id: StringName) -> void:
-		if feedback_handles.has(source_id):
-			var handles: PackedInt64Array = feedback_handles[source_id]
-			handles.append(handle)
-			feedback_handles[source_id] = handles
+		if feedback_counts.has(source_id):
+			feedback_counts[source_id] = int(feedback_counts[source_id]) + 1
+			feedback_critical[source_id] = bool(game.ability_feedback_world.render_state(handle).get("critical", false))
 	)
 
 	var node_count_before := int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
@@ -235,8 +241,8 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 	var frame_samples_ms: Array[float] = []
 	var simulation_samples_ms: Array[float] = []
 	var last_targets: Dictionary = {
-		&"ability_focus_field": Vector2.ZERO,
-		&"ability_protection_field": Vector2.ZERO,
+		&"ability_defense_burst": Vector2.ZERO,
+		&"ability_treatment_line": Vector2.ZERO,
 	}
 	for frame in range(MEASURED_FRAMES):
 		if frame == 0:
@@ -258,16 +264,6 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 	var node_count_after := int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
 	var memory_after := float(Performance.get_monitor(Performance.MEMORY_STATIC))
 
-	var focus_handle := _latest_live_feedback_handle(game.ability_feedback_world, feedback_handles[&"ability_focus_field"])
-	var protection_handle := _latest_live_feedback_handle(game.ability_feedback_world, feedback_handles[&"ability_protection_field"])
-	var focus_feedback: Dictionary = game.ability_feedback_world.render_state(focus_handle)
-	var protection_feedback: Dictionary = game.ability_feedback_world.render_state(protection_handle)
-	var protected_enemies := 0
-	for enemy in game.enemies:
-		if enemy.status_speed_multiplier() < 0.999 or enemy.status_contact_multiplier() < 0.999:
-			protected_enemies += 1
-	var protection_target: Vector2 = last_targets[&"ability_protection_field"]
-	var protection_query_hits: int = game.combat_query.circle(protection_target, 185.0).size()
 	var gameplay_state := _canonical_gameplay_state(game)
 	var timings := Metrics.summarize_ms(frame_samples_ms)
 	var simulation_timings := Metrics.summarize_ms(simulation_samples_ms)
@@ -287,11 +283,8 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 		"gameplay_summary": gameplay_summary,
 		"session_running": game.run_session.lifecycle == RunSession.Lifecycle.RUNNING,
 		"queued_commands": game.ability_controller.queued_command_count(),
-		"focus_multiplier": game.ability_controller.treatment_damage_multiplier(last_targets[&"ability_focus_field"]),
-		"focus_feedback_visible": not focus_feedback.is_empty(),
-		"protection_feedback_visible": not protection_feedback.is_empty(),
-		"focus_feedback_critical": bool(focus_feedback.get("critical", false)),
-		"protection_feedback_critical": bool(protection_feedback.get("critical", false)),
+		"burst_feedback_critical": bool(feedback_critical[&"ability_defense_burst"]),
+		"line_feedback_critical": bool(feedback_critical[&"ability_treatment_line"]),
 		"node_delta": node_count_after - node_count_before,
 		"memory_delta_bytes": memory_after - memory_before,
 		"timing_ms": timings,
@@ -309,14 +302,14 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 			"existing_feedback": game.visual_bursts.size(),
 			"feedback_renderer": game.feedback_renderer.active_count(),
 			"ability_feedback": game.ability_feedback_world.active_count(),
-			"focus_zones": game.ability_controller.zone_world.zones_for_effect(&"focus_field").size(),
-			"protection_zones": game.ability_controller.zone_world.zones_for_effect(&"protective_field").size(),
-			"protected_enemies": protected_enemies,
-			"protection_query_hits": protection_query_hits,
 			"command_successes": int(command_counts.successes),
 			"command_failures": int(command_counts.failures),
-			"focus_commands": int(command_counts.focus),
-			"protection_commands": int(command_counts.protection),
+			"burst_commands": int(command_counts.burst),
+			"line_commands": int(command_counts.line),
+			"burst_hits": int(command_counts.burst_hits),
+			"line_hits": int(command_counts.line_hits),
+			"burst_feedback_started": int(feedback_counts[&"ability_defense_burst"]),
+			"line_feedback_started": int(feedback_counts[&"ability_treatment_line"]),
 		},
 	}
 
@@ -382,13 +375,6 @@ func _queue_field_command(game: Node, slot: int, frame: int, last_targets: Dicti
 	var target: Vector2 = game.enemies[enemy_index].global_position
 	last_targets[runtime.definition.id] = target
 	game.ability_controller.queue_slot(slot, target, AbilityCommand.InputDevice.KEYBOARD_MOUSE, game.run_session.fixed_tick)
-
-
-func _latest_live_feedback_handle(world: AbilityFeedbackWorld, handles: PackedInt64Array) -> int:
-	for index in range(handles.size() - 1, -1, -1):
-		if world.resolve(handles[index]) != null:
-			return handles[index]
-	return EntityHandle.INVALID
 
 
 func _flush_renderers(game: Node) -> void:

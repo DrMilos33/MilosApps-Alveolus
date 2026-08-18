@@ -22,6 +22,7 @@ enum Mode {
 @export var max_hits: int = 1
 @export var spread_degrees: float = 0.0
 @export var tags: PackedStringArray = PackedStringArray()
+@export var damage_profile: DamageProfile
 
 static func create(
 	definition_id: StringName,
@@ -35,7 +36,8 @@ static func create(
 	unlock_cost: int,
 	treatment_tags: PackedStringArray,
 	text: String = "",
-	medical: String = ""
+	medical: String = "",
+	profile: DamageProfile = null
 ) -> TreatmentDefinition:
 	var definition := TreatmentDefinition.new()
 	definition.id = definition_id
@@ -51,6 +53,7 @@ static func create(
 	definition.research_cost = unlock_cost
 	definition.tags = CombatTagCatalog.normalize(treatment_tags)
 	definition.spread_degrees = 14.0 if treatment_mode == Mode.SPREAD else 0.0
+	definition.damage_profile = profile
 	return definition
 
 static func catalog() -> Dictionary:
@@ -59,18 +62,21 @@ static func catalog() -> Dictionary:
 			&"treatment_precision", "Präziser Impuls", Mode.PRECISE,
 			18.0, 0.82, 470.0, 1, 1, 0,
 			PackedStringArray(["treatment", "precise", "tracking"]),
-			"Verfolgt automatisch das nächste Ziel.", "Gezielte antibiotische Therapie"
+			"Verfolgt automatisch das nächste Ziel.", "Gezielte antibiotische Therapie",
+			DamageProfile.single(&"treatment_precision_damage", &"water")
 		),
 		&"treatment_spread": create(
 			&"treatment_spread", "Streuimpuls", Mode.SPREAD,
 			8.0, 1.0, 440.0, 3, 1, 60,
 			PackedStringArray(["treatment", "spread", "area"]),
-			"Drei kurze Impulse decken einen breiten Winkel ab.", "Breit angelegte antibiotische Therapie"
+			"Drei kurze Impulse decken einen breiten Winkel ab.", "Breit angelegte antibiotische Therapie",
+			DamageProfile.single(&"treatment_spread_damage", &"fire")
 		),
 		&"treatment_pierce": create(
 			&"treatment_pierce", "Durchdringender Impuls", Mode.PIERCING,
 			14.0, 1.10, 520.0, 1, 4, 100,
 			PackedStringArray(["treatment", "piercing", "line"]),
-			"Durchdringt bis zu vier Bakterien in einer Linie.", "Gewebegängige antibiotische Therapie"
+			"Durchdringt bis zu vier Bakterien in einer Linie.", "Gewebegängige antibiotische Therapie",
+			DamageProfile.single(&"treatment_pierce_damage", &"wind")
 		),
 	}

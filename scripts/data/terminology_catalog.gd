@@ -4,7 +4,7 @@ extends RefCounted
 # Compatibility surface for existing HUD and tutorial callers. Rich explanations
 # live in TerminologyDefinition instances below.
 const ENTRIES := {
-	&"patient_stability": {"simple": "Zustand", "medical": "Patientenstabilität"},
+	&"patient_stability": {"simple": "Leben", "medical": "Lebenspunkte"},
 	&"analysis": {"simple": "Probe", "medical": "Analysepunkt"},
 	&"level": {"simple": "Level", "medical": "Fortschrittsstufe"},
 	&"run": {"simple": "Run", "medical": "Behandlungsdurchlauf"},
@@ -12,7 +12,7 @@ const ENTRIES := {
 	&"upgrade": {"simple": "Ausbau", "medical": "Temporäre Therapieanpassung"},
 	&"reaction": {"simple": "Reaktion", "medical": "Reaktion auf einen Befund"},
 	&"boss": {"simple": "Boss", "medical": "Zentraler Infektionsherd"},
-	&"effect": {"simple": "Wirkung", "medical": "Therapeutische Wirkung"},
+	&"effect": {"simple": "Schaden", "medical": "Therapeutischer Schaden"},
 	&"treatment_speed": {"simple": "Behandlungstempo", "medical": "Applikationsfrequenz"},
 	&"interval": {"simple": "Intervall", "medical": "Zeitabstand"},
 	&"range": {"simple": "Reichweite", "medical": "Wirkradius"},
@@ -21,8 +21,8 @@ const ENTRIES := {
 	&"penetration": {"simple": "Durchdringung", "medical": "Gewebegängigkeit"},
 	&"antibiotic_path": {"simple": "Behandlung", "medical": "Antibiotische Therapie"},
 	&"immune_path": {"simple": "Abwehr", "medical": "Immununterstützung"},
-	&"support_path": {"simple": "Atemhilfe", "medical": "Supportive Therapie"},
-	&"shield": {"simple": "Schutz", "medical": "Temporärer Schutzpuffer"},
+	&"support_path": {"simple": "Regeneration", "medical": "Supportive Therapie"},
+	&"shield": {"simple": "Schild", "medical": "Temporärer Schutzpuffer"},
 	&"finding": {"simple": "Befund", "medical": "Diagnostischer Befund"},
 	&"finding_progress": {"simple": "Befundfortschritt", "medical": "Diagnostischer Fortschritt"},
 	&"case_trait": {"simple": "Fallmerkmal", "medical": "Klinische Besonderheit"},
@@ -34,14 +34,24 @@ const ENTRIES := {
 	&"research": {"simple": "Forschung", "medical": "Dauerhafter Erkenntnisgewinn"},
 	&"talent_points": {"simple": "Talentpunkte", "medical": "Planungspunkte"},
 	&"mastery": {"simple": "Meisterschaft", "medical": "Fallbezogene Erfahrung"},
-	&"contact_damage": {"simple": "Kontaktschaden", "medical": "Belastung bei Erregerkontakt"},
+	&"enemy_damage": {"simple": "Gegnerschaden", "medical": "Verursachter Schaden"},
+	&"defense": {"simple": "Verteidigung", "medical": "Schadensminderung"},
+	&"life_regeneration": {"simple": "Lebensregeneration", "medical": "Regenerative Erholung"},
+	&"resistance": {"simple": "Resistenz", "medical": "Schadenstypresistenz"},
+	&"fire_damage": {"simple": "Feuer", "medical": "Feuerschaden"},
+	&"water_damage": {"simple": "Wasser", "medical": "Wasserschaden"},
+	&"earth_damage": {"simple": "Erde", "medical": "Erdschaden"},
+	&"wind_damage": {"simple": "Wind", "medical": "Windschaden"},
+	&"blood_damage": {"simple": "Blut", "medical": "Blutschaden"},
+	&"holy_damage": {"simple": "Holy", "medical": "Heiliger Schaden"},
+	&"undead_damage": {"simple": "Undead", "medical": "Untotenschaden"},
 	&"cooldown": {"simple": "Abklingzeit", "medical": "Erholungszeit"},
 	&"boss_phase": {"simple": "Bossphase", "medical": "Belastungsphase des Infektionsherds"},
 	&"pneumococcus": {"simple": "Bakterium", "medical": "Pneumokokke"},
 	&"bacterial_cluster": {"simple": "Bakteriengruppe", "medical": "Bakterienverband"},
 	&"infection_focus": {"simple": "Infektionsherd", "medical": "Lokaler Infektionsherd"},
 	&"neutrophil_orbit": {"simple": "Abwehrzellen", "medical": "Neutrophile Granulozyten"},
-	&"supportive_oxygenation": {"simple": "Atemhilfe", "medical": "Supportive Oxygenierung"},
+	&"supportive_oxygenation": {"simple": "Regeneration", "medical": "Supportive Oxygenierung"},
 	&"automatic_therapy": {"simple": "Behandlung", "medical": "Automatische antibiotische Therapie"},
 }
 
@@ -72,15 +82,15 @@ static func all() -> Array[TerminologyDefinition]:
 
 static func _build_definitions() -> Dictionary:
 	var result := {}
-	_add(result, &"patient_stability", "Die gemeinsame Lebensanzeige des Patienten.", "Gegnerkontakt senkt den Zustand. Erreicht er null, endet der Fall.", [&"contact_damage", &"support_path", &"shield"], "Punkte", &"patient_stability")
+	_add(result, &"patient_stability", "Die Lebenspunkte von Doctor Milos.", "Gegnerschaden senkt das Leben. Erreicht es null, endet der Fall.", [&"enemy_damage", &"defense", &"life_regeneration", &"shield"], "Punkte", &"patient_stability")
 	_add(result, &"analysis", "Die Erfahrung eines laufenden Falls.", "Kontrollierte Gegner hinterlassen Proben. Gesammelte Proben füllen die Leiste für das nächste Level.", [&"level", &"finding"], "Punkte", &"analysis_pickup")
 	_add(result, &"level", "Die aktuelle Fortschrittsstufe im Run.", "Eine volle Probenleiste erhöht das Level und bietet einen neuen Ausbau an.", [&"analysis", &"effect"], "Stufe", &"analysis_pickup")
 	_add(result, &"run", "Ein einzelner Durchlauf durch ein Lungenmodell.", "Vorbereitung und Forschung bleiben zwischen Runs erhalten. Proben, Level und Ausbauten beginnen bei jedem neuen Run von vorn.", [&"case", &"analysis", &"upgrade"], "", &"character_stats")
-	_add(result, &"case", "Ein auswählbarer Patientenfall mit eigenen Bedingungen.", "Jeder Fall besitzt Dauer, Bosszeitpunkt und mögliche Fallmerkmale. Freigeschaltete Fälle können wiederholt werden.", [&"run", &"case_trait", &"boss"], "", &"boss_phases")
+	_add(result, &"case", "Ein auswählbarer Patientenfall mit eigenen Bedingungen.", "Jeder Fall besitzt einen Bosszeitpunkt und kann nach dem ersten Abschluss Fallmerkmale erhalten. Freigeschaltete Fälle können wiederholt werden.", [&"run", &"case_trait", &"boss"], "", &"boss_phases")
 	_add(result, &"upgrade", "Eine vorübergehende Verbesserung im laufenden Run.", "Beim Levelaufstieg wird ein Ausbau gewählt. Er wirkt nur bis zum Ende dieses Runs.", [&"level", &"run", &"effect"], "", &"automatic_therapy")
 	_add(result, &"reaction", "Eine Entscheidung nach einem abgeschlossenen Befund.", "Die gewählte Reaktion verändert den aktuellen Run und kann mit dem vorbereiteten Plan zusammenwirken.", [&"finding", &"run"], "", &"analysis_pickup")
-	_add(result, &"boss", "Das zentrale Ziel am Ende eines regulären Falls.", "Der Boss besitzt viel Leben und kann mehrere Belastungsphasen auslösen. Ein Sieg erfordert seine vollständige Kontrolle.", [&"boss_phase", &"case"], "", &"infection_focus")
-	_add(result, &"effect", "Die Stärke eines Treffers oder einer Abwehraktion.", "Mehr Wirkung bedeutet bei einer offensiven Behandlung mehr Schaden pro Treffer. Bei unterstützenden Effekten wird der genaue Nutzen separat genannt.", [&"basic_treatment", &"immune_path"], "Punkte", &"automatic_therapy")
+	_add(result, &"boss", "Das zentrale Ziel eines regulären Falls.", "Der Boss besitzt viel Leben und kann mehrere Belastungsphasen auslösen. Ein Sieg erfordert seine vollständige Kontrolle.", [&"boss_phase", &"case"], "", &"infection_focus")
+	_add(result, &"effect", "Die Stärke eines offensiven Treffers.", "Mehr Schaden zieht einem getroffenen Gegner mehr Leben ab. Schadenstyp und Resistenz bestimmen, wie viel davon tatsächlich ankommt.", [&"basic_treatment", &"resistance"], "Punkte", &"automatic_therapy")
 	_add(result, &"treatment_speed", "Wie häufig die automatische Behandlung ausgelöst wird.", "Mehr Behandlungstempo verkürzt das Intervall. Dadurch entstehen in derselben Zeit mehr Impulse.", [&"interval", &"cooldown"], "Prozent", &"automatic_therapy")
 	_add(result, &"interval", "Der Zeitabstand zwischen zwei automatischen Impulsen.", "Ein kleineres Intervall bedeutet eine häufigere Behandlung.", [&"treatment_speed", &"basic_treatment"], "Sekunden", &"automatic_therapy")
 	_add(result, &"range", "Die maximale Entfernung, in der ein Effekt ein Ziel erreicht.", "Ziele außerhalb der Reichweite werden von der jeweiligen Behandlung oder Fähigkeit nicht erfasst.", [&"targets", &"basic_treatment"], "Pixel", &"automatic_therapy")
@@ -88,9 +98,9 @@ static func _build_definitions() -> Dictionary:
 	_add(result, &"projectiles", "Die Zahl sichtbarer Impulse pro Auslösung.", "Mehrere Projektile können verschiedene Richtungen oder Ziele abdecken. Die Behandlung legt ihr genaues Verhalten fest.", [&"targets", &"penetration"], "Anzahl", &"automatic_therapy")
 	_add(result, &"penetration", "Wie viele Gegner ein Impuls nacheinander treffen kann.", "Ein durchdringender Impuls endet erst nach seiner maximalen Trefferzahl oder am Ende seiner Reichweite.", [&"projectiles", &"range"], "Treffer", &"automatic_therapy")
 	_add(result, &"antibiotic_path", "Der direkte Weg gegen Bakterien.", "Behandlung verbessert Schaden, Tempo, Reichweite und Zielabdeckung der Grundbehandlung.", [&"basic_treatment", &"effect"], "", &"automatic_therapy")
-	_add(result, &"immune_path", "Nahbereichsschutz durch körpereigene Abwehr.", "Abwehrzellen umkreisen Doctor Milos und wirken regelmäßig auf Gegner in ihrer Nähe.", [&"neutrophil_orbit", &"effect"], "", &"neutrophil_orbit")
-	_add(result, &"support_path", "Unterstützung für den Zustand des Patienten.", "Atemhilfe stellt regelmäßig Zustand wieder her. Sie verursacht keinen direkten Schaden an Bakterien.", [&"patient_stability", &"shield"], "", &"supportive_oxygenation")
-	_add(result, &"shield", "Zusätzlicher vorübergehender Puffer.", "Schutz fängt Belastung ab, bevor der Zustand sinkt. Er ist von der maximalen Zustandsanzeige getrennt.", [&"patient_stability", &"support_path"], "Punkte", &"patient_stability")
+	_add(result, &"immune_path", "Nahbereichsangriff durch Abwehrzellen.", "Abwehrzellen umkreisen Doctor Milos. Eine Zelle verursacht nur dann Schaden, wenn sie einen Gegner tatsächlich trifft.", [&"neutrophil_orbit", &"effect"], "", &"neutrophil_orbit")
+	_add(result, &"support_path", "Stellt verlorenes Leben mit der Zeit wieder her.", "Regeneration heilt Doctor Milos regelmäßig. Sie verursacht keinen direkten Schaden an Gegnern.", [&"patient_stability", &"life_regeneration"], "", &"supportive_oxygenation")
+	_add(result, &"shield", "Ein zusätzlicher vorübergehender Puffer.", "Das Schild fängt Schaden ab, bevor das Leben sinkt. Es ist von den maximalen Lebenspunkten getrennt.", [&"patient_stability", &"defense"], "Punkte", &"patient_stability")
 	_add(result, &"finding", "Eine neue Beobachtung während eines Falls.", "Ein abgeschlossener Befund bietet Reaktionen an, die den laufenden Run verändern können.", [&"finding_progress", &"case_trait"], "", &"analysis_pickup")
 	_add(result, &"finding_progress", "Der Fortschritt bis zur nächsten Beobachtung.", "Bestimmte Proben, Fähigkeiten und Module beschleunigen den Befund. Bei vollem Fortschritt wird eine Reaktion gewählt.", [&"finding", &"analysis"], "Punkte", &"analysis_pickup")
 	_add(result, &"case_trait", "Eine bekannte Besonderheit des gewählten Falls.", "Das Merkmal ist bereits in der Einsatzplanung sichtbar und hilft bei der Auswahl passender Komponenten.", [&"finding", &"capacity"], "", &"boss_phases")
@@ -102,7 +112,17 @@ static func _build_definitions() -> Dictionary:
 	_add(result, &"research", "Dauerhafter Fortschritt zwischen den Fällen.", "Forschung schaltet Komponenten frei und verbessert ausgewählte Grundlagen der Praxis.", [&"talent_points", &"mastery"], "Punkte", &"research_reward")
 	_add(result, &"talent_points", "Begrenzt verteilbare Punkte für die Vorbereitung.", "Talentpunkte werden vor einem Fall verteilt. Eine andere Verteilung ermöglicht neue Spezialisierungen.", [&"research", &"capacity"], "Punkte", &"research_reward")
 	_add(result, &"mastery", "Dauerhafte Erfahrung mit einzelnen Fällen.", "Meisterschaft dokumentiert besondere Leistungen und kann zusätzliche Talentpunkte freischalten.", [&"talent_points", &"case_trait"], "Stufe", &"research_reward")
-	_add(result, &"contact_damage", "Belastung durch direkten Gegnerkontakt.", "Solange ein Gegner Doctor Milos berührt, sinkt der Zustand entsprechend seiner Kontaktwirkung.", [&"patient_stability", &"shield"], "Punkte", &"patient_stability")
+	_add(result, &"enemy_damage", "Der Grundschaden eines Gegners.", "Wenn ein Gegner Doctor Milos trifft, werden Schadenstyp, Resistenz und Verteidigung verrechnet. Danach fängt ein vorhandenes Schild Schaden ab.", [&"patient_stability", &"resistance", &"defense", &"shield"], "Punkte", &"patient_stability")
+	_add(result, &"defense", "Eine allgemeine Minderung eingehenden Schadens.", "Verteidigung reduziert den Schaden nach der Typresistenz. Sie kann einen Treffer abschwächen, aber nicht heilen.", [&"enemy_damage", &"resistance", &"shield"], "Punkte", &"patient_stability")
+	_add(result, &"life_regeneration", "Automatische Heilung über Zeit.", "Lebensregeneration stellt fortlaufend Leben wieder her, solange Doctor Milos nicht bereits sein maximales Leben besitzt.", [&"patient_stability", &"support_path"], "Leben pro Sekunde", &"supportive_oxygenation")
+	_add(result, &"resistance", "Minderung oder Verwundbarkeit gegenüber einem Schadenstyp.", "Ein positiver Wert verringert diesen Schadenstyp. Ein negativer Wert bedeutet Verwundbarkeit und erhöht den erlittenen Schaden.", [&"enemy_damage", &"defense", &"fire_damage", &"water_damage", &"earth_damage", &"wind_damage", &"blood_damage", &"holy_damage", &"undead_damage"], "Prozent", &"patient_stability")
+	_add(result, &"fire_damage", "Ein offensiver Schadenstyp.", "Feuerschaden wird mit der Feuerresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
+	_add(result, &"water_damage", "Ein offensiver Schadenstyp.", "Wasserschaden wird mit der Wasserresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
+	_add(result, &"earth_damage", "Ein offensiver Schadenstyp.", "Erdschaden wird mit der Erdresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
+	_add(result, &"wind_damage", "Ein offensiver Schadenstyp.", "Windschaden wird mit der Windresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
+	_add(result, &"blood_damage", "Ein offensiver Schadenstyp.", "Blutschaden wird mit der Blutresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
+	_add(result, &"holy_damage", "Ein offensiver Schadenstyp.", "Holy-Schaden wird mit der Holy-Resistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
+	_add(result, &"undead_damage", "Ein offensiver Schadenstyp.", "Undead-Schaden wird mit der Undead-Resistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"cooldown", "Die Wartezeit nach einer aktiven Fähigkeit.", "Erst nach Ablauf der Abklingzeit kann die Fähigkeit erneut ausgelöst werden.", [&"active_ability", &"treatment_speed"], "Sekunden", &"automatic_therapy")
 	_add(result, &"boss_phase", "Ein Belastungsschub des Infektionsherds.", "Beim Erreichen einer Phasengrenze verändert der Boss den Kampf und kann zusätzliche Bakterien freisetzen.", [&"infection_focus", &"case_trait"], "", &"boss_phases")
 	return result

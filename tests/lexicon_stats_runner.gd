@@ -39,10 +39,11 @@ func _test_enemy_and_character_values() -> void:
 		_check(definition.gameplay_text.contains("GRUNDWERTE"), "%s zeigt Grundwerte" % id)
 		_check(definition.gameplay_text.contains("Leben"), "%s zeigt Leben" % id)
 		_check(definition.gameplay_text.contains("Tempo"), "%s zeigt Tempo" % id)
-		_check(definition.gameplay_text.contains("Kontaktschaden"), "%s zeigt Kontaktschaden" % id)
+		_check(definition.gameplay_text.contains("Schaden"), "%s zeigt Schaden" % id)
+		_check(not definition.gameplay_text.contains("Kontaktschaden"), "%s verwendet keinen veralteten Schadensbegriff" % id)
 		_check(definition.gameplay_text.contains("Probe"), "%s zeigt den Probenertrag" % id)
 	var character: DiscoveryDefinition = discoveries[&"character_stats"]
-	for label in ["Bewegung", "Wirkung", "Intervall", "Reichweite", "Ziel", "Probenradius"]:
+	for label in ["Bewegung", "Leben", "Schaden", "Intervall", "Reichweite", "Ziel", "Probenradius"]:
 		_check(character.gameplay_text.contains(label), "Arztwerte enthalten %s" % label)
 
 func _test_default_character_entry() -> void:

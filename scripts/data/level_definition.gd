@@ -89,7 +89,12 @@ func configure_case_variation(
 func duration_text() -> String:
 	if is_tutorial:
 		return "Ereignisgesteuert"
+	if not has_deadline():
+		return "Ohne Zeitlimit"
 	return _time_text(total_seconds)
+
+func has_deadline() -> bool:
+	return total_seconds > 0.0
 
 func boss_time_text() -> String:
 	if is_tutorial:

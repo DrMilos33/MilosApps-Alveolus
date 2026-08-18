@@ -24,6 +24,9 @@ var visual_current_position: Vector2 = Vector2.ZERO
 var visual_previous_angle: float = 0.0
 var visual_current_angle: float = 0.0
 var visual_motion_initialized: bool = false
+var directional_mode: bool = false
+var maximum_distance: float = INF
+var impact_distance: float = -1.0
 var _arena_min: Vector2 = Vector2.ZERO
 var _arena_max: Vector2 = Vector2.ZERO
 var _arena_size: Vector2 = Vector2.ZERO
@@ -60,6 +63,9 @@ func configure(
 	target_handle = entity_handle
 	target_resolver = resolve_target
 	direction = Vector2.RIGHT
+	directional_mode = false
+	maximum_distance = INF
+	impact_distance = -1.0
 	if _target_is_current():
 		direction = topology.shortest_delta(global_position, target.global_position).normalized()
 	rotation = direction.angle()
@@ -67,6 +73,42 @@ func configure(
 	# ProjectileWorld owns fixed stepping and ProjectileRenderer owns visibility.
 	# Discovery projectiles are explicitly promoted to a stable detail path by
 	# the renderer after registration.
+	hide()
+	set_physics_process(false)
+
+
+## Configures a fixed-heading projectile from one immutable treatment shot.
+## The optional target is generation-checked at impact time, but the heading
+## and impact distance never retarget after the fixed-tick aim sample.
+func configure_directional(
+	heading: Vector2,
+	amount: float,
+	arena_topology: ArenaTopology,
+	max_distance: float,
+	resolved_impact_distance: float = -1.0,
+	resolved_target: InfectionEnemy = null,
+	entity_handle: int = EntityHandle.INVALID,
+	resolve_target: Callable = Callable(),
+	source_id: StringName = &"treatment"
+) -> void:
+	target = resolved_target
+	damage = amount
+	topology = arena_topology
+	_cache_topology_bounds()
+	speed = DEFAULT_SPEED
+	travelled_distance = 0.0
+	discovery_pending = false
+	damage_source = source_id
+	target_generation = target.activation_generation if is_instance_valid(target) else -1
+	target_handle = entity_handle
+	target_resolver = resolve_target
+	direction = heading.normalized() if heading.length_squared() > 0.0001 else Vector2.RIGHT
+	directional_mode = true
+	maximum_distance = maxf(max_distance, 0.0)
+	impact_distance = clampf(resolved_impact_distance, 0.0, maximum_distance) if resolved_impact_distance >= 0.0 else -1.0
+	lifetime = maximum_distance / maxf(speed, 1.0) + 0.25
+	rotation = direction.angle()
+	reset_visual_motion()
 	hide()
 	set_physics_process(false)
 
@@ -79,7 +121,21 @@ func step_fixed(delta: float) -> void:
 	if lifetime <= 0.0:
 		_finish()
 		return
-	if _target_is_current():
+	if directional_mode:
+		var step_distance := speed * delta
+		if impact_distance >= 0.0 and travelled_distance + step_distance >= impact_distance:
+			global_position += direction * maxf(0.0, impact_distance - travelled_distance)
+			travelled_distance = impact_distance
+			if _target_is_current():
+				target.take_damage(damage, damage_source)
+			_finish()
+			return
+		if travelled_distance + step_distance >= maximum_distance:
+			global_position += direction * maxf(0.0, maximum_distance - travelled_distance)
+			travelled_distance = maximum_distance
+			_finish()
+			return
+	elif _target_is_current():
 		var target_delta := target.global_position - global_position
 		if _arena_size.x > 0.0:
 			if target_delta.x > _arena_half_size.x:
@@ -152,6 +208,9 @@ func recycle() -> void:
 	discovery_pending = false
 	damage_source = &"therapy"
 	visual_motion_initialized = false
+	directional_mode = false
+	maximum_distance = INF
+	impact_distance = -1.0
 
 
 func reset_visual_motion() -> void:

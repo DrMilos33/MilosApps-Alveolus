@@ -18,6 +18,7 @@ enum TargetMode {
 @export var effect_id: StringName
 @export var parameters: Dictionary = {}
 @export var tags: PackedStringArray = PackedStringArray()
+@export var damage_profile: DamageProfile
 
 static func create(
 	definition_id: StringName,
@@ -29,7 +30,8 @@ static func create(
 	unlock_cost: int = 0,
 	ability_tags: PackedStringArray = PackedStringArray(),
 	text: String = "",
-	medical: String = ""
+	medical: String = "",
+	profile: DamageProfile = null
 ) -> AbilityDefinition:
 	var definition := AbilityDefinition.new()
 	definition.id = definition_id
@@ -42,6 +44,7 @@ static func create(
 	definition.research_cost = unlock_cost
 	definition.tags = CombatTagCatalog.normalize(ability_tags)
 	definition.description = text
+	definition.damage_profile = profile
 	return definition
 
 static func catalog() -> Dictionary:
@@ -56,25 +59,27 @@ static func catalog() -> Dictionary:
 			&"ability_emergency_support", "Notfallhilfe", TargetMode.SELF, 28.0, &"emergency_support",
 			{"recovery": 14.0, "shield": 8.0}, 0,
 			PackedStringArray(["active", "support", "defensive"]),
-			"Stellt 14 Zustand wieder her und gewährt 8 Schutz."
+			"Stellt 14 Leben wieder her und gewährt 8 Schild."
 		),
 		&"ability_defense_burst": create(
 			&"ability_defense_burst", "Abwehrstoß", TargetMode.CURSOR_AREA, 14.0, &"defense_burst",
 			{"damage": 42.0, "radius": 150.0, "knockback": 75.0}, 50,
 			PackedStringArray(["active", "defense", "area", "control"]),
-			"42 AoE-Schaden und Rückstoß im Zielbereich."
+			"42 AoE-Schaden und Rückstoß im Zielbereich.", "",
+			DamageProfile.single(&"ability_defense_burst_damage", &"earth")
 		),
 		&"ability_treatment_line": create(
 			&"ability_treatment_line", "Behandlungslinie", TargetMode.CURSOR_DIRECTION, 18.0, &"treatment_line",
 			{"damage": 55.0, "range": 620.0, "width": 38.0}, 80,
 			PackedStringArray(["active", "treatment", "line", "precise"]),
-			"55 Schaden in einer durchdringenden Linie."
+			"55 Schaden in einer durchdringenden Linie.", "",
+			DamageProfile.single(&"ability_treatment_line_damage", &"holy")
 		),
 		&"ability_protection_field": create(
-			&"ability_protection_field", "Schutzfeld", TargetMode.CURSOR_AREA, 20.0, &"protective_field",
+			&"ability_protection_field", "Schildfeld", TargetMode.CURSOR_AREA, 20.0, &"protective_field",
 			{"radius": 185.0, "duration": 6.0, "speed_multiplier": 0.65, "contact_multiplier": 0.65}, 70,
 			PackedStringArray(["active", "support", "area", "control"]),
-			"Gegner im Feld: −35 % Tempo und Kontaktschaden."
+			"Gegner im Feld: −35 % Tempo und Schaden."
 		),
 		&"ability_sample_pull": create(
 			&"ability_sample_pull", "Probenzug", TargetMode.CURSOR_AREA, 18.0, &"sample_pull",

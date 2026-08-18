@@ -10,11 +10,11 @@ signal mastery_changed(new_ids: Array[StringName], earned_points: int)
 signal loadouts_changed(level_id: StringName)
 signal settings_changed
 
-const SAVE_VERSION := 5
+const SAVE_VERSION := 6
 const PASSIVE_INTERVAL_SECONDS := 600.0
 const PASSIVE_CAP_SECONDS := 28800.0
 const UNLIMITED_TEST_POINT_POOL := 1_000_000_000
-const TALENT_TREE_REVISION := 2
+const TALENT_TREE_REVISION := 3
 
 var research_points: int = 0
 var passive_seconds: float = 0.0
@@ -31,7 +31,14 @@ var intro_skipped: bool = false
 var seen_discovery_ids: Dictionary = {}
 var tutorial_status: Dictionary = {}
 var show_run_stats: bool = false
-var selected_talent_ids: Dictionary = {}
+var talent_ranks: Dictionary = {}
+## Compatibility view for older UI callers. Values are ranks instead of booleans;
+## `bool(rank)` therefore keeps all existing read paths source-compatible.
+var selected_talent_ids: Dictionary:
+	get:
+		return talent_ranks
+	set(value):
+		talent_ranks = value
 var talent_tree_refund_pending: bool = false
 var completed_mastery_ids: Dictionary = {}
 var prepared_loadouts: Dictionary = {}
@@ -76,7 +83,7 @@ func reset_defaults(now: int = -1) -> void:
 	seen_discovery_ids = {}
 	tutorial_status = {}
 	show_run_stats = false
-	selected_talent_ids = {}
+	talent_ranks = {}
 	talent_tree_refund_pending = false
 	completed_mastery_ids = {}
 	prepared_loadouts = {}
@@ -88,6 +95,7 @@ func reset_defaults(now: int = -1) -> void:
 	clinic_changed.emit()
 	upgrades_changed.emit()
 	settings_changed.emit()
+	talents_changed.emit()
 
 func accrue_time(now: int = -1) -> void:
 	var current_time := _now() if now < 0 else now
@@ -171,6 +179,13 @@ func rank(id: StringName) -> int:
 func has_research(id: StringName) -> bool:
 	return rank(id) > 0
 
+func clear_research_ranks() -> void:
+	if research_ranks.is_empty():
+		return
+	research_ranks = {}
+	research_changed.emit(research_points, claimable_research())
+	upgrades_changed.emit()
+
 func award_run(success: bool, elapsed: float, level: int, defeats: int, multiplier: float = 1.0) -> int:
 	var survival_bonus := mini(floori(elapsed / 120.0), 5)
 	var analysis_bonus := mini(maxi(level, 0), 10)
@@ -235,10 +250,13 @@ func talent_points_earned() -> int:
 func talent_points_spent() -> int:
 	var catalog := TalentDefinition.catalog()
 	var total := 0
-	for id in selected_talent_ids:
-		if bool(selected_talent_ids[id]) and catalog.has(id):
-			var definition: TalentDefinition = catalog[id]
-			total += definition.cost
+	for id in talent_ranks:
+		if not catalog.has(id):
+			continue
+		var definition: TalentDefinition = catalog[id]
+		var purchased_ranks := clampi(int(talent_ranks[id]), 0, definition.max_rank)
+		for purchased_rank in range(purchased_ranks):
+			total += definition.cost_for_rank(purchased_rank)
 	return total
 
 func available_talent_points() -> int:
@@ -247,15 +265,13 @@ func available_talent_points() -> int:
 	return maxi(0, talent_points_earned() - talent_points_spent())
 
 func has_talent(id: StringName) -> bool:
-	return bool(selected_talent_ids.get(id, false))
+	return talent_rank(id) > 0
+
+func talent_rank(id: StringName) -> int:
+	return maxi(0, int(talent_ranks.get(id, 0)))
 
 func loadout_capacity() -> int:
-	var capacity := LoadoutValidator.DEFAULT_CAPACITY
-	if has_talent(&"organization_1"):
-		capacity += 1
-	if has_talent(&"organization_2"):
-		capacity += 1
-	return capacity
+	return LoadoutValidator.DEFAULT_CAPACITY
 
 func preparation_capacity() -> int:
 	return loadout_capacity()
@@ -294,50 +310,54 @@ func set_talent_selection(ids: Array[StringName]) -> bool:
 	var requested: Dictionary = {}
 	for id in ids:
 		if id != &"":
-			requested[id] = true
-	var catalog := TalentDefinition.catalog()
-	var spent := 0
-	for id in requested:
-		if not catalog.has(id):
-			return false
-		var definition: TalentDefinition = catalog[id]
-		spent += definition.cost
-		for required_id in definition.required_ids:
-			if not requested.has(StringName(required_id)):
-				return false
-	if not unlimited_test_progression and spent > talent_points_earned():
+			requested[id] = 1
+	if not _talent_ranks_are_valid(requested, true):
 		return false
-	selected_talent_ids = requested
+	talent_ranks = requested
 	talent_tree_refund_pending = false
 	talents_changed.emit()
 	return true
 
 func set_talent_active(id: StringName, active: bool) -> bool:
-	var ids: Array[StringName] = []
-	for selected_id in selected_talent_ids:
-		if bool(selected_talent_ids[selected_id]):
-			ids.append(StringName(selected_id))
 	if active:
-		if not ids.has(id):
-			ids.append(id)
+		return true if has_talent(id) else set_talent_rank(id, 1)
+	return set_talent_rank(id, 0)
+
+func set_talent_rank(id: StringName, new_rank: int) -> bool:
+	var catalog := TalentDefinition.catalog()
+	if not catalog.has(id):
+		return false
+	var definition: TalentDefinition = catalog[id]
+	if new_rank < 0 or new_rank > definition.max_rank:
+		return false
+	var requested := talent_ranks.duplicate(true)
+	if new_rank == 0:
+		requested.erase(id)
 	else:
-		var catalog := TalentDefinition.catalog()
-		for selected_id_value in selected_talent_ids:
-			var selected_id := StringName(selected_id_value)
-			if selected_id == id or not bool(selected_talent_ids[selected_id]) or not catalog.has(selected_id):
-				continue
-			var selected_definition: TalentDefinition = catalog[selected_id]
-			if selected_definition.required_ids.has(String(id)):
-				# Never make one click silently refund a complete branch. Children
-				# must be removed explicitly before their prerequisite.
-				return false
-		ids.erase(id)
-	return set_talent_selection(ids)
+		requested[id] = new_rank
+	if not _talent_ranks_are_valid(requested, true):
+		return false
+	if requested == talent_ranks:
+		return true
+	talent_ranks = requested
+	talent_tree_refund_pending = false
+	talents_changed.emit()
+	return true
+
+func purchase_talent_rank(id: StringName) -> bool:
+	var catalog := TalentDefinition.catalog()
+	if not catalog.has(id):
+		return false
+	var definition: TalentDefinition = catalog[id]
+	var current_rank := talent_rank(id)
+	if current_rank >= definition.max_rank:
+		return false
+	return set_talent_rank(id, current_rank + 1)
 
 func clear_talents() -> void:
-	if selected_talent_ids.is_empty() and not talent_tree_refund_pending:
+	if talent_ranks.is_empty() and not talent_tree_refund_pending:
 		return
-	selected_talent_ids = {}
+	talent_ranks = {}
 	talent_tree_refund_pending = false
 	talents_changed.emit()
 
@@ -394,6 +414,19 @@ func get_or_create_case_seed(level_id: StringName) -> int:
 func clear_case_seed(level_id: StringName) -> void:
 	level_case_seeds.erase(level_id)
 
+func advance_case_seed(level_id: StringName) -> int:
+	if level_id == &"":
+		return 0
+	var previous_seed := get_or_create_case_seed(level_id)
+	case_seed_nonce += 1
+	var generated := absi(hash("%s:%d:%d:%d" % [
+		String(level_id), previous_seed, lifetime_runs, case_seed_nonce
+	])) + 1
+	if generated == previous_seed:
+		generated = 1 if previous_seed == 2147483647 else previous_seed + 1
+	level_case_seeds[level_id] = generated
+	return generated
+
 func create_run_context(
 	level_id: StringName,
 	visible_trait_id: StringName = &"",
@@ -403,7 +436,7 @@ func create_run_context(
 		level_id,
 		get_or_create_case_seed(level_id),
 		get_prepared_loadout(level_id),
-		selected_talent_ids,
+		talent_ranks,
 		visible_trait_id,
 		hidden_finding_id
 	)
@@ -438,8 +471,12 @@ func to_dict() -> Dictionary:
 		"seen_discovery_ids": seen_discovery_ids.keys().map(func(id: Variant) -> String: return String(id)),
 		"tutorial_status": tutorial_status.duplicate(true),
 		"show_run_stats": show_run_stats,
-		"selected_talent_ids": _true_dictionary_keys(selected_talent_ids),
+		"talent_ranks": _string_keyed_rank_dictionary(talent_ranks),
+		# Kept for one compatibility cycle so older diagnostics can still display
+		# which nodes are active. V6 loading exclusively trusts `talent_ranks`.
+		"selected_talent_ids": _positive_dictionary_keys(talent_ranks),
 		"talent_tree_revision": TALENT_TREE_REVISION,
+		"talent_tree_refund_pending": talent_tree_refund_pending,
 		"completed_mastery_ids": _true_dictionary_keys(completed_mastery_ids),
 		"prepared_loadouts": serialized_loadouts,
 		"level_case_seeds": serialized_seeds,
@@ -494,7 +531,7 @@ func load_dict(data: Dictionary) -> bool:
 	else:
 		tutorial_status = {}
 	show_run_stats = bool(data.get("show_run_stats", false))
-	selected_talent_ids = {}
+	talent_ranks = {}
 	talent_tree_refund_pending = false
 	completed_mastery_ids = {}
 	prepared_loadouts = {}
@@ -503,18 +540,21 @@ func load_dict(data: Dictionary) -> bool:
 	ui_settings = UISettingsState.from_dict(data.get("ui_settings", {})) if version >= 5 else UISettingsState.new()
 	if version >= 4:
 		completed_mastery_ids = _known_id_dictionary(data.get("completed_mastery_ids", []), MasteryObjectiveDefinition.catalog())
-		var stored_tree_revision := int(data.get("talent_tree_revision", 1))
-		if stored_tree_revision < TALENT_TREE_REVISION:
-			talent_tree_refund_pending = not _known_id_dictionary(data.get("selected_talent_ids", []), TalentDefinition.catalog()).is_empty()
-			selected_talent_ids = {}
+		if version >= 6:
+			var stored_tree_revision := int(data.get("talent_tree_revision", 1))
+			var requested_ranks := _known_rank_dictionary(data.get("talent_ranks", {}), TalentDefinition.catalog())
+			if stored_tree_revision == TALENT_TREE_REVISION and _talent_ranks_are_valid(requested_ranks, true):
+				talent_ranks = requested_ranks
+				talent_tree_refund_pending = bool(data.get("talent_tree_refund_pending", false))
+			else:
+				talent_ranks = {}
+				talent_tree_refund_pending = not requested_ranks.is_empty()
 		else:
-			var requested_talents := _known_id_dictionary(data.get("selected_talent_ids", []), TalentDefinition.catalog())
-			var requested_ids: Array[StringName] = []
-			for requested_id in requested_talents:
-				requested_ids.append(StringName(requested_id))
-			if not set_talent_selection(requested_ids):
-				selected_talent_ids = {}
-				talent_tree_refund_pending = not requested_talents.is_empty()
+			# V5 and older stored boolean node IDs from the retired tree. Mastery
+			# remains untouched, so every earned point is immediately available.
+			var legacy_talents := _any_positive_dictionary(data.get("selected_talent_ids", []))
+			talent_ranks = {}
+			talent_tree_refund_pending = not legacy_talents.is_empty()
 		var loaded_loadouts: Variant = data.get("prepared_loadouts", {})
 		if typeof(loaded_loadouts) == TYPE_DICTIONARY:
 			for id in loaded_loadouts:
@@ -540,14 +580,9 @@ func _ensure_default_loadouts() -> void:
 			prepared_loadouts[level_id] = _default_loadout_from_research()
 
 func _default_loadout_from_research() -> PreparedLoadout:
-	var available_modules: Array[StringName] = []
-	for id in [&"stability_reserve", &"therapy_precision", &"sample_logistics", &"preanalysis", &"second_opinion"]:
-		if rank(id) > 0:
-			available_modules.append(id)
-	var active_modules: Array[StringName] = []
-	while active_modules.size() < 2 and not available_modules.is_empty():
-		active_modules.append(available_modules.pop_front())
-	return PreparedLoadout.default_loadout(active_modules)
+	# Research ownership remains stored, but passive modules are intentionally
+	# outside the current combat-balancing catalog.
+	return PreparedLoadout.default_loadout()
 
 static func _true_dictionary_keys(source: Dictionary) -> Array[String]:
 	var result: Array[String] = []
@@ -569,6 +604,68 @@ static func _known_id_dictionary(value: Variant, catalog: Dictionary) -> Diction
 			var id := StringName(str(raw_id))
 			if bool(value[raw_id]) and catalog.has(id):
 				result[id] = true
+	return result
+
+func _talent_ranks_are_valid(requested: Dictionary, enforce_economy: bool) -> bool:
+	var catalog := TalentDefinition.catalog()
+	var spent := 0
+	for raw_id in requested:
+		var id := StringName(str(raw_id))
+		if not catalog.has(id):
+			return false
+		var definition: TalentDefinition = catalog[id]
+		var purchased_rank := int(requested[raw_id])
+		if purchased_rank <= 0 or purchased_rank > definition.max_rank:
+			return false
+		for rank_index in range(purchased_rank):
+			spent += definition.cost_for_rank(rank_index)
+		for required_id in definition.required_ids:
+			if int(requested.get(StringName(required_id), requested.get(String(required_id), 0))) <= 0:
+				return false
+	if enforce_economy and not unlimited_test_progression and spent > talent_points_earned():
+		return false
+	return true
+
+static func _known_rank_dictionary(value: Variant, catalog: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	if typeof(value) != TYPE_DICTIONARY:
+		return result
+	for raw_id in value:
+		var id := StringName(str(raw_id))
+		if not catalog.has(id):
+			continue
+		var definition: TalentDefinition = catalog[id]
+		var loaded_rank := clampi(int(value[raw_id]), 0, definition.max_rank)
+		if loaded_rank > 0:
+			result[id] = loaded_rank
+	return result
+
+static func _string_keyed_rank_dictionary(source: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for id in source:
+		var purchased_rank := maxi(0, int(source[id]))
+		if purchased_rank > 0:
+			result[String(id)] = purchased_rank
+	return result
+
+static func _positive_dictionary_keys(source: Dictionary) -> Array[String]:
+	var result: Array[String] = []
+	for id in source:
+		if int(source[id]) > 0:
+			result.append(String(id))
+	result.sort()
+	return result
+
+static func _any_positive_dictionary(value: Variant) -> Dictionary:
+	var result: Dictionary = {}
+	if typeof(value) == TYPE_ARRAY:
+		for raw_id in value:
+			if str(raw_id) != "":
+				result[StringName(str(raw_id))] = true
+	elif typeof(value) == TYPE_DICTIONARY:
+		for raw_id in value:
+			if bool(value[raw_id]):
+				result[StringName(str(raw_id))] = true
 	return result
 
 func _now() -> int:

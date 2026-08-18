@@ -21,8 +21,9 @@ $tests = [ordered]@{
     flow = @{ script = 'res://tests/flow_runner.gd'; args = @('--quick-run') }
     intro = @{ script = 'res://tests/intro_runner.gd'; args = @('--quick-run') }
     tactical_flow = @{ script = 'res://tests/tactical_flow_runner.gd'; args = @() }
-    meta_save = @{ script = 'res://tests/meta_loadout_v4_runner.gd'; args = @() }
+    save_v6_progression = @{ script = 'res://tests/new_save_v6_progression_runner.gd'; args = @() }
     loadout_navigation = @{ script = 'res://tests/ui_navigation_loadout_runner.gd'; args = @() }
+    loadout_availability = @{ script = 'res://tests/loadout_availability_runner.gd'; args = @() }
     style_gallery = @{ script = 'res://tests/style_gallery_runner.gd'; args = @() }
     context_detail = @{ script = 'res://tests/context_detail_controller_runner.gd'; args = @() }
     ui_screen_host = @{ script = 'res://tests/ui_screen_host_runner.gd'; args = @() }
@@ -51,12 +52,17 @@ $tests = [ordered]@{
     ui_settings_hud = @{ script = 'res://tests/ui_settings_hud_integration_runner.gd'; args = @() }
     combat = @{ script = 'res://tests/combat_foundation_runner.gd'; args = @() }
     upgrades = @{ script = 'res://tests/run_upgrade_runner.gd'; args = @() }
-    passives_talents = @{ script = 'res://tests/passive_talent_completion_runner.gd'; args = @() }
+    damage_types = @{ script = 'res://tests/damage_type_system_runner.gd'; args = @() }
+    combat_progression = @{ script = 'res://tests/new_combat_progression_runner.gd'; args = @() }
+    endless_cases = @{ script = 'res://tests/endless_case_contract_runner.gd'; args = @() }
+    treatment_aim = @{ script = 'res://tests/treatment_aim_resolution_runner.gd'; args = @() }
+    treatment_beam = @{ script = 'res://tests/treatment_beam_world_runner.gd'; args = @() }
     ability_pipeline = @{ script = 'res://tests/ability_pipeline_runner.gd'; args = @() }
     determinism = @{ script = 'res://tests/quality_determinism_runner.gd'; args = @() }
     runtime_architecture = @{ script = 'res://tests/runtime_architecture_runner.gd'; args = @() }
     runtime_churn = @{ script = 'res://tests/runtime_churn_regression_runner.gd'; args = @() }
     enemy_reuse = @{ script = 'res://tests/enemy_deferred_reuse_regression_runner.gd'; args = @() }
+    hidden_nest_spawn = @{ script = 'res://tests/hidden_nest_spawn_contract_runner.gd'; args = @() }
     spawn_lifecycle = @{ script = 'res://tests/spawn_lifecycle_regression_runner.gd'; args = @('--quick-run') }
     crowd_renderer = @{ script = 'res://tests/crowd_renderer_regression_runner.gd'; args = @('--quick-run') }
     projectile_renderer = @{ script = 'res://tests/projectile_renderer_regression_runner.gd'; args = @('--quick-run') }
@@ -71,10 +77,10 @@ $tests = [ordered]@{
 
 $groups = [ordered]@{
     Quick = @('core')
-    Flow = @('core', 'flow', 'intro', 'tactical_flow', 'meta_save', 'loadout_navigation', 'ui_audio_settings')
+    Flow = @('core', 'flow', 'intro', 'tactical_flow', 'save_v6_progression', 'endless_cases', 'loadout_navigation', 'loadout_availability', 'ui_audio_settings')
     UI = @('game_hud_facade_contract', 'ui_screen_dependency', 'style_gallery', 'context_detail', 'ui_screen_host', 'story_screen', 'practice_screen', 'case_archive_screen', 'settings_screen', 'progression_screen', 'pause_overlay', 'confirmation_overlay', 'result_overlay', 'upgrade_overlay', 'finding_overlay', 'run_hud_overlay', 'discovery_modal', 'ui_component_churn', 'ui_polish', 'ui_accessibility', 'campus', 'campus_building_chrome', 'lexicon_catalog', 'lexicon_stats', 'lexicon_view', 'tactical_ui', 'loadout_navigation', 'ui_audio_settings', 'ui_settings_hud')
-    Combat = @('core', 'combat', 'upgrades', 'passives_talents', 'ability_pipeline', 'tactical_flow', 'determinism')
-    Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'spawn_lifecycle', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
+    Combat = @('core', 'combat', 'upgrades', 'damage_types', 'combat_progression', 'treatment_aim', 'treatment_beam', 'ability_pipeline', 'tactical_flow', 'loadout_availability', 'determinism')
+    Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'hidden_nest_spawn', 'spawn_lifecycle', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
     Performance = @('ability_stress', 'performance', 'performance_soak')
 }
 

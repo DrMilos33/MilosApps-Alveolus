@@ -95,7 +95,8 @@ func _test_mastery_and_talents() -> void:
 	_true(starter_modules.has(&"treatment_precision"), "Starter-Grundbehandlung ist freigeschaltet")
 	_true(starter_modules.has(&"ability_focus_field"), "Starterfähigkeit ist freigeschaltet")
 	_true(not starter_modules.has(&"treatment_spread"), "Ungekaufte Behandlung bleibt gesperrt")
-	_true(meta.validate_prepared_loadout(PreparedLoadout.default_loadout(), ContentCatalog.loadout_module_definitions(), ContentCatalog.research_definitions()).valid, "Meta-Validierung verbindet Freischaltung und Talentkapazität")
+	_true(not meta.validate_prepared_loadout(PreparedLoadout.default_loadout(), ContentCatalog.loadout_module_definitions(), ContentCatalog.research_definitions()).valid, "Forschungsbesitz bleibt von der vorläufigen Testverfügbarkeit getrennt")
+	_true(LoadoutValidator.validate(PreparedLoadout.default_loadout(), ContentCatalog.loadout_module_definitions(), LoadoutAvailabilityPolicy.selectable_ids(ContentCatalog.loadout_module_definitions()), meta.preparation_capacity()).valid, "Die Testverfügbarkeit validiert den neuen Standardplan")
 	meta.research_ranks[&"unlock_spread_treatment"] = 1
 	var purchased_modules := meta.unlocked_module_ids(ContentCatalog.loadout_module_definitions(), ContentCatalog.research_definitions())
 	_true(purchased_modules.has(&"treatment_spread"), "Forschung schaltet das zugehörige Modul frei")
@@ -143,8 +144,8 @@ func _test_v3_migration_and_v5_roundtrip() -> void:
 	_equal(meta.research_points, 321, "Migration bewahrt Forschungspunkte")
 	var migrated_plan := meta.get_prepared_loadout(&"localized_focus")
 	_equal(migrated_plan.treatment_id, &"treatment_precision", "Migration setzt die präzise Grundbehandlung")
-	_equal(migrated_plan.ability_ids, [&"ability_focus_field", &"ability_emergency_support"], "Migration setzt beide Starterfähigkeiten")
-	_equal(migrated_plan.passive_ids, [&"stability_reserve", &"therapy_precision"], "Migration übernimmt gekaufte leichte Module bis zur Kapazitätsgrenze")
+	_equal(migrated_plan.ability_ids, [&"ability_defense_burst", &"ability_treatment_line"], "Migration setzt beide aktiven Testfähigkeiten")
+	_true(migrated_plan.passive_ids.is_empty(), "Migration übernimmt keine Passivmodule in neue Pläne")
 	_equal(migrated_plan.reserve_id, &"", "Migration erzeugt für neue Pläne keine sichtbare Reserve")
 
 	var first_seed := meta.get_or_create_case_seed(&"localized_focus")

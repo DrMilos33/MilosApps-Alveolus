@@ -15,7 +15,8 @@ const DRAWN_KINDS: Array[StringName] = [
 	&"ability_treatment_line", &"ability_protection_field", &"ability_sample_pull",
 	&"unlock_spread_treatment", &"unlock_piercing_treatment", &"unlock_defense_burst",
 	&"unlock_treatment_line", &"unlock_protection_field", &"unlock_sample_pull", &"quick_test",
-	&"reserve_buffer", &"defense_readiness", &"deployment_routine",
+	&"reserve_buffer", &"defense_readiness", &"deployment_routine", &"experience_gain",
+	&"defense_training", &"life_regeneration",
 	&"locked", &"check", &"remove", &"restart", &"diamond", &"circle", &"target",
 ]
 
@@ -105,6 +106,14 @@ func _draw() -> void:
 		&"sample_logistics":
 			_draw_sample_vial()
 			_draw_inward_arrows()
+		&"experience_gain":
+			_draw_sample_vial()
+			_draw_spark(Vector2(15, -15), 3.5)
+		&"defense_training":
+			_draw_shield()
+		&"life_regeneration":
+			_draw_support()
+			_draw_cross(Vector2.ZERO, 0.58)
 		&"preanalysis", &"finding":
 			_draw_finding(false)
 		&"finding_progress":

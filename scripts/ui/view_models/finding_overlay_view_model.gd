@@ -60,6 +60,16 @@ class InfoViewModel extends RefCounted:
 		}
 
 
+	func body_only_payload() -> Dictionary:
+		return {
+			"title": "",
+			"body": _body,
+			"meta": "",
+			"icon_kind": &"",
+			"accent": _accent,
+		}
+
+
 	func duplicate_immutable() -> InfoViewModel:
 		return InfoViewModel.new(_title, _body, _meta, _icon_kind, _accent)
 
@@ -100,10 +110,10 @@ class ReactionViewModel extends RefCounted:
 		_accent = accent_value
 		_interactive = interactive_value and id_value != &""
 		_info = info_value.duplicate_immutable() if info_value != null else InfoViewModel.new(
-			_title,
+			"",
 			_accessible_summary,
 			"",
-			icon_kind_value,
+			&"",
 			accent_value
 		)
 
@@ -357,6 +367,12 @@ func finding_id() -> StringName:
 
 func title() -> String:
 	return _title
+
+
+func display_title() -> String:
+	if _title.to_lower().begins_with("befund"):
+		return _title
+	return "Befund: %s" % _title
 
 
 func medical_text() -> String:

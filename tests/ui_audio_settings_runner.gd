@@ -74,6 +74,7 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_equal(UISettingsState.UI_SCALES, [0.75, 0.90, 1.0, 1.25, 1.5, 2.0], "UI-Skalierung bietet die sechs verbindlichen Stufen einschließlich 75 und 90 Prozent")
 	_equal(defaults.glyph_mode, UISettingsState.GLYPH_AUTO, "Eingabesymbole erkennen das Gerät standardmäßig automatisch")
 	_true(not defaults.reduce_motion, "Reduzierte Bewegung ist optional")
+	_true(not defaults.show_character_name, "Der Charaktername ist standardmäßig dezent ausgeblendet")
 	_true(defaults.confirm_run_restart, "Strg+R verlangt standardmäßig eine bewusste Bestätigung")
 	_true(UISettingsState.from_dict({}).confirm_run_restart, "Ältere Einstellungsdaten erhalten den sicheren Neustart-Standard")
 	_true(UISettingsState.CONFIGURABLE_ACTIONS.has(&"ui_info"), "Kontextinformationen besitzen eine konfigurierbare Eingabeaktion")
@@ -90,6 +91,7 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 		"ui_scale": 1.48,
 		"glyph_mode": "invalid",
 		"reduce_motion": true,
+		"show_character_name": true,
 		"fullscreen": true,
 		"confirm_run_restart": false,
 		"input_bindings": {"active_ability_1": [{"type": "key", "physical_keycode": KEY_R}]},
@@ -98,13 +100,14 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_equal(sanitized.ui_volume, 0.0, "Geladene Lautstärke wird unten begrenzt")
 	_equal(sanitized.ui_scale, 1.5, "Nicht unterstützte UI-Skalierung wird auf die nächste Stufe gesetzt")
 	_equal(sanitized.glyph_mode, UISettingsState.GLYPH_AUTO, "Unbekannter Glyphmodus fällt sicher auf Automatisch zurück")
-	_true(sanitized.reduce_motion and sanitized.fullscreen, "Anzeigeoptionen überleben das Laden")
+	_true(sanitized.reduce_motion and sanitized.show_character_name and sanitized.fullscreen, "Anzeigeoptionen überleben das Laden")
 	_true(not sanitized.confirm_run_restart, "Die Neustartbestätigung lässt sich im Einstellungs-Dictionary ausschalten")
 	_true(not bool(sanitized.to_dict().get("confirm_run_restart", true)), "Das Einstellungs-Dictionary speichert die Neustartbestätigung explizit")
 	_equal(UISettingsState.from_dict({"ui_scale": 0.76}).ui_scale, 0.75, "Niedrige Save-Skalierung rastet sicher auf 75 Prozent ein")
 	_equal(UISettingsState.from_dict({"ui_scale": 0.88}).ui_scale, 0.90, "Niedrige Save-Skalierung rastet sicher auf 90 Prozent ein")
 	var copy := sanitized.duplicate_settings()
 	_true(not copy.confirm_run_restart, "Einstellungsduplikate bewahren die Neustartbestätigung")
+	_true(copy.show_character_name, "Einstellungsduplikate bewahren die Namensanzeige")
 	(copy.input_bindings["active_ability_1"] as Array).append({"type": "key", "physical_keycode": KEY_T})
 	_equal((sanitized.input_bindings["active_ability_1"] as Array).size(), 1, "Einstellungsduplikate teilen keine verschachtelten Bindingdaten")
 
@@ -395,7 +398,7 @@ func _test_save_v5_settings_roundtrip() -> void:
 	}
 	meta.set_ui_settings(settings)
 	var data := meta.to_dict()
-	_equal(int(data.get("version", 0)), 5, "Einstellungen werden im Save-v5-Container gespeichert")
+	_equal(int(data.get("version", 0)), 6, "Einstellungen werden im Save-v6-Container gespeichert")
 	var restored := MetaProgressionState.new(func() -> int: return 900000)
 	_true(restored.load_dict(data), "Save v5 mit Einstellungen kann geladen werden")
 	_near(restored.ui_settings.master_volume, 0.31, 0.0001, "Masterlautstärke überlebt den Savegame-Roundtrip")
@@ -405,8 +408,8 @@ func _test_save_v5_settings_roundtrip() -> void:
 	_equal(restored.ui_settings.glyph_mode, UISettingsState.GLYPH_GAMEPAD, "Glyphmodus überlebt den Savegame-Roundtrip")
 	_true(not restored.ui_settings.confirm_run_restart, "Die ausgeschaltete Neustartbestätigung überlebt den Savegame-Roundtrip")
 	_true(restored.ui_settings.input_bindings.has("ui_info"), "Eine angepasste ui_info-Belegung überlebt ohne neue Saveversion")
-	_equal((restored.ui_settings.input_bindings["ui_info"] as Array).size(), 2, "ui_info bewahrt Tastatur- und Gamepadklasse im Save-v5-Container")
-	_equal((restored.ui_settings.input_bindings["active_ability_1"] as Array).size(), 2, "Zwei Tastaturplätze überleben unverändert im Save-v5-Container")
+	_equal((restored.ui_settings.input_bindings["ui_info"] as Array).size(), 2, "ui_info bewahrt Tastatur- und Gamepadklasse im Save-v6-Container")
+	_equal((restored.ui_settings.input_bindings["active_ability_1"] as Array).size(), 2, "Zwei Tastaturplätze überleben unverändert im Save-v6-Container")
 	var migrated := MetaProgressionState.new(func() -> int: return 900000)
 	_true(migrated.load_dict({"version": 4, "research_points": 17}), "Save v4 wird weiterhin migriert")
 	_equal(migrated.ui_settings.to_dict(), UISettingsState.new().to_dict(), "Save v4 erhält vollständige sichere Standardeinstellungen")

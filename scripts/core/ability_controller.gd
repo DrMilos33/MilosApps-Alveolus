@@ -207,7 +207,7 @@ func grant_shield(amount: float, replace_maximum: bool = false) -> void:
 
 ## Adds shield in small increments while reserving a stable upper limit. This
 ## differs from grant_shield(), whose amount also defines the source capacity.
-## Atemhilfe uses this path so several small overheal pulses can really build
+## Regeneration uses this path so several small overheal pulses can really build
 ## the Reservepuffer up to its advertised cap.
 func grant_shield_capped(amount: float, capacity: float) -> void:
 	var cap := maxf(capacity, 0.0)
@@ -273,12 +273,12 @@ func _execute_effect(command: AbilityCommand, definition: AbilityDefinition, tar
 			var burst_radius := build.value(RunBuildState.ABILITY_RADIUS, float(values.get("radius", 150.0)), definition.tags)
 			var burst_damage := build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 42.0)), definition.tags)
 			var knockback := build.value(RunBuildState.ABILITY_KNOCKBACK, float(values.get("knockback", 75.0)), definition.tags)
-			result.affected_handles = _damage_circle(target, burst_radius, burst_damage, definition.id, knockback)
+			result.affected_handles = _damage_circle(target, burst_radius, burst_damage, definition.id, knockback, definition.damage_profile)
 			result.radius = burst_radius
 			result.duration = 0.34
 			result.values = {"damage": burst_damage, "knockback": knockback}
 		&"treatment_line":
-			var line_result := _damage_line(target, values, definition.id)
+			var line_result := _damage_line(target, values, definition.id, definition.damage_profile)
 			result.direction = line_result.direction
 			result.length = line_result.length
 			result.width = line_result.width
@@ -325,14 +325,21 @@ func _spawn_zone(effect_id: StringName, center: Vector2, values: Dictionary, tag
 		zones.append(AbilityEffectZone.create(handle, effect_id, topology.wrap_position(center), radius, duration, resolved_values))
 	return handle
 
-func _damage_circle(center: Vector2, radius: float, amount: float, source: StringName, knockback: float = 0.0) -> PackedInt64Array:
+func _damage_circle(
+	center: Vector2,
+	radius: float,
+	amount: float,
+	source: StringName,
+	knockback: float = 0.0,
+	damage_profile: DamageProfile = null
+) -> PackedInt64Array:
 	var affected := PackedInt64Array()
 	if combat_query != null:
 		for handle in combat_query.circle(center, radius):
 			var enemy: Variant = combat_query.resolve(handle)
 			if not _targetable(enemy):
 				continue
-			_apply_damage_and_displacement(enemy, center, amount, source, knockback)
+			_apply_damage_and_displacement(enemy, center, amount, source, knockback, damage_profile)
 			affected.append(handle)
 		return affected
 	for enemy in _enemies():
@@ -341,10 +348,10 @@ func _damage_circle(center: Vector2, radius: float, amount: float, source: Strin
 		var body_radius := _enemy_radius(enemy)
 		if topology.distance_squared(center, enemy.global_position) > pow(radius + body_radius, 2.0):
 			continue
-		_apply_damage_and_displacement(enemy, center, amount, source, knockback)
+		_apply_damage_and_displacement(enemy, center, amount, source, knockback, damage_profile)
 	return affected
 
-func _damage_line(target: Vector2, values: Dictionary, source: StringName) -> Dictionary:
+func _damage_line(target: Vector2, values: Dictionary, source: StringName, damage_profile: DamageProfile = null) -> Dictionary:
 	var direction := topology.shortest_delta(avatar.global_position, target).normalized()
 	if direction.length_squared() < 0.0001:
 		direction = Vector2.RIGHT
@@ -364,11 +371,11 @@ func _damage_line(target: Vector2, values: Dictionary, source: StringName) -> Di
 			var enemy: Variant = combat_query.resolve(handle)
 			if not _targetable(enemy):
 				continue
-			_apply_damage_and_displacement(enemy, shot.origin, shot.damage, source, 0.0)
+			_apply_damage_and_displacement(enemy, shot.origin, shot.damage, source, 0.0, damage_profile)
 			affected.append(handle)
 	else:
 		for enemy in shot.resolve_line_hits(_enemies(), topology):
-			_apply_damage_and_displacement(enemy, shot.origin, shot.damage, source, 0.0)
+			_apply_damage_and_displacement(enemy, shot.origin, shot.damage, source, 0.0, damage_profile)
 	return {
 		"direction": shot.direction,
 		"length": shot.range_value,
@@ -455,10 +462,22 @@ func _enemy_definition_id(enemy: Object) -> StringName:
 	var id_value: Variant = (definition_value as Object).get("id")
 	return StringName(str(id_value)) if id_value != null else &""
 
-func _apply_damage_and_displacement(enemy: Object, center: Vector2, amount: float, source: StringName, knockback: float) -> void:
+func _apply_damage_and_displacement(
+	enemy: Object,
+	center: Vector2,
+	amount: float,
+	source: StringName,
+	knockback: float,
+	damage_profile: DamageProfile = null
+) -> void:
 	var resolved_amount := amount
 	if _enemy_definition_id(enemy) == &"bacterial_cluster":
 		resolved_amount *= build.value(&"group_area_effect", 1.0)
+	var enemy_definition: Variant = enemy.get("definition")
+	if enemy_definition is Object:
+		var resistance_value: Variant = (enemy_definition as Object).get("resistance_profile")
+		var resistance_profile := resistance_value as ResistanceProfile
+		resolved_amount = CombatDamageResolver.resolve(resolved_amount, damage_profile, resistance_profile, 0.0)
 	enemy.take_damage(resolved_amount, source)
 	if knockback > 0.0 and enemy.has_method("apply_displacement"):
 		var direction := topology.shortest_delta(center, enemy.global_position).normalized()

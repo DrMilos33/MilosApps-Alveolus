@@ -80,16 +80,16 @@ func _run() -> void:
 
 	var meta := MetaProgressionState.new()
 	meta.set_unlimited_test_progression(true)
-	_check(meta.set_talent_active(&"organization_1", true), "Der Testzustand aktiviert einen Talentknoten für die visuelle Statusprüfung")
+	_check(meta.set_talent_active(&"manual_treatment_aim", true), "Der Testzustand aktiviert den Wurzelknoten des Behandlungsbaums")
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
 	await process_frame
-	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 15, "Forschung zeigt bei 1280 Pixeln drei kompakte Spalten")
+	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 7, "Die sieben aktiven Forschungen zeigen bei 1280 Pixeln drei kompakte Spalten")
 	for research_card in hud.research_grid.get_children():
 		_check((research_card as Control).custom_minimum_size.y <= 76.0, "Forschungskarten überschreiten die kompakte Höhe nicht")
 	hud._select_research_tab(&"talents")
 	await process_frame
-	_check(hud.talent_grid.columns == 3 and hud.talent_grid.get_child_count() == 3, "Talente zeigen bei 1280 Pixeln drei kompakte Baumäste")
-	_check(hud.talent_buttons.size() == 12, "Alle zwölf Talente bleiben in den drei Baumästen erreichbar")
+	_check(hud.talent_grid.get_child_count() == 1, "Talente zeigen den einen aktiven Behandlungsbaum")
+	_check(hud.talent_buttons.size() == 4, "Alle vier Talente bleiben im Behandlungsbaum erreichbar")
 	var talent_tree_count := 0
 	var talent_node_count := 0
 	var talent_edge_count := 0
@@ -105,24 +105,24 @@ func _run() -> void:
 			_check(branch.get_child_count() == branch.node_count(), "Talentverbindungen werden als ruhige Linien gezeichnet und erzeugen keine zusätzlichen Kreispunkt-Controls")
 			for node in branch.get_children():
 				_check(node is Button, "Im Talentbaum bleiben ausschließlich die interaktiven Knoten als Controls bestehen")
-	_check(talent_tree_count == 3 and talent_node_count == 12, "Jeder Bereich besitzt einen echten verzweigten Talentbaum statt großer Listenkacheln")
-	_check(talent_edge_count == 9, "Alle neun Abhängigkeiten bleiben als Baumverbindungen erhalten")
-	_check(branch_accents.size() == 3, "Planung, Diagnose und Einsatz behalten jeweils ihren eigenen Astakzent")
+	_check(talent_tree_count == 1 and talent_node_count == 4, "Der aktive Bereich besitzt einen echten verzweigten Behandlungsbaum")
+	_check(talent_edge_count == 3, "Alle drei Abhängigkeiten bleiben als Baumverbindungen erhalten")
+	_check(branch_accents.size() == 1, "Der Behandlungsbaum verwendet einen einheitlichen Astakzent")
 	for talent_button in hud.talent_buttons.values():
 		var node_button := talent_button as Button
 		_check(node_button.custom_minimum_size.y <= TalentTreeBranch.NODE_HEIGHT, "Talentknoten bleiben auf die kompakte Baumhöhe begrenzt")
 		_check(not _contains_text(node_button, "VERFÜGBAR") and not _contains_text(node_button, "AKTIV") and not _contains_text(node_button, "BRAUCHT"), "Talentknoten erklären ihren Zustand ohne wiederholte Statuswörter")
 		_check(node_button.has_meta(&"item_state") and node_button.has_meta(&"item_interactive"), "Talentstatus bleibt semantisch prüfbar, obwohl er visuell über Farbe und Icon vermittelt wird")
-	var active_talent := hud.talent_buttons[&"organization_1"] as Button
+	var active_talent := hud.talent_buttons[&"manual_treatment_aim"] as Button
 	var active_state_icon := active_talent.find_child("StateIcon", true, false) as SimpleIcon
 	_check(active_talent.get_meta(&"item_state", &"") == &"active" and active_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD and active_state_icon != null and active_state_icon.kind == &"check", "Aktive Talente werden durch Highlight und Check-Icon statt Statustext markiert")
-	var locked_talent := hud.talent_buttons[&"hold_card"] as Button
+	var locked_talent := hud.talent_buttons[&"piercing_return"] as Button
 	var locked_state_icon := locked_talent.find_child("StateIcon", true, false) as SimpleIcon
 	_check(locked_talent.get_meta(&"item_state", &"") == &"locked" and not bool(locked_talent.get_meta(&"item_interactive", true)) and locked_state_icon != null and locked_state_icon.kind == &"locked", "Noch gesperrte Folgeknoten zeigen ein eindeutiges Schloss ohne Textballast")
 
 	var finding_reactions: Array = [
 		{"id": &"observe", "title": "Weiter beobachten", "description": "Befundfortschritt erhöhen."},
-		{"id": &"stabilize", "title": "Stabilisieren", "description": "Kurzzeitig Zustand schützen."},
+		{"id": &"stabilize", "title": "Stabilisieren", "description": "Kurzzeitig Leben schützen."},
 		{"id": &"treat", "title": "Gezielt behandeln", "description": "Behandlung verstärken."},
 	]
 	hud.show_finding({
@@ -136,10 +136,10 @@ func _run() -> void:
 	_check(hud.finding_copy_grid.columns == 1 and hud.finding_copy_grid.get_meta(&"alveolus_component", &"") == &"finding_effect_line", "Befund zeigt nur eine kompakte mechanische Effektzeile")
 	var finding_effect := hud.finding_copy_grid.get_child(0) as Label
 	_check(finding_effect != null and finding_effect.text == "+2 Bakteriengruppen" and hud.finding_copy_grid.find_children("*", "PanelContainer", true, false).is_empty(), "Befund verzichtet auf medizinische und spielerische Erklärungskacheln")
-	hud.show_end(levels[1], false, "Der Zustand ist auf null gefallen.", 95.0, 2, 8, 0, false)
+	hud.show_end(levels[1], false, "Das Leben ist auf null gefallen.", 95.0, 2, 8, 0, false)
 	await process_frame
 	await process_frame
-	_assert_compact_modal(hud.end_panel, GameHUD.END_PANEL_SIZE.y, "Ergebnis Zustand erschöpft")
+	_assert_compact_modal(hud.end_panel, GameHUD.END_PANEL_SIZE.y, "Ergebnis Leben erschöpft")
 	_check(
 		hud.result_screen.find_child("Optional_reward", true, false) == null
 		and hud.result_screen.find_child("Optional_unlock", true, false) == null
@@ -171,7 +171,7 @@ func _run() -> void:
 	var has_treatment_power := false
 	for row in run_stat_rows:
 		var accessible_text := String(row.get_meta(&"alveolus_accessible_name", ""))
-		if accessible_text.contains("Behandlungswirkung") and accessible_text.contains("18"):
+		if accessible_text.contains("Behandlungsschaden") and accessible_text.contains("18"):
 			has_treatment_power = true
 	_check(has_treatment_power, "HUD-Anzeige zeigt echte dynamische Werte")
 	_check(not hud.run_hud_screen.run_stats_strip().is_class("Panel"), "Die Runstatistik besitzt keine eigene Hintergrundkachel")

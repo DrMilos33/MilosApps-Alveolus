@@ -195,6 +195,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	for row_name in [
 		"OptionLayout_ui_scale",
 		"ToggleLayout_reduce_motion",
+		"ToggleLayout_show_character_name",
 		"ToggleLayout_confirm_restart",
 	]:
 		var row := screen.find_child(row_name, true, false) as HBoxContainer
@@ -211,6 +212,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	var compact_toggle_labels := {
 		&"reduce_motion": "Animationen reduzieren",
 		&"run_stats": "Werte im Run",
+		&"show_character_name": "Charaktername anzeigen",
 		&"fullscreen": "Vollbild",
 	}
 	for setting_id: StringName in compact_toggle_labels:
@@ -272,7 +274,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	var visible_binding := _button_caption(binding_button)
 	_check(not visible_binding.contains("Y") and not visible_binding.contains("Gamepad"), "Controllerbelegungen sind in der Settings-Zeile visuell ausgeblendet")
 	var toggle_grid := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
-	for setting_id in [&"reduce_motion", &"run_stats", &"fullscreen", &"confirm_restart"]:
+	for setting_id in [&"reduce_motion", &"run_stats", &"show_character_name", &"fullscreen", &"confirm_restart"]:
 		var toggle := screen.control_for_setting(StringName("toggle.%s" % String(setting_id))) as CheckButton
 		var toggle_row := screen.find_child("ToggleLayout_%s" % String(setting_id), true, false) as HBoxContainer
 		_check(toggle_row != null and toggle_row.get_parent() == toggle_grid, "%s liegt ohne zusätzliche Kachel direkt im Anzeigenraster" % setting_id)
@@ -282,6 +284,8 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 		_check(toggle != null and toggle.get_meta(&"alveolus_component", &"") == &"transparent_toggle", "%s ist redundant als transparenter Switch markiert" % setting_id)
 	var reduce_motion := screen.control_for_setting(&"toggle.reduce_motion") as CheckButton
 	_check(reduce_motion != null and reduce_motion.tooltip_text.contains("UI-Animationen"), "Animationen reduzieren erklärt die Wirkung knapp und verständlich")
+	var character_name := screen.control_for_setting(&"toggle.show_character_name") as CheckButton
+	_check(character_name != null and character_name.tooltip_text.contains("Doctor Milos"), "Namensoption erklärt ihren sichtbaren Effekt eindeutig")
 	for bus_id in [&"master", &"ui", &"effects", &"music"]:
 		var mute := screen.control_for_setting(StringName("audio.%s.mute" % String(bus_id))) as CheckButton
 		_check(mute != null and mute.theme_type_variation == &"", "%s-Stummschaltung liegt transparent in ihrer Audiozeile" % bus_id)
@@ -321,6 +325,7 @@ func _toggle_fixture() -> Array[SettingsScreenViewModel.ToggleSettingViewModel]:
 	var result: Array[SettingsScreenViewModel.ToggleSettingViewModel] = []
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Bewegung reduzieren", false))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", true))
+	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Name über dem Charakter", false))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"fullscreen", "Vollbild", false))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"confirm_restart", "Neustart bestätigen", true))
 	return result

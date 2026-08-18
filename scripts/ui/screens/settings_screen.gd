@@ -447,6 +447,9 @@ func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.Toggl
 	if setting.get_id() == &"reduce_motion":
 		toggle.tooltip_text = "Reduziert UI-Animationen und Bewegungseffekte."
 		toggle.set_meta(&"alveolus_accessible_name", "Animationen reduzieren: Ein oder Aus")
+	elif setting.get_id() == &"show_character_name":
+		toggle.tooltip_text = "Zeigt Doctor Milos dezent über der Spielfigur."
+		toggle.set_meta(&"alveolus_accessible_name", "Charaktername anzeigen: Ein oder Aus")
 	_controls[key] = toggle
 	parent.add_child(row)
 
@@ -457,6 +460,8 @@ func _toggle_purpose(setting_id: StringName, fallback: String) -> String:
 			return "Animationen reduzieren"
 		&"run_stats":
 			return "Werte im Run"
+		&"show_character_name":
+			return "Charaktername anzeigen"
 		&"fullscreen":
 			return "Vollbild"
 		&"confirm_restart":

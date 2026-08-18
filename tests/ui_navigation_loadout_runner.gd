@@ -113,7 +113,7 @@ func _test_planning_starts_at_treatment() -> void:
 	_equal(snapshot.mode, PlanningSnapshot.Mode.COMPONENT_PICK, "Die Planung überspringt den alten Übersichtsmodus")
 	_equal(snapshot.selected_slot_id, LoadoutSlotId.TREATMENT, "Der erste eindeutige Fokus liegt auf der Behandlung")
 	_equal(snapshot.current_component_id, &"treatment_precision", "Der direkt gewählte Platz kennt seinen aktuellen Inhalt")
-	_true(LoadoutSlotId.active().has(snapshot.selected_slot_id), "Der direkte Einstieg verwendet einen sichtbaren aktiven Planplatz")
+	_true(LoadoutSlotId.planning().has(snapshot.selected_slot_id), "Der direkte Einstieg verwendet einen sichtbaren Planplatz")
 	var fresh := PreparedLoadout.default_loadout()
 	_equal(fresh.reserve_id, &"", "Ein neuer Standardplan enthält keine Reserve")
 

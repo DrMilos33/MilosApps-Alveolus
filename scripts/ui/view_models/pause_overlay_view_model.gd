@@ -154,7 +154,7 @@ static func _default_icon(group: StringName) -> StringName:
 			return &"ability"
 		&"defense", &"abwehr":
 			return &"immune"
-		&"support", &"atemhilfe":
+		&"support", &"regeneration":
 			return &"support"
 		&"samples", &"proben":
 			return &"sample"
@@ -169,6 +169,6 @@ static func _default_accent(group: StringName) -> StringName:
 			return &"cobalt"
 		&"defense", &"abwehr":
 			return &"coral"
-		&"support", &"atemhilfe":
+		&"support", &"regeneration":
 			return &"turquoise"
 	return &"gold"

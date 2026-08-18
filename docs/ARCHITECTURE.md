@@ -136,27 +136,79 @@ automatic physics callbacks are disabled and the worlds step them centrally.
 The stable registries can later replace those shells with packed data without
 changing save version, definition IDs, RNG inputs, rewards or public UI flow.
 
-## Progression compatibility
+## Progression and save compatibility
 
-The visible plan currently contains treatment, two active and two passive
-slots. `LoadoutSlotId.RESERVE`, `PreparedLoadout.reserve_id`, version-5 save
-adapters and catalog IDs remain intact solely for old-save roundtrips; new plan
-drafts clear the Reserve and the UI does not expose it. Reintroducing it is a
-product decision, not a schema migration.
+The active product plan contains exactly one treatment and up to two active
+abilities. Passive modules and Reserve are not active catalog or preparation
+features. `PreparedLoadout.passive_ids`, `PreparedLoadout.reserve_id`, legacy
+`LoadoutSlotId` values and the embedded loadout adapter remain only as stable
+schema boundaries for old-save roundtrips. Every policy-sanitized effective
+plan copy clears those compatibility fields; reintroducing them requires a new
+product decision.
 
-Talent definitions keep stable IDs, costs and effects while their topology may
-gain prerequisites. Saves therefore carry an additive `talent_tree_revision`.
-Loading an older revision performs one complete talent-selection refund while
-preserving mastery completion and every earned point. It must never silently
-discard only the now-invalid descendants.
+Research ownership and preparation availability are separate contracts.
+`LoadoutAvailabilityPolicy` is the sole selection gate: Precision Treatment is
+the starter, Spread Treatment and Piercing Treatment require their respective
+research ranks, and Defense Burst plus Treatment Line are the two selectable
+active abilities. Focus Field, Emergency Aid, Protection Field and Sample Pull
+remain visible but unavailable. The UI may explain a locked definition, but it
+must never infer availability from the mere existence of a stable content ID.
+
+There are seven global research definitions. Five are applied directly through
+`PlayerStats.apply_meta_progression()` to maximum life, treatment damage,
+sample experience, defense and life regeneration. Two unlock the additional
+treatments. None of these effects depends on an equipped passive module.
+
+Savegame version 6 and `talent_tree_revision` 3 are the current outer formats.
+The treatment tree contains exactly four ranked definitions: manual treatment
+aim, Spread penetration, Piercing persistence and Piercing return. Loading an
+older tree revision discards or refunds the obsolete selection atomically while
+preserving mastery and earned points. The inner loadout adapter can retain its
+older schema version independently; it is not the savegame version.
 
 The temporary unlimited progression mode is runtime configuration rather than
-save data and must be set on `MetaProgressionState` before deserialization.
-Current-revision talent selections are validated atomically against stable IDs,
-prerequisites and the active economy mode. A rejected overspent selection is
-cleared as one refund state; partial descendant pruning is forbidden. Likewise,
-interactive refunding proceeds from leaves toward the root so one parent click
-cannot silently remove several active talents.
+save data and must be set on `MetaProgressionState` before deserialization. In
+that mode both research and talent economies expose a resettable one-billion
+point pool. Current-revision selections are still validated atomically against
+stable IDs, rank limits, prerequisites and the active economy mode.
+
+## Typed damage and player durability
+
+`DamageProfile` stores a normalized composition over the closed set `fire`,
+`water`, `earth`, `wind`, `blood`, `holy` and `undead`. Treatments, damaging
+active abilities, defense cells and enemy contact attacks own explicit damage
+profiles. `ResistanceProfile` stores the matching per-type modifiers; missing
+entries are neutral and unknown types must not silently enter gameplay.
+
+`CombatDamageResolver` first resolves the weighted type resistances and then
+applies general defense using `100 / (100 + max(defense, 0))`. Game-owned shield
+absorption runs after that resolved damage. The player-facing names for these
+layers are Leben, Schaden, Regeneration, Schild and Verteidigung even where
+legacy internal properties still use older stable names.
+
+## Case lifecycle and variation
+
+Product cases use `total_seconds <= 0` to mean no run deadline and schedule
+their boss at 180 seconds. The player baseline is 100 life. A case with no prior
+completion starts without a trait or finding; subsequent attempts derive both
+from the saved case seed. That seed advances only after a successful non-intro
+result, so failure and cancellation cannot silently reroll the case.
+
+`minor_focus` participates in the normal centralized enemy movement path with
+a 12 px/s base speed before case modifiers. It remains a detailed,
+generation-safe spawning objective and releases four bacteria after its
+20-second lifecycle if it survives; mobility does not authorize a per-entity
+process loop or a second renderer.
+
+## Defense-cell hit contract
+
+`DefenseCellWorld` owns defense-cell gameplay in the fixed `COMBAT` phase. The
+avatar may render the orbit snapshot but must not apply damage. Every cell
+queries `CombatQuery.circle()` at its actual topology-wrapped world position,
+selects at most one generation-safe enemy handle and starts its own cooldown
+only after a valid geometric hit. The minimum trigger interval is 0.1 seconds
+per cell. Cell count, hit radius and damage come from `RunBuildState`; a single
+shared avatar-centered area may not substitute for these geometric contacts.
 
 ## Feature contribution rule
 

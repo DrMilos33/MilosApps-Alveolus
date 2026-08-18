@@ -21,6 +21,7 @@ signal offline_claim_requested
 signal clinic_job_start_requested(id: StringName)
 signal clinic_job_claim_requested
 signal research_purchase_requested(id: StringName)
+signal research_reset_requested
 signal discovery_dismissed
 signal intro_skip_requested
 signal intro_skip_confirmed
@@ -337,6 +338,7 @@ var current_preparation_slots: Dictionary = {}
 var current_preparation_catalog_entries: Array = []
 var current_preparation_catalog_by_id: Dictionary = {}
 var current_preparation_unlocked_ids: Variant = {}
+var current_preparation_availability_reasons: Dictionary = {}
 var current_preparation_selected_components: Array = []
 var current_preparation_component_slots: Dictionary = {}
 var current_preparation_capacity_used: int = 0
@@ -616,7 +618,13 @@ func _install_run_hud_overlay(layer: Control) -> void:
 		var source := registration.get("source") as Control
 		var provider: Callable = registration.get("provider", Callable())
 		if source != null and provider.is_valid():
-			register_context_detail(source, provider, bool(registration.get("hover_enabled", true)))
+			register_context_detail(
+				source,
+				provider,
+				bool(registration.get("hover_enabled", true)),
+				registration.get("anchor") as Control,
+				int(registration.get("placement", ContextDetailController.Placement.AUTO))
+			)
 
 	# Preserve the established compatibility handles for callers and focused
 	# layout tests. They now point at the central module's controls.
@@ -746,6 +754,7 @@ func _build_research() -> Control:
 	progression_screen = ProgressionScreen.new()
 	progression_screen.tab_changed.connect(_on_progression_tab_changed)
 	progression_screen.research_purchase.connect(func(id: StringName) -> void: research_purchase_requested.emit(id))
+	progression_screen.research_reset.connect(func() -> void: research_reset_requested.emit())
 	progression_screen.talent_toggle.connect(func(id: StringName) -> void: talent_toggle_requested.emit(id))
 	progression_screen.talent_reset.connect(func() -> void: talent_reset_requested.emit())
 	progression_screen.back.connect(func() -> void: back_requested.emit())
@@ -818,6 +827,7 @@ func _on_settings_toggle_changed(setting_id: StringName, enabled: bool) -> void:
 	match setting_id:
 		&"reduce_motion": _on_settings_reduce_motion(enabled)
 		&"run_stats": _on_run_stats_toggle(enabled)
+		&"show_character_name": _on_settings_character_name(enabled)
 		&"fullscreen": _on_settings_fullscreen(enabled)
 		&"confirm_restart": _on_settings_restart_confirmation(enabled)
 
@@ -849,6 +859,7 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 	var toggle_settings: Array[SettingsScreenViewModel.ToggleSettingViewModel] = [
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Animationen reduzieren", current_ui_settings.reduce_motion),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", run_stats_enabled),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Charaktername anzeigen", current_ui_settings.show_character_name),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"fullscreen", "Vollbild", current_ui_settings.fullscreen, not OS.has_feature("web")),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"confirm_restart", "Neustart bestätigen", current_ui_settings.confirm_run_restart),
 	]
@@ -996,6 +1007,12 @@ func _on_settings_fullscreen(enabled: bool) -> void:
 		return
 	current_ui_settings.fullscreen = enabled
 	current_ui_settings.apply_window()
+	_emit_ui_settings_changed()
+
+func _on_settings_character_name(enabled: bool) -> void:
+	if current_ui_settings == null:
+		return
+	current_ui_settings.show_character_name = enabled
 	_emit_ui_settings_changed()
 
 func _on_settings_restart_confirmation(enabled: bool) -> void:
@@ -1526,7 +1543,7 @@ func _build_preparation() -> Control:
 	preparation_slots.add_theme_constant_override("v_separation", 7)
 	preparation_slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	plan_box.add_child(preparation_slots)
-	for slot_id in LoadoutSlotId.active():
+	for slot_id in LoadoutSlotId.planning():
 		var slot := _build_preparation_slot_card(slot_id)
 		slot.set_meta(&"slot_id", slot_id)
 		slot.set_meta(&"stable_focus_id", slot_id)
@@ -2065,15 +2082,17 @@ func refresh_talents(talent_view: Variant) -> void:
 func _refresh_progression_research_cache(meta: MetaProgressionState, definitions: Array[ResearchDefinition]) -> void:
 	progression_research_items.clear()
 	progression_research_balance = "Forschung  ∞ · Testmodus" if meta.is_unlimited_test_progression() else "Forschung  %d" % meta.research_points
+	var module_definitions := ContentCatalog.loadout_module_definitions()
 	for definition in definitions:
 		var rank := meta.rank(definition.id)
 		var maximum := rank >= definition.max_level
 		var cost := 0 if maximum else definition.cost_for_rank(rank)
-		var available := not maximum and meta.can_afford_research(cost)
-		var state := ProgressionScreenViewModel.ItemState.ACTIVE if maximum else (ProgressionScreenViewModel.ItemState.AVAILABLE if available else ProgressionScreenViewModel.ItemState.LOCKED)
+		var purchase_enabled := LoadoutAvailabilityPolicy.research_purchase_enabled(definition)
+		var available := purchase_enabled and not maximum and meta.can_afford_research(cost)
+		var state := ProgressionScreenViewModel.ItemState.LOCKED if not purchase_enabled else (ProgressionScreenViewModel.ItemState.ACTIVE if maximum else (ProgressionScreenViewModel.ItemState.AVAILABLE if available else ProgressionScreenViewModel.ItemState.LOCKED))
 		var rank_text := "Rang %d/%d" % [rank, definition.max_level]
 		var cost_text := "Maximum" if maximum else "%d Forschung" % cost
-		var state_text := "Abgeschlossen" if maximum else ("Verfügbar" if available else "Nicht genug Forschung")
+		var state_text := LoadoutAvailabilityPolicy.research_status(definition, module_definitions) if not purchase_enabled else ("Abgeschlossen" if maximum else ("Verfügbar" if available else "Nicht genug Forschung"))
 		var info := ProgressionScreenViewModel.InfoViewModel.create(
 			definition.title,
 			definition.description,
@@ -2109,7 +2128,7 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 		var category_items: Array = grouped.get(category, [])
 		category_items.append(talent)
 		grouped[category] = category_items
-	for category in ["PLANUNG", "DIAGNOSE", "EINSATZ"]:
+	for category in ["BEHANDLUNG"]:
 		var node_models: Array = []
 		for talent in grouped.get(category, []):
 			var id := StringName(_view_value(talent, &"id", &""))
@@ -2117,15 +2136,16 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 			var description := String(_view_value(talent, &"description", _view_value(talent, &"effect", "")))
 			var cost := int(_view_value(talent, &"cost", 1))
 			var active := bool(_view_value(talent, &"active", false))
+			var current_rank := int(_view_value(talent, &"current_rank", 1 if active else 0))
+			var max_rank := maxi(1, int(_view_value(talent, &"max_rank", 1)))
+			var maximum := bool(_view_value(talent, &"maximum", current_rank >= max_rank))
 			var unlocked := bool(_view_value(talent, &"unlocked", true))
 			var prerequisite_met := bool(_view_value(talent, &"prerequisite_met", true))
-			var active_dependents := PackedStringArray(_view_value(talent, &"active_dependents", PackedStringArray()))
-			var can_deactivate := active_dependents.is_empty()
-			var interactive := (active and can_deactivate) or (not active and unlocked and prerequisite_met and available_points >= cost)
+			var interactive := not maximum and unlocked and prerequisite_met and available_points >= cost
 			var state := ProgressionScreenViewModel.ItemState.ACTIVE if active else (ProgressionScreenViewModel.ItemState.AVAILABLE if interactive else ProgressionScreenViewModel.ItemState.LOCKED)
 			var requirement := String(_view_value(talent, &"requirement_text", "Einstieg des Astes"))
-			if active and not can_deactivate:
-				requirement = "Zuerst deaktivieren: %s" % ", ".join(active_dependents)
+			if maximum:
+				requirement = "Maximaler Rang erreicht"
 			elif not unlocked:
 				requirement = "Noch nicht freigeschaltet"
 			elif not prerequisite_met:
@@ -2137,14 +2157,14 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 			var info := ProgressionScreenViewModel.InfoViewModel.create(
 				title,
 				description,
-				"%d P · %s" % [cost, requirement],
+				"Rang %d/%d · %s" % [current_rank, max_rank, requirement],
 				icon_kind,
 				accent
 			)
 			node_models.append(ProgressionScreenViewModel.TalentNodeViewModel.create(
 				id,
 				title,
-				"%dP" % cost,
+				"%d/%d · %s" % [current_rank, max_rank, "Max" if maximum else "%dP" % cost],
 				icon_kind,
 				int(_view_value(talent, &"tree_tier", 0)),
 				int(_view_value(talent, &"tree_lane", 1)),
@@ -2155,10 +2175,10 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 			))
 		if node_models.is_empty():
 			continue
-		var branch_id := &"planning" if category == "PLANUNG" else (&"diagnosis" if category == "DIAGNOSE" else &"deployment")
+		var branch_id := &"treatment"
 		progression_talent_branches.append(ProgressionScreenViewModel.TalentBranchViewModel.create(
 			branch_id,
-			category.capitalize(),
+			"Behandlungen",
 			_talent_icon_kind(category),
 			_talent_branch_accent(category),
 			node_models
@@ -2344,6 +2364,7 @@ func _add_talent_tree_branch(category: String, talents: Array, available_points:
 
 func _talent_branch_accent(category: String) -> Color:
 	match category:
+		"BEHANDLUNG": return COLOR_TEAL
 		"PLANUNG": return COLOR_GOLD
 		"DIAGNOSE": return COLOR_RED
 		"EINSATZ": return COLOR_BLUE
@@ -2357,6 +2378,14 @@ func _talent_view_from_meta(meta: MetaProgressionState, definitions: Array) -> D
 	for definition in definitions:
 		var required_ids: Variant = _view_value(definition, &"required_ids", [])
 		var definition_id := StringName(_view_value(definition, &"id", &""))
+		var current_rank := meta.talent_rank(definition_id)
+		var max_rank := maxi(1, int(_view_value(definition, &"max_rank", 1)))
+		var maximum := current_rank >= max_rank
+		var next_cost := 0
+		if not maximum and definition is TalentDefinition:
+			next_cost = (definition as TalentDefinition).cost_for_rank(current_rank)
+		elif not maximum:
+			next_cost = int(_view_value(definition, &"cost", 1))
 		var prerequisites_met := true
 		var requirement_titles := PackedStringArray()
 		var active_dependents := PackedStringArray()
@@ -2374,9 +2403,12 @@ func _talent_view_from_meta(meta: MetaProgressionState, definitions: Array) -> D
 			"id": definition_id,
 			"title": _view_value(definition, &"title", "Talent"),
 			"description": _view_value(definition, &"description", ""),
-			"cost": _view_value(definition, &"cost", 1),
-			"category": _view_value(definition, &"category", &""),
-			"active": meta.has_talent(definition_id),
+			"cost": next_cost,
+			"category": &"treatment",
+			"active": current_rank > 0,
+			"current_rank": current_rank,
+			"max_rank": max_rank,
+			"maximum": maximum,
 			"prerequisite_met": prerequisites_met,
 			"required_ids": PackedStringArray(required_ids),
 			"active_dependents": active_dependents,
@@ -2447,8 +2479,10 @@ func show_lexicon(meta: MetaProgressionState) -> void:
 	_show_campus_context()
 	lexicon_overlay.show()
 	if lexicon_master_detail != null:
+		var lexicon_stats := PlayerStats.new()
+		lexicon_stats.apply_meta_progression(meta.research_ranks)
 		lexicon_master_detail.configure(
-			LexiconViewModelProvider.new(ContentCatalog.enemy_definitions(), ContentCatalog.discovery_definitions(), PlayerStats.new(), TreatmentDefinition.catalog()),
+			LexiconViewModelProvider.new(ContentCatalog.enemy_definitions(), ContentCatalog.discovery_definitions(), lexicon_stats, TreatmentDefinition.catalog()),
 			meta.seen_discovery_ids,
 			LexiconCatalog.entries()
 		)
@@ -2465,7 +2499,7 @@ func show_story() -> void:
 		story_view_model = StoryScreenViewModel.create([
 			{"id": &"welcome", "title": "Willkommen bei ALVEOLUS", "body": "Du leitest ALVEOLUS, einen kleinen Forschungscampus für schwierige Lungenfälle.", "next_label": "Weiter"},
 			{"id": &"lung_model", "title": "Das Lungenmodell", "body": "Jeder Fall wird als begehbares Lungenmodell dargestellt. Du koordinierst die Behandlung direkt im Modell.", "next_label": "Weiter"},
-			{"id": &"mission", "title": "Deine Aufgabe", "body": "Stoppe Bakterien, stärke die Abwehr und halte den Zustand stabil. Gesammelte Proben helfen dem Campus weiter.", "next_label": "Zum Campus"},
+			{"id": &"mission", "title": "Deine Aufgabe", "body": "Stoppe Bakterien, stärke die Abwehr und halte Doctor Milos am Leben. Gesammelte Proben helfen dem Campus weiter.", "next_label": "Zum Campus"},
 		], 1, &"prologue", true, true, "Überspringen")
 	story_screen.present(story_view_model, story_index, false)
 	_prepare_optional_navigation_focus.call_deferred(story_overlay, story_next_button)
@@ -2478,9 +2512,15 @@ func configure_input_glyphs(service: InputGlyphService) -> void:
 		input_glyph_service.input_method_changed.connect(_on_input_method_changed)
 	_refresh_input_glyphs()
 
-func register_context_detail(source: Control, provider: Callable, hover_enabled: bool = true) -> void:
+func register_context_detail(
+	source: Control,
+	provider: Callable,
+	hover_enabled: bool = true,
+	anchor: Control = null,
+	placement: int = ContextDetailController.Placement.AUTO
+) -> void:
 	if context_detail_controller != null:
-		context_detail_controller.register_source(source, provider, hover_enabled)
+		context_detail_controller.register_source(source, provider, hover_enabled, anchor, placement)
 
 func toggle_focused_context_detail(focus_owner: Control) -> bool:
 	return context_detail_controller != null and context_detail_controller.toggle_focused(focus_owner)
@@ -2630,7 +2670,7 @@ func refresh_preparation(view_model: Variant, catalog: Array = [], loadout: Vari
 	if planning_snapshot.mode == PlanningSnapshot.Mode.COMPONENT_PICK and planning_snapshot.selected_slot_id != &"":
 		planning_snapshot.current_component_id = _preparation_component_at(planning_snapshot.selected_slot_id)
 	var active_component_ids: Array = []
-	for slot_id in LoadoutSlotId.active():
+	for slot_id in LoadoutSlotId.planning():
 		var slot_button: Button = preparation_slot_buttons[slot_id]
 		var component_id := StringName(str(slot_snapshot.get(slot_id, slot_snapshot.get(String(slot_id), ""))))
 		slot_button.set_meta(&"component_id", component_id)
@@ -2654,11 +2694,13 @@ func refresh_preparation(view_model: Variant, catalog: Array = [], loadout: Vari
 	preparation_capacity_bar.add_theme_stylebox_override("fill", _bar_style(COLOR_RED if used > maximum else COLOR_TEAL, 4))
 	var selected_components := active_component_ids.duplicate()
 	var component_slots: Dictionary = {}
-	for slot_id in LoadoutSlotId.active():
+	for slot_id in LoadoutSlotId.planning():
 		var assigned_id := StringName(str(slot_snapshot.get(slot_id, slot_snapshot.get(String(slot_id), ""))))
 		if assigned_id != &"":
 			component_slots[assigned_id] = _loadout_slot_caption(slot_id)
-	current_preparation_unlocked_ids = _view_value(view_model, &"unlocked_ids", {})
+	current_preparation_unlocked_ids = _view_value(view_model, &"available_ids", _view_value(view_model, &"unlocked_ids", {}))
+	var raw_availability_reasons: Variant = _view_value(view_model, &"availability_reasons", {})
+	current_preparation_availability_reasons = raw_availability_reasons.duplicate() if raw_availability_reasons is Dictionary else {}
 	current_preparation_selected_components = selected_components
 	current_preparation_component_slots = component_slots
 	_rebuild_preparation_catalog(current_preparation_catalog_entries, current_preparation_unlocked_ids, selected_components, component_slots)
@@ -2736,11 +2778,11 @@ func _case_modifier_fact(modifier: Variant) -> Dictionary:
 	var beneficial := false
 	match stat_id:
 		&"initial_stability":
-			caption = "Startzustand"
+			caption = "Startleben"
 			amount = value
 			beneficial = amount >= 0.0
 		&"support_effect":
-			caption = "Atemhilfe"
+			caption = "Regeneration"
 			amount = (value - 1.0) * 100.0 if operation == &"multiply" else value
 			beneficial = amount >= 0.0
 		&"spawn_interval":
@@ -2755,8 +2797,8 @@ func _case_modifier_fact(modifier: Variant) -> Dictionary:
 			caption = "Gegnertempo"
 			amount = (value - 1.0) * 100.0 if operation == &"multiply" else value
 			beneficial = amount <= 0.0
-		&"contact_damage":
-			caption = "Kontaktschaden"
+		&"enemy_damage", &"contact_damage":
+			caption = "Gegnerschaden"
 			amount = (value - 1.0) * 100.0 if operation == &"multiply" else value
 			beneficial = amount <= 0.0
 		_:
@@ -2828,7 +2870,7 @@ func _refresh_run_stats() -> void:
 func _run_stat_descriptors(current_stability: float, maximum_stability: float) -> Array:
 	var descriptors: Array = []
 	var wanted := {
-		"BEHANDLUNG:Wirkung": [&"treatment", 100, "Behandlungswirkung"],
+		"BEHANDLUNG:Schaden": [&"treatment", 100, "Behandlungsschaden"],
 		"BEHANDLUNG:Intervall": [&"automatic_therapy", 90, "Behandlungsintervall"],
 		"BEHANDLUNG:Ziele": [&"therapy_precision", 80, "Behandlungsziele"],
 		"ABWEHR:Zellen": [&"immune", 70, "Abwehrzellen"],
@@ -2872,10 +2914,10 @@ func _refresh_pause_stats() -> void:
 		grouped[group] = group_rows
 	# The reference layout is one quiet sheet with two real value columns. The
 	# group color and a small icon travel with every row, so repeated captions
-	# such as "Wirkung" remain unambiguous without six bulky group cards.
+	# such as "Schaden" remain unambiguous without six bulky group cards.
 	var column_groups := [
 		["ALLGEMEIN", "BEHANDLUNG"],
-		["AKTIV", "ABWEHR", "ATEMHILFE", "PROBEN"],
+		["AKTIV", "ABWEHR", "REGENERATION", "PROBEN"],
 	]
 	for group_order in column_groups:
 		var column := VBoxContainer.new()
@@ -2901,7 +2943,7 @@ func _refresh_pause_stats() -> void:
 			group_lines.append("%s:  %s" % [String(row.get("label", "")), String(row.get("value", ""))])
 		text_grouped[group] = group_lines
 	pause_stats_label.text = _stat_group_text(text_grouped, ["ALLGEMEIN", "BEHANDLUNG"])
-	pause_stats_label_right.text = _stat_group_text(text_grouped, ["AKTIV", "ABWEHR", "ATEMHILFE", "PROBEN"])
+	pause_stats_label_right.text = _stat_group_text(text_grouped, ["AKTIV", "ABWEHR", "REGENERATION", "PROBEN"])
 	if pause_stats_scroll != null:
 		pause_stats_scroll.scroll_vertical = 0
 		_update_pause_stats_scroll_mode.call_deferred()
@@ -2973,7 +3015,7 @@ func _pause_stat_group_accent(group: String) -> Color:
 		"BEHANDLUNG": return COLOR_TEAL
 		"AKTIV": return COLOR_BLUE
 		"ABWEHR": return COLOR_RED
-		"ATEMHILFE": return COLOR_TEAL.lightened(0.10)
+		"REGENERATION": return COLOR_TEAL.lightened(0.10)
 		"PROBEN": return COLOR_BLUE.lightened(0.10)
 	return COLOR_MUTED
 
@@ -2983,7 +3025,7 @@ func _pause_stat_group_icon(group: String) -> StringName:
 		"BEHANDLUNG": return &"treatment"
 		"AKTIV": return &"ability"
 		"ABWEHR": return &"immune"
-		"ATEMHILFE": return &"support"
+		"REGENERATION": return &"support"
 		"PROBEN": return &"sample"
 	return &"information"
 
@@ -3037,6 +3079,7 @@ func configure_active_abilities(abilities: Array) -> void:
 			"title": String(_view_value(ability, &"title", _view_value(ability, &"display_name", "Aktive Fähigkeit"))),
 			"icon_id": ability_id,
 			"effect_text": String(_view_value(ability, &"description", _view_value(ability, &"effect_text", ""))),
+			"fact_rows": _view_value(ability, &"fact_rows", []),
 			"occupied": true,
 			"ready": bool(_view_value(ability, &"ready", true)),
 			"cooldown_remaining": float(_view_value(ability, &"cooldown_remaining", 0.0)),
@@ -3083,6 +3126,7 @@ func _empty_run_hud_ability(slot_index: int) -> Dictionary:
 		"title": "Nicht belegt",
 		"icon_id": &"ability",
 		"effect_text": "",
+		"fact_rows": [],
 		"occupied": false,
 		"ready": false,
 		"cooldown_remaining": 0.0,
@@ -3242,7 +3286,7 @@ func _intro_upgrade_copy(id: StringName) -> String:
 		&"neutrophils":
 			return "Abwehrzellen schützen den Nahbereich automatisch."
 		&"oxygenation":
-			return "Atemhilfe stellt regelmäßig Zustand wieder her."
+			return "Regeneration stellt regelmäßig Leben wieder her."
 		_:
 			return "Diese Verbesserung verstärkt deine Behandlung."
 
@@ -3308,7 +3352,7 @@ func _pause_stat_group_role(group: String) -> StringName:
 		"BEHANDLUNG": return &"teal"
 		"AKTIV", "PROBEN": return &"cobalt"
 		"ABWEHR": return &"coral"
-		"ATEMHILFE": return &"turquoise"
+		"REGENERATION": return &"turquoise"
 	return &"gold"
 
 func show_abort_confirmation() -> void:
@@ -3351,7 +3395,7 @@ func show_finding(definition: Variant, reactions: Array, reserve: Variant = null
 		var title := String(_view_value(reaction, &"title", "Reaktion"))
 		var effect := String(_view_value(reaction, &"description", _view_value(reaction, &"effect", "")))
 		var accent := COLOR_TEAL if index % 2 == 0 else COLOR_GOLD
-		var info := FindingOverlayViewModel.InfoViewModel.new(title, effect, "Reaktion auf den Befund", &"ability", accent)
+		var info := FindingOverlayViewModel.InfoViewModel.new("", effect, "", &"ability", accent)
 		finding_reaction_models.append(FindingOverlayViewModel.ReactionViewModel.new(
 			reaction_id,
 			title,
@@ -3498,7 +3542,7 @@ func show_end(level: LevelDefinition, success: bool, reason: String, elapsed: fl
 	ability_panel.hide()
 	finding_progress_panel.hide()
 	result_success = success
-	result_title_text = "Herd kontrolliert" if success else "Zustand erschöpft"
+	result_title_text = "Herd kontrolliert" if success else "Leben erschöpft"
 	result_reason_text = reason
 	result_detail_text = level.victory_text if success else level.failure_text
 	result_stats_data = [
@@ -3746,7 +3790,7 @@ func _on_preparation_slot_gui_input(event: InputEvent) -> void:
 		preparation_slot_keyboard_activation = false
 
 func _on_preparation_slot_pressed(slot_id: StringName) -> void:
-	if preparation_locked or not LoadoutSlotId.active().has(slot_id) or planning_snapshot.mode == PlanningSnapshot.Mode.REPLACE_CONFIRM:
+	if preparation_locked or not LoadoutSlotId.planning().has(slot_id) or planning_snapshot.mode == PlanningSnapshot.Mode.REPLACE_CONFIRM:
 		return
 	var navigation_activation := preparation_slot_keyboard_activation \
 		or (input_glyph_service != null and input_glyph_service.method() == InputGlyphService.GAMEPAD)
@@ -3918,7 +3962,7 @@ func _preparation_slot_short_description(component_id: StringName, entry: Varian
 	match component_id:
 		&"precise", &"treatment_precision": return "Präziser Einzelimpuls"
 		&"focus", &"ability_focus_field": return "Verstärkt das Zielgebiet"
-		&"emergency", &"ability_emergency_support": return "Stabilität und Schutz"
+		&"emergency", &"ability_emergency_support": return "Leben und Schild"
 		&"shield", &"ability_defense_burst": return "AoE-Schaden und Rückstoß"
 	var description := String(_view_value(entry, &"description", _view_value(entry, &"effect", "Vorbereitete Komponente")))
 	var first_sentence := description.get_slice(".", 0).strip_edges()
@@ -4094,6 +4138,7 @@ func _rebuild_preparation_catalog(entries: Array, unlocked_ids: Variant = {}, se
 			"cost": cost,
 			"selected_slot": selected_slot,
 			"entry": entry,
+			"lock_reason": String(current_preparation_availability_reasons.get(id, current_preparation_availability_reasons.get(String(id), "Gesperrt"))),
 		}
 		if current_for_slot:
 			row["state"] = &"current"
@@ -4127,6 +4172,7 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	var cost := int(row.get("cost", 0))
 	var selected_slot := String(row.get("selected_slot", ""))
 	var state := StringName(row.get("state", &"available"))
+	var lock_reason := String(row.get("lock_reason", "Gesperrt"))
 	var available := state == &"available"
 	var locked := state == &"locked"
 	var assigned := state == &"assigned"
@@ -4149,6 +4195,7 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	button.set_meta(&"component_cost", cost)
 	button.set_meta(&"catalog_state", state)
 	button.set_meta(&"catalog_available", available)
+	button.set_meta(&"catalog_lock_reason", lock_reason)
 	button.set_meta(&"stable_focus_id", id)
 	UISoundService.set_sound_role(button, UISoundService.CONFIRM if available else (UISoundService.NONE if current else UISoundService.ERROR))
 	_apply_preparation_candidate_style(button, available, assigned or current)
@@ -4192,7 +4239,7 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	title_stack.add_child(title_label)
 	var state_text := ""
 	if locked:
-		state_text = "Gesperrt · Forschung"
+		state_text = lock_reason
 	elif assigned:
 		state_text = "In %s" % selected_slot
 	var state_label := _label(state_text, 12, Color("708a8c") if locked else Color("a8c9c6"))
@@ -4243,7 +4290,7 @@ func _show_preparation_component_inspector(id: StringName, source: Control = nul
 	var state := StringName(button.get_meta(&"catalog_state", &"available")) if button != null else &"available"
 	if state == &"locked":
 		preparation_inspector_description.text = description.get_slice(".", 0).strip_edges()
-		preparation_inspector_meta.text = "Gesperrt · Forschung"
+		preparation_inspector_meta.text = String(button.get_meta(&"catalog_lock_reason", "Gesperrt")) if button != null else "Gesperrt"
 	elif state == &"assigned":
 		preparation_inspector_description.text = description.get_slice(".", 0).strip_edges()
 		preparation_inspector_meta.text = "In anderem Planplatz"
@@ -4274,7 +4321,7 @@ func _preparation_component_context_payload(id: StringName) -> Dictionary:
 	var state := StringName(button.get_meta(&"catalog_state", &"available")) if button != null else &"available"
 	var meta := "%d" % cost
 	match state:
-		&"locked": meta = "%d · Gesperrt · Forschung" % cost
+		&"locked": meta = "%d · %s" % [cost, String(button.get_meta(&"catalog_lock_reason", "Gesperrt")) if button != null else "Gesperrt"]
 		&"assigned": meta = "%d · In anderem Planplatz" % cost
 		&"current": meta = "%d · Aktueller Inhalt" % cost
 		_:
@@ -4725,7 +4772,7 @@ func cancel_preparation_step() -> bool:
 	return false
 
 func complete_preparation_change(slot_id: StringName) -> void:
-	var next_slot := slot_id if LoadoutSlotId.active().has(slot_id) else LoadoutSlotId.TREATMENT
+	var next_slot := slot_id if LoadoutSlotId.planning().has(slot_id) else LoadoutSlotId.TREATMENT
 	planning_snapshot.begin_component_pick(next_slot, _preparation_component_at(next_slot))
 	preparation_selecting_reserve = false
 	preparation_replacement_slots.clear()
@@ -4937,6 +4984,7 @@ func _research_category_text(category: StringName) -> String:
 
 func _talent_icon_kind(category: String) -> StringName:
 	match category.to_upper():
+		"BEHANDLUNG": return &"treatment"
 		"PLANUNG": return &"plan"
 		"DIAGNOSE": return &"finding"
 		_: return &"ability"
@@ -4944,12 +4992,14 @@ func _talent_icon_kind(category: String) -> StringName:
 
 func _talent_category_text(category: Variant) -> String:
 	var normalized := str(category).to_upper()
+	if normalized in ["TREATMENT", "BEHANDLUNG"]:
+		return "BEHANDLUNG"
 	if normalized in ["0", "PLANNING", "PLANUNG"]:
 		return "PLANUNG"
 	if normalized in ["1", "DIAGNOSIS", "DIAGNOSE"]:
 		return "DIAGNOSE"
 	if normalized in ["2", "DEPLOYMENT", "EINSATZ"]:
-		return "EINSATZ"
+		return "BEHANDLUNG"
 	return "TALENT"
 
 func _catalog_capacity(component_ids: Array, catalog_by_id: Dictionary) -> int:

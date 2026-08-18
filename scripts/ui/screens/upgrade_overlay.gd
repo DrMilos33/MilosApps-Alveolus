@@ -31,6 +31,7 @@ var _backdrop: ColorRect
 var _safe_area: MarginContainer
 var _center: CenterContainer
 var _sheet: PanelContainer
+var _sheet_stack: VBoxContainer
 var _body_scroll: ScrollContainer
 var _scrollbar_inset: MarginContainer
 var _body_stack: VBoxContainer
@@ -261,13 +262,14 @@ func _build() -> void:
 
 	var footer_buttons: Array[Control] = [_reroll_button, _cancel_button]
 	var sheet_parts := AlveolusUIComponents.modal_sheet(
-		"",
+		"Level Up!",
 		_body_scroll,
 		footer_buttons,
 		MODAL_PADDING,
 		AlveolusVisualTheme.TURQUOISE
 	)
 	_sheet = sheet_parts["panel"] as PanelContainer
+	_sheet_stack = sheet_parts["content"] as VBoxContainer
 	_sheet.name = "UpgradeSheet"
 	_footer_actions = sheet_parts["actions"] as HBoxContainer
 	_footer_actions.hide()
@@ -573,10 +575,15 @@ func _update_responsive_layout() -> void:
 
 	_body_scroll.custom_minimum_size.y = 0.0
 	var body_height := _body_stack.get_combined_minimum_size().y
+	var title_height := 0.0
+	if _sheet_stack != null and _sheet_stack.get_child_count() > 0:
+		var title_control := _sheet_stack.get_child(0) as Control
+		title_height = title_control.get_combined_minimum_size().y if title_control != null else 0.0
 	var footer_height := _footer_actions.get_combined_minimum_size().y if _footer_actions.visible else 0.0
-	var gap_count := 1 if _footer_actions.visible else 0
+	var gap_count := 1 + (1 if _footer_actions.visible else 0)
 	var chrome_height := (
 		float(MODAL_PADDING * 2)
+		+ title_height
 		+ footer_height
 		+ float(AlveolusVisualTheme.CONTENT_GAP * gap_count)
 	)

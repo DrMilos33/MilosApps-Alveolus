@@ -53,7 +53,7 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	var view_model: RunHUDViewModel = RunHUDViewModelScript.create(vital, stats, abilities, 22)
 	_check(view_model.is_valid() and view_model.revision() == 22, "View-Model übernimmt einen gültigen revisionsgebundenen Snapshot")
 	_check(view_model.content_hash().length() == 64, "Run-HUD-View-Model besitzt einen SHA-256-Inhaltshash")
-	_check(view_model.stability_text() == "76 / 100" and view_model.shield_text() == "12", "Zustand und Schutz sind präsentationsfertig und nur lesbar")
+	_check(view_model.stability_text() == "76 / 100" and view_model.shield_text() == "12", "Leben und Schild sind präsentationsfertig und nur lesbar")
 	_check(view_model.round_time_text() == "03:36" and view_model.timer_text() == "03:36", "Rundendauer ist präsentationsfertig und frei von Boss-Chrome")
 	_check(view_model.boss_visible() and view_model.boss_percentage_text() == "64 %", "Bossstatus enthält Sichtbarkeit und Prozentwert")
 	_check(view_model.analysis_text() == "Lv 3 · 7/12", "Analyse und Proben bilden eine kompakte gemeinsame Anzeige")
@@ -61,6 +61,7 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	_check(view_model.stat_at(0).id() == &"therapy_power", "Runwerte werden nach stabiler Priorität sortiert")
 	_check(view_model.ability_at(0).title() == "Fokusfeld" and view_model.ability_at(1).title() == "Notfallhilfe", "Fähigkeiten werden unabhängig von der Eingabereihenfolge nach Slot normalisiert")
 	_check(view_model.ability_at(0).effect_text() == "Priorisiert Ziele und verstärkt die Behandlung im Zielgebiet.", "Fähigkeitswirkung wird präsentationsfertig und nur lesbar kopiert")
+	_check(view_model.ability_at(0).facts_text() == "Abklingzeit: 10 s\nRadius: 120 px", "Fähigkeit stellt ausschließlich strukturierte Fakten kompakt bereit")
 	_check(view_model.ability_at(0).targeting() and view_model.ability_at(0).status_text() == "Ziel wählen", "Targeting besitzt Vorrang vor dem Bereitstatus")
 	_check(is_equal_approx(view_model.ability_at(1).cooldown_progress(), 0.4), "Cooldownfortschritt wird aus kopierten Presenterwerten berechnet")
 	_check(view_model.ability_at(-1) == null and view_model.ability_at(2) == null, "Ungültige Fähigkeitsslots werden sicher abgewiesen")
@@ -70,13 +71,16 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	stats[0]["value"] = "999"
 	abilities[0]["title"] = "Fremde Fähigkeit"
 	abilities[0]["effect_text"] = "Fremde Wirkung"
+	var mutable_fact_rows := abilities[0]["fact_rows"] as Array
+	var mutable_fact := mutable_fact_rows[0] as Dictionary
+	mutable_fact["value"] = "999 s"
 	var returned_stats := view_model.stats()
 	var returned_abilities := view_model.abilities()
 	returned_stats.clear()
 	returned_abilities.clear()
 	_check(view_model.timer_text() == "03:36", "Tiefe Quellmutationen erreichen den Vital-Snapshot nicht")
 	_check(view_model.stat_count() == 5 and view_model.stat_at(0).formatted_value() == "+18 %", "Runwertarrays sind defensiv kopiert")
-	_check(view_model.ability_count() == 2 and view_model.ability_at(1).title() == "Notfallhilfe" and view_model.ability_at(1).effect_text().contains("Schutzpuffer"), "Fähigkeitsarrays, Namen und Wirkungen sind defensiv kopiert")
+	_check(view_model.ability_count() == 2 and view_model.ability_at(1).title() == "Notfallhilfe" and view_model.ability_at(1).facts_text().contains("12 s"), "Fähigkeitsarrays, Namen und Fakten sind defensiv kopiert")
 
 	var equivalent: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), _stat_rows(), _ability_rows(), 23)
 	_check(equivalent.content_hash() == view_model.content_hash(), "Revision ist nicht Teil des semantischen HUD-Hashs")
@@ -100,22 +104,22 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(hud.apply_view_model(view_model), "Erstes Apply bindet das vollständige Run-HUD")
 	await _settle()
 
-	_assert_surface(hud.stability_panel(), AlveolusVisualTheme.SurfaceRole.HUD_VITAL, "Zustand")
-	_assert_surface(hud.shield_panel(), AlveolusVisualTheme.SurfaceRole.HUD_VITAL, "Schutz")
+	_assert_surface(hud.stability_panel(), AlveolusVisualTheme.SurfaceRole.HUD_VITAL, "Leben")
+	_assert_surface(hud.shield_panel(), AlveolusVisualTheme.SurfaceRole.HUD_VITAL, "Schild")
 	_assert_surface(hud.timer_panel(), AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, "Timer")
 	_assert_surface(hud.boss_panel(), AlveolusVisualTheme.SurfaceRole.HUD_ALERT, "Boss")
 	_assert_surface(hud.analysis_panel(), AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, "Analyse")
 	for card in hud.ability_cards():
 		_assert_surface(card, AlveolusVisualTheme.SurfaceRole.HUD_ABILITY, "Fähigkeit")
 
-	_check(hud.stability_bar().value == 76.0 and hud.stability_bar().max_value == 100.0, "Zustandsleiste übernimmt Presenterwerte")
-	_check(hud.stability_value_label().text == "76 / 100", "Zustandswert bleibt immer sichtbar")
-	_check(hud.shield_panel().visible and hud.shield_bar().value == 12.0, "Schutz bleibt auch als eigene kritische Anzeige sichtbar")
+	_check(hud.stability_bar().value == 76.0 and hud.stability_bar().max_value == 100.0, "Lebensleiste übernimmt Presenterwerte")
+	_check(hud.stability_value_label().text == "76 / 100", "Lebenswert bleibt immer sichtbar")
+	_check(hud.shield_panel().visible and hud.shield_bar().value == 12.0, "Schild bleibt auch als eigene kritische Anzeige sichtbar")
 	_check(hud.timer_value_label().text == "03:36", "Freistehende Rundendauer besitzt keine eigene Fortschrittslogik")
 	_check(not hud.boss_panel().visible and hud.boss_value_label().text == "64 %", "Die frühere Bosskarte bleibt dormant, während der Kompatibilitätssnapshot gebunden bleibt")
 	_check(hud.analysis_value_label().text == "Lv 3 · 7/12" and hud.analysis_bar().value == 7.0, "Proben und Analyse bleiben als kompakte Zielanzeige sichtbar")
-	_check(hud.stability_panel().size.y <= 30.0 and hud.stability_panel().size.x >= 360.0 and hud.stability_panel().find_child("StabilityIcon", true, false) == null, "Zustand nutzt einen niedrigen, breiten und zentrierten Balken ohne redundantes Vital-Icon")
-	_check(hud.stability_panel().get_meta(&"alveolus_component", &"") == &"transparent_hud_vital" and is_zero_approx(hud.stability_panel().self_modulate.a), "Zustand schwebt ohne Kartenfläche über dem Run")
+	_check(hud.stability_panel().size.y <= 30.0 and hud.stability_panel().size.x >= 360.0 and hud.stability_panel().find_child("StabilityIcon", true, false) == null, "Leben nutzt einen niedrigen, breiten und zentrierten Balken ohne redundantes Vital-Icon")
+	_check(hud.stability_panel().get_meta(&"alveolus_component", &"") == &"transparent_hud_vital" and is_zero_approx(hud.stability_panel().self_modulate.a), "Leben schwebt ohne Kartenfläche über dem Run")
 	_check(hud.analysis_panel().size.y <= 30.0 and is_zero_approx(hud.analysis_panel().self_modulate.a), "Befund und Level bleiben ohne Kachel als dezente Zielzeile kompakt")
 	_check(hud.timer_panel().size.x <= 82.0 and hud.timer_panel().global_position.x > 640.0 and is_zero_approx(hud.timer_panel().self_modulate.a), "Rundendauer sitzt freistehend oben rechts")
 
@@ -156,10 +160,23 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(hud.ability_buttons().all(func(button: Button) -> bool: return UISoundService.sound_role(button) == UISoundService.NONE), "Fähigkeitstrefferflächen überlassen Soundfeedback ausschließlich dem Gameplay-Intent")
 	var registrations := hud.context_detail_registrations()
 	_check(registrations.size() == 2 and bool(registrations[0].get("hover_enabled", false)), "Beide stabilen Slots exponieren hoverfähige ContextDetail-Registrierungen")
+	_check(registrations.all(func(registration: Dictionary) -> bool:
+		return (
+			registration.get("anchor") == hud.ability_panel()
+			and int(registration.get("placement", -1)) == ContextDetailController.Placement.ABOVE_CENTER
+		)
+	), "Beide Fähigkeiten verankern ihren Tooltip stabil oberhalb der gemeinsamen Leiste")
 	var hover_provider := hud.tooltip_provider_for(hud.ability_buttons()[0])
 	_check(hover_provider.is_valid() and hover_provider == hud.ui_info_provider_for(hud.ability_buttons()[0]), "Maus-Hover und ui_info teilen dieselbe stabile Informationsquelle")
 	var hover_payload: Dictionary = hover_provider.call()
-	_check(hover_payload.get("title", "") == "Fokusfeld" and String(hover_payload.get("body", "")).contains("verstärkt"), "Fähigkeitstooltip nennt Name und konkrete Wirkung kompakt")
+	_check(
+		hover_payload.get("title", "") == ""
+		and hover_payload.get("meta", "") == ""
+		and StringName(String(hover_payload.get("icon_kind", ""))) == &""
+		and hover_payload.get("body", "") == "Abklingzeit: 10 s\nRadius: 120 px",
+		"Fähigkeitstooltip enthält nur strukturierte Fakten ohne Titelduplikat"
+	)
+	_check(is_equal_approx(float(hover_payload.get("surface_opacity", 0.0)), 0.86), "Fähigkeitstooltip fordert eine dezente halbtransparente Fläche an")
 	_check(hud.pause_action().get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "Pause bleibt eine ruhige HUD-Aktion")
 	_check(hud.pause_action().flat and hud.pause_action().get_meta(&"alveolus_component", &"") == &"transparent_pause_action", "Pause erscheint als freistehendes Icon ohne Kachel")
 	_check(get_root().gui_get_focus_owner() == null or not hud.is_ancestor_of(get_root().gui_get_focus_owner()), "Presenterupdate erzeugt keinen unerwarteten HUD-Fokus")
@@ -302,7 +319,7 @@ func _stat_rows() -> Array:
 	return [
 		{"id": &"sample_radius", "icon_id": &"sample", "value": "96", "accessible_name": "Probenradius", "priority": 60},
 		{"id": &"therapy_targets", "icon_id": &"therapy_precision", "value": "3", "accessible_name": "Behandlungsziele", "priority": 80},
-		{"id": &"therapy_power", "icon_id": &"treatment", "value": "+18 %", "accessible_name": "Behandlungswirkung", "priority": 100},
+		{"id": &"therapy_power", "icon_id": &"treatment", "value": "+18 %", "accessible_name": "Behandlungsschaden", "priority": 100},
 		{"id": &"immune_cells", "icon_id": &"immune", "value": "2", "accessible_name": "Abwehrzellen", "priority": 70},
 		{"id": &"therapy_interval", "icon_id": &"automatic_therapy", "value": "0,82 s", "accessible_name": "Behandlungsintervall", "priority": 90},
 	]
@@ -313,12 +330,16 @@ func _ability_rows() -> Array:
 		{
 			"slot": 1,
 			"title": "Notfallhilfe",
-			"effect_text": "Stellt Zustand wieder her und erzeugt einen Schutzpuffer.",
+			"effect_text": "Stellt Leben wieder her und erzeugt einen Schild.",
 			"icon_id": &"ability_emergency_support",
 			"occupied": true,
 			"ready": false,
 			"cooldown_remaining": 7.2,
 			"cooldown_total": 12.0,
+			"fact_rows": [
+				{"label": "Abklingzeit", "value": "12 s"},
+				{"label": "Heilung", "value": "24 Leben"},
+			],
 			"targeting": false,
 			"key_glyph_text": "E",
 		},
@@ -331,6 +352,10 @@ func _ability_rows() -> Array:
 			"ready": true,
 			"cooldown_remaining": 0.0,
 			"cooldown_total": 10.0,
+			"fact_rows": [
+				{"label": "Abklingzeit", "value": "10 s"},
+				{"label": "Radius", "value": "120 px"},
+			],
 			"targeting": true,
 			"key_glyph_text": "Q",
 		},

@@ -98,6 +98,7 @@ func _assert_finding_interaction() -> void:
 	await _settle()
 
 	_check(overlay.modal_sheet() != null and overlay.modal_sheet().get_meta(&"alveolus_component", &"") == &"modal_sheet", "Befund verwendet den zentralen ModalSheet")
+	_check(_contains_label_text(overlay.modal_sheet(), "Befund: Gruppenbildung"), "Befundtitel verbindet Kategorie und konkreten Namen")
 	_check(overlay.modal_sheet().custom_minimum_size.y <= 0.0, "Befund reserviert keine dekorative Leerraumhöhe")
 	_check(overlay.modal_sheet().size.y <= overlay.modal_sheet().get_combined_minimum_size().y + 1.0, "Breiter Befund folgt seiner tatsächlichen Inhaltshöhe")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and not overlay.body_scroll().get_v_scroll_bar().visible, "Kurzer Befund zeigt keine unnötige Scrollbar")
@@ -118,6 +119,14 @@ func _assert_finding_interaction() -> void:
 	var info_provider := overlay.ui_info_provider_for(observe)
 	_check(hover_provider.is_valid() and info_provider.is_valid() and hover_provider == info_provider, "Hover und ui_info verwenden denselben registrierbaren Provider")
 	_check(hover_provider.call() == info_provider.call(), "Hover und ui_info liefern inhaltsgleiche Details")
+	var reaction_payload := hover_provider.call() as Dictionary
+	_check(
+		reaction_payload.get("title", "") == ""
+		and reaction_payload.get("meta", "") == ""
+		and StringName(String(reaction_payload.get("icon_kind", ""))) == &""
+		and reaction_payload.get("body", "") == "Befundfortschritt erhöhen.",
+		"Reaktionstooltip enthält ausschließlich den entscheidenden Effekttext"
+	)
 	_check(overlay.registered_info_source_count() == 3, "Jede Reaktion besitzt genau eine Informationsquelle")
 	var registrations := overlay.context_detail_registrations()
 	var all_hover_only := registrations.size() == 3
@@ -215,13 +224,13 @@ func _assert_finding_interaction() -> void:
 	_check(overlay.is_compact_layout(), "480 × 270 bildet den 200-Prozent-Kompaktfall ab")
 	_check(overlay.copy_grid().columns == 1 and overlay.reaction_grid().columns == 1 and overlay.reaction_grid().get_child_count() == 3, "Kompakt bleiben Effekt und höchstens drei Reaktionen in lesbaren Einzelspalten")
 	_check(overlay.reaction_action(&"treat") == null and overlay.registered_info_source_count() == 3, "Auch ein übergroßes Presenterarray erzeugt stabil nur drei Reaktionen und Tooltipquellen")
-	_check(overlay.action_grid().columns == 2, "Zurück und Anwenden bleiben im 480-Pixel-Kompaktfall nebeneinander")
+	_check(overlay.action_grid().columns == 1, "Die einzelne Befundaktion nutzt im Kompaktfall die volle Breite")
 	_check(
 		overlay.copy_grid().get_index() < overlay.reaction_grid().get_index(),
 		"Kompakt bleibt die knappe mechanische Wirkung vor den Reaktionskarten sichtbar"
 	)
 	var compact_reaction_heading := overlay.find_child("ReactionHeading", true, false) as Label
-	_check(compact_reaction_heading != null and not compact_reaction_heading.visible, "Kompakt entfällt die redundante Reaktionsüberschrift zugunsten der Wirkung und ersten Wahl")
+	_check(compact_reaction_heading == null, "Die redundante Reaktionsüberschrift wird in keinem Layout erzeugt")
 	_check(
 		_is_visible_in_scroll(overlay.effect_label(), overlay.body_scroll()),
 		"Die mechanische Effektzeile ist beim Öffnen des kompakten Befunds sichtbar"
@@ -236,7 +245,7 @@ func _assert_finding_interaction() -> void:
 	)
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Nur echter kompakter Inhaltsüberlauf aktiviert Scrollen")
 	_check(not overlay.body_scroll().is_ancestor_of(overlay.confirm_action()) and overlay.confirm_action().is_visible_in_tree(), "Hauptaktion bleibt fest außerhalb des Scrollinhalts sichtbar")
-	_check(not overlay.body_scroll().is_ancestor_of(overlay.cancel_action()) and overlay.cancel_action().is_visible_in_tree(), "Zurück bleibt fest außerhalb des Scrollinhalts sichtbar")
+	_check(overlay.cancel_action() == null, "Befund erzeugt keinen redundanten sichtbaren Zurückbutton")
 
 	var no_effect_model := FindingOverlayViewModelScript.new(
 		6,
@@ -285,8 +294,8 @@ func _finding_model(
 func _reaction_fixture(count: int) -> Array[FindingOverlayViewModel.ReactionViewModel]:
 	var definitions := [
 		[&"observe", "Weiter beobachten", "Befundfortschritt erhöhen.", &"analysis"],
-		[&"stabilize", "Stabilisieren", "Zustand kurzfristig schützen.", &"support"],
-		[&"protect", "Patientenschutz", "Kontaktschaden reduzieren.", &"immune"],
+		[&"stabilize", "Stabilisieren", "Leben kurzfristig sichern.", &"support"],
+		[&"protect", "Patientenschutz", "Eingehenden Schaden reduzieren.", &"immune"],
 		[&"treat", "Gezielt behandeln", "Behandlung verstärken.", &"treatment"],
 		[&"slow", "Ausbreitung bremsen", "Gegnertempo senken.", &"clock"],
 		[&"sample", "Probe sichern", "Zusätzliche Probe gewinnen.", &"sample"],

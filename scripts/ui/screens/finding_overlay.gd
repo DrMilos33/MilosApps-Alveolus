@@ -38,7 +38,6 @@ var _scrollbar_inset: MarginContainer
 var _body_stack: VBoxContainer
 var _copy_grid: GridContainer
 var _effect_label: Label
-var _reaction_heading: Label
 var _reaction_grid: GridContainer
 var _reaction_group: ButtonGroup
 var _reaction_buttons: Dictionary = {}
@@ -50,7 +49,6 @@ var _outgoing_ids: Array[StringName] = []
 var _validation_label: Label
 var _action_grid: GridContainer
 var _confirm_button: Button
-var _cancel_button: Button
 var _info_sources: Dictionary = {}
 
 
@@ -140,7 +138,7 @@ func default_focus_control() -> Control:
 		var button := _reaction_buttons.get(reaction_id) as Button
 		if button != null and not button.disabled:
 			return button
-	return _cancel_button
+	return _confirm_button if _confirm_button != null and not _confirm_button.disabled else null
 
 
 func get_default_focus_control() -> Control:
@@ -208,7 +206,7 @@ func confirm_action() -> Button:
 
 
 func cancel_action() -> Button:
-	return _cancel_button
+	return null
 
 
 func selected_reaction_id() -> StringName:
@@ -332,7 +330,7 @@ func _rebuild_modal() -> void:
 
 	var modal_actions: Array[Control] = [_action_grid]
 	var sheet_parts := AlveolusUIComponents.modal_sheet(
-		_view_model.title(),
+		_view_model.display_title(),
 		_body_scroll,
 		modal_actions,
 		MODAL_PADDING,
@@ -345,7 +343,7 @@ func _rebuild_modal() -> void:
 	_modal.custom_minimum_size.y = 0.0
 	_modal.set_meta(&"finding_id", _view_model.finding_id())
 	var sheet_stack := sheet_parts["content"] as VBoxContainer
-	_title_label = sheet_stack.get_child(0) as Label if not _view_model.title().is_empty() else null
+	_title_label = sheet_stack.get_child(0) as Label if not _view_model.display_title().is_empty() else null
 	if _title_label != null:
 		_title_label.name = "FindingTitle"
 	_modal_host.add_child(_modal)
@@ -361,7 +359,6 @@ func _reset_control_references() -> void:
 	_body_stack = null
 	_copy_grid = null
 	_effect_label = null
-	_reaction_heading = null
 	_reaction_grid = null
 	_reaction_group = null
 	_reserve_panel = null
@@ -370,7 +367,6 @@ func _reset_control_references() -> void:
 	_validation_label = null
 	_action_grid = null
 	_confirm_button = null
-	_cancel_button = null
 
 
 func _build_effect_line() -> void:
@@ -398,9 +394,6 @@ func _build_reactions() -> void:
 	var reactions := _view_model.reactions()
 	if reactions.is_empty():
 		return
-	_reaction_heading = AlveolusUIComponents.label("Reaktion wählen", AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
-	_reaction_heading.name = "ReactionHeading"
-	_body_stack.add_child(_reaction_heading)
 	_reaction_grid = GridContainer.new()
 	_reaction_grid.name = "ReactionChoices"
 	_reaction_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -495,18 +488,6 @@ func _build_actions() -> void:
 	_action_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_action_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	_action_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
-
-	_cancel_button = AlveolusUIComponents.action_button(
-		"Zurück",
-		AlveolusUIComponents.ACTION_SECONDARY,
-		&"back",
-		AlveolusVisualTheme.COBALT
-	)
-	_cancel_button.name = "CancelButton"
-	_cancel_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_cancel_button.set_meta(&"stable_focus_id", &"cancel")
-	_cancel_button.pressed.connect(func() -> void: cancel.emit())
-	_action_grid.add_child(_cancel_button)
 
 	_confirm_button = AlveolusUIComponents.action_button(
 		"Reaktion anwenden",
@@ -611,10 +592,10 @@ func _update_focus_trap() -> void:
 		controls.append(_swap_toggle)
 	if _outgoing_option != null and _outgoing_option.visible and not _outgoing_option.disabled:
 		controls.append(_outgoing_option)
-	if _cancel_button != null:
-		controls.append(_cancel_button)
 	if _confirm_button != null and not _confirm_button.disabled:
 		controls.append(_confirm_button)
+	if controls.is_empty():
+		return
 	for index in range(controls.size()):
 		var control := controls[index]
 		var previous := controls[posmod(index - 1, controls.size())]
@@ -652,8 +633,6 @@ func _control_for_stable_id(stable_id: StringName) -> Control:
 			return _swap_toggle
 		&"reserve.outgoing":
 			return _outgoing_option
-		&"cancel":
-			return _cancel_button
 		&"confirm":
 			return _confirm_button
 	return null
@@ -675,7 +654,7 @@ func _register_info_source(source: Control, info: FindingOverlayViewModel.InfoVi
 
 
 func _info_payload(info: FindingOverlayViewModel.InfoViewModel) -> Dictionary:
-	var payload := info.payload()
+	var payload := info.body_only_payload()
 	var accent: Color = payload.get("accent", Color.TRANSPARENT)
 	if accent.a <= 0.0:
 		payload["accent"] = AlveolusVisualTheme.GOLD
@@ -724,15 +703,7 @@ func _refresh_responsive_layout() -> void:
 	_modal.custom_minimum_size.x = floorf(sheet_width)
 	_modal.custom_minimum_size.y = 0.0
 	var reaction_columns := 1 if _compact_layout else 3
-	# At the 480-pixel logical accessibility canvas both actions still fit side
-	# by side. Stacking them consumed the complete compact viewport and pushed the
-	# actual reaction choices below the fold.
-	var action_columns := 2 if available.x >= 360.0 else 1
-	if _reaction_heading != null:
-		# On the smallest accessibility canvas the three choice cards already
-		# communicate the decision. Omitting the redundant heading keeps the
-		# concise mechanical effect and the first choice visible together.
-		_reaction_heading.visible = not _compact_layout
+	var action_columns := 1
 	var columns_changed := false
 	if _copy_grid != null:
 		columns_changed = columns_changed or _copy_grid.columns != 1
@@ -774,7 +745,7 @@ func _apply_responsive_body_order() -> bool:
 		return false
 	# The fact line is the compact replacement for the removed medical/gameplay
 	# cards, so it always remains the first piece of finding content.
-	var leading_controls: Array[Control] = [_copy_grid, _reaction_heading, _reaction_grid]
+	var leading_controls: Array[Control] = [_copy_grid, _reaction_grid]
 	var next_index := 0
 	var changed := false
 	for control in leading_controls:

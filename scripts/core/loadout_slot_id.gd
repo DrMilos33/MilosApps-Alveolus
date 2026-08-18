@@ -17,6 +17,12 @@ static func active() -> Array[StringName]:
 	return [TREATMENT, ACTIVE_1, ACTIVE_2, PASSIVE_1, PASSIVE_2]
 
 
+## Slots exposed by the current preparation milestone. Passive slot IDs remain
+## part of the save schema, but are deliberately absent from the playable UI.
+static func planning() -> Array[StringName]:
+	return [TREATMENT, ACTIVE_1, ACTIVE_2]
+
+
 static func abilities() -> Array[StringName]:
 	return [ACTIVE_1, ACTIVE_2]
 
@@ -58,4 +64,3 @@ static func default_equip_slots(component_kind: StringName) -> Array[StringName]
 
 static func counts_towards_capacity(slot_id: StringName) -> bool:
 	return active().has(slot_id)
-

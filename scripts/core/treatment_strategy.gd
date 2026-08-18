@@ -8,9 +8,13 @@ func create_shots(
 	topology: ArenaTopology,
 	definition: TreatmentDefinition,
 	build: RunBuildState,
-	effect_resolver: Object = null
+	effect_resolver: Object = null,
+	manual_aim: bool = false
 ) -> Array[TreatmentShot]:
 	return []
+
+func normalized_facing(facing: Vector2) -> Vector2:
+	return facing.normalized() if facing.length_squared() > 0.0001 else Vector2.RIGHT
 
 func ranked_targets(
 	origin: Vector2,

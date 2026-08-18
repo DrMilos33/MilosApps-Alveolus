@@ -194,15 +194,16 @@ func _test_upgrade_selection() -> void:
 		ids[definition.id] = true
 		paths[definition.path] = true
 	_assert_equal(ids.size(), 3, "Upgrade-Karten sind eindeutig")
-	_assert_equal(paths.size(), 3, "Erste Auswahl zeigt alle drei Therapiepfade")
+	_assert_equal(paths.size(), 2, "Erste Auswahl nutzt die aktiven Behandlungs- und Abwehrpfade")
 
 func _test_medical_boundaries() -> void:
-	var definitions := ContentCatalog.upgrade_definitions()
-	var oxygenation: UpgradeDefinition = _find_upgrade(definitions, &"oxygenation")
-	_assert_equal(oxygenation.effect, &"support_level", "Oxygenierung verändert nur supportive Therapie")
-	_assert_true(oxygenation.effect != &"damage", "Oxygenierung verursacht keinen Erregerschaden")
+	var treatments := TreatmentDefinition.catalog()
+	_assert_equal(treatments[&"treatment_precision"].damage_profile.dominant_type_id(), &"water", "Präzise Behandlung verwendet Wasserschaden")
+	_assert_equal(treatments[&"treatment_spread"].damage_profile.dominant_type_id(), &"fire", "Streuimpuls verwendet Feuerschaden")
+	_assert_equal(treatments[&"treatment_pierce"].damage_profile.dominant_type_id(), &"wind", "Durchdringender Impuls verwendet Windschaden")
 	var enemies := ContentCatalog.enemy_definitions()
 	_assert_true(enemies.has(&"pneumococcus") and enemies.has(&"bacterial_cluster"), "Antibiotischer Fall enthält bakterielle Gegner")
+	_assert_true(enemies[&"pneumococcus"].base_damage > 0.0, "Gegner besitzen typisierten Basisschaden")
 
 func _test_pressure_guard_contract() -> void:
 	var state := RunState.new()
@@ -224,7 +225,6 @@ func _test_upgrade_previews() -> void:
 	var targets: UpgradeDefinition = _find_upgrade(definitions, &"parallel_sites")
 	var rhythm: UpgradeDefinition = _find_upgrade(definitions, &"rhythm")
 	var immune_damage: UpgradeDefinition = _find_upgrade(definitions, &"phagocytosis")
-	var oxygenation: UpgradeDefinition = _find_upgrade(definitions, &"oxygenation")
 	var target_preview := stats.preview_upgrade(targets)
 	_assert_equal(target_preview.effect_text, "+1 Projektil", "Zielupgrade benennt den exakten Projektilzuwachs")
 	_assert_equal(target_preview.before_after_text, "1 Ziel  >  2 Ziele", "Zielupgrade zeigt Vorher und Nachher")
@@ -232,11 +232,8 @@ func _test_upgrade_previews() -> void:
 	_assert_equal(rhythm_preview.effect_text, "+16 % Tempo", "Rhythmusupgrade priorisiert den verständlichen Prozentzuwachs")
 	_assert_equal(rhythm_preview.before_after_text, "0,82 s  >  0,69 s Intervall", "Intervallupgrade zeigt den konkreten Vorher-/Nachher-Wert")
 	var immune_preview := stats.preview_upgrade(immune_damage)
-	_assert_equal(immune_preview.effect_text, "+6 Abwehrwirkung", "Abwehrupgrade verwendet die kompakte Effektzeile")
-	_assert_equal(immune_preview.before_after_text, "10 Wirkung  >  16 Wirkung", "Immunupgrade zeigt nur den Wertvergleich")
-	var support_preview := stats.preview_upgrade(oxygenation)
-	_assert_equal(support_preview.effect_text, "+4 Zustand", "Atemhilfe-Upgrade verwendet die kompakte Effektzeile")
-	_assert_true(support_preview.before_after_text.contains("5,65 s"), "Supportupgrade nennt das tatsächliche Impulsintervall")
+	_assert_equal(immune_preview.effect_text, "+6 Schaden", "Abwehrupgrade verwendet die kompakte Effektzeile")
+	_assert_equal(immune_preview.before_after_text, "10 Schaden  >  16 Schaden", "Abwehrupgrade zeigt nur den Wertvergleich")
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 77
@@ -255,25 +252,25 @@ func _test_upgrade_previews() -> void:
 func _test_character_stat_rows() -> void:
 	var stats := PlayerStats.new()
 	var rows := stats.stat_rows(80.0, 90.0, 275.0)
-	_assert_equal(rows.size(), 13, "Charakterwertemenü enthält alle relevanten dynamischen Werte")
-	_assert_equal(String(rows[0].get("value", "")), "80 / 90", "Aktueller und maximaler Zustand werden gemeinsam angezeigt")
-	_assert_equal(String(rows[2].get("value", "")), "18", "Behandlungswirkung entspricht dem echten Basiswert")
-	_assert_equal(String(rows[6].get("value", "")), "0", "Nicht freigeschaltete Abwehr zeigt keine erfundenen Zellen")
+	_assert_equal(rows.size(), 16, "Charakterwertemenü enthält alle relevanten dynamischen Werte")
+	_assert_equal(_row_value(rows, "ALLGEMEIN", "Leben"), "80 / 90", "Aktuelles und maximales Leben werden gemeinsam angezeigt")
+	_assert_equal(_row_value(rows, "BEHANDLUNG", "Schaden"), "18", "Behandlungsschaden entspricht dem echten Basiswert")
+	_assert_equal(_row_value(rows, "ABWEHR", "Zellen"), "0", "Nicht freigeschaltete Abwehr zeigt keine erfundenen Zellen")
 	stats.immune_level = 1
 	stats.support_level = 1
 	rows = stats.stat_rows(80.0, 90.0, 275.0)
-	_assert_equal(String(rows[6].get("value", "")), "2", "Freigeschaltete Abwehr zeigt die echte Zellenzahl")
-	_assert_equal(String(rows[10].get("value", "")), "+4", "Atemhilfe zeigt die echte Regeneration")
+	_assert_equal(_row_value(rows, "ABWEHR", "Zellen"), "2", "Freigeschaltete Abwehr zeigt die echte Zellenzahl")
+	_assert_equal(_row_value(rows, "REGENERATION", "Heilung"), "+4", "Regeneration zeigt den echten Lebensgewinn")
 	var compact := stats.compact_stat_text(80.0, 90.0)
-	_assert_true(compact.contains("Wirkung  18"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
+	_assert_true(compact.contains("Schaden  18"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
 	_assert_true(compact.contains("Abwehrzellen  2"), "Kompakte Anzeige aktualisiert Ausbauwerte")
 
 func _test_level_catalog_and_run_config() -> void:
 	var levels := ContentCatalog.level_definitions()
 	_assert_equal(levels.size(), 4, "Levelkatalog enthält Intro und drei Hauptfälle")
-	var expected_durations := [0.0, 180.0, 240.0, 300.0]
-	var expected_boss_times := [0.0, 135.0, 180.0, 225.0]
-	var expected_stability := [120.0, 90.0, 85.0, 80.0]
+	var expected_durations := [0.0, -1.0, -1.0, -1.0]
+	var expected_boss_times := [0.0, 180.0, 180.0, 180.0]
+	var expected_stability := [100.0, 100.0, 100.0, 100.0]
 	for index in range(levels.size()):
 		var level: LevelDefinition = levels[index]
 		_assert_equal(level.order, index, "Levelreihenfolge ist datengetrieben und lückenlos")
@@ -283,6 +280,7 @@ func _test_level_catalog_and_run_config() -> void:
 		var config := ContentCatalog.create_run_config(level)
 		_assert_equal(config.run_duration_seconds, level.boss_spawn_seconds, "RunConfig übernimmt den Bosszeitpunkt")
 		_assert_equal(config.final_deadline_seconds, level.total_seconds, "RunConfig übernimmt die Leveldeadline")
+		_assert_true(not config.has_deadline(), "Intro und Hauptfälle besitzen keine Zeitniederlage")
 	_assert_equal(levels[0].boss_health_multiplier, 0.18, "Intro verwendet den reduzierten Boss")
 	_assert_true(levels[0].boss_phase_minions.is_empty(), "Intro hat keine vollständige Bossphasenmechanik")
 	_assert_equal(levels[3].boss_phase_minions, PackedInt32Array([6, 8]), "Fall 3 verwendet die geplanten Minion-Schübe")
@@ -513,6 +511,12 @@ func _find_research(definitions: Array[ResearchDefinition], id: StringName) -> R
 		if definition.id == id:
 			return definition
 	return null
+
+func _row_value(rows: Array[Dictionary], group: String, label: String) -> String:
+	for row in rows:
+		if String(row.get("group", "")) == group and String(row.get("label", "")) == label:
+			return String(row.get("value", ""))
+	return ""
 
 func _assert_true(condition: bool, message: String) -> void:
 	assertions += 1

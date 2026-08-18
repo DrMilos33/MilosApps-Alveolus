@@ -95,6 +95,43 @@ func _run() -> void:
 	await _settle()
 	_check(not controller.is_open() and controller.active_source() == null, "Eine freigegebene Quelle hinterlässt keine schwebende Karte")
 
+	var ability_strip := PanelContainer.new()
+	ability_strip.position = Vector2(112.0, 264.0)
+	ability_strip.size = Vector2(256.0, 40.0)
+	host.add_child(ability_strip)
+	var ability_source := Button.new()
+	ability_source.position = Vector2(6.0, 2.0)
+	ability_source.size = Vector2(116.0, 36.0)
+	ability_strip.add_child(ability_source)
+	controller.register_source(
+		ability_source,
+		func() -> Dictionary:
+			return {
+				"title": "",
+				"body": "Abklingzeit: 10 s\nSchaden: 55",
+				"meta": "",
+				"icon_kind": &"",
+				"maximum_width": 244.0,
+				"surface_opacity": 0.86,
+			},
+		true,
+		ability_strip,
+		ContextDetailController.Placement.ABOVE_CENTER
+	)
+	ability_source.mouse_entered.emit()
+	await _settle()
+	_check(controller.is_open() and not controller.header.visible, "Body-only-Tooltip entfernt den vollständigen leeren Header")
+	_check(controller.body_label.text == "Abklingzeit: 10 s\nSchaden: 55" and not controller.meta_label.visible, "Kompakter Tooltip zeigt ausschließlich Faktenzeilen")
+	_check(controller.card.get_global_rect().end.y <= ability_strip.get_global_rect().position.y + 0.5, "ABOVE_CENTER setzt den Tooltip oberhalb des gemeinsamen Ankers")
+	_check(absf(controller.card.get_global_rect().get_center().x - ability_strip.get_global_rect().get_center().x) <= 1.0, "Gemeinsamer Anker zentriert beide Fähigkeitstooltips identisch")
+	_check(is_equal_approx(controller.card.self_modulate.a, 0.86), "Tooltipfläche respektiert die angeforderte Halbtransparenz")
+	var tooltip_membrane := controller.card.get_node_or_null("BioLumenSurface") as CanvasItem
+	_check(tooltip_membrane == null or not tooltip_membrane.visible, "Dekorative Bio-Lumen-Füllung überdeckt die halbtransparente Faktenfläche nicht")
+	ability_source.mouse_exited.emit()
+	await _settle()
+	ability_strip.queue_free()
+	await _settle()
+
 	# Refreshes replace progression cards while the pointer is stationary. The
 	# replacement must recover the same hover detail without waiting for another
 	# physical mouse movement.
@@ -113,6 +150,9 @@ func _run() -> void:
 	)
 	await _settle()
 	_check(controller.is_open() and controller.title_label.text == "Schnelltest II", "Der wiederhergestellte Tooltip zeigt die Daten der neuen Karteninstanz")
+	_check(is_equal_approx(controller.card.self_modulate.a, 1.0), "Ein normaler Folgetooltip setzt die optionale Halbtransparenz vollständig zurück")
+	var restored_membrane := controller.card.get_node_or_null("BioLumenSurface") as CanvasItem
+	_check(restored_membrane == null or restored_membrane.visible, "Ein normaler Folgetooltip stellt die Bio-Lumen-Füllung wieder her")
 	replacement.queue_free()
 	await _settle()
 

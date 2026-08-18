@@ -86,7 +86,8 @@ func _capture_suite(game: Node) -> void:
 		return
 	await _capture("preparation_intro_locked")
 
-	game.meta.research_ranks[&"unlock_defense_burst"] = 1
+	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
+	game.meta.research_ranks[&"unlock_piercing_treatment"] = 1
 	game.selected_level = game.levels[1]
 	game._show_preparation()
 	if not _verify_direct_preparation_state(game):
@@ -111,21 +112,26 @@ func _capture_suite(game: Node) -> void:
 
 func _populate_character_stats_capture(game: Node) -> void:
 	# Keep the visual contract honest by capturing the densest supported sheet,
-	# including conditional treatment, defense, support and active-ability rows.
+	# including conditional treatment, defense, regeneration and active rows.
 	game.stats.configure_prepared_treatment(TreatmentDefinition.catalog()[&"treatment_precision"])
 	game.stats.therapy_projectiles = 3
 	game.stats.therapy_max_hits = 4
 	game.stats.immune_level = 3
-	game.stats.support_level = 3
+	game.stats.defense = 6.0
+	game.stats.life_regeneration_per_second = 1.5
 	game.stats.prepared_abilities.assign([
-		AbilityDefinition.catalog()[&"ability_focus_field"],
-		AbilityDefinition.catalog()[&"ability_emergency_support"],
+		AbilityDefinition.catalog()[&"ability_defense_burst"],
+		AbilityDefinition.catalog()[&"ability_treatment_line"],
 	])
 
 func _capture_preparation_editor_states(game: Node) -> void:
-	game.hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
+	# The current balance profile deliberately exposes exactly two active
+	# abilities and equips both by default. Exercise direct replacement through
+	# the treatment slot, where all three alternatives remain available.
+	var edited_slot := LoadoutSlotId.TREATMENT
+	game.hud._on_preparation_slot_pressed(edited_slot)
 	await _capture("preparation_picker")
-	var current_id: StringName = game.hud._preparation_component_at(LoadoutSlotId.ACTIVE_1)
+	var current_id: StringName = game.hud._preparation_component_at(edited_slot)
 	var candidate_id: StringName = &""
 	for id_value in game.hud.preparation_component_buttons:
 		var id := StringName(id_value)
@@ -140,7 +146,7 @@ func _capture_preparation_editor_states(game: Node) -> void:
 	game.hud._on_preparation_component(candidate_id, false)
 	await _settle()
 	if game.hud.planning_snapshot.mode != PlanningSnapshot.Mode.COMPONENT_PICK \
-		or game.hud._preparation_component_at(LoadoutSlotId.ACTIVE_1) != candidate_id \
+		or game.hud._preparation_component_at(edited_slot) != candidate_id \
 		or game.hud.preparation_editor_confirm.visible:
 		capture_failed = true
 		push_error("Einsatzplanung ersetzte den expliziten Planplatz nicht direkt")
@@ -233,10 +239,8 @@ func _canvas_rect(control: Control) -> Rect2:
 func _capture_transient_dialogs(game: Node) -> void:
 	var findings := ContentCatalog.finding_definitions()
 	var reactions := ContentCatalog.reaction_definitions()
-	var modules := ContentCatalog.loadout_module_definitions()
 	var finding_reactions: Array = [reactions[&"group_area"], reactions[&"group_control"], reactions[&"group_safety"]]
-	var swappable_passives: Array = [modules[&"defense_readiness"], modules[&"quick_test"]]
-	game.hud.show_finding(findings[&"grouping"], finding_reactions, modules[&"reserve_buffer"], swappable_passives)
+	game.hud.show_finding(findings[&"grouping"], finding_reactions)
 	await _capture("finding")
 	game.hud.hide_finding()
 	game.hud.show_running_hud()

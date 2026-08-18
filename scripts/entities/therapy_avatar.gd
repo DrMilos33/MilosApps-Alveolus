@@ -6,6 +6,8 @@ const BODY_RADIUS := 23.0
 const DAMAGE_FLASH_SECONDS := 0.16
 const WALK_FRAME_SECONDS := 0.12
 const DOCTOR_DRAW_RECT := Rect2(-30.0, -44.0, 60.0, 60.0)
+const CHARACTER_NAME_TEXT := "Doctor Milos"
+const CHARACTER_NAME_RECT := Rect2(-72.0, -71.0, 144.0, 24.0)
 
 var arena_bounds: Rect2
 var stats: PlayerStats
@@ -22,6 +24,10 @@ var damage_flash_time: float = 0.0
 var visual_body: UnitBody2D
 var doctor_texture: Texture2D
 var immune_texture: Texture2D
+var character_name_label: Label
+var _character_name_visible := false
+var _defense_cell_count: int = 0
+var _defense_cell_radius: float = 0.0
 
 func configure(bounds: Rect2, player_stats: PlayerStats, arena_topology: ArenaTopology) -> void:
 	arena_bounds = bounds
@@ -36,6 +42,7 @@ func _ready() -> void:
 	visual_body = UnitBody2D.new()
 	visual_body.configure_alpha_texture(doctor_texture, DOCTOR_DRAW_RECT, 0.08)
 	add_child(visual_body)
+	_build_character_name_label()
 	camera = Camera2D.new()
 	camera.position_smoothing_enabled = false
 	camera.process_callback = Camera2D.CAMERA2D_PROCESS_PHYSICS
@@ -85,14 +92,30 @@ func _process(delta: float) -> void:
 			walk_frame = 0
 			needs_redraw = true
 		walk_frame_time = 0.0
-	if stats != null and stats.immune_level > 0:
-		immune_angle = fmod(immune_angle + delta * 1.7, TAU)
-		needs_redraw = true
 	if needs_redraw:
 		queue_redraw()
 
 func get_highlight_body() -> UnitBody2D:
 	return visual_body
+
+
+func set_character_name_visible(visible_value: bool) -> void:
+	_character_name_visible = visible_value
+	if character_name_label != null:
+		character_name_label.visible = visible_value
+
+
+func is_character_name_visible() -> bool:
+	return _character_name_visible
+
+
+## DefenseCellWorld owns gameplay and publishes the identical orbit snapshot
+## used here. The avatar never advances a second render-only orbit.
+func set_defense_cell_snapshot(angle: float, count: int, radius: float) -> void:
+	immune_angle = angle
+	_defense_cell_count = clampi(count, 0, 12)
+	_defense_cell_radius = maxf(radius, 0.0)
+	queue_redraw()
 
 func show_treatment_impulse() -> void:
 	treatment_anim_time = 0.16
@@ -107,6 +130,25 @@ func neutrophil_radius() -> float:
 		return 0.0
 	return 98.0 + float(stats.immune_level) * 18.0
 
+
+func _build_character_name_label() -> void:
+	character_name_label = Label.new()
+	character_name_label.name = "CharacterName"
+	character_name_label.text = CHARACTER_NAME_TEXT
+	character_name_label.position = CHARACTER_NAME_RECT.position
+	character_name_label.size = CHARACTER_NAME_RECT.size
+	character_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	character_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	character_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	character_name_label.z_index = 3
+	character_name_label.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
+	character_name_label.add_theme_font_size_override("font_size", AlveolusVisualTheme.TEXT_CAPTION)
+	character_name_label.add_theme_color_override("font_color", AlveolusVisualTheme.IVORY)
+	character_name_label.add_theme_color_override("font_outline_color", Color(AlveolusVisualTheme.PETROL, 0.92))
+	character_name_label.add_theme_constant_override("outline_size", 3)
+	character_name_label.visible = _character_name_visible
+	add_child(character_name_label)
+
 func _draw() -> void:
 	if doctor_texture != null:
 		var moving := velocity.length_squared() > 1.0
@@ -120,10 +162,10 @@ func _draw() -> void:
 		draw_texture_rect(doctor_texture, DOCTOR_DRAW_RECT, false, doctor_tint)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
-	if stats == null or stats.immune_level <= 0:
+	if _defense_cell_count <= 0:
 		return
-	var count := mini(stats.immune_level + 1, 4)
-	var orbit_radius := neutrophil_radius() - 18.0
+	var count := _defense_cell_count
+	var orbit_radius := _defense_cell_radius
 	for index in range(count):
 		var angle := immune_angle + TAU * float(index) / float(count)
 		var point := Vector2.from_angle(angle) * orbit_radius

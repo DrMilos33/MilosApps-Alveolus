@@ -20,10 +20,10 @@ func _run() -> void:
 	var components := [
 		{"id": &"precise", "title": "Präziser Impuls", "description": "Ein verfolgtes Ziel", "kind": 0, "capacity_cost": 2, "selected": true, "visual_id": &"treatment_precision"},
 		{"id": &"focus", "title": "Fokusfeld", "description": "Stärkt einen Bereich", "kind": 1, "capacity_cost": 2, "selected": true, "visual_id": &"ability_focus_field"},
-		{"id": &"emergency", "title": "Notfallhilfe", "description": "+14 Zustand", "kind": 1, "capacity_cost": 2, "selected": true, "visual_id": &"ability_emergency_support"},
-		{"id": &"steady", "title": "Ruhige Hand", "description": "+2 % Wirkung", "kind": 2, "capacity_cost": 1},
+		{"id": &"emergency", "title": "Notfallhilfe", "description": "+14 Leben", "kind": 1, "capacity_cost": 2, "selected": true, "visual_id": &"ability_emergency_support"},
+		{"id": &"steady", "title": "Ruhige Hand", "description": "+2 % Schaden", "kind": 2, "capacity_cost": 1},
 		{"id": &"rapid_test", "title": "Schnelltest", "description": "+20 % Befund", "kind": 2, "capacity_cost": 1},
-		{"id": &"shield", "title": "Schutzfeld", "description": "Reduziert Schaden im Zielgebiet", "kind": 1, "capacity_cost": 2, "visual_id": &"ability_protection_field"},
+		{"id": &"shield", "title": "Schildfeld", "description": "Reduziert Schaden im Zielgebiet", "kind": 1, "capacity_cost": 2, "visual_id": &"ability_protection_field"},
 		# Dense fixture for the approved two-by-two picker. These IDs exist only in
 		# this UI test and deliberately do not add production loadout content.
 		{"id": &"pulse", "title": "Pulswelle", "description": "Mehrere Impulse in kurzer Folge", "kind": 1, "capacity_cost": 3, "visual_id": &"ability_treatment_line"},
@@ -81,7 +81,8 @@ func _run() -> void:
 	var plan_share := plan_rect.size.x / desktop_columns_width if desktop_columns_width > 0.0 else 0.0
 	_check(absf(plan_share - 0.44) <= 0.025, "Desktop teilt Plan und Behandlung im freigegebenen Verhältnis 44 / 56 (aktuell %.3f; Plan %.1f / Editor %.1f; Minima %.1f / %.1f)" % [plan_share, plan_rect.size.x, editor_rect.size.x, hud.preparation_plan_panel.custom_minimum_size.x, hud.preparation_catalog_panel.custom_minimum_size.x])
 	_check(absf(plan_rect.position.y - editor_rect.position.y) <= 0.5 and absf(plan_rect.size.y - editor_rect.size.y) <= 0.5, "Plan und Behandlung bilden eine bündige gemeinsame Arbeitsfläche")
-	_check(hud.preparation_slots.get_child_count() == 5, "Plan zeigt exakt fünf Plätze")
+	_check(hud.preparation_slots.get_child_count() == 3, "Plan zeigt nur Behandlung und die beiden aktiven Plätze")
+	_check(not hud.preparation_slot_buttons.has(LoadoutSlotId.PASSIVE_1) and not hud.preparation_slot_buttons.has(LoadoutSlotId.PASSIVE_2), "Passivplätze bleiben vollständig aus der sichtbaren Planung entfernt")
 	for slot_id_value in hud.preparation_slot_buttons:
 		var slot_id := StringName(slot_id_value)
 		var slot_button := hud.preparation_slot_buttons[slot_id] as Button
@@ -104,7 +105,7 @@ func _run() -> void:
 	_check(hud.planning_snapshot.mode == PlanningSnapshot.Mode.COMPONENT_PICK and hud.planning_snapshot.selected_slot_id == LoadoutSlotId.TREATMENT, "Einsatzplanung startet ohne Zwischenschritt direkt in der Behandlungsauswahl")
 	_check(bool((hud.preparation_slot_buttons[LoadoutSlotId.TREATMENT] as Button).get_meta(&"selected_slot", false)), "Der direkt gewählte Behandlungsplatz ist sichtbar markiert")
 	_check(not hud.preparation_remove_button.visible, "Die nicht entfernbare Grundbehandlung zeigt keine Entfernen-Aktion")
-	for selected_slot_id in LoadoutSlotId.active():
+	for selected_slot_id in LoadoutSlotId.planning():
 		hud._on_preparation_slot_pressed(selected_slot_id)
 		await process_frame
 		for slot_id_value in hud.preparation_slot_buttons:
@@ -223,7 +224,7 @@ func _run() -> void:
 	var adjacent_vertically := absf(hover_tooltip_rect.position.y - shield_rect.end.y) <= 8.0 or absf(shield_rect.position.y - hover_tooltip_rect.end.y) <= 8.0
 	_check(not hover_tooltip_rect.intersects(shield_rect) and (adjacent_horizontally or adjacent_vertically), "Der Komponenten-Tooltip liegt kompakt direkt neben seinem Mouseover-Auslöser")
 	var hover_tooltip_state := [hud.preparation_inspector_title.text, hud.preparation_inspector_description.text, hud.preparation_inspector_meta.text]
-	_check(hover_tooltip_state[0] == "Schutzfeld" and String(hover_tooltip_state[1]).contains("Reduziert Schaden im Zielgebiet"), "Mouseover zeigt Titel und vollständige Beschreibung im Komponenten-Tooltip")
+	_check(hover_tooltip_state[0] == "Schildfeld" and String(hover_tooltip_state[1]).contains("Reduziert Schaden im Zielgebiet"), "Mouseover zeigt Titel und vollständige Beschreibung im Komponenten-Tooltip")
 	var pulse_button := hud.preparation_component_buttons[&"pulse"] as Button
 	pulse_button.mouse_entered.emit()
 	shield_button.mouse_exited.emit()
@@ -282,7 +283,7 @@ func _run() -> void:
 	prepared.treatment_id = &""
 	validation = LoadoutValidator.validate(prepared, module_catalog, {}, 8)
 	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"high_load"], "validation": validation}, module_catalog.values(), prepared)
-	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Wählen") and _named_label_text(hud.preparation_slots.get_child(1) as Control, "Title").contains("Fokusfeld"), "Leere Grundbehandlung verschiebt aktive Slots nicht")
+	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Wählen") and _named_label_text(hud.preparation_slots.get_child(1) as Control, "Title").contains("Abwehrstoß"), "Leere Grundbehandlung verschiebt aktive Slots nicht")
 
 	var intro_view := prep_view.duplicate(true)
 	intro_view["tutorial_locked"] = true
@@ -311,7 +312,7 @@ func _run() -> void:
 	var research_events: Array[StringName] = []
 	hud.research_purchase_requested.connect(func(id: StringName) -> void: research_events.append(id))
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
-	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 15, "Forschung nutzt bei 1280 Pixeln ein kompaktes Dreispaltenbrett")
+	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 7, "Die sieben Forschungen nutzen bei 1280 Pixeln ein kompaktes Dreispaltenbrett")
 	_check((hud.research_grid.get_child(0) as Control).custom_minimum_size.y <= 76.0, "Forschungskarten bleiben kompakt")
 	for research_button in hud.research_buy_buttons.values():
 		_check((research_button as Button).tooltip_text.is_empty(), "Forschung nutzt ausschließlich die gemeinsame Kontextkarte")
@@ -320,7 +321,7 @@ func _run() -> void:
 	await process_frame
 	var research_payload := hud.context_detail_controller.current_payload()
 	_check(hud.context_detail_controller.is_open() and not hud.context_detail_controller.is_explicit(), "Mouseover öffnet die kompakte Forschungs-Kontextkarte")
-	_check(research_payload.get("title", "") == "Ruhige Hand" and String(research_payload.get("body", "")).contains("Basiswirkung"), "Die Forschungs-Kontextkarte erklärt die überfahrene Karte")
+	_check(research_payload.get("title", "") == "Stärkere Behandlung" and String(research_payload.get("body", "")).contains("Schaden"), "Die Forschungs-Kontextkarte erklärt die überfahrene Karte")
 	research_source.mouse_exited.emit()
 	await process_frame
 	_check(not hud.context_detail_controller.is_open(), "Die Forschungs-Kontextkarte schließt beim Verlassen der Karte")
@@ -339,49 +340,39 @@ func _run() -> void:
 	_check(sound_service.next_player == (sound_before_locked_research + 1) % UISoundService.PLAYER_COUNT, "Eine gesperrte Forschung erzeugt genau einen Fehler-Cue")
 	hud._select_research_tab(&"talents")
 	_check(hud.talent_content.visible and not hud.research_content.visible, "Talenttab ersetzt Forschung ohne neue Seite")
-	_check(hud.talent_buttons.size() == 12 and hud.talent_grid.get_child_count() == 3, "Talentbaum baut zwölf Talente in genau drei fachlichen Ästen auf")
+	_check(hud.talent_buttons.size() == 4 and hud.talent_grid.get_child_count() == 1, "Talentbaum baut vier Talente in einem Behandlungsast auf")
 	for talent_button in hud.talent_buttons.values():
 		_check((talent_button as Button).tooltip_text.is_empty(), "Talente nutzen ausschließlich die gemeinsame Kontextkarte")
 	for branch_panel in hud.talent_grid.get_children():
 		var branch := (branch_panel as Control).find_child("Tree", true, false) as TalentTreeBranch
-		_check(branch != null and branch.node_count() == 4 and branch.edge_count() == 3, "Jeder Talentast besitzt Einstieg, Voraussetzung und eine sichtbare Verzweigung")
+		_check(branch != null and branch.node_count() == 4 and branch.edge_count() == 3, "Der Talentast besitzt Einstieg, Voraussetzungen und eine sichtbare Verzweigung")
 		_check((branch_panel as Control).custom_minimum_size.y >= branch.custom_minimum_size.y + 50.0, "Jede Talentastkarte meldet ihre vollständige Baumhöhe an das responsive Raster")
 	await process_frame
 	await process_frame
-	var organization_two := hud.talent_buttons[&"organization_2"] as Button
-	var hold_card := hud.talent_buttons[&"hold_card"] as Button
-	var guided_choice := hud.talent_buttons[&"guided_choice"] as Button
-	var branch_child := organization_two.get_node_or_null(organization_two.focus_neighbor_bottom) as Button
-	var branch_sibling := hold_card.get_node_or_null(hold_card.focus_neighbor_right) as Button
-	_check(branch_child in [hold_card, guided_choice], "D-Pad nach unten folgt vom mittleren Talent einem gezeichneten Kind")
-	_check(branch_sibling == guided_choice, "D-Pad seitwärts wechselt innerhalb derselben Talentbaumstufe")
-	var planning_root := hud.talent_buttons[&"organization_1"] as Button
-	var diagnosis_root := hud.talent_buttons[&"early_classification"] as Button
-	_check(planning_root.get_node_or_null(planning_root.focus_neighbor_top) == hud.talent_tab_button, "D-Pad kann den ersten Talentast nach oben zu den festen Tabs verlassen")
-	_check(guided_choice.get_node_or_null(guided_choice.focus_neighbor_right) == diagnosis_root, "D-Pad wechselt am äußeren Rand in den benachbarten Talentast")
-	hud.talent_grid.columns = 2
-	hud._configure_talent_tree_exits()
-	await process_frame
-	var deployment_root := hud.talent_buttons[&"alternating_rhythm"] as Button
-	_check(guided_choice.get_node_or_null(guided_choice.focus_neighbor_bottom) == deployment_root, "Im zweispaltigen Baum führt D-Pad nach unten aus Ast 1 zum dritten Ast")
-	_check(deployment_root.get_node_or_null(deployment_root.focus_neighbor_top) == planning_root, "Der dritte Ast führt im zweispaltigen Baum wieder zum räumlich darüberliegenden Ast")
-	hud.talent_grid.columns = 3
-	hud._configure_talent_tree_exits()
-	_check((hud.talent_buttons[&"organization_1"] as Control).custom_minimum_size.y <= 76.0, "Talentknoten bleiben auf die kompakte Baumdichte begrenzt")
-	var rapid_evaluation := hud.talent_buttons[&"rapid_evaluation"] as Button
-	rapid_evaluation.grab_focus()
+	var treatment_root := hud.talent_buttons[&"manual_treatment_aim"] as Button
+	var spread_branch := hud.talent_buttons[&"spread_penetration"] as Button
+	var persistence_branch := hud.talent_buttons[&"piercing_persistence"] as Button
+	var return_leaf := hud.talent_buttons[&"piercing_return"] as Button
+	var root_child := treatment_root.get_node_or_null(treatment_root.focus_neighbor_bottom) as Button
+	var branch_sibling := spread_branch.get_node_or_null(spread_branch.focus_neighbor_right) as Button
+	_check(root_child in [spread_branch, persistence_branch], "D-Pad nach unten folgt vom Wurzeltalent einem gezeichneten Kind")
+	_check(branch_sibling == persistence_branch, "D-Pad seitwärts wechselt innerhalb derselben Talentbaumstufe")
+	_check(treatment_root.get_node_or_null(treatment_root.focus_neighbor_top) == hud.talent_tab_button, "D-Pad kann den Behandlungsbaum nach oben zu den festen Tabs verlassen")
+	_check(return_leaf.get_node_or_null(return_leaf.focus_neighbor_top) == persistence_branch, "Der Rückkehrlaser führt nach oben zu seiner sichtbaren Voraussetzung")
+	_check(treatment_root.custom_minimum_size.y <= 76.0, "Talentknoten bleiben auf die kompakte Baumdichte begrenzt")
+	persistence_branch.grab_focus()
 	await process_frame
 	_check(not hud.context_detail_controller.is_open(), "Reiner Tastatur- oder Gamepadfokus öffnet keine Tooltipkarte")
-	_check(hud.toggle_focused_context_detail(rapid_evaluation), "ui_info öffnet die Detailkarte des fokussierten Talentknotens")
+	_check(hud.toggle_focused_context_detail(persistence_branch), "ui_info öffnet die Detailkarte des fokussierten Talentknotens")
 	await process_frame
 	var talent_payload := hud.context_detail_controller.current_payload()
-	_check(hud.context_detail_controller.is_explicit() and talent_payload.get("title", "") == "Schnellauswertung" and String(talent_payload.get("body", "")).contains("Befund"), "Die ausdrückliche Talentdetailkarte ist vollständig")
-	_check(String(talent_payload.get("meta", "")).contains("Frühe Einordnung"), "Die Talentdetailkarte nennt die konkrete Voraussetzung des Knotens")
+	_check(hud.context_detail_controller.is_explicit() and talent_payload.get("title", "") == "Anhaltender Laser" and String(talent_payload.get("body", "")).contains("0,5"), "Die ausdrückliche Talentdetailkarte ist vollständig")
+	_check(String(talent_payload.get("meta", "")).contains("Manuelle Zielsteuerung"), "Die Talentdetailkarte nennt die konkrete Voraussetzung des Knotens")
 	hud.close_context_detail()
 	_check(hud.talent_points_label.text.to_lower().contains("0 frei"), "Freie Talentpunkte werden in Sentence Case gezeigt")
 	var reset_caption := (hud.talent_reset_button as IconTextButton).caption.text
 	_check(reset_caption.to_lower().contains("kostenlos"), "Umskillen ist in Sentence Case ausdrücklich kostenlos")
-	var locked_talent := hud.talent_buttons[&"organization_1"] as Button
+	var locked_talent := hud.talent_buttons[&"manual_treatment_aim"] as Button
 	_check(locked_talent.get_meta(&"item_state", &"") == &"locked" and not bool(locked_talent.get_meta(&"item_interactive", true)), "Talentknoten exponieren Sperrstatus und Interaktivität semantisch")
 	var sound_before_locked_talent := sound_service.next_player
 	locked_talent.pressed.emit()
@@ -397,13 +388,13 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var focus_after_reset := get_root().gui_get_focus_owner()
-	var first_tree_root := hud.talent_buttons[&"organization_1"] as Button
+	var first_tree_root := hud.talent_buttons[&"manual_treatment_aim"] as Button
 	_check(hud.talent_reset_button.disabled and focus_after_reset == first_tree_root, "Nach dem Talent-Reset wechselt der Fokus vom deaktivierten Reset sicher zum ersten Baumknoten")
 	_check(_inside_viewport(first_tree_root, get_root().size), "Der Fokus nach dem Talent-Reset bleibt sichtbar im Talentbaum")
 
 	hud.configure_active_abilities([
-		{"id": &"ability_focus_field", "title": "Fokusfeld", "description": "Behandlung wirkt im Zielgebiet 25 % stärker.", "cooldown_remaining": 0.0, "cooldown_total": 16.0, "ready": true},
-		{"id": &"ability_emergency_support", "title": "Notfallhilfe", "description": "Stellt Zustand wieder her und erzeugt Schutz.", "cooldown_remaining": 7.2, "cooldown_total": 28.0, "ready": false}
+		{"id": &"ability_focus_field", "title": "Fokusfeld", "description": "", "fact_rows": [{"label": "Abklingzeit", "value": "16 s"}, {"label": "Radius", "value": "165"}], "cooldown_remaining": 0.0, "cooldown_total": 16.0, "ready": true},
+		{"id": &"ability_emergency_support", "title": "Notfallhilfe", "description": "", "fact_rows": [{"label": "Abklingzeit", "value": "28 s"}, {"label": "Heilung", "value": "14"}, {"label": "Schild", "value": "8"}], "cooldown_remaining": 7.2, "cooldown_total": 28.0, "ready": false}
 	])
 	hud.show_running_hud()
 	hud.set_run_stats_visibility(true)
@@ -422,7 +413,7 @@ func _run() -> void:
 	var run_ability_button := (hud.run_hud_screen.ability_buttons()[0] as Button)
 	run_ability_button.mouse_entered.emit()
 	await process_frame
-	_check(hud.context_detail_controller.is_open() and hud.context_detail_controller.current_payload().get("title", "") == "Fokusfeld" and String(hud.context_detail_controller.current_payload().get("body", "")).contains("25 %"), "Mouseover erklärt die vollständige Wirkung der aktiven Fähigkeit")
+	_check(hud.context_detail_controller.is_open() and hud.context_detail_controller.current_payload().get("title", "") == "" and String(hud.context_detail_controller.current_payload().get("body", "")).contains("Abklingzeit: 16 s"), "Mouseover erklärt die aktiven Fähigkeitswerte ohne doppelten Titel")
 	run_ability_button.mouse_exited.emit()
 	await process_frame
 	hud.update_finding_progress(18, 30)
@@ -436,7 +427,7 @@ func _run() -> void:
 		[
 			{"id": &"area", "title": "Flächenwirkung", "effect": "Gruppen schneller kontrollieren"},
 			{"id": &"control", "title": "Kontrolle", "effect": "Tempo senken"},
-			{"id": &"protect", "title": "Patientenschutz", "effect": "Kontaktschaden senken"}
+			{"id": &"protect", "title": "Patientenschild", "effect": "Gegnerschaden senken"}
 		],
 		null,
 		[]
@@ -464,7 +455,7 @@ func _run() -> void:
 		_check(hud.preparation_plan_panel.visible and hud.preparation_catalog_panel.visible, "Plan und Editor bleiben bei %s ohne Zwischenscreen erreichbar" % viewport_size)
 		_check(_inside_viewport(hud.preparation_start_button, viewport_size), "Startbutton bleibt bei %s im Bild" % viewport_size)
 		_check(_inside_viewport(hud.preparation_catalog, viewport_size), "Komponentenkatalog bleibt bei %s im Bild" % viewport_size)
-		hud.show_finding({"title": "Test", "gameplay_text": "Wirkung"}, [{"id": &"a", "title": "A"}, {"id": &"b", "title": "B"}, {"id": &"c", "title": "C"}, {"id": &"d", "title": "D"}])
+		hud.show_finding({"title": "Test", "gameplay_text": "Schaden"}, [{"id": &"a", "title": "A"}, {"id": &"b", "title": "B"}, {"id": &"c", "title": "C"}, {"id": &"d", "title": "D"}])
 		await process_frame
 		_check(_inside_viewport(hud.finding_confirm_button, viewport_size), "Befundaktion bleibt bei %s im Bild" % viewport_size)
 

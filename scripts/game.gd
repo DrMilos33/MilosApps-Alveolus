@@ -53,6 +53,9 @@ var projectile_world: ProjectileWorld
 var pickup_world: PickupWorld
 var combat_query: CombatQuery
 var pickup_query: CombatQuery
+var defense_cell_world: DefenseCellWorld
+var treatment_beam_world: TreatmentBeamWorld
+var defense_cell_damage_profile: DamageProfile
 var avatar: TherapyAvatar
 var hud: GameHUD
 var ui_sound_service: UISoundService
@@ -105,11 +108,13 @@ var targeting_ability_slot: int = -1
 var targeting_input_device: AbilityCommand.InputDevice = AbilityCommand.InputDevice.UNKNOWN
 var gamepad_target_direction: Vector2 = Vector2.ZERO
 var ability_ready_states: Dictionary = {}
+var treatment_beam_return_visualized: Dictionary = {}
 
 var spawn_accumulator: float = 0.0
 var therapy_timer: float = 0.0
 var immune_timer: float = 0.0
 var support_timer: float = 0.0
+var life_regeneration_accumulator: float = 0.0
 var pressure_grace_timer: float = 0.0
 var pickup_merge_cursor: int = 0
 var meta_refresh_timer: float = 0.0
@@ -182,6 +187,7 @@ func _ready() -> void:
 	loadout_modules = ContentCatalog.loadout_module_definitions()
 	treatment_definitions = TreatmentDefinition.catalog()
 	ability_definitions = AbilityDefinition.catalog()
+	defense_cell_damage_profile = DamageProfile.single(&"defense_cell_damage", &"holy")
 	case_traits = ContentCatalog.case_trait_definitions()
 	finding_definitions = ContentCatalog.finding_definitions()
 	reaction_definitions = ContentCatalog.reaction_definitions()
@@ -246,6 +252,11 @@ func _ready() -> void:
 	avatar.z_index = 5
 	simulation_root.add_child(avatar)
 	avatar.set_physics_process(false)
+	defense_cell_world = DefenseCellWorld.new().configure(topology, avatar, combat_query)
+	defense_cell_world.enemy_hit.connect(_on_defense_cell_hit)
+	treatment_beam_world = TreatmentBeamWorld.new().configure()
+	treatment_beam_world.tick_resolved.connect(_on_treatment_beam_tick)
+	treatment_beam_world.beam_finished.connect(_on_treatment_beam_finished)
 	ability_feedback_world.set_shield_anchor(avatar)
 	treatment_controller = TreatmentController.new()
 	treatment_controller.enabled = false
@@ -303,6 +314,7 @@ func _ready() -> void:
 	hud.clinic_job_start_requested.connect(_on_clinic_job_start_requested)
 	hud.clinic_job_claim_requested.connect(_on_clinic_job_claim_requested)
 	hud.research_purchase_requested.connect(_on_research_purchase_requested)
+	hud.research_reset_requested.connect(_on_research_reset_requested)
 	hud.research_tab_changed.connect(_on_research_tab_changed)
 	hud.talent_toggle_requested.connect(_on_talent_toggle_requested)
 	hud.talent_reset_requested.connect(_on_talent_reset_requested)
@@ -341,6 +353,7 @@ func _ready() -> void:
 	hud.configure_input_glyphs(input_glyph_service)
 	hud.configure_ui_settings(meta.ui_settings)
 	hud.set_run_stats_visibility(meta.show_run_stats)
+	avatar.set_character_name_visible(meta.ui_settings.show_character_name)
 	discovery_manager = DiscoveryManager.new()
 	discovery_manager.configure(discovery_definitions, meta.seen_discovery_ids)
 	discovery_manager.seen_changed.connect(_on_discovery_seen)
@@ -438,8 +451,11 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 			_therapy_step(delta)
 		else:
 			treatment_controller.step(delta)
+			if treatment_beam_world != null:
+				treatment_beam_world.step_fixed(delta, combat_query)
 		_immune_step(delta)
 		_support_step(delta)
+		_life_regeneration_step(delta)
 		_case_mechanics_step(delta)
 	_profile_phase(&"combat", phase_started)
 	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
@@ -913,6 +929,8 @@ func _on_ui_settings_changed(settings: UISettingsState) -> void:
 		ui_sound_service.configure(meta.ui_settings)
 	if input_glyph_service != null:
 		input_glyph_service.configure(meta.ui_settings.glyph_mode)
+	if avatar != null:
+		avatar.set_character_name_visible(meta.ui_settings.show_character_name)
 	_save_meta()
 
 func _on_settings_reset_bindings_requested() -> void:
@@ -945,19 +963,20 @@ func _on_retry_requested() -> void:
 func _show_preparation() -> void:
 	if selected_level == null:
 		return
-	var seed := meta.get_or_create_case_seed(selected_level.id)
-	var case_rng := RandomNumberGenerator.new()
-	case_rng.seed = seed
-	var trait_id := _deterministic_case_choice(selected_level.visible_trait_ids, case_rng)
-	var finding_id := _deterministic_case_choice(selected_level.hidden_finding_ids, case_rng)
-	pending_run_context = meta.create_run_context(selected_level.id, trait_id, finding_id)
-	pending_preparation_loadout = pending_run_context.loadout_snapshot.duplicate_loadout()
-	# Reserve remains serializable for old saves, but is intentionally dormant in
-	# the current product milestone. New plans and runs start without it.
-	pending_preparation_loadout.reserve_id = &""
-	pending_run_context.loadout_snapshot.reserve_id = &""
-	var unlocked := meta.unlocked_module_ids(loadout_modules, research_definitions)
-	pending_loadout_draft = LoadoutDraft.from_prepared(pending_preparation_loadout, loadout_modules, unlocked, meta.preparation_capacity())
+	pending_run_context = _create_case_context(selected_level)
+	if pending_run_context == null:
+		return
+	# Historical plans remain stored until the player actually changes or starts
+	# this plan. The effective draft follows the current balancing catalog without
+	# deleting owned research, legacy actives or passive values from the save.
+	pending_preparation_loadout = LoadoutAvailabilityPolicy.sanitized_copy(
+		pending_run_context.loadout_snapshot,
+		loadout_modules,
+		meta.research_ranks
+	)
+	pending_run_context.loadout_snapshot = pending_preparation_loadout.duplicate_loadout()
+	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks)
+	pending_loadout_draft = LoadoutDraft.from_prepared(pending_preparation_loadout, loadout_modules, available, meta.preparation_capacity())
 	pending_replacement_component = &""
 	_set_flow(GameFlowState.State.PREPARATION)
 	if ui_router.current_screen_id() != &"level_select":
@@ -965,6 +984,20 @@ func _show_preparation() -> void:
 		ui_router.push_screen(&"level_select")
 	ui_router.push_screen(&"preparation", null, get_viewport().gui_get_focus_owner())
 	_refresh_preparation()
+
+func _create_case_context(level: LevelDefinition) -> RunContext:
+	if level == null:
+		return null
+	var seed := meta.get_or_create_case_seed(level.id)
+	if not meta.has_completed_level(level.id):
+		return meta.create_run_context(level.id, &"", &"")
+	var case_rng := RandomNumberGenerator.new()
+	case_rng.seed = seed
+	return meta.create_run_context(
+		level.id,
+		_deterministic_case_choice(level.visible_trait_ids, case_rng),
+		_deterministic_case_choice(level.hidden_finding_ids, case_rng)
+	)
 
 func _deterministic_case_choice(ids: Array[StringName], case_rng: RandomNumberGenerator) -> StringName:
 	var valid: Array[StringName] = []
@@ -992,6 +1025,8 @@ func _refresh_preparation() -> void:
 		"validation": validation,
 		"finding_hint": _preparation_finding_hint(),
 		"unlocked_ids": meta.unlocked_module_ids(loadout_modules, research_definitions),
+		"available_ids": LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks),
+		"availability_reasons": _preparation_availability_reasons(),
 		"slot_snapshot": pending_loadout_draft.slot_snapshot(),
 		"loadout_snapshot": pending_preparation_loadout.to_dict(),
 		"replacement_component": pending_replacement_component,
@@ -999,23 +1034,22 @@ func _refresh_preparation() -> void:
 	hud.show_preparation(view_model, loadout_modules.values(), pending_preparation_loadout)
 
 func _preparation_finding_hint() -> String:
-	if pending_run_context == null or not pending_run_context.has_talent(&"early_classification"):
-		return "Der genaue Befund entsteht während der Behandlung."
-	var finding: FindingDefinition = finding_definitions.get(pending_run_context.hidden_finding_id)
-	if finding == null:
-		return "Frühe Einordnung: noch unklar"
-	var category := "Ausbreitungsverhalten"
-	if finding.behavior == FindingDefinition.Behavior.PRESSURE_SURGES:
-		category = "Zustandsbelastung"
-	elif finding.behavior == FindingDefinition.Behavior.HIDDEN_NESTS:
-		category = "Lokale Herde"
-	return "Frühe Einordnung: %s" % category
+	return "Der genaue Befund entsteht während der Behandlung."
+
+func _preparation_availability_reasons() -> Dictionary:
+	var reasons: Dictionary = {}
+	for raw_id in loadout_modules:
+		var id := StringName(raw_id)
+		var reason := LoadoutAvailabilityPolicy.unavailable_reason(id, loadout_modules, meta.research_ranks)
+		if not reason.is_empty():
+			reasons[id] = reason
+	return reasons
 
 func _on_preparation_component_requested(id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
 		return
-	var unlocked := meta.unlocked_module_ids(loadout_modules, research_definitions)
-	if not bool(unlocked.get(id, false)) or not loadout_modules.has(id):
+	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks)
+	if not bool(available.get(id, false)) or not loadout_modules.has(id):
 		return
 	var result := pending_loadout_draft.equip(id)
 	_handle_loadout_change(result)
@@ -1023,10 +1057,10 @@ func _on_preparation_component_requested(id: StringName) -> void:
 func _on_preparation_slot_component_requested(slot_id: StringName, id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
 		return
-	if not LoadoutSlotId.active().has(slot_id) or not loadout_modules.has(id):
+	if not LoadoutSlotId.planning().has(slot_id) or not loadout_modules.has(id):
 		return
-	var unlocked := meta.unlocked_module_ids(loadout_modules, research_definitions)
-	if not bool(unlocked.get(id, false)):
+	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks)
+	if not bool(available.get(id, false)):
 		return
 	# The plan already names an explicit target slot, so replacement is atomic
 	# and immediately reversible. A second confirmation added friction without
@@ -1035,12 +1069,14 @@ func _on_preparation_slot_component_requested(slot_id: StringName, id: StringNam
 	_handle_loadout_change(result)
 
 func _on_preparation_slot_clear_requested(slot_index: int) -> void:
-	if slot_index < 0 or slot_index >= LoadoutSlotId.active().size():
+	if slot_index < 0 or slot_index >= LoadoutSlotId.planning().size():
 		return
-	_on_preparation_slot_requested(LoadoutSlotId.active()[slot_index])
+	_on_preparation_slot_requested(LoadoutSlotId.planning()[slot_index])
 
 func _on_preparation_slot_requested(slot_id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
+		return
+	if not LoadoutSlotId.planning().has(slot_id):
 		return
 	var result: LoadoutChangeResult
 	if pending_replacement_component != &"":
@@ -1087,8 +1123,8 @@ func _on_preparation_reserve_requested(id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or not loadout_modules.has(id) or _is_preparation_loadout_locked():
 		return
 	var definition: LoadoutModuleDefinition = loadout_modules[id]
-	var unlocked := meta.unlocked_module_ids(loadout_modules, research_definitions)
-	if definition.kind != LoadoutModuleDefinition.Kind.PASSIVE or not bool(unlocked.get(id, false)):
+	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks)
+	if definition.kind != LoadoutModuleDefinition.Kind.PASSIVE or not bool(available.get(id, false)):
 		return
 	var result := pending_loadout_draft.equip(id, LoadoutSlotId.RESERVE)
 	if result.needs_replacement():
@@ -1108,7 +1144,7 @@ func _on_preparation_start_requested(snapshot: Dictionary) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_run_context == null or pending_loadout_draft == null:
 		return
 	var requested := pending_loadout_draft.to_prepared()
-	var validation := meta.validate_prepared_loadout(requested, loadout_modules, research_definitions)
+	var validation := pending_loadout_draft.validate()
 	if not validation.valid:
 		_refresh_preparation()
 		return
@@ -1156,7 +1192,9 @@ func start_run(run_context: RunContext = null) -> void:
 	var treatment: TreatmentDefinition = treatment_definitions.get(active_loadout.treatment_id) if active_loadout != null else null
 	if not selected_level.is_tutorial and treatment != null:
 		stats.configure_prepared_treatment(treatment)
-		stats.apply_prepared_progression(meta.research_ranks, active_loadout.passive_ids)
+		# Forschung ist dauerhafte Charakterprogression. Sie wirkt unabhängig von
+		# der Einsatzplanung; Passivmodule sind im aktuellen Ausbau deaktiviert.
+		stats.apply_meta_progression(meta.research_ranks)
 		if active_run_context != null and active_run_context.visible_trait_id == &"fragile_condition":
 			stats.support_effect_multiplier *= 1.20
 	if completion_smoke:
@@ -1171,6 +1209,7 @@ func start_run(run_context: RunContext = null) -> void:
 	avatar.global_position = Vector2.ZERO
 	avatar.reset_physics_interpolation()
 	avatar.input_enabled = true
+	avatar.set_character_name_visible(meta.ui_settings.show_character_name)
 	avatar.show()
 	avatar.queue_redraw()
 	rng.seed = config.random_seed
@@ -1178,12 +1217,13 @@ func start_run(run_context: RunContext = null) -> void:
 	therapy_timer = 0.18
 	immune_timer = 0.75
 	support_timer = 6.0
+	life_regeneration_accumulator = 0.0
 	pressure_grace_timer = 0.0
 	pickup_merge_cursor = 0
 	defeats = 0
 	stress_reported = false
 	stress_hud_timer = 0.0
-	reroll_available = active_loadout != null and active_loadout.passive_ids.has(&"second_opinion")
+	reroll_available = false
 	reroll_used = false
 	current_upgrade_options.clear()
 	active_boss = null
@@ -1213,18 +1253,14 @@ func start_run(run_context: RunContext = null) -> void:
 	state.level_up_requested.connect(_on_level_up_requested)
 	state.boss_due.connect(_spawn_boss)
 	state.run_finished.connect(_on_run_finished)
-	var starting_analysis := 2 if active_loadout != null and active_loadout.passive_ids.has(&"preanalysis") and not selected_level.is_tutorial else 0
-	state.reset(config, starting_analysis, stats.max_stability_bonus)
+	state.reset(config, 0, stats.max_stability_bonus)
+	state.set_analysis_gain_multiplier(stats.experience_gain_multiplier)
 	if run_session != null:
 		run_session.reset()
 		run_session.start(active_run_context)
 	_configure_tactical_run(treatment)
 	mastery_tracker.begin_run(selected_level.id, config.run_duration_seconds)
 	mastery_tracker.record_stability(state.stability, state.max_stability)
-	if active_run_context != null and not selected_level.is_tutorial and persistence_enabled:
-		meta.clear_case_seed(selected_level.id)
-		_save_meta()
-
 	hud.update_run_stats(stats, state)
 	hud.update_shield(0.0, 0.0)
 	hud.show_running_hud()
@@ -1378,18 +1414,16 @@ func _stress_number_option(arguments: PackedStringArray, prefix: String, web_key
 func _resolved_run_context(requested: RunContext) -> RunContext:
 	if selected_level == null or selected_level.is_tutorial:
 		return null
+	var resolved: RunContext = null
 	if requested != null and requested.level_id == selected_level.id:
-		return requested.duplicate_context()
-	if quick_run:
-		return RunContext.create(selected_level.id, config.random_seed, PreparedLoadout.default_loadout(), {})
-	var seed := meta.get_or_create_case_seed(selected_level.id)
-	var case_rng := RandomNumberGenerator.new()
-	case_rng.seed = seed
-	return meta.create_run_context(
-		selected_level.id,
-		_deterministic_case_choice(selected_level.visible_trait_ids, case_rng),
-		_deterministic_case_choice(selected_level.hidden_finding_ids, case_rng)
-	)
+		resolved = requested.duplicate_context()
+	elif quick_run:
+		resolved = RunContext.create(selected_level.id, config.random_seed, PreparedLoadout.default_loadout(), {})
+	else:
+		resolved = _create_case_context(selected_level)
+	if resolved != null:
+		resolved.loadout_snapshot = LoadoutAvailabilityPolicy.sanitized_copy(resolved.loadout_snapshot, loadout_modules, meta.research_ranks)
+	return resolved
 
 func _apply_case_trait_to_config(trait_id: StringName) -> void:
 	var case_trait_definition: CaseTraitDefinition = case_traits.get(trait_id)
@@ -1408,10 +1442,8 @@ func _apply_case_trait_to_config(trait_id: StringName) -> void:
 				config.enemy_health_end = _apply_scalar_modifier(config.enemy_health_end, operation, value)
 			&"enemy_speed":
 				config.enemy_speed_multiplier = _apply_scalar_modifier(config.enemy_speed_multiplier, operation, value)
-			&"contact_damage":
+			&"contact_damage", &"enemy_damage":
 				config.contact_damage_multiplier = _apply_scalar_modifier(config.contact_damage_multiplier, operation, value)
-			&"initial_stability":
-				config.initial_stability = maxf(1.0, _apply_scalar_modifier(config.initial_stability, operation, value))
 
 func _apply_scalar_modifier(current: float, operation: StringName, value: float) -> float:
 	match operation:
@@ -1442,7 +1474,20 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 			if ability != null:
 				equipped_abilities.append(ability)
 		stats.call("bind_run_build", build_state, treatment, equipped_abilities)
+	var talent_context := active_run_context
+	var spread_rank := talent_context.talent_rank(&"spread_penetration") if talent_context != null else 0
+	var persistence_rank := talent_context.talent_rank(&"piercing_persistence") if talent_context != null else 0
+	var return_rank := talent_context.talent_rank(&"piercing_return") if talent_context != null else 0
+	var manual_rank := talent_context.talent_rank(&"manual_treatment_aim") if talent_context != null else 0
+	if treatment.id == &"treatment_spread" and spread_rank > 0:
+		build_state.set_base(RunBuildState.TREATMENT_MAX_HITS, float(treatment.max_hits + spread_rank))
+	if treatment.id == &"treatment_pierce":
+		build_state.set_base(RunBuildState.TREATMENT_BEAM_DURATION, float(persistence_rank) * 0.5)
+		build_state.set_base(RunBuildState.TREATMENT_BEAM_TICK, 0.25)
+		build_state.set_base(RunBuildState.TREATMENT_BEAM_RETURN, 1.0 if return_rank > 0 else 0.0)
+	build_state.set_base(RunBuildState.TREATMENT_MANUAL_AIM, 1.0 if manual_rank > 0 else 0.0)
 	treatment_controller.configure(treatment, build_state, topology, avatar, _treatment_candidates, ability_controller)
+	treatment_controller.configure_manual_aim(_treatment_aim_world_position, manual_rank > 0)
 	treatment_controller.enabled = true
 	ability_controller.configure(build_state, topology, avatar, func() -> Array: return enemies, func() -> Array: return pickups, state)
 	ability_controller.configure_queries(combat_query, pickup_query)
@@ -1450,14 +1495,82 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 	for slot in range(mini(active_loadout.ability_ids.size(), 2)):
 		var ability: AbilityDefinition = ability_definitions.get(active_loadout.ability_ids[slot])
 		if ability != null and ability_controller.equip(slot, ability):
-			ability_views.append(ability)
+			ability_views.append(_ability_hud_view(ability))
 	hud.configure_active_abilities(ability_views)
 	var finding: FindingDefinition = finding_definitions.get(active_run_context.hidden_finding_id) if active_run_context != null else null
 	if finding != null:
-		var threshold_multiplier := TalentDefinition.magnitude_for(&"rapid_evaluation", 0.8) if active_run_context.has_talent(&"rapid_evaluation") else 1.0
-		finding_controller.configure(finding, maxi(1, roundi(float(selected_level.finding_progress_target) * threshold_multiplier)))
+		finding_controller.configure(finding, maxi(1, selected_level.finding_progress_target))
 	else:
 		hud.hide_finding_progress()
+
+func _ability_hud_view(definition: AbilityDefinition) -> Dictionary:
+	if definition == null:
+		return {}
+	var rows: Array[Dictionary] = []
+	var cooldown := definition.cooldown
+	if build_state != null:
+		cooldown *= build_state.value(RunBuildState.ACTIVE_COOLDOWN, 1.0, definition.tags)
+	rows.append({"label": "Abklingzeit", "value": "%s s" % _hud_number(cooldown, 1)})
+	var values := definition.parameters
+	if values.has("damage"):
+		var damage := float(values.get("damage", 0.0))
+		if build_state != null:
+			damage = build_state.value(RunBuildState.ABILITY_DAMAGE, damage, definition.tags)
+		rows.append({"label": "Schaden", "value": _hud_number(damage)})
+		if definition.damage_profile != null:
+			rows.append({
+				"label": "Schadenstyp",
+				"value": DamageTypeCatalog.display_name(definition.damage_profile.dominant_type_id()),
+			})
+	if values.has("recovery"):
+		var recovery := float(values.get("recovery", 0.0))
+		if build_state != null:
+			recovery = build_state.value(RunBuildState.ABILITY_RECOVERY, recovery, definition.tags)
+		rows.append({"label": "Heilung", "value": _hud_number(recovery)})
+	if values.has("shield"):
+		var shield := float(values.get("shield", 0.0))
+		if build_state != null:
+			shield = build_state.value(RunBuildState.ABILITY_SHIELD, shield, definition.tags)
+		rows.append({"label": "Schild", "value": _hud_number(shield)})
+	if values.has("range"):
+		var range_value := float(values.get("range", 0.0))
+		if build_state != null:
+			range_value = build_state.value(RunBuildState.ABILITY_RANGE, range_value, definition.tags)
+		rows.append({"label": "Reichweite", "value": _hud_number(range_value)})
+	if values.has("radius"):
+		var radius := float(values.get("radius", 0.0))
+		if build_state != null:
+			radius = build_state.value(RunBuildState.ABILITY_RADIUS, radius, definition.tags)
+		rows.append({"label": "Radius", "value": _hud_number(radius)})
+	if values.has("width"):
+		var width := float(values.get("width", 0.0))
+		if build_state != null:
+			width = build_state.value(RunBuildState.ABILITY_WIDTH, width, definition.tags)
+		rows.append({"label": "Breite", "value": _hud_number(width)})
+	if values.has("projectiles"):
+		rows.append({"label": "Projektile", "value": str(int(values.get("projectiles", 1)))})
+	return {
+		"id": definition.id,
+		"display_name": definition.display_name,
+		"description": definition.description,
+		"cooldown_total": cooldown,
+		"fact_rows": rows,
+	}
+
+func _active_ability_hud_views() -> Array:
+	var result: Array = []
+	if active_loadout == null:
+		return result
+	for id in active_loadout.ability_ids.slice(0, 2):
+		var definition: AbilityDefinition = ability_definitions.get(id)
+		if definition != null:
+			result.append(_ability_hud_view(definition))
+	return result
+
+func _hud_number(value: float, decimals: int = 0) -> String:
+	if decimals <= 0 or is_equal_approx(value, roundf(value)):
+		return str(roundi(value))
+	return ("%.*f" % [decimals, value]).replace(".", ",")
 
 func _spawn_step(delta: float) -> void:
 	_drain_deferred_spawns(8)
@@ -1497,7 +1610,7 @@ func _drain_deferred_spawns(maximum_per_tick: int) -> void:
 		var critical := request.is_critical()
 		if not combat_capacity.can_allocate_enemy(enemy_world.regular_count, enemy_world.critical_count, critical):
 			break
-		var spawned := _spawn_enemy(request.definition_id, request.position, request.health_scale, critical, false)
+		var spawned := _spawn_enemy(request.definition_id, request.position, request.health_scale, critical, false, request)
 		if spawned == null:
 			break
 		deferred_spawn_cursor += 1
@@ -1603,12 +1716,21 @@ func _on_treatment_shots_requested(shots: Array[TreatmentShot]) -> void:
 				shot.target.take_damage(_resolved_treatment_damage(shot.damage, shot.target), shot.source_id)
 				continue
 			projectiles.append(projectile)
-		elif shot.mode == TreatmentShot.Mode.LINE:
-			# Hitscan treatments use the same generation-safe spatial index as
-			# active abilities. This avoids sorting/scanning the entire crowd for
-			# every spread bolt while preserving front-to-back piercing order.
+		elif shot.mode == TreatmentShot.Mode.LINE or shot.mode == TreatmentShot.Mode.DIRECTIONAL:
+			var beam_duration := 0.0
+			if shot.source_id == &"treatment_pierce" and build_state != null:
+				beam_duration = build_state.value(RunBuildState.TREATMENT_BEAM_DURATION, 0.0, PackedStringArray(["piercing"]))
+			if beam_duration > 0.0 and shot.mode == TreatmentShot.Mode.LINE:
+				_spawn_treatment_beam(shot, beam_duration)
+				continue
+			# Resolve once. Damage and feedback consume this exact generation-safe
+			# snapshot, including each spread ray's independent shortened endpoint.
 			_ensure_combat_query()
-			for handle in combat_query.line(shot.origin, shot.direction, shot.range_value, shot.hit_radius, shot.max_hits):
+			shot.resolve_query_snapshot(combat_query)
+			if shot.mode == TreatmentShot.Mode.DIRECTIONAL:
+				_spawn_directional_treatment_projectile(shot)
+				continue
+			for handle in shot.resolved_handles:
 				var enemy := enemy_world.resolve(handle) as InfectionEnemy
 				if is_instance_valid(enemy) and enemy.is_targetable():
 					enemy.take_damage(_resolved_treatment_damage(shot.damage, enemy), shot.source_id)
@@ -1619,41 +1741,165 @@ func _on_treatment_feedback_requested(_treatment_id: StringName, shots: Array[Tr
 	# Tracking shots already own a moving ProjectileRenderer visual. Hitscan
 	# treatments need a short tracer because their damage resolves immediately.
 	for shot in shots:
-		if shot != null and shot.mode == TreatmentShot.Mode.LINE:
+		if shot != null and shot.mode == TreatmentShot.Mode.LINE and not (
+			shot.source_id == &"treatment_pierce"
+			and build_state != null
+			and build_state.value(RunBuildState.TREATMENT_BEAM_DURATION, 0.0, PackedStringArray(["piercing"])) > 0.0
+		):
 			ability_feedback_world.spawn_treatment_shot(shot)
+
+func _spawn_directional_treatment_projectile(shot: TreatmentShot) -> void:
+	var target: InfectionEnemy = null
+	var target_handle := EntityHandle.INVALID
+	if not shot.resolved_handles.is_empty():
+		target_handle = int(shot.resolved_handles[0])
+		target = enemy_world.resolve(target_handle) as InfectionEnemy
+	var resolved_damage := _resolved_treatment_damage(shot.damage, target) if is_instance_valid(target) else shot.damage
+	if projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+		if is_instance_valid(target) and target.is_targetable():
+			target.take_damage(resolved_damage, shot.source_id)
+		return
+	var projectile: TherapyProjectile
+	if not projectile_pool.is_empty():
+		projectile = projectile_pool.pop_back()
+	else:
+		projectile = TherapyProjectile.new()
+		projectile.z_index = 6
+		projectile.finished.connect(_on_projectile_finished)
+		projectile.discovery_ready.connect(_on_projectile_discovery_ready)
+		simulation_root.add_child(projectile)
+	projectile.global_position = shot.origin
+	projectile.configure_directional(
+		shot.direction,
+		resolved_damage,
+		topology,
+		shot.requested_range_value,
+		shot.impact_distance,
+		target,
+		target_handle,
+		enemy_world.resolve,
+		shot.source_id
+	)
+	projectile.global_position = shot.origin
+	projectile.reset_visual_motion()
+	var projectile_handle := projectile_world.register_projectile(projectile)
+	if not EntityHandle.is_valid(projectile_handle):
+		_store_projectile(projectile)
+		if is_instance_valid(target) and target.is_targetable():
+			target.take_damage(resolved_damage, shot.source_id)
+		return
+	if projectile_renderer == null or not projectile_renderer.register_projectile(projectile, projectile_handle, false):
+		projectile_world.release(projectile_handle, false)
+		_store_projectile(projectile)
+		if is_instance_valid(target) and target.is_targetable():
+			target.take_damage(resolved_damage, shot.source_id)
+		return
+	projectiles.append(projectile)
+
+func _spawn_treatment_beam(shot: TreatmentShot, duration: float) -> void:
+	if treatment_beam_world == null:
+		return
+	var tick_interval := build_state.value(RunBuildState.TREATMENT_BEAM_TICK, 0.25, PackedStringArray(["piercing"]))
+	var returns := build_state.value(RunBuildState.TREATMENT_BEAM_RETURN, 0.0, PackedStringArray(["piercing"])) >= 0.5
+	var handle := treatment_beam_world.spawn(
+		shot.origin, shot.direction, shot.requested_range_value, shot.hit_radius * 2.0,
+		shot.damage, duration, tick_interval, returns, shot.source_id
+	)
+	if not EntityHandle.is_valid(handle):
+		shot.resolve_query_snapshot(combat_query)
+		for enemy_handle in shot.resolved_handles:
+			var fallback_enemy := enemy_world.resolve(enemy_handle) as InfectionEnemy
+			if is_instance_valid(fallback_enemy) and fallback_enemy.is_targetable():
+				fallback_enemy.take_damage(_resolved_treatment_damage(shot.damage, fallback_enemy), shot.source_id)
+		return
+	treatment_beam_return_visualized[handle] = false
+	if ability_feedback_world != null:
+		ability_feedback_world.spawn(
+			shot.source_id, shot.origin, shot.origin + shot.direction * shot.requested_range_value,
+			shot.direction, 0.0, shot.requested_range_value, shot.hit_radius * 2.0, duration
+		)
+
+func _on_treatment_beam_tick(handle: int, enemy_handles: PackedInt64Array, is_return: bool) -> void:
+	var beam := treatment_beam_world.resolve(handle) if treatment_beam_world != null else null
+	if beam == null:
+		return
+	if is_return and not bool(treatment_beam_return_visualized.get(handle, false)):
+		treatment_beam_return_visualized[handle] = true
+		if ability_feedback_world != null:
+			var return_origin := beam.phase_origin(topology)
+			var return_direction := beam.phase_direction()
+			ability_feedback_world.spawn(
+				beam.source_id, return_origin, return_origin + return_direction * beam.length,
+				return_direction, 0.0, beam.length, beam.width, beam.duration
+			)
+	for enemy_handle in enemy_handles:
+		var enemy := enemy_world.resolve(enemy_handle) as InfectionEnemy
+		if is_instance_valid(enemy) and enemy.is_targetable():
+			enemy.take_damage(_resolved_treatment_damage(beam.damage, enemy), beam.source_id)
+
+func _on_treatment_beam_finished(handle: int) -> void:
+	treatment_beam_return_visualized.erase(handle)
+
+func _treatment_aim_world_position() -> Vector2:
+	return get_global_mouse_position()
 
 func _on_treatment_fired(_treatment_id: StringName) -> void:
 	if not selected_level.is_tutorial and discovery_manager.request(&"automatic_therapy", avatar):
 		_try_present_next_discovery()
 
 func _resolved_treatment_damage(base_damage: float, enemy: InfectionEnemy) -> float:
-	if enemy == null or enemy.definition == null or build_state == null:
+	if enemy == null or enemy.definition == null:
 		return base_damage
 	var result := base_damage
-	if enemy.definition.id == &"bacterial_cluster":
+	if build_state != null and enemy.definition.id == &"bacterial_cluster":
 		result *= build_state.value(&"group_area_effect", 1.0)
-	if enemy.definition.id == &"minor_focus":
+	if build_state != null and enemy.definition.id == &"minor_focus":
 		result *= build_state.value(&"nest_damage", 1.0)
-	return result
+	var profile := stats.prepared_treatment.damage_profile if stats != null and stats.prepared_treatment != null else null
+	return CombatDamageResolver.resolve(result, profile, enemy.definition.resistance_profile, 0.0)
 
 func _on_projectile_discovery_ready(projectile: TherapyProjectile) -> void:
 	if discovery_manager.request(&"automatic_therapy", projectile):
 		_try_present_next_discovery()
 
 func _immune_step(delta: float) -> void:
+	if defense_cell_world == null:
+		return
 	if stats.immune_level <= 0:
+		defense_cell_world.clear()
 		return
-	immune_timer -= delta
-	if immune_timer > 0.0:
-		return
-	immune_timer += maxf(0.42, 0.82 - stats.immune_level * 0.06)
-	var radius := avatar.neutrophil_radius()
-	var damage := stats.immune_damage + float(stats.immune_level - 1) * 3.0
+	var count := stats.immune_cell_count()
+	var orbit_radius := stats.immune_orbit_radius()
+	var collision_radius := 15.0
+	var damage := stats.immune_damage
+	var hit_interval := 0.1
+	if build_state != null:
+		count = maxi(1, roundi(build_state.value(RunBuildState.DEFENSE_CELL_PROJECTILES, float(count), PackedStringArray(["defense_cell"]))))
+		collision_radius = build_state.value(RunBuildState.DEFENSE_CELL_RADIUS, collision_radius, PackedStringArray(["defense_cell"]))
+		damage = build_state.value(RunBuildState.DEFENSE_CELL_DAMAGE, damage, PackedStringArray(["defense_cell"]))
+		hit_interval = build_state.value(RunBuildState.DEFENSE_CELL_HIT_INTERVAL, hit_interval, PackedStringArray(["defense_cell"]))
+	defense_cell_world.configure_stats(count, orbit_radius, collision_radius, damage, hit_interval)
 	_ensure_combat_query()
-	for handle in combat_query.circle(avatar.global_position, radius):
-		var enemy := enemy_world.resolve(handle) as InfectionEnemy
-		if is_instance_valid(enemy):
-			enemy.take_damage(damage, &"immune")
+	defense_cell_world.step_fixed(delta)
+
+func _on_defense_cell_hit(handle: int, damage: float) -> void:
+	var enemy := enemy_world.resolve(handle) as InfectionEnemy
+	if is_instance_valid(enemy) and enemy.is_targetable():
+		var resolved := CombatDamageResolver.resolve(damage, defense_cell_damage_profile, enemy.definition.resistance_profile, 0.0)
+		enemy.take_damage(resolved, &"immune")
+
+func _life_regeneration_step(delta: float) -> void:
+	if stats == null or state == null or stats.life_regeneration_per_second <= 0.0 or state.stability >= state.max_stability:
+		return
+	life_regeneration_accumulator += maxf(delta, 0.0)
+	if life_regeneration_accumulator < 0.25:
+		return
+	var elapsed := life_regeneration_accumulator
+	life_regeneration_accumulator = 0.0
+	var regeneration_multiplier := stats.support_effect_multiplier
+	if build_state != null and not selected_level.is_tutorial:
+		regeneration_multiplier = build_state.value(RunBuildState.SUPPORT_EFFECT, regeneration_multiplier)
+	state.change_stability(stats.life_regeneration_per_second * regeneration_multiplier * elapsed)
 
 func _support_step(delta: float) -> void:
 	if stats.support_level <= 0:
@@ -1697,7 +1943,8 @@ func _spawn_enemy(
 	spawn_position: Vector2,
 	health_scale_override: float = -1.0,
 	critical_spawn: bool = false,
-	defer_if_full: bool = true
+	defer_if_full: bool = true,
+	spawn_request: EnemySpawnRequest = null
 ) -> InfectionEnemy:
 	if not enemy_definitions.has(type):
 		return null
@@ -1705,24 +1952,30 @@ func _spawn_enemy(
 	var critical := critical_spawn or definition.is_boss
 	var progress := 0.0 if state == null or config.event_driven_intro else clampf(state.elapsed / maxf(config.run_duration_seconds, 0.001), 0.0, 1.0)
 	var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, progress)
-	var phases := PackedInt32Array()
+	var movement_scale := spawn_request.movement_scale if spawn_request != null else config.enemy_speed_multiplier
+	var damage_scale := spawn_request.contact_scale if spawn_request != null else config.contact_damage_multiplier
+	var phases := spawn_request.boss_phases.duplicate() if spawn_request != null else PackedInt32Array()
 	if definition.is_boss:
 		health_scale = config.boss_health_multiplier
-		phases = config.boss_phase_minions
+		if spawn_request == null:
+			phases = config.boss_phase_minions
 	if health_scale_override > 0.0:
 		health_scale = health_scale_override
 	if not combat_capacity.can_allocate_enemy(enemy_world.regular_count, enemy_world.critical_count, critical):
 		if defer_if_full and deferred_spawn_requests.size() - deferred_spawn_cursor < 2048:
-			deferred_spawn_requests.append(EnemySpawnRequest.create(
-				type,
-				spawn_position,
-				definition.visual_id,
-				health_scale,
-				config.enemy_speed_multiplier,
-				config.contact_damage_multiplier,
-				phases,
-				EnemySpawnRequest.Priority.CRITICAL if critical else EnemySpawnRequest.Priority.REGULAR
-			))
+			if spawn_request != null:
+				deferred_spawn_requests.append(spawn_request.duplicate_request())
+			else:
+				deferred_spawn_requests.append(EnemySpawnRequest.create(
+					type,
+					spawn_position,
+					definition.visual_id,
+					health_scale,
+					movement_scale,
+					damage_scale,
+					phases,
+					EnemySpawnRequest.Priority.CRITICAL if critical else EnemySpawnRequest.Priority.REGULAR
+				))
 		return null
 	var resolved_spawn_position := spawn_position
 	var force_detailed_discovery := discovery_manager != null and not discovery_manager.has_seen(definition.discovery_id) and not discovery_spawn_reservations.has(definition.discovery_id)
@@ -1746,7 +1999,7 @@ func _spawn_enemy(
 		enemy.damage_applied.connect(_on_enemy_damage_applied)
 		simulation_root.add_child(enemy)
 	enemy.global_position = wrapped_position
-	enemy.configure(definition, avatar, topology, health_scale, config.enemy_speed_multiplier, config.contact_damage_multiplier, phases)
+	enemy.configure(definition, avatar, topology, health_scale, movement_scale, damage_scale, phases)
 	_apply_group_control_to_enemy(enemy)
 	enemy.global_position = wrapped_position
 	enemy.reset_physics_interpolation()
@@ -1760,7 +2013,14 @@ func _spawn_enemy(
 	_combat_query_dirty = true
 	enemies.append(enemy)
 	crowd_renderer.register_enemy(enemy, force_detailed_discovery)
+	_apply_enemy_spawn_metadata(enemy, spawn_request)
 	return enemy
+
+func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnRequest) -> void:
+	if enemy == null or request == null:
+		return
+	if request.source_id == &"hidden_nest":
+		hidden_nest_timers[enemy] = maxf(0.1, float(request.metadata.get("release_after_seconds", 20.0)))
 
 func _spawn_boss() -> void:
 	if state == null or not state.active:
@@ -1909,10 +2169,10 @@ func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss:
 	_spawn_analysis_pickup(analysis_value, pickup_position, guided_intro_pickup)
 	if selected_level.is_tutorial and intro_phase == &"await_immune_defeat" and enemy.last_damage_source == &"immune":
 		intro_lesson = 3
-		intro_phase = &"support_setup"
-		state.change_stability(-minf(16.0, maxf(0.0, state.stability - 1.0)))
-		avatar.show_damage_flash()
-		_present_intro_upgrade(&"oxygenation", 3, null)
+		intro_phase = &"boss_pending"
+		meta.set_tutorial_step(&"immune_defense")
+		discovery_manager.mark_seen(&"neutrophil_orbit")
+		state.trigger_event_boss()
 	if was_boss:
 		active_boss = null
 		mastery_tracker.record_boss_defeated(state.elapsed if state != null else 0.0)
@@ -2176,6 +2436,8 @@ func _on_pressure_applied(amount: float, source_enemy: InfectionEnemy = null) ->
 			amount *= 1.0 + finding.magnitude
 		if build_state != null:
 			amount *= build_state.value(&"surge_contact", 1.0)
+	var incoming_profile := source_enemy.definition.damage_profile if source_enemy != null and source_enemy.definition != null else null
+	amount = CombatDamageResolver.resolve(amount, incoming_profile, stats.resistances if stats != null else null, stats.defense if stats != null else 0.0)
 	if ability_controller != null:
 		amount = ability_controller.absorb_pressure(amount)
 	if amount <= 0.0:
@@ -2190,20 +2452,9 @@ func _on_stability_changed(current: float, maximum: float) -> void:
 	stability_changed.emit(current, maximum)
 	hud.update_stability(current, maximum)
 	mastery_tracker.record_stability(current, maximum)
-	var emergency_threshold := TalentDefinition.magnitude_for(&"emergency_window", 0.25)
-	if active_run_context != null and active_run_context.has_talent(&"emergency_window") and not emergency_talent_used and current <= maximum * emergency_threshold:
-		emergency_talent_used = true
-		ability_controller.reset_all_cooldowns()
-		hud.show_alert("NOTFALLFENSTER · FÄHIGKEITEN BEREIT", Color("ef7766"), 2.4)
 
 func _on_ability_used(slot: int, _ability_id: StringName, _target: Vector2) -> void:
 	mastery_tracker.record_ability_used(slot)
-	if active_run_context != null and active_run_context.has_talent(&"linked_deployment"):
-		ability_controller.reduce_other_cooldown(slot, TalentDefinition.magnitude_for(&"linked_deployment", 2.0))
-	if active_run_context != null and active_run_context.has_talent(&"alternating_rhythm") and last_ability_slot >= 0 and last_ability_slot != slot and state.elapsed - last_ability_time <= TalentDefinition.ALTERNATING_RHYTHM_WINDOW_SECONDS:
-		var runtime := ability_controller.runtime(slot)
-		if runtime != null:
-			runtime.scale_remaining(TalentDefinition.magnitude_for(&"alternating_rhythm", 0.75))
 	last_ability_slot = slot
 	last_ability_time = state.elapsed if state != null else 0.0
 
@@ -2249,11 +2500,6 @@ func _on_finding_revealed(definition: FindingDefinition) -> void:
 	if definition == null or state == null:
 		return
 	mastery_tracker.record_finding_revealed(state.elapsed)
-	if active_run_context != null and active_run_context.has_talent(&"finding_readiness"):
-		for slot in ability_controller.slots:
-			var runtime := ability_controller.runtime(int(slot))
-			if runtime != null:
-				runtime.scale_remaining(TalentDefinition.magnitude_for(&"finding_readiness", 0.5))
 	if definition.behavior == FindingDefinition.Behavior.HIDDEN_NESTS:
 		_spawn_hidden_nests(maxi(1, roundi(definition.magnitude)))
 	if flow_state == GameFlowState.State.LEVEL_UP:
@@ -2281,26 +2527,6 @@ func _reactions_for_finding(definition: FindingDefinition) -> Array:
 	for id in definition.reaction_ids:
 		if reaction_definitions.has(id):
 			result.append(reaction_definitions[id])
-	if active_run_context != null and active_run_context.has_talent(&"broader_perspective"):
-		var adaptive_id := StringName("%s_adaptive" % String(definition.id))
-		if not reaction_definitions.has(adaptive_id):
-			reaction_definitions[adaptive_id] = ReactionDefinition.create(
-				adaptive_id,
-				definition.id,
-				"Flexible Anpassung",
-				"+6 % Behandlungstempo und 6 % kürzere aktive Abklingzeiten.",
-				[
-					{"stat_id": &"therapy_cooldown", "operation": &"multiply", "value": 0.94},
-					{"stat_id": &"ability_cooldown", "operation": &"multiply", "value": 0.94},
-				]
-			)
-		# The finding decision remains a dense three-choice problem. The talent
-		# contributes its flexible option by replacing the final base reaction,
-		# rather than creating a fourth card that breaks the shared UI contract.
-		if result.is_empty():
-			result.append(reaction_definitions[adaptive_id])
-		else:
-			result[result.size() - 1] = reaction_definitions[adaptive_id]
 	return result
 
 func _on_finding_confirmed(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName) -> void:
@@ -2385,8 +2611,6 @@ func _on_finding_reaction_applied(definition: ReactionDefinition) -> void:
 	if definition.id == &"group_control":
 		for enemy in enemies:
 			_apply_group_control_to_enemy(enemy)
-	if active_run_context != null and active_run_context.has_talent(&"immediate_measure"):
-		_apply_immediate_reaction_boost(definition)
 	stats.call("_sync_fields_from_build")
 	hud.update_run_stats(stats, state)
 
@@ -2503,9 +2727,20 @@ func _case_mechanics_step(delta: float) -> void:
 
 func _spawn_hidden_nests(count: int) -> void:
 	for index in range(count):
-		var nest := _spawn_enemy(&"minor_focus", _spawn_position_around_avatar(390.0 + float(index) * 85.0), 1.0)
-		if nest != null:
-			hidden_nest_timers[nest] = 20.0
+		var spawn_position := _spawn_position_around_avatar(390.0 + float(index) * 85.0)
+		var request := EnemySpawnRequest.create(
+			&"minor_focus",
+			spawn_position,
+			&"infection_focus",
+			1.0,
+			config.enemy_speed_multiplier,
+			config.contact_damage_multiplier,
+			PackedInt32Array(),
+			EnemySpawnRequest.Priority.REGULAR,
+			&"hidden_nest"
+		)
+		request.metadata["release_after_seconds"] = 20.0
+		_spawn_enemy(&"minor_focus", spawn_position, 1.0, false, true, request)
 
 func _on_analysis_changed(current: int, target: int, level: int) -> void:
 	analysis_changed.emit(current, target, level)
@@ -2516,8 +2751,10 @@ func _on_level_up_requested(level: int) -> void:
 		state.resolve_level_up()
 		return
 	level_up_requested.emit(level)
-	var guided_interval := maxi(1, roundi(TalentDefinition.magnitude_for(&"guided_choice", 3.0)))
-	current_upgrade_options = _choose_tactical_upgrades([], level == 1 or (active_run_context != null and active_run_context.has_talent(&"guided_choice") and level % guided_interval == 0))
+	# Jede Auswahl enthält mindestens einen Ausbau der ausgerüsteten
+	# Grundbehandlung. Aktive Fähigkeiten und Abwehrzellen bleiben zusätzliche
+	# Optionen, verdrängen aber nie den Auto-Angriff vollständig.
+	current_upgrade_options = _choose_tactical_upgrades([], true)
 	if current_upgrade_options.is_empty():
 		state.resolve_level_up()
 		return
@@ -2565,12 +2802,7 @@ func _on_reroll_requested() -> void:
 	var excluded: Array[StringName] = []
 	for definition in current_upgrade_options:
 		excluded.append(definition.id)
-	var held: UpgradeDefinition = null
-	if active_run_context != null and active_run_context.has_talent(&"hold_card") and not current_upgrade_options.is_empty():
-		held = current_upgrade_options[0]
-	current_upgrade_options = _choose_tactical_upgrades(excluded, false, 2 if held != null else 3)
-	if held != null:
-		current_upgrade_options.push_front(held)
+	current_upgrade_options = _choose_tactical_upgrades(excluded, false, 3)
 	hud.show_upgrade_choices(current_upgrade_options, stats, false, false)
 
 func _choose_tactical_upgrades(excluded: Array[StringName], guarantee_treatment: bool, count: int = 3) -> Array[UpgradeDefinition]:
@@ -2597,6 +2829,7 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	_sync_legacy_upgrade_to_build(definition)
 	avatar.queue_redraw()
 	hud.update_run_stats(stats, state)
+	hud.configure_active_abilities(_active_ability_hud_views())
 	hud.show_running_hud()
 	if active_boss != null and is_instance_valid(active_boss):
 		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
@@ -2616,10 +2849,6 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 				immune_timer = 0.20
 				discovery_manager.mark_seen(&"neutrophil_orbit")
 				intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(104.0), 0.68)
-			&"oxygenation":
-				intro_phase = &"await_support_tick"
-				support_timer = 5.65
-				discovery_manager.mark_seen(&"supportive_oxygenation")
 		_save_meta()
 		return
 	if pending_finding_definition != null:
@@ -2627,8 +2856,6 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 		return
 	if definition.effect == &"immune_level":
 		discovery_manager.request(&"neutrophil_orbit", avatar)
-	elif definition.effect == &"support_level":
-		discovery_manager.request(&"supportive_oxygenation", null)
 	_try_present_next_discovery()
 
 func _on_run_finished(success: bool, reason: String) -> void:
@@ -2644,6 +2871,11 @@ func _on_run_finished(success: bool, reason: String) -> void:
 	var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
 	var reward := meta.award_run(success, state.elapsed, state.level, defeats, multiplier)
 	var unlocked_new := meta.register_level_result(selected_level, success, state.elapsed, state.level, defeats)
+	# Der sichtbare Fallzustand bleibt bei Niederlage und Abbruch unverändert.
+	# Nur ein erfolgreicher Abschluss erzeugt die nächste deterministische
+	# Merkmals-/Befundkombination. Der allererste Sieg selbst hat keine Parameter.
+	if success and not selected_level.is_tutorial:
+		meta.advance_case_seed(selected_level.id)
 	var new_mastery_ids := meta.apply_mastery_candidates(mastery_tracker.completed_candidates(success))
 	_save_meta()
 	_set_flow(GameFlowState.State.RESULT)
@@ -2760,9 +2992,20 @@ func _on_clinic_job_claim_requested() -> void:
 
 func _on_research_purchase_requested(id: StringName) -> void:
 	for definition in research_definitions:
-		if definition.id == id and meta.purchase(definition):
-			_save_meta()
+		if definition.id != id:
+			continue
+		if not LoadoutAvailabilityPolicy.research_purchase_enabled(definition):
 			break
+		if meta.purchase(definition):
+			_save_meta()
+		break
+	hud.refresh_research(meta, research_definitions)
+
+func _on_research_reset_requested() -> void:
+	if flow_state != GameFlowState.State.RESEARCH:
+		return
+	meta.clear_research_ranks()
+	_save_meta()
 	hud.refresh_research(meta, research_definitions)
 
 func _on_research_tab_changed(tab: StringName) -> void:
@@ -2772,7 +3015,7 @@ func _on_research_tab_changed(tab: StringName) -> void:
 func _on_talent_toggle_requested(id: StringName) -> void:
 	if flow_state != GameFlowState.State.RESEARCH:
 		return
-	if meta.set_talent_active(id, not meta.has_talent(id)):
+	if meta.purchase_talent_rank(id):
 		_save_meta()
 	hud.refresh_talents(_talent_view_model())
 
@@ -2792,25 +3035,25 @@ func _talent_view_model() -> Dictionary:
 	for definition in definitions:
 		var prerequisites_met := true
 		var requirement_titles := PackedStringArray()
-		var active_dependents := PackedStringArray()
 		for required_id in definition.required_ids:
 			requirement_titles.append(String(titles.get(StringName(required_id), String(required_id))))
 			if not meta.has_talent(StringName(required_id)):
 				prerequisites_met = false
 				break
-		for candidate in definitions:
-			if meta.has_talent(candidate.id) and candidate.required_ids.has(String(definition.id)):
-				active_dependents.append(candidate.title)
+		var current_rank := meta.talent_rank(definition.id)
+		var maximum := current_rank >= definition.max_rank
 		cards.append({
 			"id": definition.id,
 			"title": definition.title,
 			"description": definition.description,
-			"cost": definition.cost,
-			"category": definition.category,
-			"active": meta.has_talent(definition.id),
+			"cost": 0 if maximum else definition.cost_for_rank(current_rank),
+			"category": &"treatment",
+			"active": current_rank > 0,
+			"current_rank": current_rank,
+			"max_rank": definition.max_rank,
+			"maximum": maximum,
 			"prerequisite_met": prerequisites_met,
 			"required_ids": definition.required_ids.duplicate(),
-			"active_dependents": active_dependents,
 			"requirement_text": " + ".join(requirement_titles) if not requirement_titles.is_empty() else "Einstieg des Astes",
 			"tree_tier": definition.tree_tier,
 			"tree_lane": definition.tree_lane,
@@ -2918,6 +3161,9 @@ func _cleanup_run_nodes() -> void:
 		hud.update_shield(0.0, 0.0)
 	if treatment_controller != null:
 		treatment_controller.enabled = false
+	if treatment_beam_world != null:
+		treatment_beam_world.clear()
+	treatment_beam_return_visualized.clear()
 	if ability_controller != null:
 		ability_controller.clear()
 	_cancel_ability_targeting()

@@ -89,7 +89,7 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.select_entry(&"pneumococcus"), "Entdecktes Bakterium ist auswählbar")
 	_check(not lexicon.detail_illustration.locked, "Entdeckte Illustration ist sichtbar")
-	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Sechs Gegnerwerte werden strukturiert dargestellt")
+	_check(lexicon.detail_stats_grid.get_child_count() == 8, "Acht Gegnerwerte einschließlich Schadenstyp und Resistenzen werden strukturiert dargestellt")
 	_check(lexicon.detail_title.text == "Bakterium", "Detailtitel verwendet einfachen Namen")
 	_check(lexicon.detail_medical_name.text == "Pneumokokke", "Fachbegriff bleibt als zweite Ebene")
 
@@ -100,7 +100,7 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(not lexicon.detail_medical_name.visible, "Gesperrter Eintrag verrät keinen Fachbegriff")
 
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_TERMS)
-	_check(lexicon.entry_buttons.size() >= 27, "Begriffslexikon enthält den vollständigen Startkatalog")
+	_check(lexicon.entry_buttons.size() >= 38, "Begriffslexikon enthält den vollständigen Startkatalog einschließlich Schadenstypen")
 	_check(lexicon.selected_entry_id == &"", "Auch ein Kategorienwechsel wählt nicht automatisch den ersten Begriff")
 	_check(lexicon.empty_detail_label.visible, "Nach dem Kategorienwechsel bleibt die kompakte neutrale Anleitung sichtbar")
 	_check(lexicon.context_detail_sources().is_empty(), "Begriffe erzeugen keine ui_info-Detailquellen")
@@ -118,7 +118,7 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	await process_frame
 	_check(lexicon.detail_stats_grid.columns == 2, "Breites Lexikon zeigt zwei kompakte Wertkarten pro Zeile")
 	_check(lexicon.detail_stats_grid.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "Die Werteansicht nutzt die gesamte verfügbare Detailbreite")
-	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Die Zwei-Spalten-Wertansicht behält alle sechs Basiswerte")
+	_check(lexicon.detail_stats_grid.get_child_count() == 8, "Die Zwei-Spalten-Wertansicht behält alle acht Basiswerte")
 	for stat_child in lexicon.detail_stats_grid.get_children():
 		var stat_panel := stat_child as PanelContainer
 		_check(stat_panel != null and stat_panel.get_meta(&"alveolus_component", &"") == &"value_row", "Jeder Basiswert verwendet die zentrale kompakte Wertzeile")

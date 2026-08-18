@@ -19,7 +19,13 @@ enum OpenMode {
 	EXPLICIT,
 }
 
+enum Placement {
+	AUTO,
+	ABOVE_CENTER,
+}
+
 var card: PanelContainer
+var header: HBoxContainer
 var icon: SimpleIcon
 var title_label: Label
 var body_label: Label
@@ -42,7 +48,13 @@ func _ready() -> void:
 	resized.connect(_on_controller_resized)
 
 
-func register_source(source: Control, provider: Callable, hover_enabled: bool = true) -> void:
+func register_source(
+	source: Control,
+	provider: Callable,
+	hover_enabled: bool = true,
+	anchor: Control = null,
+	placement: int = Placement.AUTO
+) -> void:
 	if source == null or not is_instance_valid(source):
 		push_warning("ContextDetailController.register_source requires a valid Control.")
 		return
@@ -67,6 +79,8 @@ func register_source(source: Control, provider: Callable, hover_enabled: bool = 
 				_disconnect_if_connected(source.mouse_exited, exited)
 		existing["provider"] = provider
 		existing["hover_enabled"] = hover_enabled
+		existing["anchor"] = weakref(anchor) if anchor != null and is_instance_valid(anchor) else null
+		existing["placement"] = Placement.ABOVE_CENTER if placement == Placement.ABOVE_CENTER else Placement.AUTO
 		_registrations[source_id] = existing
 		if hover_enabled:
 			_schedule_hover_recovery()
@@ -89,6 +103,8 @@ func register_source(source: Control, provider: Callable, hover_enabled: bool = 
 		"visibility_changed": visibility_changed,
 		"tree_exiting": tree_exiting,
 		"hover_enabled": hover_enabled,
+		"anchor": weakref(anchor) if anchor != null and is_instance_valid(anchor) else null,
+		"placement": Placement.ABOVE_CENTER if placement == Placement.ABOVE_CENTER else Placement.AUTO,
 	}
 	if hover_enabled:
 		_schedule_hover_recovery()
@@ -162,7 +178,7 @@ func _build_card() -> void:
 	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(AlveolusUIComponents.margin(stack, 12))
 
-	var header := HBoxContainer.new()
+	header = HBoxContainer.new()
 	header.name = "Header"
 	header.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -231,17 +247,21 @@ func _apply_payload(payload: Dictionary, mode: int) -> void:
 	var accent: Color = accent_value if typeof(accent_value) == TYPE_COLOR else AlveolusVisualTheme.TURQUOISE
 	var icon_value: Variant = payload.get("icon_kind", &"")
 	var icon_kind := StringName(String(icon_value)) if icon_value != null else &""
-	title_label.text = String(payload.get("title", ""))
-	body_label.text = String(payload.get("body", ""))
-	meta_label.text = String(payload.get("meta", ""))
+	title_label.text = String(payload.get("title", "")).strip_edges()
+	body_label.text = String(payload.get("body", "")).strip_edges()
+	meta_label.text = String(payload.get("meta", "")).strip_edges()
+	title_label.visible = not title_label.text.is_empty()
 	body_label.visible = not body_label.text.is_empty()
 	meta_label.visible = not meta_label.text.is_empty()
 	icon.visible = not icon_kind.is_empty()
+	header.visible = title_label.visible or icon.visible
 	if icon.visible:
 		icon.configure(icon_kind, accent)
 	meta_label.add_theme_color_override("font_color", accent.lightened(0.18))
 	var surface_role := AlveolusVisualTheme.SurfaceRole.DETAIL_CARD if mode == OpenMode.EXPLICIT else AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD
 	AlveolusUIComponents.apply_surface_role(card, surface_role, accent)
+	var surface_opacity := clampf(float(payload.get("surface_opacity", 1.0)), 0.35, 1.0)
+	_set_surface_opacity(surface_opacity)
 
 
 func _measure_and_place(source_id: int, generation: int, phase: int) -> void:
@@ -256,6 +276,9 @@ func _measure_and_place(source_id: int, generation: int, phase: int) -> void:
 		viewport_size = get_viewport_rect().size
 	var available_width := maxf(1.0, viewport_size.x - VIEWPORT_MARGIN * 2.0)
 	var maximum_width := DETAIL_MAX_WIDTH if _mode == OpenMode.EXPLICIT else TOOLTIP_MAX_WIDTH
+	var requested_width := float(_current_payload.get("maximum_width", 0.0))
+	if requested_width > 0.0:
+		maximum_width = minf(maximum_width, requested_width)
 	var width := minf(maximum_width, available_width)
 	if available_width >= CARD_MIN_WIDTH:
 		width = maxf(width, CARD_MIN_WIDTH)
@@ -272,10 +295,18 @@ func _measure_and_place(source_id: int, generation: int, phase: int) -> void:
 		return
 	var card_height := ceilf(card.get_combined_minimum_size().y)
 	card.size = Vector2(width, card_height)
-	card.position = _contained_position(_source_rect_in_controller(source), card.size, viewport_size)
+	var registration: Dictionary = _registrations.get(source_id, {})
+	var placement := int(registration.get("placement", Placement.AUTO))
+	var anchor := _anchor_for_registration(source_id, source)
+	card.position = _contained_position(_source_rect_in_controller(anchor), card.size, viewport_size, placement)
 
 
-func _contained_position(source_rect: Rect2, card_size: Vector2, viewport_size: Vector2) -> Vector2:
+func _contained_position(
+	source_rect: Rect2,
+	card_size: Vector2,
+	viewport_size: Vector2,
+	placement: int = Placement.AUTO
+) -> Vector2:
 	var bounds := Rect2(
 		Vector2(VIEWPORT_MARGIN, VIEWPORT_MARGIN),
 		Vector2(
@@ -283,12 +314,17 @@ func _contained_position(source_rect: Rect2, card_size: Vector2, viewport_size: 
 			maxf(0.0, viewport_size.y - VIEWPORT_MARGIN * 2.0)
 		)
 	)
-	var candidates: Array[Vector2] = [
+	var candidates: Array[Vector2] = []
+	if placement == Placement.ABOVE_CENTER:
+		var centered_x := source_rect.get_center().x - card_size.x * 0.5
+		candidates.append(Vector2(centered_x, source_rect.position.y - card_size.y - SOURCE_GAP))
+		candidates.append(Vector2(centered_x, source_rect.end.y + SOURCE_GAP))
+	candidates.append_array([
 		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.position.y),
 		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.position.y),
 		Vector2(source_rect.position.x, source_rect.end.y + SOURCE_GAP),
 		Vector2(source_rect.position.x, source_rect.position.y - card_size.y - SOURCE_GAP),
-	]
+	])
 	for candidate in candidates:
 		if bounds.encloses(Rect2(candidate, card_size)):
 			return candidate
@@ -299,6 +335,29 @@ func _contained_position(source_rect: Rect2, card_size: Vector2, viewport_size: 
 		clampf(candidates[0].x, bounds.position.x, maximum.x),
 		clampf(candidates[0].y, bounds.position.y, maximum.y)
 	)
+
+
+func _anchor_for_registration(source_id: int, fallback: Control) -> Control:
+	var registration: Dictionary = _registrations.get(source_id, {})
+	var anchor_ref := registration.get("anchor") as WeakRef
+	if anchor_ref == null:
+		return fallback
+	var anchor_value: Variant = anchor_ref.get_ref()
+	var anchor := anchor_value as Control if anchor_value != null and is_instance_valid(anchor_value) else null
+	if anchor == null or not anchor.is_inside_tree() or not anchor.is_visible_in_tree():
+		return fallback
+	return anchor
+
+
+func _set_surface_opacity(opacity: float) -> void:
+	var color := Color(1.0, 1.0, 1.0, opacity)
+	card.self_modulate = color
+	var membrane := card.get_node_or_null("BioLumenSurface") as CanvasItem
+	if membrane != null:
+		# The shared membrane shader writes its own alpha. Hide that decorative
+		# layer for translucent fact cards so only the centrally themed panel body
+		# is faded; regular context cards restore it on their next payload.
+		membrane.visible = opacity >= 0.999
 
 
 func _source_rect_in_controller(source: Control) -> Rect2:

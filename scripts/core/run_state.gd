@@ -18,6 +18,8 @@ var active: bool = false
 var level_up_pending: bool = false
 var boss_spawned: bool = false
 var boss_defeated: bool = false
+var analysis_gain_multiplier: float = 1.0
+var analysis_gain_carry: float = 0.0
 
 func reset(run_config: RunConfig, initial_analysis: int = 0, stability_bonus: float = 0.0) -> void:
 	config = run_config
@@ -31,6 +33,7 @@ func reset(run_config: RunConfig, initial_analysis: int = 0, stability_bonus: fl
 	level_up_pending = false
 	boss_spawned = false
 	boss_defeated = false
+	analysis_gain_carry = 0.0
 	stability_changed.emit(stability, max_stability)
 	analysis_changed.emit(analysis, analysis_target, level)
 
@@ -43,7 +46,7 @@ func tick(delta: float) -> void:
 	if not boss_spawned and elapsed >= config.run_duration_seconds:
 		boss_spawned = true
 		boss_due.emit()
-	if elapsed >= config.final_deadline_seconds and not boss_defeated:
+	if config.has_deadline() and elapsed >= config.final_deadline_seconds and not boss_defeated:
 		finish(false, "Die Behandlungszeit ist abgelaufen.")
 
 func change_stability(amount: float) -> void:
@@ -52,7 +55,7 @@ func change_stability(amount: float) -> void:
 	stability = clampf(stability + amount, 0.0, max_stability)
 	stability_changed.emit(stability, max_stability)
 	if is_zero_approx(stability):
-		finish(false, "Der Zustand ist erschöpft.")
+		finish(false, "Das Leben ist erschöpft.")
 
 func increase_max_stability(amount: float) -> void:
 	if amount <= 0.0:
@@ -75,9 +78,17 @@ func adjust_max_stability(amount: float, restore_added_capacity: bool = true) ->
 func add_analysis(amount: int) -> void:
 	if not active or amount <= 0:
 		return
-	analysis += amount
+	var scaled := float(amount) * maxf(analysis_gain_multiplier, 0.0) + analysis_gain_carry
+	var awarded := floori(scaled + 0.000001)
+	analysis_gain_carry = scaled - float(awarded)
+	if awarded <= 0:
+		return
+	analysis += awarded
 	analysis_changed.emit(analysis, analysis_target, level)
 	_request_level_if_ready()
+
+func set_analysis_gain_multiplier(value: float) -> void:
+	analysis_gain_multiplier = maxf(value, 0.0)
 
 func resolve_level_up() -> void:
 	level_up_pending = false
