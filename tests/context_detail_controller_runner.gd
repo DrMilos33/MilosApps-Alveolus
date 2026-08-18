@@ -70,6 +70,14 @@ func _run() -> void:
 	_check(controller.card.get_global_rect().end.x <= source.get_global_rect().position.x - 5.5, "AUTO fällt am rechten Rand diagonal nach links oberhalb zurück")
 	_check(controller.card.get_global_rect().end.y <= source.get_global_rect().position.y - 5.5, "AUTO hält auch im Links-Fallback die Karte oberhalb der Quelle")
 	_check(_tree_ignores_mouse(controller.card), "Karte und kompletter Unterbaum ignorieren Mausereignisse")
+	controller._measure_and_place(source.get_instance_id(), controller._layout_generation, 0)
+	controller._measure_and_place(source.get_instance_id(), controller._layout_generation, 0)
+	_check(
+		_connection_count(process_frame, controller, &"_on_layout_settle_frame") == 1,
+		"Mehrere Refreshes vor dem Layoutframe teilen genau einen Settle-Callback"
+	)
+	await process_frame
+	_check(not controller._layout_settle_scheduled, "Der gemeinsame Settle-Callback räumt seinen Pending-Zustand auf")
 	var short_height := controller.card.size.y
 	long_copy[0] = true
 	controller.sync_sources(&"progression", [{
@@ -307,6 +315,16 @@ func _tree_ignores_mouse(node: Node) -> bool:
 		if not _tree_ignores_mouse(child):
 			return false
 	return true
+
+
+func _connection_count(signal_value: Signal, target: Object, method: StringName) -> int:
+	var count := 0
+	for connection_value in signal_value.get_connections():
+		var connection := connection_value as Dictionary
+		var callback: Callable = connection.get("callable", Callable())
+		if callback.is_valid() and callback.get_object() == target and callback.get_method() == method:
+			count += 1
+	return count
 
 
 func _check(condition: bool, message: String) -> void:

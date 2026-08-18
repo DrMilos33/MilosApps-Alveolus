@@ -35,6 +35,7 @@ var _registrations: Dictionary = {}
 var _active_source_id := 0
 var _mode := OpenMode.NONE
 var _layout_generation := 0
+var _layout_settle_scheduled := false
 var _current_payload: Dictionary = {}
 var _hover_recovery_scheduled := false
 var _source_scopes: Dictionary = {}
@@ -365,14 +366,20 @@ func _measure_and_place(source_id: int, generation: int, phase: int) -> void:
 	if phase == 0:
 		# Container minimum sizes settle after one layout frame. Measuring again in
 		# the same deferred queue can observe the previous unconstrained wrap width.
-		get_tree().process_frame.connect(
-			_measure_and_place.bind(source_id, generation, 1),
-			CONNECT_ONE_SHOT
-		)
+		# Multiple in-place payload refreshes can arrive before that frame. Keep one
+		# trampoline connected and let it measure the latest active generation.
+		if not _layout_settle_scheduled:
+			_layout_settle_scheduled = true
+			get_tree().process_frame.connect(_on_layout_settle_frame, CONNECT_ONE_SHOT)
 		return
 	var card_height := ceilf(card.get_combined_minimum_size().y)
 	card.size = Vector2(width, card_height)
 	card.position = _contained_position(_source_rect_in_controller(source), card.size, viewport_size)
+
+
+func _on_layout_settle_frame() -> void:
+	_layout_settle_scheduled = false
+	_measure_and_place(_active_source_id, _layout_generation, 1)
 
 
 func _contained_position(
