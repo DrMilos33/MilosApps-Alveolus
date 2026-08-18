@@ -23,7 +23,7 @@ func _run() -> void:
 
 	_test_prompt_icons_and_text_fallback(hud, glyphs)
 	_test_dual_keyboard_capture_and_conflict_popup(hud)
-	_test_scale_and_reduced_motion(hud)
+	_test_visible_settings_and_reduced_motion(hud)
 	_test_restart_confirmation_setting(hud)
 	_test_semantic_sounds(hud, sound)
 	_test_binding_cancel_feedback(hud, sound)
@@ -55,9 +55,6 @@ func _test_prompt_icons_and_text_fallback(hud: GameHUD, glyphs: InputGlyphServic
 	_true(hud.ability_key_labels[0].visible and hud.ability_key_labels[0].text == "Q", "Fähigkeit 1 zeigt die scharfe Tastaturglyphe Q als Text")
 	_true(hud.ability_key_labels[1].visible and hud.ability_key_labels[1].text == "E", "Fähigkeit 2 zeigt die scharfe Tastaturglyphe E als Text")
 
-	glyphs.configure(UISettingsState.GLYPH_GAMEPAD)
-	_true(hud.ability_key_labels[0].visible and hud.ability_key_labels[0].text == "LB", "Fähigkeit 1 zeigt die Gamepadglyphe LB als Text")
-	_true(hud.ability_key_labels[1].visible and hud.ability_key_labels[1].text == "RB", "Fähigkeit 2 zeigt die Gamepadglyphe RB als Text")
 	_true(not hud.run_hud_screen.pause_action().tooltip_text.is_empty(), "Die Run-HUD-Pauseaktion hält ihre aktuelle Belegung im Tooltip auffindbar")
 	var pause_action := hud.pause_resume_button as IconTextButton
 	_true(pause_action != null and pause_action.caption.text == "Weiter", "Das Pausemenü zeichnet die Hauptaktion genau einmal als zentrierte Icon-Text-Einheit")
@@ -73,6 +70,9 @@ func _test_prompt_icons_and_text_fallback(hud: GameHUD, glyphs: InputGlyphServic
 
 func _test_dual_keyboard_capture_and_conflict_popup(hud: GameHUD) -> void:
 	hud.show_settings(false)
+	_true(hud.settings_screen.control_for_setting(&"option.ui_scale") == null, "UI-Größe ist aus der sichtbaren Settingsoberfläche entfernt")
+	_true(hud.settings_screen.control_for_setting(&"option.glyph_mode") == null, "Eingabemodus ist aus der sichtbaren Settingsoberfläche entfernt")
+	_true(hud.settings_scale_option == null and hud.settings_glyph_option == null, "Die HUD-Kompatibilitätsfassade erhält für dormante Anzeigeoptionen keine sichtbaren Controls")
 	_true(hud.settings_screen.control_for_setting(&"binding.move_up.0") != null, "Nach oben besitzt ein erstes Tastaturfeld")
 	_true(hud.settings_screen.control_for_setting(&"binding.move_up.1") != null, "Nach oben besitzt ein zweites Tastaturfeld")
 	_equal(_button_caption(hud.settings_screen.control_for_setting(&"binding.move_up.0") as Button), "W", "Der erste Bewegungsplatz zeigt W ohne Controllerzusatz")
@@ -110,29 +110,12 @@ func _test_dual_keyboard_capture_and_conflict_popup(hud: GameHUD) -> void:
 	hud.show_settings(false)
 
 
-func _test_scale_and_reduced_motion(hud: GameHUD) -> void:
+func _test_visible_settings_and_reduced_motion(hud: GameHUD) -> void:
 	var settings := hud.current_ui_settings.duplicate_settings()
-	_true(hud.settings_scale_option.item_count == UISettingsState.UI_SCALES.size(), "Die Anzeigeoption listet jede unterstützte UI-Skalierung genau einmal")
-	_equal(hud.settings_scale_option.get_item_text(0), "75 %", "75 Prozent ist als kleinste UI-Stufe auswählbar")
-	_equal(hud.settings_scale_option.get_item_text(1), "90 %", "90 Prozent ist als zweite kompakte UI-Stufe auswählbar")
-	settings.ui_scale = 0.75
-	hud.configure_ui_settings(settings)
-	_near(hud.root.scale.x, 0.75, 0.001, "75 Prozent UI-Skalierung erreicht den gemeinsamen UI-Root")
-	_near(hud.root.theme.default_base_scale, 1.0, 0.001, "Dokumente besitzen keine zweite Theme-Skalierung")
-	_near(hud.campus_overlay.theme.default_base_scale, 0.75, 0.001, "Campus-Chrome bewahrt seine unabhängige Skalierung")
-	_equal(hud.settings_scale_option.selected, 0, "Die Anzeigeoption markiert die aktive 75-Prozent-Stufe")
-	settings.ui_scale = 0.90
-	hud.configure_ui_settings(settings)
-	_near(hud.root.scale.x, 0.90, 0.001, "90 Prozent UI-Skalierung erreicht den gemeinsamen UI-Root")
-	_near(hud.root.theme.default_base_scale, 1.0, 0.001, "Das zentrale Theme bleibt bei genau einer Skalierungsautorität")
-	_near(hud.campus_overlay.theme.default_base_scale, 0.90, 0.001, "Campus-Chrome folgt der 90-Prozent-Stufe")
-	_equal(hud.settings_scale_option.selected, 1, "Die Anzeigeoption markiert die aktive 90-Prozent-Stufe")
-	settings.ui_scale = 2.0
+	_true(hud.settings_scale_option == null, "Das fokussierte Settingsprofil besitzt keine UI-Größenmatrix mehr")
+	_true(hud.settings_glyph_option == null, "Das fokussierte Settingsprofil besitzt keine Eingabemodusmatrix mehr")
 	settings.reduce_motion = true
 	hud.configure_ui_settings(settings)
-	_near(hud.root.scale.x, 2.0, 0.001, "200 Prozent UI-Skalierung erreicht den gemeinsamen UI-Root")
-	_near(hud.root.theme.default_base_scale, 1.0, 0.001, "200 Prozent werden nicht über Theme und Root doppelt angewendet")
-	_near(hud.campus_overlay.theme.default_base_scale, 2.0, 0.001, "Nur Campus-Chrome erhält die Theme-Skalierung")
 	_true(hud.reduced_motion_enabled, "Reduzierte Bewegung wird im HUD unmittelbar aktiviert")
 	hud.settings_quit_button.scale = Vector2.ONE * 1.02
 	hud._animate_button(hud.settings_quit_button, Vector2.ONE * 1.02)
@@ -298,10 +281,3 @@ func _equal(actual: Variant, expected: Variant, message: String) -> void:
 	if actual != expected:
 		failures += 1
 		printerr("FAIL: %s | expected=%s actual=%s" % [message, str(expected), str(actual)])
-
-
-func _near(actual: float, expected: float, tolerance: float, message: String) -> void:
-	assertions += 1
-	if absf(actual - expected) > tolerance:
-		failures += 1
-		printerr("FAIL: %s | expected=%f actual=%f" % [message, expected, actual])

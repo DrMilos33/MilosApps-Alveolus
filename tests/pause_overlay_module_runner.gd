@@ -53,7 +53,7 @@ func _test_immutable_section_view_model() -> PauseOverlayViewModel:
 	_check(view_model.section_count() == 4 and view_model.stat_count() == 20, "View-Model übernimmt vier belegte Sektionen und zwanzig Werte")
 	_check(view_model.content_hash().length() == 64, "View-Model besitzt einen stabilen SHA-256-Inhaltshash")
 	_check(view_model.section_at(0).id() == &"general" and view_model.section_at(0).title() == "Grundwerte", "Allgemeine DTO-Werte werden zur stabilen Grundwertesektion")
-	_check(view_model.section_at(1).id() == &"treatment:treatment_precision" and view_model.section_at(1).display_title() == "Behandlung  ·  Präziser Impuls", "Behandlung behält ihre stabile ID und sichtbare Identität")
+	_check(view_model.section_at(1).id() == &"treatment:treatment_precision" and view_model.section_at(1).display_title() == "Behandlung  ·  Impuls", "Behandlung behält ihre stabile ID und sichtbare Identität")
 	_check(view_model.section_at(2).title() == "Aktiv 1" and view_model.section_at(3).title() == "Aktiv 2", "Aktivsektionen werden ausschließlich aus ihren stabilen Slot-IDs benannt")
 	_check(view_model.section_at(-1) == null and view_model.section_at(4) == null, "Ungültige Sektionsindizes werden sicher abgewiesen")
 	_check(view_model.section_by_id(&"ability:1:ability_treatment_line").detail_title() == "Behandlungslinie", "Sektionslookup verwendet die vollständige stabile Produktions-ID")
@@ -126,6 +126,8 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	_assert_stat_rows(overlay)
 	_check(overlay.is_section_expanded(&"general"), "Grundwerte sind semantisch standardmäßig geöffnet")
 	_check(not overlay.is_section_expanded(&"treatment:treatment_precision") and not overlay.is_section_expanded(&"ability:0:ability_focus_field"), "Weitere Sektionen bleiben bis zur ausdrücklichen Auswahl kompakt")
+	_assert_section_disclosure_state(overlay, &"general", true)
+	_assert_section_disclosure_state(overlay, &"treatment:treatment_precision", false)
 	_check(overlay.section_body(&"general").is_visible_in_tree(), "Geöffnete Grundwerte sind sichtbar")
 	_check(not overlay.section_body(&"treatment:treatment_precision").visible, "Geschlossene Behandlung reserviert keinen Body-Leerraum")
 
@@ -140,6 +142,8 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	await _settle()
 	_check(treatment_header.button_pressed and overlay.section_body(&"treatment:treatment_precision").is_visible_in_tree(), "Buttonzustand und sichtbarer Sektionsbody bleiben synchron")
 	_check(not overlay.section_body(&"general").visible, "Eingeklappte Grundwerte lassen keinen versteckten Platz stehen")
+	_assert_section_disclosure_state(overlay, &"treatment:treatment_precision", true)
+	_assert_section_disclosure_state(overlay, &"general", false)
 
 	# 480 × 270 models the logical area of the 960 × 540 / 200-percent case.
 	_resize_logical_host(host, Vector2i(480, 270))
@@ -205,7 +209,22 @@ func _assert_section_contract(overlay: PauseOverlay, view_model: PauseOverlayVie
 		_check(header != null and header.focus_mode == Control.FOCUS_ALL, "%s besitzt einen tastatur- und gamepadfähigen Kopf" % section.title())
 		_check(header.get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "%s verwendet die zentrale Quiet-Buttonrolle" % section.title())
 		_check(not String(header.get_meta(&"alveolus_accessible_name", "")).is_empty(), "%s besitzt einen eindeutigen Accessible Name" % section.title())
+		var chevron := header.find_child("SectionChevron", true, false) as SimpleIcon
+		_check(chevron != null and chevron.kind == &"back" and chevron.custom_minimum_size.x >= 20.0, "%s besitzt ein gut sichtbares zentrales Chevron" % section.title())
 		_check(body != null and body.get_parent() == header.get_parent() and body.get_index() > header.get_index(), "%s ordnet den Inhalt direkt nach seinem Kopf an" % section.title())
+
+
+func _assert_section_disclosure_state(overlay: PauseOverlay, section_id: StringName, expanded: bool) -> void:
+	var header := overlay.section_header(section_id)
+	var chevron := header.find_child("SectionChevron", true, false) as SimpleIcon if header != null else null
+	var expected_state: StringName = &"expanded" if expanded else &"collapsed"
+	var expected_word := "ausgeklappt" if expanded else "eingeklappt"
+	_check(header != null and header.get_meta(&"accordion_state", &"") == expected_state, "%s transportiert den Ein-/Ausklappzustand am Kopf" % section_id)
+	_check(chevron != null and chevron.get_meta(&"accordion_state", &"") == expected_state, "%s transportiert den Zustand redundant am Chevron" % section_id)
+	_check(header != null and String(header.get_meta(&"alveolus_accessible_name", "")).contains(expected_word), "%s aktualisiert den Accessible Name mit dem aktuellen Zustand" % section_id)
+	if chevron != null:
+		var expected_rotation := -PI * 0.5 if expanded else PI
+		_check(is_equal_approx(chevron.rotation, expected_rotation), "%s unterscheidet Ein-/Ausklappen sichtbar durch die Chevron-Richtung" % section_id)
 
 
 func _assert_stat_rows(overlay: PauseOverlay) -> void:
@@ -237,7 +256,7 @@ func _stat_sections(life_value: String = "80 / 90", include_second_ability: bool
 			"rows": [
 				{"id": &"life", "label": "Leben", "value": life_value},
 				{"id": &"shield", "label": "Schild", "value": "12 / 20"},
-				{"id": &"movement_speed", "label": "Bewegung", "value": "250"},
+				{"id": &"movement_speed", "label": "Bewegung", "value": "338"},
 				{"id": &"defense", "label": "Verteidigung", "value": "18,4 %"},
 				{"id": &"life_regeneration", "label": "Regeneration", "value": "4/s"},
 				{"id": &"experience_gain", "label": "Erfahrung", "value": "+20 %"},
@@ -249,12 +268,12 @@ func _stat_sections(life_value: String = "80 / 90", include_second_ability: bool
 		},
 		{
 			"id": &"treatment:treatment_precision",
-			"title": "Präziser Impuls",
+			"title": "Impuls",
 			"rows": [
 				{"id": &"damage", "label": "Schaden", "value": "16"},
 				{"id": &"interval", "label": "Intervall", "value": "0,82 s"},
 				{"id": &"targets", "label": "Ziele", "value": "1"},
-				{"id": &"range_stage", "label": "Reichweite", "value": "Stufe 5"},
+				{"id": &"range_stage", "label": "Reichweite", "value": "5"},
 				{"id": &"projectiles", "label": "Projektile", "value": "1"},
 			],
 		},
@@ -264,7 +283,7 @@ func _stat_sections(life_value: String = "80 / 90", include_second_ability: bool
 			"rows": [
 				{"id": &"cooldown", "label": "Abklingzeit", "value": "8,0 s"},
 				{"id": &"damage", "label": "Schaden", "value": "0"},
-				{"id": &"radius_stage", "label": "Radius", "value": "Stufe 3"},
+				{"id": &"radius_stage", "label": "Radius", "value": "3"},
 			],
 		},
 	]
@@ -274,7 +293,7 @@ func _stat_sections(life_value: String = "80 / 90", include_second_ability: bool
 			"title": "Behandlungslinie",
 			"rows": [
 				{"id": &"cooldown", "label": "Abklingzeit", "value": "11,0 s"},
-				{"id": &"range_stage", "label": "Reichweite", "value": "Stufe 6"},
+				{"id": &"range_stage", "label": "Reichweite", "value": "6"},
 			],
 		})
 	return sections

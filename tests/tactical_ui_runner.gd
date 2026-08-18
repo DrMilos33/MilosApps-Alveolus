@@ -18,7 +18,7 @@ func _run() -> void:
 	await process_frame
 
 	var components := [
-		{"id": &"precise", "title": "Präziser Impuls", "description": "Ein verfolgtes Ziel", "kind": 0, "capacity_cost": 2, "selected": true, "visual_id": &"treatment_precision"},
+		{"id": &"precise", "title": "Impuls", "description": "Ein verfolgtes Ziel", "kind": 0, "capacity_cost": 2, "selected": true, "visual_id": &"treatment_precision"},
 		{"id": &"focus", "title": "Fokusfeld", "description": "Stärkt einen Bereich", "kind": 1, "capacity_cost": 2, "selected": true, "visual_id": &"ability_focus_field"},
 		{"id": &"emergency", "title": "Notfallhilfe", "description": "+14 Leben", "kind": 1, "capacity_cost": 2, "selected": true, "visual_id": &"ability_emergency_support"},
 		{"id": &"steady", "title": "Ruhige Hand", "description": "+2 % Schaden", "kind": 2, "capacity_cost": 1},
@@ -277,7 +277,7 @@ func _run() -> void:
 	var prepared := PreparedLoadout.default_loadout()
 	var validation := LoadoutValidator.validate(prepared, module_catalog, {}, 8)
 	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"high_load"], "validation": validation}, module_catalog.values(), prepared)
-	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Präziser Impuls"), "PreparedLoadout wird ohne UI-Adapter gelesen")
+	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Impuls"), "PreparedLoadout wird ohne UI-Adapter gelesen")
 	_check(hud.preparation_capacity_label.text.contains("6 / 8"), "Validator liefert die Kapazität direkt")
 	_check(hud.current_preparation_snapshot.get("treatment_id") == "treatment_precision", "PreparedLoadout erzeugt den Start-Snapshot")
 	prepared.treatment_id = &""
@@ -291,6 +291,10 @@ func _run() -> void:
 	hud.show_preparation(intro_view, components)
 	await process_frame
 	await process_frame
+	var intro_duration_copy := ""
+	for label_node in hud.preparation_level_facts.find_children("*", "Label", true, false):
+		intro_duration_copy += (label_node as Label).text
+	_check(intro_duration_copy.contains("∞") and not intro_duration_copy.contains("Ereignisgesteuert") and not intro_duration_copy.contains("Ohne Zeitlimit"), "Die Einsatzplanung zeigt die unendliche Introzeit ausschließlich als ∞")
 	_check(hud.preparation_lock_panel.visible and not hud.preparation_workspace.visible, "Die Einführung zeigt ausschließlich die volle Plan-Sperrfläche statt bearbeitbarer Planmodule")
 	_check(_control_inside(hud.preparation_workspace_host, hud.preparation_lock_panel) and hud.preparation_lock_panel.get_global_rect().size.is_equal_approx(hud.preparation_workspace_host.get_global_rect().size), "Die Intro-Sperre deckt den gesamten Plan-Arbeitsbereich ab")
 	_check(hud.preparation_lock_panel.z_index == 0, "Die Intro-Sperre bleibt im lokalen Plan-Layer und übermalt keine späteren Bestätigungsdialoge")
@@ -411,6 +415,25 @@ func _run() -> void:
 	hud.update_defeat_research_reward(17)
 	await process_frame
 	_check(hud.run_hud_screen != null and hud.run_hud_screen.is_visible_in_tree(), "Das neue RunHUDOverlay ist im laufenden Run sichtbar")
+	_check(hud.run_prompt != null and hud.run_prompt.find_children("*", "Panel", true, false).is_empty(), "Run-Meldungen verwenden die zentrale containerlose PlainRunPrompt-View")
+	hud.show_boss(100.0, 2)
+	await process_frame
+	_check(hud.run_prompt.visible and hud.run_prompt.semantic_mode() == PlainRunPrompt.MODE_CORAL, "Die normale Bossmeldung verwendet dieselbe korallene Plain-View")
+	_check(hud.run_prompt.message_label().text == "Infektionsherd erkannt", "Die Bossmeldung verwendet die freigegebene knappe Copy")
+	_check(hud.run_prompt.message_label().get_global_rect().position.y >= hud.stability_panel.get_global_rect().end.y - 0.5, "Bosscopy liegt direkt unter dem zentrierten Lebensbalken")
+	hud.hide_run_prompt()
+	var prompt_confirmations: Array[bool] = []
+	hud.run_prompt_confirmed.connect(func() -> void: prompt_confirmations.append(true))
+	hud.show_run_prompt("Beobachte den ersten Erreger.", PlainRunPrompt.MODE_NORMAL, true, "Linksklick zum Fortfahren")
+	await process_frame
+	_check(absf(hud.run_prompt.message_label().get_global_rect().get_center().y - 360.0) <= 32.0, "Normale Introcopy nutzt dieselbe Plain-View zentriert statt die Bossband")
+	var intro_left_click := InputEventMouseButton.new()
+	intro_left_click.button_index = MOUSE_BUTTON_LEFT
+	intro_left_click.pressed = true
+	hud.run_prompt._gui_input(intro_left_click)
+	hud.run_prompt._gui_input(intro_left_click)
+	_check(prompt_confirmations.size() == 1 and not hud.is_run_prompt_awaiting_confirmation(), "Der blockierende Prompt konsumiert einen Linksklick und relayed genau eine Fortsetzungsabsicht")
+	hud.hide_run_prompt()
 	var expected_run_stat_ids: Array[StringName] = [
 		&"defense", &"movement_speed", &"life_regeneration", &"experience_gain",
 		&"resistance_fire", &"resistance_water", &"resistance_earth", &"resistance_wind",

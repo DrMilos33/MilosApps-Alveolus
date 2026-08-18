@@ -23,6 +23,8 @@ func _run() -> void:
 	source_bindings.clear()
 	_check(view_model.get_audio_settings().size() == 4, "Audio-View-Models werden tief kopiert")
 	_check(view_model.get_option_settings()[0].get_entries().size() == 6, "Optionslisten geben keine interne Collection frei")
+	_check(view_model.get_option_settings().size() == 2, "Dormante Anzeigeoptionen bleiben für Fassade und Save-Roundtrip im View-Model erhalten")
+	_check(view_model.get_visible_option_settings().is_empty(), "UI-Größe und Eingabemodus werden nicht an die sichtbare Settingsoberfläche geliefert")
 	_check(view_model.get_binding_settings().size() == 14, "Alle Spielaktionen werden als Binding-View-Models tief kopiert")
 	_check(view_model.get_content_hash() == original_hash, "Externe Mutationen verändern den Content-Hash nicht")
 
@@ -41,13 +43,16 @@ func _run() -> void:
 	_check(screen.get_upper_column_count() == 2, "Audio und Anzeige stehen auf breiten Ansichten in zwei Spalten")
 	_check(screen.get_binding_column_count() == 3, "Steuerungszeilen nutzen auf breiten Ansichten drei kompakte Spalten")
 	var wide_options := screen.find_child("DisplayOptionsGrid", true, false) as GridContainer
-	_check(wide_options != null and wide_options.columns == 2, "UI-Größe und Eingabemodus stehen kompakt nebeneinander")
+	_check(wide_options == null, "Dormante Anzeigeoptionen hinterlassen kein leeres Raster")
 	var wide_toggles := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
 	_check(wide_toggles != null and wide_toggles.columns == 2, "Anzeige ordnet vier Schalter platzsparend in zwei Spalten an")
+	_check(screen.control_for_setting(&"option.ui_scale") == null, "UI-Größe besitzt kein sichtbares oder fokussierbares Control")
+	_check(screen.control_for_setting(&"option.glyph_mode") == null, "Eingabemodus besitzt kein sichtbares oder fokussierbares Control")
 	_check(screen.control_for_setting(&"binding.ui_info.0") != null, "ui_info besitzt einen zugänglichen ersten Tastaturplatz")
 	_check(screen.control_for_setting(&"binding.ui_info.1") != null, "ui_info besitzt einen zugänglichen zweiten Tastaturplatz")
 	_assert_sections_are_content_driven(screen)
 	_assert_compact_labeled_rows(screen)
+	_assert_closed_focus_and_accessibility(screen)
 	_assert_intents(screen)
 	_resize_logical_host(host, Vector2i(960, 540))
 	await _settle()
@@ -57,25 +62,12 @@ func _run() -> void:
 	_check(screen.get_binding_column_count() == 3, "Steuerung kehrt auf Desktopbreite zu drei Spalten zurück")
 	await _assert_conflict_modal(screen)
 
-	_resize_logical_host(host, Vector2i(480, 270))
+	_resize_logical_host(host, Vector2i(960, 540))
 	await _settle()
-	_check(screen.is_compact_layout(), "480 logische Pixel bilden die 200-Prozent-Kompaktstruktur ab")
-	_check(screen.get_upper_column_count() == 1, "Audio und Anzeige stapeln bei 200 Prozent einspaltig")
-	_check(screen.get_binding_column_count() == 1, "Steuerung stapelt bei 200 Prozent einspaltig")
-	var compact_options := screen.find_child("DisplayOptionsGrid", true, false) as GridContainer
-	_check(compact_options != null and compact_options.columns == 1, "Anzeigeoptionen stapeln bei 200 Prozent einspaltig")
-	var compact_toggles := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
-	_check(compact_toggles != null and compact_toggles.columns == 1, "Anzeigeschalter bleiben bei 200 Prozent einspaltig lesbar")
-	_check(screen.get_scroll_container().get_v_scroll_bar().max_value > screen.get_scroll_container().size.y, "Kompakte Settings zeigen ihren notwendigen vertikalen Scrollpfad")
-	var page_shell := screen.get_node_or_null("PageShell") as Control
-	var back_button := screen.find_child("BackButton", true, false) as Control
-	var first_audio_row := screen.find_child("AudioLayout_master", true, false) as Control
-	_check(page_shell != null and _fully_inside(page_shell, host), "Settings-PageShell bleibt im echten logischen 480-mal-270-Host")
-	_check(back_button != null and _fully_inside(back_button, host), "Kompakter Zurück-Button bleibt vollständig im Host")
-	_check(screen.get_scroll_container() != null and _fully_inside(screen.get_scroll_container(), host), "Settings-Scrollfläche bleibt vollständig im Host")
-	_check(first_audio_row != null and _fully_inside(first_audio_row, host), "Erste kompakte Audiozeile ist beim Öffnen vollständig enthalten")
-	_check(first_audio_row != null and _visible_children_inside(first_audio_row), "Label, Wert, Slider und Stummschalter bleiben in der ersten Audiozeile")
-	_check(screen.get_scroll_container().scroll_vertical == 0, "Kompakte Settings öffnen am oberen Scrollanfang")
+	_check(screen.get_binding_column_count() == 2, "Steuerung bleibt bei 960 mal 540 als kompaktes Zweispaltenraster bedienbar")
+	_check(screen.find_child("DisplayOptionsGrid", true, false) == null, "Ausgeblendete Anzeigeoptionen hinterlassen bei kleinerer Desktopbreite keinen Leerraum")
+	_check(screen.get_scroll_container().get_v_scroll_bar().max_value > screen.get_scroll_container().size.y, "Settings zeigen bei begrenzter Höhe einen eindeutigen vertikalen Scrollpfad")
+	_check(screen.get_scroll_container().scroll_vertical == 0, "Settings öffnen am oberen Scrollanfang")
 
 	var info_binding := screen.control_for_setting(&"binding.ui_info.1") as Button
 	info_binding.grab_focus()
@@ -119,7 +111,6 @@ func _assert_intents(screen: SettingsScreen) -> void:
 
 	(screen.control_for_setting(&"audio.master.value") as HSlider).value = 42.0
 	(screen.control_for_setting(&"audio.master.mute") as CheckButton).toggled.emit(true)
-	(screen.control_for_setting(&"option.ui_scale") as OptionButton).item_selected.emit(3)
 	(screen.control_for_setting(&"toggle.reduce_motion") as CheckButton).toggled.emit(true)
 	(screen.control_for_setting(&"binding.ui_info.1") as Button).pressed.emit()
 	(screen.control_for_setting(&"binding.ui_info.0") as Button).pressed.emit()
@@ -129,7 +120,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 
 	_check(audio_values.size() == 1 and audio_values[0][0] == &"master" and is_equal_approx(audio_values[0][1], 0.42), "Lautstärke emittiert ID und linearen Wert")
 	_check(audio_mutes == [[&"master", true]], "Stummschaltung emittiert einen typisierten Intent")
-	_check(options == [[&"ui_scale", 3]], "Option emittiert ID und Index")
+	_check(options.is_empty(), "Ausgeblendete Anzeigeoptionen können keinen sichtbaren Intent emittieren")
 	_check(toggles == [[&"reduce_motion", true]], "Schalter emittiert ID und Zustand")
 	_check(bindings == [[&"ui_info", 1], [&"ui_info", 0]], "Binding-Intent enthält Aktion und den ausdrücklich gewählten Tastaturplatz")
 	_check(legacy_bindings == [&"ui_info"], "Der erste Tastaturplatz emittiert weiterhin den kompatiblen Ein-Slot-Intent")
@@ -193,7 +184,6 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	var explanation := screen.find_child("BindingsExplanation", true, false) as Label
 	_check(explanation != null and explanation.text.contains("zwei") and explanation.text.contains("Tastatur"), "Steuerung erklärt die zwei sichtbaren Tastaturplätze ohne Controllertext")
 	for row_name in [
-		"OptionLayout_ui_scale",
 		"ToggleLayout_reduce_motion",
 		"ToggleLayout_show_character_name",
 		"ToggleLayout_confirm_restart",
@@ -219,21 +209,9 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 		var toggle_row := screen.find_child("ToggleLayout_%s" % String(setting_id), true, false) as HBoxContainer
 		var toggle_purpose: Label = toggle_row.find_child("SettingPurpose", true, false) as Label if toggle_row != null else null
 		_check(toggle_purpose != null and toggle_purpose.text == compact_toggle_labels[setting_id], "%s bleibt in der zweispaltigen Anzeige vollständig lesbar" % setting_id)
-	var options_grid := screen.find_child("DisplayOptionsGrid", true, false) as GridContainer
-	for option_id in [&"ui_scale", &"glyph_mode"]:
-		var option_row := screen.find_child("OptionLayout_%s" % String(option_id), true, false) as HBoxContainer
-		var option_purpose := option_row.find_child("SettingPurpose", true, false) as Label if option_row != null else null
-		var option_control := screen.control_for_setting(StringName("option.%s" % String(option_id))) as OptionButton
-		_check(option_row != null and option_row.get_parent() == options_grid, "%s liegt ohne zusätzliche Kachel direkt im kompakten Optionsraster" % option_id)
-		_check(option_row != null and option_row.size_flags_horizontal == Control.SIZE_SHRINK_BEGIN, "%s belegt nicht unnötig die gesamte Anzeigenbreite" % option_id)
-		_check(option_control != null and option_control.custom_minimum_size.x <= 132.0, "%s hält Auswahlwert und Beschriftung eng zusammen" % option_id)
-		_check(option_purpose != null and not option_purpose.clip_text, "%s bleibt links vollständig lesbar" % option_id)
-	var scale_row := screen.find_child("OptionLayout_ui_scale", true, false) as HBoxContainer
-	var glyph_row := screen.find_child("OptionLayout_glyph_mode", true, false) as HBoxContainer
-	var scale_purpose := scale_row.find_child("SettingPurpose", true, false) as Label if scale_row != null else null
-	var glyph_purpose := glyph_row.find_child("SettingPurpose", true, false) as Label if glyph_row != null else null
-	_check(scale_purpose != null and scale_purpose.text == "UI-Größe", "UI-Skalierung verwendet eine knappe eindeutige Beschriftung")
-	_check(glyph_purpose != null and glyph_purpose.text == "Eingabemodus", "Eingabedarstellung wird als verständlicher Eingabemodus benannt")
+	_check(screen.find_child("DisplayOptionsGrid", true, false) == null, "Anzeige beginnt ohne leeren Optionsblock direkt mit den verbleibenden Schaltern")
+	_check(screen.find_child("OptionLayout_ui_scale", true, false) == null, "UI-Größe ist vollständig aus dem sichtbaren Baum entfernt")
+	_check(screen.find_child("OptionLayout_glyph_mode", true, false) == null, "Eingabemodus ist vollständig aus dem sichtbaren Baum entfernt")
 	var binding_layout := screen.find_child("BindingLayout_ui_info", true, false) as VBoxContainer
 	_check(binding_layout != null and binding_layout.get_child_count() == 2, "Tastenbelegung stapelt Zweck und zwei nahe Tastaturfelder kompakt")
 	_check(binding_layout != null and binding_layout.get_meta(&"alveolus_component", &"") == &"compact_binding_card", "Tastenbelegung ist als kompakte Kartenstruktur markiert")
@@ -291,6 +269,34 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 		_check(mute != null and mute.theme_type_variation == &"", "%s-Stummschaltung liegt transparent in ihrer Audiozeile" % bus_id)
 		_check(mute != null and mute.flat, "%s-Stummschaltung besitzt keine umgebende Button-Kachel" % bus_id)
 		_check(mute != null and mute.custom_minimum_size.y >= 44.0, "%s-Stummschaltung behält ihr 44-Pixel-Trefferziel" % bus_id)
+
+
+func _assert_closed_focus_and_accessibility(screen: SettingsScreen) -> void:
+	var back := screen.control_for_setting(&"back")
+	var first := screen.control_for_setting(&"audio.master.value")
+	var master_mute := screen.control_for_setting(&"audio.master.mute")
+	var last_audio := screen.control_for_setting(&"audio.music.mute")
+	var first_toggle := screen.control_for_setting(&"toggle.reduce_motion")
+	var binding_primary := screen.control_for_setting(&"binding.ui_info.0")
+	var binding_secondary := screen.control_for_setting(&"binding.ui_info.1")
+	var last := screen.control_for_setting(&"quit")
+	_check(_focus_target(back, back.focus_neighbor_bottom) == first, "Fokus läuft vom Seitenkopf direkt zum ersten verbleibenden Control")
+	_check(_focus_target(first, first.focus_neighbor_top) == back, "Erstes Settings-Control führt nach oben ohne ausgeblendete Zwischenstation zum Seitenkopf")
+	_check(_focus_target(first, first.focus_neighbor_right) == master_mute, "Audiozeile verbindet Regler und Stummschaltung horizontal")
+	_check(_focus_target(last_audio, last_audio.focus_neighbor_bottom) == first_toggle, "Fokus schließt die Lücke zwischen Audio und den verbleibenden Anzeigeoptionen")
+	_check(_focus_target(binding_primary, binding_primary.focus_neighbor_right) == binding_secondary, "Beide Tastaturplätze einer Aktion sind direkt horizontal verbunden")
+	_check(_focus_target(last, last.focus_neighbor_bottom) == back, "Letztes sichtbares Control schließt den Fokuszyklus zum Seitenkopf")
+	_check(_focus_target(back, back.focus_neighbor_top) == last, "Rückwärtsnavigation bleibt nach Entfernen der Optionen geschlossen")
+	_check(str(first.get_meta(&"alveolus_accessible_name", "")).contains("Gesamtlautstärke"), "Audioregler nennt seinen Zweck im zugänglichen Namen")
+	_check(str(master_mute.get_meta(&"alveolus_accessible_name", "")).contains("Gesamtlautstärke stumm"), "Stummschaltung nennt Audiokanal und Zustand zugänglich")
+	_check(str(first_toggle.get_meta(&"alveolus_accessible_name", "")).contains("Animationen reduzieren"), "Verbleibende Schalter besitzen Zweck und Zustand als zugänglichen Namen")
+	_check(not str(binding_primary.get_meta(&"alveolus_accessible_name", "")).is_empty(), "Tastaturfelder bleiben nach dem Reflow zugänglich benannt")
+
+
+func _focus_target(source: Control, path: NodePath) -> Control:
+	if source == null or path.is_empty():
+		return null
+	return source.get_node_or_null(path) as Control
 
 
 func _assert_dependency_contract() -> void:
@@ -370,34 +376,6 @@ func _create_logical_host(logical_size: Vector2i) -> Control:
 
 func _resize_logical_host(host: Control, logical_size: Vector2i) -> void:
 	host.size = Vector2(logical_size)
-
-
-func _fully_inside(control: Control, container: Control, tolerance: float = 0.5) -> bool:
-	if control == null or container == null:
-		return false
-	var rect := control.get_global_rect()
-	var bounds := container.get_global_rect()
-	return rect.position.x >= bounds.position.x - tolerance \
-		and rect.position.y >= bounds.position.y - tolerance \
-		and rect.end.x <= bounds.end.x + tolerance \
-		and rect.end.y <= bounds.end.y + tolerance
-
-
-func _visible_children_inside(container: Control, tolerance: float = 0.5) -> bool:
-	if container == null:
-		return false
-	var bounds := container.get_global_rect()
-	for child in container.get_children():
-		var control := child as Control
-		if control == null or not control.visible:
-			continue
-		var rect := control.get_global_rect()
-		if rect.position.x < bounds.position.x - tolerance \
-			or rect.position.y < bounds.position.y - tolerance \
-			or rect.end.x > bounds.end.x + tolerance \
-			or rect.end.y > bounds.end.y + tolerance:
-			return false
-	return true
 
 
 func _label_fits_single_line(label: Label) -> bool:

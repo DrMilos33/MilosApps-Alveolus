@@ -45,6 +45,7 @@ var _audio_layout_records: Array[Dictionary] = []
 var _option_controls: Array[OptionButton] = []
 var _option_layout_records: Array[Dictionary] = []
 var _binding_layout_records: Array[Dictionary] = []
+var _focus_order: Array[Control] = []
 var _conflict_layer: ColorRect
 var _conflict_modal: PanelContainer
 var _conflict_cancel_button: Button
@@ -215,6 +216,8 @@ func _rebuild_sections() -> void:
 		child.queue_free()
 	_controls.clear()
 	_controls[&"back"] = _back_button
+	_focus_order.clear()
+	_focus_order.append(_back_button)
 	_audio_layout_records.clear()
 	_option_controls.clear()
 	_option_layout_records.clear()
@@ -239,14 +242,16 @@ func _rebuild_sections() -> void:
 	var display_content := display_section["content"] as VBoxContainer
 	display_panel.name = "DisplaySection"
 	_upper_grid.add_child(display_panel)
-	_options_grid = GridContainer.new()
-	_options_grid.name = "DisplayOptionsGrid"
-	_options_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_options_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
-	_options_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
-	display_content.add_child(_options_grid)
-	for setting in _view_model.get_option_settings():
-		if setting.is_visible():
+	_options_grid = null
+	var visible_options := _view_model.get_visible_option_settings()
+	if not visible_options.is_empty():
+		_options_grid = GridContainer.new()
+		_options_grid.name = "DisplayOptionsGrid"
+		_options_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_options_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+		_options_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
+		display_content.add_child(_options_grid)
+		for setting in visible_options:
 			_build_option_row(_options_grid, setting)
 	_toggles_grid = GridContainer.new()
 	_toggles_grid.name = "DisplayTogglesGrid"
@@ -288,8 +293,10 @@ func _rebuild_sections() -> void:
 	reset_button.name = "ResetBindingsButton"
 	reset_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	reset_button.set_meta(&"setting_id", &"bindings.reset")
+	reset_button.set_meta(&"alveolus_accessible_name", "Standardbelegung wiederherstellen")
 	reset_button.pressed.connect(func() -> void: bindings_reset_requested.emit())
 	_controls[&"bindings.reset"] = reset_button
+	_focus_order.append(reset_button)
 	controls_content.add_child(reset_button)
 
 	var status := AlveolusUIComponents.label(_view_model.get_status_text(), AlveolusVisualTheme.TYPE_MUTED_LABEL)
@@ -313,12 +320,16 @@ func _rebuild_sections() -> void:
 	quit_button.name = "QuitButton"
 	quit_button.size_flags_horizontal = Control.SIZE_SHRINK_END
 	quit_button.set_meta(&"setting_id", &"quit")
+	quit_button.set_meta(&"alveolus_accessible_name", "Spiel beenden")
 	quit_button.pressed.connect(func() -> void: quit_requested.emit())
 	_controls[&"quit"] = quit_button
 	actions.add_child(quit_button)
 	controls_content.add_child(actions)
+	if actions.visible:
+		_focus_order.append(quit_button)
 
 	_refresh_responsive_layout()
+	_refresh_focus_neighbors()
 
 
 func _section(title_text: String, accent: Color) -> Dictionary:
@@ -372,12 +383,24 @@ func _build_audio_row(parent: VBoxContainer, setting: SettingsScreenViewModel.Au
 	slider.name = "Audio_%s" % String(setting.get_id())
 	slider.set_meta(&"setting_id", value_key)
 	mute.set_meta(&"setting_id", mute_key)
+	slider.set_meta(
+		&"alveolus_accessible_name",
+		"%s: %d Prozent" % [setting.get_label(), roundi(setting.get_linear_value() * 100.0)]
+	)
+	mute.set_meta(
+		&"alveolus_accessible_name",
+		"%s stumm: %s" % [setting.get_label(), "Ein" if setting.is_muted() else "Aus"]
+	)
+	mute.set_meta(&"setting_purpose", "%s stumm" % setting.get_label())
 	mute.custom_minimum_size.x = 92.0
 	slider.value_changed.connect(_on_audio_value_changed.bind(setting.get_id()))
 	mute.toggled.connect(_on_audio_mute_changed.bind(setting.get_id()))
 	_controls[value_key] = slider
 	_controls[mute_key] = mute
+	_focus_order.append(slider)
+	_focus_order.append(mute)
 	parent.add_child(layout)
+	_link_horizontal_focus_pair(slider, mute)
 	_audio_layout_records.append({
 		"layout": layout,
 		"label": title,
@@ -407,8 +430,10 @@ func _build_option_row(parent: Container, setting: SettingsScreenViewModel.Optio
 	control.name = "Option_%s" % String(setting.get_id())
 	control.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	control.set_meta(&"setting_id", key)
+	control.set_meta(&"alveolus_accessible_name", title.text)
 	control.item_selected.connect(_on_option_changed.bind(setting.get_id()))
 	_controls[key] = control
+	_focus_order.append(control)
 	_option_controls.append(control)
 	_option_layout_records.append({"row": row, "label": title, "control": control})
 	parent.add_child(row)
@@ -429,11 +454,16 @@ func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.Toggl
 	toggle.flat = true
 	toggle.set_meta(&"alveolus_component", &"transparent_toggle")
 	var key := _toggle_key(setting.get_id())
+	var visible_label := _toggle_purpose(setting.get_id(), setting.get_label())
 	toggle.name = "Toggle_%s" % String(setting.get_id())
 	toggle.set_meta(&"setting_id", key)
+	toggle.set_meta(&"setting_purpose", visible_label)
+	toggle.set_meta(
+		&"alveolus_accessible_name",
+		"%s: %s" % [visible_label, "Ein" if setting.is_enabled() else "Aus"]
+	)
 	toggle.custom_minimum_size.x = 80.0
 	toggle.toggled.connect(_on_toggle_changed.bind(setting.get_id(), toggle))
-	var visible_label := _toggle_purpose(setting.get_id(), setting.get_label())
 	var row := _compact_setting_row(visible_label, toggle)
 	row.name = "ToggleLayout_%s" % String(setting.get_id())
 	row.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -446,11 +476,10 @@ func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.Toggl
 		purpose_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	if setting.get_id() == &"reduce_motion":
 		toggle.tooltip_text = "Reduziert UI-Animationen und Bewegungseffekte."
-		toggle.set_meta(&"alveolus_accessible_name", "Animationen reduzieren: Ein oder Aus")
 	elif setting.get_id() == &"show_character_name":
 		toggle.tooltip_text = "Zeigt Doctor Milos dezent über der Spielfigur."
-		toggle.set_meta(&"alveolus_accessible_name", "Charaktername anzeigen: Ein oder Aus")
 	_controls[key] = toggle
+	_focus_order.append(toggle)
 	parent.add_child(row)
 
 
@@ -499,6 +528,7 @@ func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(_on_binding_requested.bind(setting.get_action_id(), slot_index))
 		_controls[key] = button
+		_focus_order.append(button)
 		# The former semantic key resolves to the primary keyboard slot so
 		# existing focus-restoration and facade lookups remain compatible.
 		if slot_index == 0:
@@ -534,6 +564,32 @@ func _build_binding_row(setting: SettingsScreenViewModel.BindingSettingViewModel
 		"buttons": buttons,
 	})
 	_bindings_grid.add_child(card)
+	if buttons.size() == 2:
+		_link_horizontal_focus_pair(buttons[0], buttons[1])
+
+
+func _link_horizontal_focus_pair(left: Control, right: Control) -> void:
+	if left == null or right == null:
+		return
+	left.focus_neighbor_right = left.get_path_to(right)
+	right.focus_neighbor_left = right.get_path_to(left)
+
+
+func _refresh_focus_neighbors() -> void:
+	var focusable: Array[Control] = []
+	for control in _focus_order:
+		if control != null and is_instance_valid(control) and control.focus_mode != Control.FOCUS_NONE:
+			focusable.append(control)
+	if focusable.is_empty():
+		return
+	for index in range(focusable.size()):
+		var control := focusable[index]
+		var previous := focusable[posmod(index - 1, focusable.size())]
+		var next := focusable[(index + 1) % focusable.size()]
+		control.focus_neighbor_top = control.get_path_to(previous)
+		control.focus_neighbor_bottom = control.get_path_to(next)
+		control.focus_previous = control.get_path_to(previous)
+		control.focus_next = control.get_path_to(next)
 
 
 func _compact_setting_row(text_value: String, control: Control) -> HBoxContainer:
@@ -717,10 +773,20 @@ func _on_binding_conflict_decided(
 
 
 func _on_audio_value_changed(percent_value: float, setting_id: StringName) -> void:
+	var slider := control_for_setting(_audio_value_key(setting_id))
+	if slider != null:
+		slider.set_meta(
+			&"alveolus_accessible_name",
+			"%s: %d Prozent" % [_audio_setting_label(setting_id), roundi(percent_value)]
+		)
 	audio_value_changed.emit(setting_id, clampf(percent_value / 100.0, 0.0, 1.0))
 
 
 func _on_audio_mute_changed(muted: bool, setting_id: StringName) -> void:
+	var control := control_for_setting(_audio_mute_key(setting_id))
+	if control != null:
+		var purpose := str(control.get_meta(&"setting_purpose", "Stumm"))
+		control.set_meta(&"alveolus_accessible_name", "%s: %s" % [purpose, "Ein" if muted else "Aus"])
 	audio_mute_changed.emit(setting_id, muted)
 
 
@@ -731,7 +797,17 @@ func _on_option_changed(selected_index: int, setting_id: StringName) -> void:
 func _on_toggle_changed(enabled: bool, setting_id: StringName, toggle: CheckButton) -> void:
 	if toggle != null:
 		toggle.text = "Ein" if enabled else "Aus"
+		var purpose := str(toggle.get_meta(&"setting_purpose", _toggle_purpose(setting_id, String(setting_id))))
+		toggle.set_meta(&"alveolus_accessible_name", "%s: %s" % [purpose, toggle.text])
 	toggle_changed.emit(setting_id, enabled)
+
+
+func _audio_setting_label(setting_id: StringName) -> String:
+	if _view_model != null:
+		for setting in _view_model.get_audio_settings():
+			if setting.get_id() == setting_id:
+				return setting.get_label()
+	return String(setting_id)
 
 
 func _on_binding_requested(action_id: StringName, slot_index: int) -> void:

@@ -37,6 +37,7 @@ var _scrollbar_inset: MarginContainer
 var _body_stack: VBoxContainer
 var _education_panel: PanelContainer
 var _education_body: Label
+var _selection_helper: Label
 var _cards_grid: GridContainer
 var _footer_actions: HBoxContainer
 var _reroll_button: Button
@@ -77,6 +78,7 @@ func apply_view_model(view_model: UpgradeOverlayViewModel) -> bool:
 		_rebuild_cards()
 		_education_body.text = view_model.education_text()
 		_education_panel.visible = view_model.shows_education()
+		_selection_helper.visible = view_model.option_count() == 3
 		_reroll_button.visible = view_model.can_reroll()
 		_cancel_button.visible = view_model.allow_cancel()
 		_footer_actions.visible = view_model.can_reroll() or view_model.allow_cancel()
@@ -158,6 +160,10 @@ func education_panel() -> PanelContainer:
 	return _education_panel
 
 
+func selection_helper() -> Label:
+	return _selection_helper
+
+
 func cards() -> Array[Button]:
 	var result: Array[Button] = []
 	result.assign(_cards)
@@ -233,6 +239,18 @@ func _build() -> void:
 	_education_body = education["body"] as Label
 	_education_panel.hide()
 	_body_stack.add_child(_education_panel)
+
+	_selection_helper = AlveolusUIComponents.label(
+		"Du kannst 1 Upgrade auswählen.",
+		AlveolusVisualTheme.TYPE_BODY_LABEL
+	)
+	_selection_helper.name = "SelectionHelper"
+	_selection_helper.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_selection_helper.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_selection_helper.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_selection_helper.set_meta(&"alveolus_component", &"content_driven_helper")
+	_selection_helper.hide()
+	_body_stack.add_child(_selection_helper)
 
 	_cards_grid = GridContainer.new()
 	_cards_grid.name = "UpgradeCards"

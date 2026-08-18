@@ -30,7 +30,7 @@ entsteht durch:
   `Prolog → Campus → Fallarchiv → Einsatzplanung → Run → Ergebnis`.
 - Vier wiederholbare Fälle einschließlich ereignisgesteuertem Intro und Bossen.
 - Einsatzplan mit einer Grundbehandlung und bis zu zwei aktiven Fähigkeiten.
-  Präziser Impuls ist sofort verfügbar; Streuimpuls und Durchdringender Impuls
+  Impuls ist sofort verfügbar; Streuimpuls und Durchdringender Impuls
   werden durch Forschung freigeschaltet. Abwehrstoß und Behandlungslinie sind
   auswählbar, vier weitere aktive Fähigkeiten bleiben sichtbar gesperrt.
   Passive Module gehören nicht mehr zum aktiven Produktkatalog; technisch
@@ -47,11 +47,13 @@ entsteht durch:
   Verteidigung. Feuer, Wasser, Erde und Wind sind die vier aktiven
   Schadenstypen. Die UI zeigt Verteidigung und Resistenzen ausschließlich als
   bereits berechnete effektive Prozentwerte.
-- Maus, Tastatur und Gamepad, UI-Sounds, Audioeinstellungen, UI-Skalierung von
-  75 bis 200 Prozent,
-  reduzierte Bewegung und anpassbare Eingaben.
+- Maus und Tastatur, UI-Sounds, Audioeinstellungen, reduzierte Bewegung und
+  anpassbare Tastaturbelegungen. Die sichtbare UI läuft vorerst fest bei
+  100 Prozent und zeigt ausschließlich Tastatur-/Mausglyphen; frühere
+  Skalierungs- und Gamepadfelder bleiben dormant save-kompatibel.
 - Zusammenhängendes dunkles Dossier-UI mit sicherer Kopfzone, slotorientierter
-  Einsatzplanung, kompaktem Kampf-HUD und responsiven Dialogen bis 200 Prozent.
+  Einsatzplanung, kompaktem Kampf-HUD und responsiven Dialogen bei der festen
+  UI-Größe von 100 Prozent.
 - Stabile Massendarstellung mit gepoolten Worlds, festen Render-Slots und
   automatischer Reduktion ausschließlich kosmetischer Effekte.
 
@@ -90,9 +92,9 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 
 - Namen, Zahlenwerte und Schwierigkeitskurven sind teilweise noch Platzhalter.
 - Vollständige Storytexte, Musik und finales Sounddesign fehlen bewusst.
-- Das responsive UI ist automatisiert geprüft; 200 Prozent Skalierung auf sehr
-  kleinen Ansichten verwendet stellenweise Scrollflächen statt eigener
-  Einspaltenvarianten.
+- Die aktuell sichtbare Einstellungsoberfläche bietet weder UI-Größe noch
+  Eingabemodus an. Ältere gespeicherte Werte bleiben kompatibel, wirken aber
+  vorerst nicht auf Größe oder sichtbare Glyphen.
 - Die Leistungsziele sind auf dem Entwicklungs-PC nativ und im lokalen Browser
   geprüft. Eine separate Abnahme auf dem definierten Mittelklasse-Referenz-PC
   bleibt offen.
@@ -157,6 +159,11 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-051 | Präzisiert D-036 für Kampf- und Pausenwerte: Oben rechts zeigt das Run-HUD ausschließlich kompakte Grundwerte. Links vom Rundentimer steht die mit derselben Belohnungsfunktion wie die Niederlage berechnete Forschungsprognose als zugängliches Symbol-Wert-Paar. Charakterwerte erscheinen in stabilen einklappbaren Sektionen `Grundwerte`, `Behandlung`, `Aktiv 1` und `Aktiv 2`; leere Aktivplätze erzeugen keine Sektion, und der Aufklappzustand bleibt bei Aktualisierungen erhalten. |
 | D-052 | Kontextquellen verwenden stabile IDs und werden differenziell synchronisiert. Wert- oder Rangänderungen aktualisieren bestehende Controls und Inhalte an Ort und Stelle, ohne alle Quellen ab- und wieder anzumelden oder eine offene Detailansicht zu schließen. Befunddetails liegen bevorzugt diagonal rechts oberhalb ihres Auslösers, bei Platzmangel diagonal links oberhalb und immer vollständig im Viewport. |
 | D-053 | Run-Ausbaukarten tragen als Überschrift ausschließlich den betroffenen Komponentennamen; Wirkung und Änderung stehen nur darunter. Das Level-Up-Modal zentriert `Level Up!` lokal. Eine Niederlage zeigt exakt den Titel `You suck` und weder Untertitel noch Grundtext. |
+| D-054 | Ersetzt D-040 nur hinsichtlich der sichtbaren Behandlungsbezeichnung: `treatment_precision` heißt in der gesamten Oberfläche „Impuls“; die Content-ID und interne Kompatibilitätsbegriffe bleiben unverändert. Präzisiert und ersetzt D-048 nur hinsichtlich der Darstellung: Wo Zeilenbezeichnung oder Tooltip bereits `Radius` beziehungsweise `Reichweite` nennt, zeigt der zugehörige Wert ausschließlich die nackte zentrale Stufenzahl `N`; Pixel-, Welt- oder UI-eigene Umrechnungen bleiben unzulässig. |
+| D-055 | Ersetzt D-008, D-031, D-032 und D-035 ausschließlich hinsichtlich der aktuell sichtbaren Einstellungs- und Glyphendarstellung. `UI-Größe` und `Eingabemodus` sind vorerst nicht sichtbar; die UI wirkt fest bei 100 Prozent und zeigt Tastatur-/Mausglyphen. Vorhandene Skalierungs-, Controller-, Maus- und Savefelder bleiben dormant kompatibel und werden weder gelöscht noch umgedeutet. Die sichtbaren Settings schließen nach dem Entfernen ohne Lücken und besitzen vollständige Fokusnachbarn. |
+| D-056 | Intro- und Bossmeldungen verwenden eine gemeinsame containerlose `PlainRunPrompt`-Darstellung: ausschließlich Text ohne Panel, Shader, Hintergrund oder Button. Die Bossmeldung „Infektionsherd erkannt“ steht korallrot direkt unter dem Lebensbalken. Bestätigungspflichtige Intro-Prompts sind die exakten Texte „Beobachte den ersten Erreger.“, „Du greifst automatisch an.“ und „Geh nah ran, um die EXP einzusammeln.“; nur ein Linksklick setzt fort. Die oberste Prompt-Ebene konsumiert den Klick und meldet genau eine Bestätigung, damit keine zweite Gameplay-Klickroute auslöst. |
+| D-057 | Präzisiert D-045 und D-053 für das Intro: Die ereignisgesteuerte Tutorialdauer erscheint in der Planung ausschließlich als `Dauer ∞`; die Texte „Ereignisgesteuert“ und „Ohne Zeitlimit“ werden dafür nicht verwendet. Ein Level-up zeigt drei normale Ausbaukarten mit ihren üblichen Vergleichswerten und zusätzlich exakt „Du kannst 1 Upgrade auswählen.“; der Hinweis ist nicht an einen historischen Ein-Karten-Introzustand gekoppelt. |
+| D-058 | Präzisiert D-051: Jeder Charakterwerte-Accordionheader zeigt seinen Zustand mit einem echten semantischen `SimpleIcon` für ein- beziehungsweise ausgeklappt. Ein bloßes Unicode-Dreieck oder Farbe allein genügt nicht; Symbol und zugänglicher Name werden bei jedem Zustandswechsel gemeinsam aktualisiert. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

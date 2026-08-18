@@ -3,6 +3,14 @@ extends RefCounted
 
 ## Immutable presentation data for SettingsScreen.
 
+## These values remain part of the immutable settings snapshot so existing
+## saves and the compatibility facade can still round-trip them. The current
+## settings surface deliberately does not offer controls for them.
+const DORMANT_OPTION_IDS := {
+	&"ui_scale": true,
+	&"glyph_mode": true,
+}
+
 
 class AudioSettingViewModel extends RefCounted:
 	var _id: StringName
@@ -309,6 +317,14 @@ func get_audio_settings() -> Array[AudioSettingViewModel]:
 
 func get_option_settings() -> Array[OptionSettingViewModel]:
 	return _copy_options(_option_settings)
+
+
+func get_visible_option_settings() -> Array[OptionSettingViewModel]:
+	var result: Array[OptionSettingViewModel] = []
+	for entry in _option_settings:
+		if entry.is_visible() and not DORMANT_OPTION_IDS.has(entry.get_id()):
+			result.append(entry.duplicate_immutable())
+	return result
 
 
 func get_toggle_settings() -> Array[ToggleSettingViewModel]:

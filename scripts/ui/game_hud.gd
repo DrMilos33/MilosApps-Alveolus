@@ -48,6 +48,7 @@ signal finding_reserve_swap_requested(incoming_id: StringName, outgoing_id: Stri
 signal finding_confirmed(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName)
 signal context_detail_opened(source: Control, explicit: bool)
 signal context_detail_closed
+signal run_prompt_confirmed
 
 const COLOR_BG := AlveolusVisualTheme.PETROL
 const COLOR_PANEL := Color("163f47")
@@ -139,7 +140,8 @@ var boss_panel: Panel
 var boss_bar: ProgressBar
 var boss_value: Label
 var boss_phase_label: Label
-var boss_announcement_panel: Panel
+var run_prompt: PlainRunPrompt
+var boss_announcement_panel: Control
 var boss_announcement: Label
 var alert_time: float = 0.0
 var boss_announcement_time: float = 0.0
@@ -499,7 +501,7 @@ func _process(delta: float) -> void:
 	if boss_announcement_time > 0.0:
 		boss_announcement_time -= delta
 		if boss_announcement_time <= 0.0:
-			boss_announcement_panel.hide()
+			run_prompt.hide_prompt()
 	if alert_time <= 0.0 and boss_announcement_time <= 0.0:
 		set_process(false)
 
@@ -552,26 +554,14 @@ func _build_gameplay_hud() -> Control:
 	alert_margin.add_child(alert_label)
 	alert_panel.hide()
 
-	boss_announcement_panel = Panel.new()
-	boss_announcement_panel.name = "BossAnnouncement"
-	boss_announcement_panel.set_anchor(SIDE_LEFT, 0.5)
-	boss_announcement_panel.set_anchor(SIDE_RIGHT, 0.5)
-	boss_announcement_panel.set_anchor(SIDE_TOP, 0.5)
-	boss_announcement_panel.offset_left = -300.0
-	boss_announcement_panel.offset_right = 300.0
-	boss_announcement_panel.offset_top = -42.0
-	boss_announcement_panel.offset_bottom = 42.0
-	boss_announcement_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	AlveolusUIComponents.apply_surface_role(boss_announcement_panel, AlveolusVisualTheme.SurfaceRole.HUD_ALERT, COLOR_RED, true)
-	layer.add_child(boss_announcement_panel)
-	var announcement_margin := _margin(16, 10, 16, 10)
-	boss_announcement_panel.add_child(announcement_margin)
-	boss_announcement = AlveolusUIComponents.label("INFEKTIONSHERD ERKANNT", AlveolusVisualTheme.TYPE_HUD_VALUE_LABEL)
-	boss_announcement.add_theme_color_override("font_color", COLOR_RED)
-	boss_announcement.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	boss_announcement.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	announcement_margin.add_child(boss_announcement)
-	boss_announcement_panel.hide()
+	run_prompt = PlainRunPrompt.new()
+	run_prompt.name = "RunPrompt"
+	run_prompt.left_click_acknowledged.connect(func() -> void: run_prompt_confirmed.emit())
+	layer.add_child(run_prompt)
+	# Compatibility aliases preserve callers that inspect the former
+	# boss-specific surface while the view itself is now containerless.
+	boss_announcement_panel = run_prompt
+	boss_announcement = run_prompt.message_label()
 
 	finding_progress_panel = Control.new()
 	finding_progress_panel.name = "FindingProgress"
@@ -1262,8 +1252,6 @@ func _apply_ui_scale() -> void:
 		alert_panel.offset_right = compact_right
 		alert_panel.offset_top = 110.0
 		alert_panel.offset_bottom = 144.0
-		boss_announcement_panel.offset_left = -logical_width * 0.5 + 16.0
-		boss_announcement_panel.offset_right = compact_right
 	elif run_hud_screen == null and boss_panel != null:
 		boss_panel.offset_left = -260.0
 		boss_panel.offset_right = 260.0
@@ -1274,23 +1262,17 @@ func _apply_ui_scale() -> void:
 		alert_panel.offset_right = 260.0
 		alert_panel.offset_top = 126.0
 		alert_panel.offset_bottom = 160.0
-		boss_announcement_panel.offset_left = -300.0
-		boss_announcement_panel.offset_right = 300.0
 	elif run_hud_screen != null and logical_width < 740.0:
 		var compact_right := logical_width * 0.5 - 16.0
 		alert_panel.offset_left = -logical_width * 0.5 + 16.0
 		alert_panel.offset_right = compact_right
 		alert_panel.offset_top = 110.0
 		alert_panel.offset_bottom = 144.0
-		boss_announcement_panel.offset_left = -logical_width * 0.5 + 16.0
-		boss_announcement_panel.offset_right = compact_right
 	else:
 		alert_panel.offset_left = -260.0
 		alert_panel.offset_right = 260.0
 		alert_panel.offset_top = 126.0
 		alert_panel.offset_bottom = 160.0
-		boss_announcement_panel.offset_left = -300.0
-		boss_announcement_panel.offset_right = 300.0
 	if preparation_workspace != null:
 		_apply_preparation_layout()
 	if restart_panel != null:
@@ -2733,9 +2715,15 @@ func _refresh_preparation_case_facts(view_model: Variant, trait_data: Variant) -
 	for child in preparation_case_facts.get_children():
 		preparation_case_facts.remove_child(child)
 		child.queue_free()
+	var duration_text := String(_view_value(view_model, &"duration_text", "–"))
+	if bool(_view_value(view_model, &"tutorial_locked", false)):
+		# The guided case has no clock. Keep the dossier fact compact and
+		# unambiguous instead of leaking the old implementation label
+		# "Ereignisgesteuert" (or the generic "Ohne Zeitlimit") into planning.
+		duration_text = "∞"
 	preparation_level_facts = _case_fact_chip(
 		&"clock",
-		"Dauer %s" % String(_view_value(view_model, &"duration_text", "–")),
+		"Dauer %s" % duration_text,
 		Color("7eb5ff")
 	)
 	preparation_case_facts.add_child(preparation_level_facts)
@@ -2819,7 +2807,6 @@ func show_running_hud() -> void:
 	alert_time = 0.0
 	boss_announcement_time = 0.0
 	alert_panel.hide()
-	boss_announcement_panel.hide()
 	finding_progress_panel.hide()
 	set_process(false)
 	boss_hud_active = false
@@ -3219,9 +3206,36 @@ func show_boss(maximum: float, phase_count: int) -> void:
 	boss_hud_active = true
 	_apply_run_hud_model()
 	_refresh_run_stats()
-	boss_announcement_panel.show()
+	show_run_prompt("Infektionsherd erkannt", PlainRunPrompt.MODE_CORAL)
 	boss_announcement_time = 1.2
 	set_process(true)
+
+
+func show_run_prompt(
+	text: String,
+	semantic_mode: StringName = &"normal",
+	requires_left_click: bool = false,
+	mouse_hint: String = ""
+) -> void:
+	if run_prompt == null:
+		return
+	boss_announcement_time = 0.0
+	if semantic_mode == PlainRunPrompt.MODE_CORAL:
+		run_prompt.set_content_band(44.0, 102.0)
+	else:
+		run_prompt.set_content_band(-1.0, -1.0)
+	run_prompt.set_content(text, semantic_mode, requires_left_click, mouse_hint)
+	run_prompt.show_prompt(requires_left_click, requires_left_click)
+
+
+func hide_run_prompt() -> void:
+	boss_announcement_time = 0.0
+	if run_prompt != null:
+		run_prompt.hide_prompt()
+
+
+func is_run_prompt_awaiting_confirmation() -> bool:
+	return run_prompt != null and run_prompt.is_awaiting_left_click()
 
 func update_boss_health(current: float, maximum: float) -> void:
 	run_hud_vitals["boss_current"] = current
@@ -3258,30 +3272,23 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 		rows.append({
 			"id": definition.id,
 			"title": definition.resolved_component_name(stats.prepared_treatment, component_titles),
-			"effect": _intro_upgrade_copy(definition.id) if scripted_intro else preview.effect_text,
-			"before": "" if scripted_intro else comparison[0],
-			"after": "" if scripted_intro else comparison[1],
+			"effect": preview.effect_text,
+			"before": comparison[0],
+			"after": comparison[1],
 			"icon_id": _upgrade_icon_kind(definition),
 			"accent_role": _upgrade_accent_role(definition),
 		})
-	var education_copy := ""
-	if scripted_intro:
-		education_copy = "Diese Auswahl erklärt den nächsten Behandlungsschritt."
-	elif show_education:
-		# Legacy callers may still request the former legend. Keeping the branch
-		# explicit documents that this no longer creates a second text block.
-		education_copy = ""
-	# show_education is retained in the public facade for compatibility. The
-	# central overlay deliberately renders education only for an explicit
-	# scripted intro; option count or a generic hint never changes the mode.
 	var model := UpgradeOverlayViewModel.create(
 		rows,
 		upgrade_view_revision,
-		scripted_intro,
-		education_copy,
+		false,
+		"",
 		can_reroll,
 		false
 	)
+	# Both flags remain accepted by the public facade, but no longer replace
+	# normal comparison values or switch into the former one-card lesson.
+	upgrade_screen.set_meta(&"legacy_education_requested", show_education or scripted_intro)
 	var request_focus := input_glyph_service != null and input_glyph_service.current_method == InputGlyphService.GAMEPAD
 	upgrade_screen.present(model, request_focus)
 	upgrade_panel = upgrade_screen.modal_sheet()
@@ -3653,6 +3660,9 @@ func _all_overlays() -> Array[Control]:
 
 func _hide_all() -> void:
 	_clear_binding_interaction()
+	boss_announcement_time = 0.0
+	if run_prompt != null:
+		run_prompt.hide_prompt(false)
 	gameplay_hud.hide()
 	close_all_context_details()
 	if upgrade_target_preview != null:
@@ -3989,7 +3999,7 @@ func _refresh_preparation_slot_content(slot_id: StringName, component_id: String
 
 func _preparation_slot_short_description(component_id: StringName, entry: Variant) -> String:
 	match component_id:
-		&"precise", &"treatment_precision": return "Präziser Einzelimpuls"
+		&"precise", &"treatment_precision": return "Automatischer Einzelimpuls"
 		&"focus", &"ability_focus_field": return "Verstärkt das Zielgebiet"
 		&"emergency", &"ability_emergency_support": return "Leben und Schild"
 		&"shield", &"ability_defense_burst": return "AoE-Schaden und Rückstoß"

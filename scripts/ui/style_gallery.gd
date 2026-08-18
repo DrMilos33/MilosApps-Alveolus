@@ -306,7 +306,7 @@ func _build_preparation_view() -> Control:
 	slots.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	slots.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	for data in [
-		["Grundbehandlung", "Präziser Impuls", true],
+		["Grundbehandlung", "Impuls", true],
 		["Aktiv 1", "Fokusfeld", true],
 		["Aktiv 2", "Freier Platz", false],
 		["Passiv 1", "Ruhige Hand", true],

@@ -375,7 +375,7 @@ func _vital_snapshot() -> Dictionary:
 func _stat_rows() -> Array:
 	return [
 		{"id": &"defense", "icon_id": &"defense_training", "value": "8 %", "accessible_name": "Effektive Verteidigung", "priority": 100},
-		{"id": &"movement_speed", "icon_id": &"movement_training", "value": "250", "accessible_name": "Bewegungstempo", "priority": 90},
+		{"id": &"movement_speed", "icon_id": &"movement_training", "value": "338", "accessible_name": "Bewegungstempo", "priority": 90},
 		{"id": &"life_regeneration", "icon_id": &"life_regeneration", "value": "0,8/s", "accessible_name": "Regeneration", "priority": 80},
 		{"id": &"experience_gain", "icon_id": &"experience_gain", "value": "+15 %", "accessible_name": "EXP-Multiplikator", "priority": 70},
 		{"id": &"resistance_fire", "icon_id": &"damage_fire", "value": "0 %", "accessible_name": "Feuerresistenz", "priority": 60},

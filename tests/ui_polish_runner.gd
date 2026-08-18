@@ -329,7 +329,7 @@ func _run() -> void:
 	hud.show_upgrade_choices(heading_upgrades, stats, false, false)
 	await process_frame
 	var expected_upgrade_headings := {
-		&"potency": "Präziser Impuls",
+		&"potency": "Impuls",
 		&"burst_effect": "Abwehrstoß",
 		&"line_effect": "Behandlungslinie",
 		&"mobility": "Bewegung",

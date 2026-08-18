@@ -137,6 +137,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.body_scroll().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Ausbauwahl scrollt niemals horizontal")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Eine normale einzelne Option benötigt keinen Scrollmodus")
 	_check(not overlay.education_panel().visible, "Eine einzelne normale Option zeigt trotz vorhandenem Text keine Einführung")
+	_check(not overlay.selection_helper().visible, "Eine einzelne normale Option reserviert keinen Platz für den Drei-Karten-Hinweis")
 	_check(overlay.cards().size() == 1 and overlay.cards_grid().columns == 1, "Eine einzelne Option bleibt eine eigenständige kompakte Karte")
 	_assert_card_contract(overlay.cards()[0], ordinary_single.option_at(0).id())
 	var ordinary_title := overlay.cards()[0].find_child("UpgradeTitle", true, false) as Label
@@ -202,6 +203,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.present(scripted, false), "Expliziter Einführungssnapshot wird angewendet")
 	await _settle()
 	_check(overlay.education_panel().visible, "Explizites scripted_intro zeigt Education")
+	_check(not overlay.selection_helper().visible, "Die geskriptete Einführung zeigt keinen widersprüchlichen Drei-Karten-Hinweis")
 	var education_copy := overlay.education_panel().find_child("*", true, false)
 	_check(overlay.education_panel().find_children("*", "Label", true, false).any(func(node: Node) -> bool: return (node as Label).text.contains("Vorher-nachher")), "Education bindet ihren geskripteten Text")
 	_check(education_copy != null and overlay.cards().size() == 1, "Education ergänzt die eine Option statt sie aus der Anzahl abzuleiten")
@@ -210,6 +212,18 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.present(three, false), "Drei Ausbauoptionen werden gemeinsam präsentiert")
 	await _settle()
 	_check(overlay.cards().size() == 3 and overlay.cards_grid().columns == 3, "Breiter Viewport zeigt drei kompakte Karten ohne Browse-Churn")
+	_check(overlay.selection_helper().visible and overlay.selection_helper().text == "Du kannst 1 Upgrade auswählen.", "Normale Drei-Karten-Auswahl zeigt exakt den knappen Auswahlhinweis")
+	_check(overlay.selection_helper().get_index() < overlay.cards_grid().get_index(), "Auswahlhinweis steht direkt vor den Karten in der Leserichtung")
+	var legacy_flagged_three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
+		_three_option_rows(), 12, true, "Veralteter Einführungstext"
+	)
+	_check(overlay.present(legacy_flagged_three, false), "Der alte Kompatibilitätsmarker darf drei normale Karten weiterhin präsentieren")
+	await _settle()
+	_check(overlay.cards().size() == 3 and overlay.selection_helper().visible, "Der Drei-Karten-Hinweis hängt ausschließlich von den sichtbaren Karten ab")
+	var legacy_comparison := overlay.cards()[0].find_child("UpgradeComparison", true, false) as RichTextLabel
+	_check(legacy_comparison != null and not String(legacy_comparison.get_meta(&"semantic_before", "")).is_empty() and not String(legacy_comparison.get_meta(&"semantic_after", "")).is_empty(), "Auch markierte Legacy-Aufrufe bewahren normale Vergleichswerte")
+	_check(overlay.present(three, false), "Die normale Drei-Karten-Revision wird nach dem Kompatibilitätscheck wiederhergestellt")
+	await _settle()
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Drei normale Karten passen ohne Scrollbalken")
 	_check(overlay.reroll_action().visible and overlay.cancel_action().visible, "Explizite optionale Nebenaktionen werden sichtbar")
 	_check(overlay.reroll_action().get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_SECONDARY, "Neu würfeln bleibt eine Sekundäraktion")
