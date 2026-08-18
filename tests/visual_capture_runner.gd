@@ -1,7 +1,7 @@
 extends SceneTree
 
 const OUTPUT_DIR := "res://.codex-temp/visual_restart/screens"
-const EXPECTED_CAPTURE_COUNT := 24
+const EXPECTED_CAPTURE_COUNT := 26
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
@@ -114,6 +114,17 @@ func _capture_suite(game: Node) -> void:
 	if not _verify_run_hud_capture(game.hud.run_hud_screen):
 		return
 	await _capture("run")
+	game.hud.show_run_prompt("Beobachte den ersten Erreger.", PlainRunPrompt.MODE_NORMAL)
+	await _capture("run_prompt_normal")
+	game.hud.hide_run_prompt()
+	game.hud.show_run_prompt(
+		"Infektionsherd erkannt",
+		PlainRunPrompt.MODE_CORAL,
+		true,
+		"Linksklick zum Fortfahren"
+	)
+	await _capture("run_prompt_boss")
+	game.hud.hide_run_prompt()
 	game.hud.show_pause(false, game.stats, game.state)
 	await _capture("pause")
 	_populate_character_stats_capture(game)

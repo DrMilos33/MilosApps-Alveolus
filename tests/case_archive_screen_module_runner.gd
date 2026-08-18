@@ -114,7 +114,7 @@ func _run() -> void:
 func _fixture_entries() -> Array[CaseArchiveViewModel.CaseEntryViewModel]:
 	var result: Array[CaseArchiveViewModel.CaseEntryViewModel] = []
 	result.append(CaseArchiveViewModel.CaseEntryViewModel.new(
-		&"intro", 0, "Das Lungenmodell", "Intro · Abgeschlossen", "Ereignisgesteuert · Lektion 3",
+		&"intro", 0, "Das Lungenmodell", "Intro · Abgeschlossen", "∞ · Lektion 3",
 		"", "1 Sieg · Lv 1 · 4 Bakt.", true, true, AlveolusVisualTheme.GOLD
 	))
 	result.append(CaseArchiveViewModel.CaseEntryViewModel.new(

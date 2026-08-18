@@ -4,7 +4,7 @@ extends Control
 const GLYPH_ARTBOARD := 52.0
 const IMPORTED_GLYPH_EXTENT := 0.76
 const DRAWN_KINDS: Array[StringName] = [
-	&"back", &"play", &"story", &"lexicon", &"clock", &"boss", &"clinic", &"offline",
+	&"back", &"chevron_right", &"chevron_down", &"play", &"story", &"lexicon", &"clock", &"boss", &"clinic", &"offline",
 	&"passive_research", &"antibiotic", &"automatic_therapy", &"treatment", &"immune",
 	&"neutrophil_orbit", &"support", &"supportive_oxygenation", &"practice", &"research",
 	&"archive", &"levels", &"settings", &"stability_reserve", &"therapy_precision", &"treatment_precision", &"preanalysis",
@@ -60,6 +60,12 @@ func _draw() -> void:
 			draw_line(Vector2(14, -16), Vector2(-4, 0), accent, 3.0, true)
 			draw_line(Vector2(-4, 0), Vector2(14, 16), accent, 3.0, true)
 			draw_line(Vector2(-3, 0), Vector2(19, 0), accent, 3.0, true)
+		&"chevron_right":
+			draw_line(Vector2(-7, -11), Vector2(5, 0), accent, 3.0, true)
+			draw_line(Vector2(5, 0), Vector2(-7, 11), accent, 3.0, true)
+		&"chevron_down":
+			draw_line(Vector2(-11, -7), Vector2(0, 5), accent, 3.0, true)
+			draw_line(Vector2(0, 5), Vector2(11, -7), accent, 3.0, true)
 		&"play":
 			draw_colored_polygon(PackedVector2Array([Vector2(-10, -17), Vector2(17, 0), Vector2(-10, 17)]), accent)
 		&"story", &"lexicon":

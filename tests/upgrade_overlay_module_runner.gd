@@ -222,7 +222,8 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.cards().size() == 3 and overlay.selection_helper().visible, "Der Drei-Karten-Hinweis hängt ausschließlich von den sichtbaren Karten ab")
 	var legacy_comparison := overlay.cards()[0].find_child("UpgradeComparison", true, false) as RichTextLabel
 	_check(legacy_comparison != null and not String(legacy_comparison.get_meta(&"semantic_before", "")).is_empty() and not String(legacy_comparison.get_meta(&"semantic_after", "")).is_empty(), "Auch markierte Legacy-Aufrufe bewahren normale Vergleichswerte")
-	_check(overlay.present(three, false), "Die normale Drei-Karten-Revision wird nach dem Kompatibilitätscheck wiederhergestellt")
+	var restored_three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_three_option_rows(), 13, false, "", true, true)
+	_check(overlay.present(restored_three, false), "Die normale Drei-Karten-Revision wird nach dem Kompatibilitätscheck wiederhergestellt")
 	await _settle()
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Drei normale Karten passen ohne Scrollbalken")
 	_check(overlay.reroll_action().visible and overlay.cancel_action().visible, "Explizite optionale Nebenaktionen werden sichtbar")
@@ -259,7 +260,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	await process_frame
 	_check(get_root().gui_get_focus_owner() == overlay.focus_targets()[0], "Kompakter Fokus bleibt am ersten Auswahlfeld")
 
-	var mandatory: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_single_option_rows(), 12, false, "", false, false)
+	var mandatory: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_single_option_rows(), 14, false, "", false, false)
 	_check(overlay.present(mandatory, false), "Pflichtauswahl kann optionale Actions entfernen")
 	await _settle()
 	var prior_cancel_count := cancel_intents.size()

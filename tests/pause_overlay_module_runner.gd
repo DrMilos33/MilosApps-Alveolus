@@ -210,7 +210,7 @@ func _assert_section_contract(overlay: PauseOverlay, view_model: PauseOverlayVie
 		_check(header.get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "%s verwendet die zentrale Quiet-Buttonrolle" % section.title())
 		_check(not String(header.get_meta(&"alveolus_accessible_name", "")).is_empty(), "%s besitzt einen eindeutigen Accessible Name" % section.title())
 		var chevron := header.find_child("SectionChevron", true, false) as SimpleIcon
-		_check(chevron != null and chevron.kind == &"back" and chevron.custom_minimum_size.x >= 20.0, "%s besitzt ein gut sichtbares zentrales Chevron" % section.title())
+		_check(chevron != null and chevron.kind in [&"chevron_right", &"chevron_down"] and chevron.custom_minimum_size.x >= 20.0, "%s besitzt ein gut sichtbares zentrales Chevron" % section.title())
 		_check(body != null and body.get_parent() == header.get_parent() and body.get_index() > header.get_index(), "%s ordnet den Inhalt direkt nach seinem Kopf an" % section.title())
 
 
@@ -223,8 +223,8 @@ func _assert_section_disclosure_state(overlay: PauseOverlay, section_id: StringN
 	_check(chevron != null and chevron.get_meta(&"accordion_state", &"") == expected_state, "%s transportiert den Zustand redundant am Chevron" % section_id)
 	_check(header != null and String(header.get_meta(&"alveolus_accessible_name", "")).contains(expected_word), "%s aktualisiert den Accessible Name mit dem aktuellen Zustand" % section_id)
 	if chevron != null:
-		var expected_rotation := -PI * 0.5 if expanded else PI
-		_check(is_equal_approx(chevron.rotation, expected_rotation), "%s unterscheidet Ein-/Ausklappen sichtbar durch die Chevron-Richtung" % section_id)
+		var expected_kind: StringName = &"chevron_down" if expanded else &"chevron_right"
+		_check(chevron.kind == expected_kind, "%s unterscheidet Ein-/Ausklappen sichtbar durch eine eigene Chevron-Glyphe" % section_id)
 
 
 func _assert_stat_rows(overlay: PauseOverlay) -> void:

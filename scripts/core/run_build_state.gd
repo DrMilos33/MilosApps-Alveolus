@@ -257,8 +257,11 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 		&"distance_stage":
 			var before_stage := CombatDistanceScale.stage_from_world(before)
 			var after_stage := CombatDistanceScale.stage_from_world(after)
-			effect_text = "%s%d %s" % [_sign(float(after_stage - before_stage)), absi(after_stage - before_stage), label]
-			comparison = "%d  >  %d %s" % [before_stage, after_stage, comparison_label]
+			# The card heading/row label already names Reichweite or Radius. UI-facing
+			# distance values therefore stay as naked central stages without repeating
+			# implementation units or a second semantic label.
+			effect_text = "%s%d" % [_sign(float(after_stage - before_stage)), absi(after_stage - before_stage)]
+			comparison = "%d  >  %d" % [before_stage, after_stage]
 		&"tempo":
 			var percent := roundi((1.0 - after / maxf(before, 0.001)) * 100.0)
 			effect_text = "+%d %% Tempo" % percent

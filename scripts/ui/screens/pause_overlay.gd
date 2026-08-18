@@ -37,8 +37,6 @@ const STAT_LABEL_MINIMUM_WIDTH := 64.0
 const COMPACT_STAT_TEXT_MINIMUM_WIDTH := 136.0
 const COMPACT_STAT_LABEL_FLOOR := 16.0
 const SECTION_CHEVRON_SIZE := 20.0
-const SECTION_CHEVRON_COLLAPSED_ROTATION := PI
-const SECTION_CHEVRON_EXPANDED_ROTATION := -PI * 0.5
 
 var _view_model: PauseOverlayViewModel
 var _mode := Mode.MENU
@@ -535,8 +533,7 @@ func _create_stat_section(section: PauseOverlayViewModel.SectionViewModel) -> Pa
 	chevron.name = "SectionChevron"
 	chevron.custom_minimum_size = Vector2.ONE * SECTION_CHEVRON_SIZE
 	chevron.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	chevron.pivot_offset = Vector2.ONE * SECTION_CHEVRON_SIZE * 0.5
-	chevron.configure(&"back", AlveolusVisualTheme.TURQUOISE)
+	chevron.configure(&"chevron_right", AlveolusVisualTheme.TURQUOISE)
 	chevron.set_meta(&"alveolus_component", &"accordion_chevron")
 	header_row.add_child(chevron)
 	var header_label := AlveolusUIComponents.label(
@@ -668,10 +665,9 @@ func _apply_section_expansion(section_id: StringName) -> void:
 		var chevron := header.find_child("SectionChevron", true, false) as SimpleIcon
 		var title_label := header.find_child("SectionTitle", true, false) as Label
 		if chevron != null:
-			chevron.rotation = (
-				SECTION_CHEVRON_EXPANDED_ROTATION
-				if expanded
-				else SECTION_CHEVRON_COLLAPSED_ROTATION
+			chevron.configure(
+				&"chevron_down" if expanded else &"chevron_right",
+				AlveolusVisualTheme.TURQUOISE
 			)
 			chevron.set_meta(&"accordion_state", &"expanded" if expanded else &"collapsed")
 		if title_label != null:

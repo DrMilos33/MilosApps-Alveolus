@@ -46,8 +46,13 @@ func _run_flow() -> void:
 	_check(game.flow_state == GameFlowState.State.PREPARATION, "Intro-Überspringen kann ohne Freischaltung verworfen werden")
 	game._on_preparation_start_requested(game.pending_preparation_loadout.to_dict())
 	_check(game.flow_state == GameFlowState.State.RUNNING, "Die Einsatzplanung startet einen laufenden Run")
+	_check(game.hud.run_prompt != null and game.hud.run_prompt.message_label().text == "Beobachte den ersten Erreger.", "Der laufende Introfall startet mit dem containerlosen Beobachtungsprompt")
 	var research_before_abort: int = game.meta.research_points
 	game._set_flow(GameFlowState.State.MANUAL_PAUSE)
+	game.hud.show_pause()
+	_check(not game.hud.run_prompt.visible, "Der Prompt gibt beim Routenwechsel die blockierende Ebene cleanup-sicher frei")
+	game.hud.hide_pause()
+	_check(game.hud.run_prompt.visible and game.hud.run_prompt.message_label().text == "Beobachte den ersten Erreger.", "Fortsetzen stellt die unveränderte passive Introcopy wieder her")
 	game.hud.show_pause()
 	game._on_abort_requested()
 	_check(game.flow_state == GameFlowState.State.ABORT_CONFIRMATION, "Pause öffnet eine Abbruchbestätigung")

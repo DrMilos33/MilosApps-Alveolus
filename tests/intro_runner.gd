@@ -3,8 +3,10 @@ extends SceneTree
 var assertions := 0
 var failures := 0
 
+
 func _init() -> void:
 	call_deferred("_run_intro")
+
 
 func _run_intro() -> void:
 	Engine.physics_ticks_per_second = 240
@@ -13,8 +15,10 @@ func _run_intro() -> void:
 	get_root().add_child(game)
 	await process_frame
 	await process_frame
-	# The live tutorial regression must not depend on or mutate the player's
-	# local discovery history.
+
+	# The UI regression is deliberately independent from the developer's save.
+	# Runtime timing and spawn details live in intro_runtime_contract_runner; this
+	# runner owns the actual GameHUD prompt and three-card presentation boundary.
 	game.persistence_enabled = false
 	game.meta.reset_defaults()
 	game.discovery_manager.configure(game.discovery_definitions, {})
@@ -22,114 +26,75 @@ func _run_intro() -> void:
 	game._show_level_select()
 	game._on_level_selected(&"intro")
 	game.start_run()
-	_check(game.intro_phase == &"await_movement", "Intro wartet zuerst auf echte Bewegung")
-	_check(game.stats.prepared_treatment != null and game.stats.prepared_treatment.id == &"treatment_precision", "Intro trägt die Identität des gezeigten Präzisen Impulses für generische UI-Präsentation")
-	game.state.tick(999.0)
-	_check(game.state.active and not game.state.boss_spawned, "Ereignisintro besitzt keine Zeitdeadline")
 
-	# Run the real physics path up to the first upgrade. This deliberately does
-	# not call damage or pickup handlers directly, so a stuck live intro fails.
-	game.avatar.global_position = Vector2(40.0, 0.0)
-	game.run_session.step_fixed(1.0 / 240.0)
-	_check(game.intro_phase == &"enemy_approach", "Bewegung startet vor dem ersten Gegner eine eigene Annäherungsphase")
-	_check(is_equal_approx(game.intro_transition_timer, 0.85), "Die Annäherungsphase dauert verbindlich 0,85 Sekunden")
-	_check(game.intro_primary_enemy == null, "Während der Annäherungsphase existiert noch kein versteckter Gegner")
-	game.run_session.step_fixed(0.84)
-	_check(game.intro_phase == &"enemy_approach" and game.intro_primary_enemy == null, "Vor Ablauf der 0,85 Sekunden wird der erste Gegner nicht vorzeitig erzeugt")
-	game.run_session.step_fixed(0.02)
-	_check(game.intro_phase == &"await_enemy" and is_instance_valid(game.intro_primary_enemy), "Nach der Annäherungsphase erscheint genau der geführte erste Gegner")
-	_check(is_equal_approx(game.intro_primary_enemy.status_speed_multiplier(), 0.58), "Der erste Gegner verwendet den ruhigeren Bewegungsfaktor 0,58")
-	var observed_discoveries: Array[StringName] = []
-	var observed_first_projectile_speed := false
-	var observed_guided_pickup_speed := false
-	var observed_recycled_projectile_default := false
-	var observed_recycled_pickup_default := false
-	for _frame in range(1200):
-		# Drive the new centralized fixed-step path deterministically. Discovery
-		# pauses still stop the session; the test dismisses them before advancing.
-		if game.flow_state == GameFlowState.State.DISCOVERY_PAUSE and not game.discovery_manager.active.is_empty():
-			observed_discoveries.append(game.discovery_manager.active["id"])
-			game._on_discovery_dismissed()
-		if game.flow_state == GameFlowState.State.RUNNING:
-			game.run_session.step_fixed(1.0 / 240.0)
-		for projectile in game.projectiles:
-			if is_instance_valid(projectile) and is_equal_approx((projectile as TherapyProjectile).speed, 360.0):
-				observed_first_projectile_speed = true
-		for pickup in game.pickups:
-			if is_instance_valid(pickup) and (pickup as AnalysisPickup).guided_to_target and is_equal_approx((pickup as AnalysisPickup).guided_speed, 280.0):
-				observed_guided_pickup_speed = true
-		for projectile in game.projectile_pool:
-			if is_instance_valid(projectile) and is_equal_approx((projectile as TherapyProjectile).speed, TherapyProjectile.DEFAULT_SPEED):
-				observed_recycled_projectile_default = true
-		for pickup in game.pickup_pool:
-			if is_instance_valid(pickup) and not (pickup as AnalysisPickup).guided_to_target and is_equal_approx((pickup as AnalysisPickup).guided_speed, AnalysisPickup.DEFAULT_GUIDED_SPEED):
-				observed_recycled_pickup_default = true
-		await process_frame
-		if game.flow_state == GameFlowState.State.LEVEL_UP:
-			break
-	# Collection is applied at the end of the fixed step. In headless runs the
-	# pooled node can therefore become observable on the same process frame on
-	# which the level-up state stops the loop.
-	for pickup in game.pickup_pool:
-		if is_instance_valid(pickup) and not (pickup as AnalysisPickup).guided_to_target and is_equal_approx((pickup as AnalysisPickup).guided_speed, AnalysisPickup.DEFAULT_GUIDED_SPEED):
-			observed_recycled_pickup_default = true
-	_check(observed_discoveries.has(&"pneumococcus"), "Der reale Introablauf erklärt die erste Pneumokokke")
-	_check(observed_discoveries.has(&"automatic_therapy"), "Der reale Introablauf erklärt den ersten Therapieimpuls")
-	_check(observed_discoveries.has(&"analysis_pickup"), "Der reale Introablauf erklärt die erste Analyse")
-	_check(observed_first_projectile_speed, "Das erste Intro-Therapieprojektil fliegt lesbar mit Geschwindigkeit 360")
-	_check(observed_guided_pickup_speed, "Die erste geführte Analyseprobe bewegt sich lesbar mit Geschwindigkeit 280")
-	_check(observed_recycled_projectile_default, "Ein recyceltes Therapieprojektil setzt seine Geschwindigkeit auf 720 zurück")
-	_check(observed_recycled_pickup_default, "Eine recycelte Analyseprobe setzt Führung und Geschwindigkeit auf den Standard 680 zurück")
-	_check(game.flow_state == GameFlowState.State.LEVEL_UP, "Die echte Analyseaufnahme startet die erste Ein-Karten-Lektion")
-	if game.flow_state != GameFlowState.State.LEVEL_UP or game.current_upgrade_options.is_empty():
-		var debug_enemy: InfectionEnemy = game.enemies[0] if not game.enemies.is_empty() else null
-		printerr("INTRO_DEBUG phase=%s flow=%s session=%s enemies=%d handles=%d allocated=%d regular=%d world_handle=%s targetable=%s spawn=%.3f distance=%.1f timer=%.3f targets=%d projectiles=%d pickups=%d discoveries=%s" % [
-			game.intro_phase,
-			game.flow_state,
-			game.run_session.lifecycle,
-			game.enemies.size(),
-			game.enemy_world.handles().size(),
-			game.enemy_world.allocated_count(),
-			game.enemy_world.regular_count,
-			game.enemy_world.handle_for(debug_enemy) if debug_enemy != null else EntityHandle.INVALID,
-			debug_enemy.is_targetable() if debug_enemy != null else false,
-			debug_enemy.spawn_timer if debug_enemy != null else -1.0,
-			game.topology.distance(game.avatar.global_position, debug_enemy.global_position) if debug_enemy != null else -1.0,
-			game.therapy_timer,
-			game._nearest_targets(game.stats.therapy_range, game.stats.therapy_targets).size(),
-			game.projectiles.size(),
-			game.pickups.size(),
-			observed_discoveries,
-		])
-		game.queue_free()
-		await process_frame
-		quit(1)
-		return
-	_check(game.current_upgrade_options.size() == 1 and game.current_upgrade_options[0].id == &"potency", "Lektion 1 zeigt nur Gezielte Wirksamkeit")
-	_check(not game.hud.upgrade_target_preview.visible and game.hud.upgrade_target_preview.target_type == &"", "Die Intro-Verbesserung zeichnet keine Welt- oder Zielvorschau")
-	_check(_scripted_upgrade_card_has_heading(game.hud, "Präziser Impuls"), "Die Intro-Verbesserung benennt die tatsächlich gezeigte Behandlung")
-	_check(_scripted_upgrade_card_is_qualitative(game.hud, "Deine Behandlung verursacht jetzt mehr Schaden."), "Die Wirkungslektion erklärt den Nutzen qualitativ und ohne Vorher/Nachher-Grundwerte")
+	_check(game.stats.prepared_treatment != null and game.stats.prepared_treatment.id == &"treatment_precision", "Intro bewahrt die stabile Behandlungs-ID")
+	_check(game.stats.prepared_treatment.display_name == "Impuls", "Die sichtbare Intro-Behandlung heißt Impuls")
+	_check(game.state.analysis_target == 3, "Das Intro zeigt ein explizites Analyseziel von drei")
+	_check(_prompt_shows(game.hud, "Beobachte den ersten Erreger.", PlainRunPrompt.MODE_NORMAL, false), "Der erste containerlose Beobachtungsprompt ist sichtbar")
+
+	game.run_session.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	game.run_session.step_fixed(3.01)
+	_check(game.flow_state == GameFlowState.State.INTRO_CONFIRMATION, "Nach der Beobachtung wartet das Intro in der eigenen Bestätigung")
+	_check(_prompt_shows(game.hud, "Du greifst automatisch an.", PlainRunPrompt.MODE_NORMAL, true), "Die Autoangriffserklärung wartet containerlos auf Linksklick")
+	_check(game.hud.run_prompt.mouse_hint_label().text == "Linksklick zum Fortfahren", "Der bestätigungspflichtige Prompt nennt den einzigen Fortsetzungsweg")
+
+	var keyboard_accept := InputEventKey.new()
+	keyboard_accept.keycode = KEY_ENTER
+	keyboard_accept.pressed = true
+	game.hud.run_prompt._gui_input(keyboard_accept)
+	_check(game.flow_state == GameFlowState.State.INTRO_CONFIRMATION, "Tastatur-Accept löst die Linksklicklektion nicht aus")
+	_confirm_prompt_with_left_click(game)
+	_check(game.flow_state == GameFlowState.State.RUNNING and game.intro_autoattack_enabled, "Genau der HUD-Linksklick aktiviert den Autoangriff")
+	_check(not game.hud.run_prompt.visible, "Bestätigte Promptcopy wird vom Runtime-Presenter ausgeblendet")
+
+	var primary: InfectionEnemy = game.intro_primary_enemy
+	primary.take_damage(primary.health, &"therapy")
+	_check(_prompt_shows(game.hud, "Geh nah ran, um die EXP einzusammeln.", PlainRunPrompt.MODE_NORMAL, false), "Der EXP-Hinweis nutzt dieselbe containerlose View")
+	_check(game.pickups.size() == 1, "Der erste Gegner hinterlässt genau einen normalen EXP-Drop")
+	var primary_pickup: AnalysisPickup = game.pickups[0]
+	game._on_pickup_collected(primary_pickup.analysis_value, primary_pickup)
+	_check(game.state.analysis == 1 and game.enemies.size() == 2, "Der erste Drop erzeugt genau zwei Folgegegner")
+
+	var followers: Array[InfectionEnemy] = []
+	followers.assign(game.enemies)
+	for enemy in followers:
+		enemy.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+		enemy.take_damage(enemy.health, &"therapy")
+	_check(game.pickups.size() == 2, "Beide Folgegegner hinterlassen je einen normalen EXP-Drop")
+	var second_pickup: AnalysisPickup = game.pickups[0]
+	game._on_pickup_collected(second_pickup.analysis_value, second_pickup)
+	_check(game.state.analysis == 2 and game.flow_state == GameFlowState.State.RUNNING, "Zwei Drops reichen noch nicht für Level Up")
+	var third_pickup: AnalysisPickup = game.pickups[0]
+	game._on_pickup_collected(third_pickup.analysis_value, third_pickup)
+	await process_frame
+	await process_frame
+
+	_check(game.flow_state == GameFlowState.State.LEVEL_UP, "Der dritte normale EXP-Drop öffnet Level Up")
+	_check(game.current_upgrade_options.size() == 3, "Das Intro zeigt exakt drei normale Upgradeoptionen")
+	_check(game.hud.upgrade_screen.cards().size() == 3, "Das sichtbare Level-Up enthält drei Karten")
+	_check(game.hud.upgrade_screen.selection_helper().visible and game.hud.upgrade_screen.selection_helper().text == "Du kannst 1 Upgrade auswählen.", "Das Level-Up nennt die exakte Auswahlregel")
+	for card in game.hud.upgrade_screen.cards():
+		var title := card.find_child("UpgradeTitle", true, false) as Label
+		var comparison := card.find_child("UpgradeComparison", true, false) as RichTextLabel
+		_check(title != null and title.text == "Impuls", "Jede Introkartenüberschrift nennt ausschließlich die betroffene Komponente Impuls")
+		_check(comparison != null and not str(comparison.get_meta(&"semantic_after", "")).is_empty(), "Jede Introkarte behält ihren normalen Vorher-Nachher-Vergleich")
+
 	game._on_upgrade_chosen(game.current_upgrade_options[0])
+	await process_frame
+	_check(game.flow_state == GameFlowState.State.INTRO_CONFIRMATION and game.state.boss_spawned, "Eine normale Karte startet die pausierte Bossbestätigung")
+	_check(_prompt_shows(game.hud, "Infektionsherd erkannt", PlainRunPrompt.MODE_CORAL, true), "Der Boss erscheint als persistenter korallener Plain-Prompt")
+	_check(game.hud.run_prompt.message_label().modulate.is_equal_approx(AlveolusVisualTheme.CORAL), "Der Bosswarntext verwendet die zentrale Korallenfarbe")
+	_confirm_prompt_with_left_click(game)
+	_check(game.flow_state == GameFlowState.State.RUNNING and game.intro_phase == &"boss_active", "Nur der HUD-Linksklick startet die Bosssimulation")
 
-	var potency_enemy: InfectionEnemy = game.intro_primary_enemy
-	potency_enemy._physics_process(InfectionEnemy.SPAWN_TOTAL_SECONDS)
-	potency_enemy.take_damage(26.0, &"therapy")
-	_check(game.flow_state == GameFlowState.State.LEVEL_UP and game.current_upgrade_options[0].id == &"neutrophils", "Treffer mit neuem Wert startet nur die Immunlektion")
-	_check(not game.hud.upgrade_target_preview.visible and game.hud.upgrade_target_preview.target_type == &"", "Auch die Abwehrlektion bleibt frei von einer Weltvorschau")
-	_check(_scripted_upgrade_card_is_qualitative(game.hud, "Abwehrzellen schützen den Nahbereich automatisch."), "Die Abwehrlektion verwendet kurze qualitative Erklärung statt Grundwertvergleich")
-	game._on_upgrade_chosen(game.current_upgrade_options[0])
+	for discovery_id in [&"pneumococcus", &"automatic_therapy", &"analysis_pickup", &"infection_focus"]:
+		_check(game.discovery_manager.has_seen(discovery_id), "Das Intro markiert %s still als gesehen" % discovery_id)
+	_check(game.discovery_manager.active.is_empty() and game.discovery_manager.queue.is_empty(), "Introhinweise öffnen keine konkurrierenden Entdeckungsmodals")
 
-	var immune_enemy: InfectionEnemy = game.intro_primary_enemy
-	immune_enemy._physics_process(InfectionEnemy.SPAWN_TOTAL_SECONDS)
-	immune_enemy.take_damage(10.0, &"immune")
-	immune_enemy.take_damage(10.0, &"immune")
-	_check(game.state.boss_spawned and game.active_boss != null, "Immunbeseitigung startet direkt den Mini-Boss")
 	game.active_boss._physics_process(InfectionEnemy.SPAWN_TOTAL_SECONDS)
-	_check(game.flow_state == GameFlowState.State.DISCOVERY_PAUSE and game.discovery_manager.active["id"] == &"infection_focus", "Intro-Boss erhält seine angepasste Entdeckung")
-	game._on_discovery_dismissed()
 	game.discovery_manager.mark_seen(&"research_reward")
 	game.active_boss.take_damage(9999.0, &"therapy")
-	_check(game.flow_state == GameFlowState.State.RESULT, "Mini-Boss beendet das ereignisgesteuerte Intro regulär")
+	_check(game.flow_state == GameFlowState.State.RESULT, "Der Mini-Boss beendet das ereignisgesteuerte Intro regulär")
 
 	game.queue_free()
 	await process_frame
@@ -140,47 +105,27 @@ func _run_intro() -> void:
 		printerr("ALVEOLUS_INTRO_FAILED failures=%d assertions=%d" % [failures, assertions])
 		quit(1)
 
-func _scripted_upgrade_card_is_qualitative(hud: GameHUD, expected_copy: String) -> bool:
-	if hud == null or hud.upgrade_cards == null:
+
+func _prompt_shows(hud: GameHUD, expected_text: String, expected_mode: StringName, awaits_click: bool) -> bool:
+	if hud == null or hud.run_prompt == null:
 		return false
-	var live_cards: Array[Control] = []
-	for child in hud.upgrade_cards.get_children():
-		if child is Control and not child.is_queued_for_deletion():
-			live_cards.append(child)
-	if live_cards.size() != 1:
-		return false
-	var card := live_cards[0]
-	var text := _control_text(card)
-	# The numeric comparison row is intentionally absent for scripted lessons;
-	# exactly two copy controls leave room only for title and qualitative effect.
-	return text.contains(expected_copy) and _control_copy_count(card) == 2
+	var prompt := hud.run_prompt
+	return (
+		prompt.is_visible_in_tree()
+		and prompt.message_label().text == expected_text
+		and prompt.semantic_mode() == expected_mode
+		and prompt.is_awaiting_left_click() == awaits_click
+		and prompt.find_children("*", "Panel", true, false).is_empty()
+		and prompt.find_children("*", "ColorRect", true, false).is_empty()
+	)
 
 
-func _scripted_upgrade_card_has_heading(hud: GameHUD, expected_heading: String) -> bool:
-	if hud == null or hud.upgrade_cards == null:
-		return false
-	for child in hud.upgrade_cards.get_children():
-		if not child is Control or child.is_queued_for_deletion():
-			continue
-		var heading := (child as Control).find_child("UpgradeTitle", true, false) as Label
-		return heading != null and heading.text == expected_heading
-	return false
+func _confirm_prompt_with_left_click(game: Node) -> void:
+	var left_click := InputEventMouseButton.new()
+	left_click.button_index = MOUSE_BUTTON_LEFT
+	left_click.pressed = true
+	game.hud.run_prompt._gui_input(left_click)
 
-func _control_text(node: Node) -> String:
-	var result := ""
-	if node is Label:
-		result += (node as Label).text + "\n"
-	elif node is RichTextLabel:
-		result += (node as RichTextLabel).get_parsed_text() + "\n"
-	for child in node.get_children():
-		result += _control_text(child)
-	return result
-
-func _control_copy_count(node: Node) -> int:
-	var result := 1 if node is Label or node is RichTextLabel else 0
-	for child in node.get_children():
-		result += _control_copy_count(child)
-	return result
 
 func _check(condition: bool, message: String) -> void:
 	assertions += 1

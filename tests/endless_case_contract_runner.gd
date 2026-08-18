@@ -31,7 +31,7 @@ func _test_level_deadline_contract() -> void:
 
 	var tutorial := _level(0.0, 0.0)
 	tutorial.is_tutorial = true
-	_equal(tutorial.duration_text(), "Ereignisgesteuert", "Das Intro behält seine eigene Dauerbezeichnung")
+	_equal(tutorial.duration_text(), "∞", "Das Intro zeigt sein fehlendes Zeitlimit als Unendlichkeitszeichen")
 
 
 func _test_config_deadline_contract() -> void:

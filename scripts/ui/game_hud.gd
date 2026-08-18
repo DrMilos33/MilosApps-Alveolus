@@ -141,6 +141,7 @@ var boss_bar: ProgressBar
 var boss_value: Label
 var boss_phase_label: Label
 var run_prompt: PlainRunPrompt
+var run_prompt_suspended_by_pause := false
 var boss_announcement_panel: Control
 var boss_announcement: Label
 var alert_time: float = 0.0
@@ -3239,6 +3240,7 @@ func show_run_prompt(
 
 func hide_run_prompt() -> void:
 	boss_announcement_time = 0.0
+	run_prompt_suspended_by_pause = false
 	if run_prompt != null:
 		run_prompt.hide_prompt()
 
@@ -3342,6 +3344,9 @@ func activate_upgrade(index: int) -> void:
 	upgrade_chosen.emit(current_upgrade_options[index])
 
 func show_pause(is_intro: bool = false, player_stats: PlayerStats = null, run_state: RunState = null) -> void:
+	if run_prompt != null and run_prompt.visible:
+		run_prompt_suspended_by_pause = true
+		run_prompt.hide_prompt(false)
 	if player_stats != null:
 		update_run_stats(player_stats, run_state)
 	pause_is_intro = is_intro
@@ -3352,6 +3357,9 @@ func show_pause(is_intro: bool = false, player_stats: PlayerStats = null, run_st
 func hide_pause() -> void:
 	pause_screen.dismiss()
 	pause_stats_overlay.hide()
+	if run_prompt_suspended_by_pause and run_prompt != null and not run_prompt.message_label().text.is_empty():
+		run_prompt.show_prompt(run_prompt.confirmation_required(), false)
+	run_prompt_suspended_by_pause = false
 
 func is_pause_stats_open() -> bool:
 	return pause_screen != null and pause_screen.visible and pause_screen.current_mode() == PauseOverlay.Mode.STATS
