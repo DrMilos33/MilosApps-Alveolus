@@ -18,6 +18,7 @@ signal back
 const ProgressionScreenViewModelType := preload("res://scripts/ui/view_models/progression_screen_view_model.gd")
 const TalentTreeBranchType := preload("res://scripts/ui/talent_tree_branch.gd")
 const ROUTE_ID := &"research"
+const CONTEXT_DETAIL_SCOPE_ID := &"progression"
 const TALENT_SYMBOLS_BY_ID := {
 	&"manual_treatment_aim": &"target",
 	&"spread_penetration": &"treatment_spread",
@@ -60,8 +61,8 @@ var _talent_branches: Dictionary = {}
 var _branch_order: Array[StringName] = []
 
 var _info_sources: Dictionary = {}
-var _research_info_source_ids: Array[int] = []
-var _talent_info_source_ids: Array[int] = []
+var _research_info_source_ids: Array[StringName] = []
+var _talent_info_source_ids: Array[StringName] = []
 
 var _selected_tab := &"research"
 var _research_balance_text := ""
@@ -71,6 +72,7 @@ var _applied_revision := -1
 var _applied_content_hash := 0
 var _applied_research_hash := 0
 var _applied_talent_hash := 0
+var _applied_talent_structure_hash := 0
 
 
 func _init() -> void:
@@ -88,6 +90,10 @@ func _init() -> void:
 
 func route_id() -> StringName:
 	return ROUTE_ID
+
+
+func context_detail_scope_id() -> StringName:
+	return CONTEXT_DETAIL_SCOPE_ID
 
 
 ## Returns true only when visible content changed. A newer revision with an
@@ -109,9 +115,15 @@ func apply_view_model(view_model: ProgressionScreenViewModelType) -> bool:
 	_talent_balance_text = view_model.talent_balance_text()
 	AlveolusUIComponents.set_button_disabled(_talent_reset_button, not view_model.talent_reset_enabled())
 	if not _has_applied_model or view_model.research_hash() != _applied_research_hash:
-		_rebuild_research(view_model.research_items())
+		_sync_research(view_model.research_items())
 	if not _has_applied_model or view_model.talent_hash() != _applied_talent_hash:
-		_rebuild_talents(view_model.talent_branches())
+		var talent_branches := view_model.talent_branches()
+		var next_structure_hash := hash(_talent_structure_signature(talent_branches))
+		if not _has_applied_model or next_structure_hash != _applied_talent_structure_hash:
+			_rebuild_talents(talent_branches)
+		else:
+			_refresh_talents(talent_branches)
+		_applied_talent_structure_hash = next_structure_hash
 	_set_selected_tab(view_model.selected_tab())
 
 	_has_applied_model = true
@@ -194,13 +206,18 @@ func default_focus_control() -> Control:
 func context_detail_registrations() -> Array[Dictionary]:
 	_prune_info_sources()
 	var result: Array[Dictionary] = []
-	for entry_value in _info_sources.values():
-		var entry := entry_value as Dictionary
+	var stable_ids: Array[StringName] = []
+	for stable_id_value in _info_sources:
+		stable_ids.append(StringName(stable_id_value))
+	stable_ids.sort()
+	for stable_id in stable_ids:
+		var entry := _info_sources[stable_id] as Dictionary
 		var source_ref := entry.get("source") as WeakRef
 		var source: Control = source_ref.get_ref() as Control if source_ref != null else null
 		if source == null or not is_instance_valid(source):
 			continue
 		result.append({
+			"id": stable_id,
 			"source": source,
 			"provider": entry.get("provider", Callable()),
 			"hover_enabled": true,
@@ -381,40 +398,66 @@ func _build_talent_view(parent: VBoxContainer) -> void:
 	_talent_stack.add_child(_talent_grid)
 
 
-func _rebuild_research(items: Array) -> void:
-	_clear_info_sources(_research_info_source_ids)
-	_free_children(_research_grid)
-	_research_buttons.clear()
-	_research_interactive.clear()
+func _sync_research(items: Array) -> void:
+	var next_ids: Dictionary = {}
 	for item in items:
-		var state := int(item.state())
-		var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
-		var locked := state == ProgressionScreenViewModelType.ItemState.LOCKED
-		var button := AlveolusUIComponents.selection_card("", "", "", active, false)
-		button.name = "Research_%s" % String(item.id())
-		button.custom_minimum_size.y = 76.0
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.clip_contents = true
-		button.tooltip_text = ""
-		button.set_meta(&"stable_focus_id", item.id())
-		button.set_meta(&"item_state", _state_name(state))
-		button.set_meta(&"item_interactive", item.interactive())
-		button.set_meta(&"alveolus_accessible_name", "%s, %s" % [item.title(), _accessible_state_name(state)])
-		button.set_meta(&"ui_sound_cue", &"confirm" if item.interactive() else &"error")
-		button.pressed.connect(_on_research_pressed.bind(item.id()))
-		_research_grid.add_child(button)
-		_build_item_content(
-			button,
-			item.title(),
-			item.rank_text(),
-			item.cost_text(),
-			item.icon_kind(),
-			state,
-			AlveolusVisualTheme.GOLD
-		)
-		_research_buttons[item.id()] = button
-		_research_interactive[item.id()] = item.interactive()
-		_register_info_source(button, item.info(), _research_info_source_ids)
+		next_ids[item.id()] = true
+	var removed_ids: Array[StringName] = []
+	for id_value in _research_buttons:
+		var id := StringName(id_value)
+		if not next_ids.has(id):
+			removed_ids.append(id)
+	for id in removed_ids:
+		var removed_button := _research_buttons.get(id) as Button
+		_unregister_info_source(_stable_info_id(&"research", id), _research_info_source_ids)
+		_research_buttons.erase(id)
+		_research_interactive.erase(id)
+		if removed_button != null and is_instance_valid(removed_button):
+			removed_button.queue_free()
+	for index in range(items.size()):
+		var item: Variant = items[index]
+		var button := _research_buttons.get(item.id()) as Button
+		if button == null:
+			button = AlveolusUIComponents.selection_card("", "", "", false, false)
+			button.name = "Research_%s" % String(item.id())
+			button.custom_minimum_size.y = 76.0
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.clip_contents = true
+			button.tooltip_text = ""
+			button.pressed.connect(_on_research_pressed.bind(item.id()))
+			_research_grid.add_child(button)
+			_research_buttons[item.id()] = button
+		_update_research_button(button, item)
+		_research_grid.move_child(button, index)
+
+
+func _update_research_button(button: Button, item: Variant) -> void:
+	var state := int(item.state())
+	var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
+	button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD if active else AlveolusVisualTheme.TYPE_SELECTION_CARD
+	button.set_meta(&"stable_focus_id", item.id())
+	button.set_meta(&"item_state", _state_name(state))
+	button.set_meta(&"item_interactive", item.interactive())
+	button.set_meta(&"alveolus_accessible_name", "%s, %s" % [item.title(), _accessible_state_name(state)])
+	button.set_meta(&"ui_sound_cue", &"confirm" if item.interactive() else &"error")
+	_research_interactive[item.id()] = item.interactive()
+	_free_children(button)
+	_build_item_content(
+		button,
+		item.title(),
+		item.rank_text(),
+		item.cost_text(),
+		item.icon_kind(),
+		state,
+		AlveolusVisualTheme.GOLD
+	)
+	AlveolusUIComponents.refresh_button_state(button)
+	_register_info_source(
+		button,
+		_stable_info_id(&"research", item.id()),
+		item.info(),
+		_research_info_source_ids
+	)
 
 
 func _rebuild_talents(branches: Array) -> void:
@@ -437,10 +480,12 @@ func _rebuild_talents(branches: Array) -> void:
 		heading.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 		stack.add_child(heading)
 		var branch_icon := SimpleIcon.new()
+		branch_icon.name = "BranchIcon"
 		branch_icon.custom_minimum_size = Vector2(24.0, 24.0)
 		branch_icon.configure(branch_model.icon_kind(), branch_model.accent())
 		heading.add_child(branch_icon)
 		var branch_title := AlveolusUIComponents.label(branch_model.title(), AlveolusVisualTheme.TYPE_SECTION_LABEL)
+		branch_title.name = "BranchTitle"
 		branch_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		heading.add_child(branch_title)
 		var tree := TalentTreeBranchType.new() as TalentTreeBranch
@@ -481,11 +526,78 @@ func _rebuild_talents(branches: Array) -> void:
 			)
 			_talent_buttons[node_model.id()] = button
 			_talent_interactive[node_model.id()] = node_model.interactive()
-			_register_info_source(button, node_model.info(), _talent_info_source_ids)
+			_register_info_source(
+				button,
+				_stable_info_id(&"talent", node_model.id()),
+				node_model.info(),
+				_talent_info_source_ids
+			)
 		panel.custom_minimum_size.y = tree.custom_minimum_size.y + 68.0
 		_talent_branches[branch_model.id()] = tree
 		_branch_order.append(branch_model.id())
 	_configure_branch_exits.call_deferred()
+
+
+func _refresh_talents(branches: Array) -> void:
+	var used_symbols: Dictionary = {}
+	for branch_model in branches:
+		var tree := _talent_branches.get(branch_model.id()) as TalentTreeBranch
+		if tree == null:
+			# The stable topology hash should have routed structural changes through
+			# _rebuild_talents. Keep this guard safe for malformed external models.
+			_rebuild_talents(branches)
+			return
+		var panel := tree.get_parent() as Control
+		var branch_icon := panel.find_child("BranchIcon", true, false) as SimpleIcon if panel != null else null
+		var branch_title := panel.find_child("BranchTitle", true, false) as Label if panel != null else null
+		if branch_icon != null:
+			branch_icon.configure(branch_model.icon_kind(), branch_model.accent())
+		if branch_title != null:
+			branch_title.text = branch_model.title()
+		tree.configure_accent(branch_model.accent())
+		for node_model in branch_model.nodes():
+			var button := _talent_buttons.get(node_model.id()) as Button
+			if button == null:
+				_rebuild_talents(branches)
+				return
+			var state := int(node_model.state())
+			var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
+			var symbol_kind := _talent_symbol_kind(node_model.id(), node_model.icon_kind(), used_symbols)
+			button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD if active else AlveolusVisualTheme.TYPE_SELECTION_CARD
+			button.set_meta(&"stable_focus_id", node_model.id())
+			button.set_meta(&"item_state", _state_name(state))
+			button.set_meta(&"item_interactive", node_model.interactive())
+			button.set_meta(&"talent_symbol_kind", symbol_kind)
+			button.set_meta(&"alveolus_accessible_name", "%s, %s, %s" % [node_model.title(), node_model.cost_text(), _accessible_state_name(state)])
+			button.set_meta(&"ui_sound_cue", &"confirm" if node_model.interactive() else &"error")
+			_talent_interactive[node_model.id()] = node_model.interactive()
+			_free_children(button)
+			_build_talent_symbol_content(button, symbol_kind, state, branch_model.accent())
+			AlveolusUIComponents.refresh_button_state(button)
+			tree._states[node_model.id()] = _state_name(state)
+			_register_info_source(
+				button,
+				_stable_info_id(&"talent", node_model.id()),
+				node_model.info(),
+				_talent_info_source_ids
+			)
+		tree.queue_redraw()
+	_configure_branch_exits.call_deferred()
+
+
+func _talent_structure_signature(branches: Array) -> Array:
+	var signature: Array = []
+	for branch_model in branches:
+		var node_signature: Array = []
+		for node_model in branch_model.nodes():
+			node_signature.append([
+				node_model.id(),
+				node_model.tier(),
+				node_model.lane(),
+				node_model.required_ids(),
+			])
+		signature.append([branch_model.id(), node_signature])
+	return signature
 
 
 func _build_talent_symbol_content(
@@ -634,19 +746,32 @@ func _set_selected_tab(tab: StringName) -> void:
 	_update_responsive_layout()
 
 
-func _register_info_source(source: Control, info: Variant, id_bucket: Array[int]) -> void:
-	if source == null or info == null:
+func _register_info_source(
+	source: Control,
+	stable_id: StringName,
+	info: Variant,
+	id_bucket: Array[StringName]
+) -> void:
+	if source == null or stable_id == &"" or info == null:
 		return
-	var source_id := source.get_instance_id()
-	var provider := _info_payload.bind(info.duplicate_value())
-	_info_sources[source_id] = {
-		"source": weakref(source),
-		"provider": provider,
-	}
-	id_bucket.append(source_id)
+	var entry: Dictionary = _info_sources.get(stable_id, {})
+	var provider: Callable = entry.get("provider", Callable())
+	if not provider.is_valid():
+		provider = _info_payload_for_stable_id.bind(stable_id)
+	entry["source"] = weakref(source)
+	entry["provider"] = provider
+	entry["info"] = info.duplicate_value()
+	_info_sources[stable_id] = entry
+	source.set_meta(&"context_detail_id", stable_id)
+	if not id_bucket.has(stable_id):
+		id_bucket.append(stable_id)
 
 
-func _info_payload(info: Variant) -> Dictionary:
+func _info_payload_for_stable_id(stable_id: StringName) -> Dictionary:
+	var entry: Dictionary = _info_sources.get(stable_id, {})
+	var info: Variant = entry.get("info")
+	if info == null:
+		return {}
 	var payload := info.payload() as Dictionary
 	var accent: Color = payload.get("accent", Color.TRANSPARENT)
 	if accent.a <= 0.0:
@@ -657,28 +782,44 @@ func _info_payload(info: Variant) -> Dictionary:
 func _info_provider_for(source: Control) -> Callable:
 	if source == null:
 		return Callable()
-	var entry: Dictionary = _info_sources.get(source.get_instance_id(), {})
+	var stable_id := StringName(source.get_meta(&"context_detail_id", &""))
+	var entry: Dictionary = _info_sources.get(stable_id, {})
+	var source_ref := entry.get("source") as WeakRef
+	var registered_source: Variant = source_ref.get_ref() if source_ref != null else null
+	if registered_source != source:
+		return Callable()
 	var provider: Callable = entry.get("provider", Callable())
 	return provider
 
 
-func _clear_info_sources(ids: Array[int]) -> void:
-	for source_id in ids:
-		_info_sources.erase(source_id)
+func _stable_info_id(kind: StringName, id: StringName) -> StringName:
+	return StringName("%s:%s" % [String(kind), String(id)])
+
+
+func _unregister_info_source(stable_id: StringName, id_bucket: Array[StringName]) -> void:
+	_info_sources.erase(stable_id)
+	id_bucket.erase(stable_id)
+
+
+func _clear_info_sources(ids: Array[StringName]) -> void:
+	for stable_id in ids:
+		_info_sources.erase(stable_id)
 	ids.clear()
 
 
 func _prune_info_sources() -> void:
-	var stale_ids: Array[int] = []
-	for source_id_value in _info_sources:
-		var source_id := int(source_id_value)
-		var entry := _info_sources[source_id] as Dictionary
+	var stale_ids: Array[StringName] = []
+	for stable_id_value in _info_sources:
+		var stable_id := StringName(stable_id_value)
+		var entry := _info_sources[stable_id] as Dictionary
 		var source_ref := entry.get("source") as WeakRef
 		var source: Variant = source_ref.get_ref() if source_ref != null else null
 		if not source is Control or not is_instance_valid(source):
-			stale_ids.append(source_id)
-	for source_id in stale_ids:
-		_info_sources.erase(source_id)
+			stale_ids.append(stable_id)
+	for stable_id in stale_ids:
+		_info_sources.erase(stable_id)
+		_research_info_source_ids.erase(stable_id)
+		_talent_info_source_ids.erase(stable_id)
 
 
 func _configure_branch_exits() -> void:

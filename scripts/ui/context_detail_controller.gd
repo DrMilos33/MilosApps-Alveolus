@@ -37,6 +37,7 @@ var _mode := OpenMode.NONE
 var _layout_generation := 0
 var _current_payload: Dictionary = {}
 var _hover_recovery_scheduled := false
+var _source_scopes: Dictionary = {}
 
 
 func _ready() -> void:
@@ -82,7 +83,9 @@ func register_source(
 		existing["anchor"] = weakref(anchor) if anchor != null and is_instance_valid(anchor) else null
 		existing["placement"] = Placement.ABOVE_CENTER if placement == Placement.ABOVE_CENTER else Placement.AUTO
 		_registrations[source_id] = existing
-		if hover_enabled:
+		if _active_source_id == source_id and is_open():
+			_refresh_active_payload(source_id)
+		elif hover_enabled:
 			_schedule_hover_recovery()
 		return
 
@@ -110,6 +113,57 @@ func register_source(
 		_schedule_hover_recovery()
 
 
+## Differentially synchronizes one logical source family. Stable IDs preserve
+## existing Control registrations and active cards while providers change.
+## Removed or genuinely replaced controls are the only registrations that are
+## disconnected, so rank updates never cause a close/open cycle.
+func sync_sources(scope_id: StringName, registrations: Array[Dictionary]) -> void:
+	if scope_id == &"":
+		push_warning("ContextDetailController.sync_sources requires a stable scope ID.")
+		return
+	var previous: Dictionary = (_source_scopes.get(scope_id, {}) as Dictionary).duplicate()
+	var next: Dictionary = {}
+	for registration in registrations:
+		var stable_id := StringName(registration.get("id", &""))
+		var source := registration.get("source") as Control
+		var provider: Callable = registration.get("provider", Callable())
+		if stable_id == &"" or source == null or not is_instance_valid(source) or not provider.is_valid():
+			push_warning("ContextDetailController.sync_sources ignored an invalid stable registration.")
+			continue
+		if next.has(stable_id):
+			push_warning("ContextDetailController.sync_sources ignored duplicate ID '%s'." % stable_id)
+			continue
+		var previous_ref := previous.get(stable_id) as WeakRef
+		var previous_value: Variant = previous_ref.get_ref() if previous_ref != null else null
+		var previous_source := previous_value as Control if previous_value != null and is_instance_valid(previous_value) else null
+		if previous_source != source:
+			if previous_source != null:
+				unregister_source(previous_source)
+		# Intentionally outside the replacement branch: an unchanged source still
+		# needs its current provider and an in-place refresh of an open card.
+		register_source(
+			source,
+			provider,
+			bool(registration.get("hover_enabled", true)),
+			registration.get("anchor") as Control,
+			int(registration.get("placement", Placement.AUTO))
+		)
+		next[stable_id] = weakref(source)
+	for stable_id_value in previous:
+		var stable_id := StringName(stable_id_value)
+		if next.has(stable_id):
+			continue
+		var previous_ref := previous.get(stable_id) as WeakRef
+		var previous_value: Variant = previous_ref.get_ref() if previous_ref != null else null
+		var previous_source := previous_value as Control if previous_value != null and is_instance_valid(previous_value) else null
+		if previous_source != null:
+			unregister_source(previous_source)
+	if next.is_empty():
+		_source_scopes.erase(scope_id)
+	else:
+		_source_scopes[scope_id] = next
+
+
 func unregister_source(source: Control) -> void:
 	if source == null:
 		return
@@ -123,6 +177,7 @@ func unregister_source(source: Control) -> void:
 	_disconnect_if_connected(source.visibility_changed, registration.get("visibility_changed", Callable()))
 	_disconnect_if_connected(source.tree_exiting, registration.get("tree_exiting", Callable()))
 	_registrations.erase(source_id)
+	_remove_source_from_scopes(source_id)
 	if _active_source_id == source_id:
 		close_all()
 
@@ -264,6 +319,26 @@ func _apply_payload(payload: Dictionary, mode: int) -> void:
 	_set_surface_opacity(surface_opacity)
 
 
+func _refresh_active_payload(source_id: int) -> void:
+	if source_id != _active_source_id or not is_open():
+		return
+	var registration: Dictionary = _registrations.get(source_id, {})
+	var provider: Callable = registration.get("provider", Callable())
+	if not provider.is_valid():
+		_close_card()
+		return
+	var provided: Variant = provider.call()
+	if not provided is Dictionary:
+		push_warning("ContextDetailController provider must return a Dictionary.")
+		_close_card()
+		return
+	var payload := provided as Dictionary
+	_apply_payload(payload, _mode)
+	_current_payload = payload.duplicate()
+	_layout_generation += 1
+	_measure_and_place.call_deferred(source_id, _layout_generation, 0)
+
+
 func _measure_and_place(source_id: int, generation: int, phase: int) -> void:
 	if generation != _layout_generation or source_id != _active_source_id or not card.visible:
 		return
@@ -320,10 +395,14 @@ func _contained_position(
 		candidates.append(Vector2(centered_x, source_rect.position.y - card_size.y - SOURCE_GAP))
 		candidates.append(Vector2(centered_x, source_rect.end.y + SOURCE_GAP))
 	candidates.append_array([
+		# Default information cards sit diagonally above the source: right first,
+		# then left. This keeps the source visible and follows reading direction.
+		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.position.y - card_size.y - SOURCE_GAP),
+		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.position.y - card_size.y - SOURCE_GAP),
 		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.position.y),
 		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.position.y),
-		Vector2(source_rect.position.x, source_rect.end.y + SOURCE_GAP),
-		Vector2(source_rect.position.x, source_rect.position.y - card_size.y - SOURCE_GAP),
+		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.end.y + SOURCE_GAP),
+		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.end.y + SOURCE_GAP),
 	])
 	for candidate in candidates:
 		if bounds.encloses(Rect2(candidate, card_size)):
@@ -445,6 +524,7 @@ func _on_source_visibility_changed(source_id: int) -> void:
 
 func _on_source_tree_exiting(source_id: int) -> void:
 	_registrations.erase(source_id)
+	_remove_source_from_scopes(source_id)
 	if _active_source_id == source_id:
 		_close_card()
 
@@ -485,6 +565,26 @@ func _source_for_id(source_id: int) -> Control:
 		return null
 	var source: Variant = source_ref.get_ref()
 	return source as Control if source != null and is_instance_valid(source) else null
+
+
+func _remove_source_from_scopes(source_id: int) -> void:
+	var empty_scopes: Array[StringName] = []
+	for scope_id_value in _source_scopes:
+		var scope_id := StringName(scope_id_value)
+		var sources := _source_scopes[scope_id] as Dictionary
+		var stale_ids: Array[StringName] = []
+		for stable_id_value in sources:
+			var stable_id := StringName(stable_id_value)
+			var source_ref := sources[stable_id] as WeakRef
+			var source_value: Variant = source_ref.get_ref() if source_ref != null else null
+			if source_value == null or not is_instance_valid(source_value) or (source_value as Control).get_instance_id() == source_id:
+				stale_ids.append(stable_id)
+		for stable_id in stale_ids:
+			sources.erase(stable_id)
+		if sources.is_empty():
+			empty_scopes.append(scope_id)
+	for scope_id in empty_scopes:
+		_source_scopes.erase(scope_id)
 
 
 func _close_card() -> void:

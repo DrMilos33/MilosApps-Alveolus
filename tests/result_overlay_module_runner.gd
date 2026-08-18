@@ -88,9 +88,9 @@ func _run() -> void:
 	var failure_model := ResultOverlayViewModel.new(
 		2,
 		false,
-		"Zustand erschöpft",
-		"Der Zustand ist auf null gefallen.",
-		"Passe den Behandlungsplan vor dem nächsten Versuch an.",
+		"You suck",
+		"",
+		"   ",
 		_stats_fixture(),
 		"",
 		"",
@@ -101,7 +101,17 @@ func _run() -> void:
 	_check(not bool(overlay.get_modal().get_meta(&"result_success", true)), "Niederlage besitzt die semantische Gefahrenrolle")
 	_check(_optional_section_count(overlay) == 0, "Leere Belohnungssektionen erzeugen weder Karten noch Blank-Space")
 	var failure_title := overlay.find_child("OutcomeTitle", true, false) as Label
-	_check(failure_title != null and failure_title.text == "Zustand erschöpft", "Niederlagentitel bleibt eindeutig und nicht nur farbcodiert")
+	_check(failure_title != null and failure_title.text == "You suck", "Niederlagen-View-Model stellt den verbindlichen Titel exakt dar")
+	_check(overlay.find_child("Reason", true, false) == null, "Leerer Niederlagengrund erzeugt keinen Untertitelknoten")
+	_check(overlay.find_child("Detail", true, false) == null, "Inhaltsloses Niederlagendetail erzeugt keinen Reserveknoten")
+	var failure_content := overlay.find_child("ResultContent", true, false) as VBoxContainer
+	_check(
+		failure_content != null
+		and overlay.get_scroll_container().custom_minimum_size.y <= failure_content.get_combined_minimum_size().y + 1.0,
+		"Niederlage reserviert keine Höhe für ausgelassene Copy"
+	)
+	var result_overlay_source := FileAccess.get_file_as_string("res://scripts/ui/screens/result_overlay.gd")
+	_check(not result_overlay_source.contains("You suck"), "Niederlagentitel bleibt Presenter-Daten statt hardcodierter Overlay-Entscheidung")
 	_check(_primary_action_count(overlay) == 1, "Auch die Niederlage behält genau eine primäre Folgeaktion")
 
 	_assert_dependency_contract()

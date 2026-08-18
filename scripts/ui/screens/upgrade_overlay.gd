@@ -271,6 +271,11 @@ func _build() -> void:
 	_sheet = sheet_parts["panel"] as PanelContainer
 	_sheet_stack = sheet_parts["content"] as VBoxContainer
 	_sheet.name = "UpgradeSheet"
+	var level_up_title := _sheet_stack.get_child(0) as Label
+	if level_up_title != null:
+		level_up_title.name = "LevelUpTitle"
+		level_up_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		level_up_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_footer_actions = sheet_parts["actions"] as HBoxContainer
 	_footer_actions.hide()
 	_neutral_focus = Control.new()

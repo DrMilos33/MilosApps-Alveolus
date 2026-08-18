@@ -19,6 +19,7 @@ func _run() -> void:
 	await process_frame
 
 	_check(screen.route_id() == &"research", "Progression-Screen bewahrt die bestehende Forschungsroute")
+	_check(screen.context_detail_scope_id() == &"progression", "Progression-Screen besitzt einen stabilen ContextDetail-Scope")
 	_check(not screen.is_processing(), "Progression-Screen besitzt keine Prozessschleife")
 	_check(not screen.is_physics_processing(), "Progression-Screen besitzt keine Physikschleife")
 	_check(screen.research_scroll().follow_focus, "Forschungsscroll folgt Tastatur- und Gamepadfokus")
@@ -71,8 +72,13 @@ func _run() -> void:
 	_check(screen.registered_info_source_count() == 8, "Alle Forschungs- und Talentknoten besitzen eine Informationsquelle")
 	var registrations := screen.context_detail_registrations()
 	_check(registrations.size() == 8, "ContextDetail-API gibt jede aktuelle Quelle genau einmal aus")
+	var registration_ids: Dictionary = {}
 	for registration in registrations:
 		_check(bool(registration.get("hover_enabled", false)), "Automatische Kontextinformation ist ausschließlich Hover-registriert")
+		var registration_id := StringName(registration.get("id", &""))
+		_check(registration_id != &"" and not registration_ids.has(registration_id), "Jede Kontextquelle besitzt eine eindeutige stabile ID")
+		registration_ids[registration_id] = true
+	_check(registration_ids.has(&"research:research_available") and registration_ids.has(&"talent:plan_child"), "Stabile IDs unterscheiden Forschungs- und Talentquellen")
 
 	var intents := {
 		"tab": StringName(),
@@ -126,6 +132,9 @@ func _run() -> void:
 	_check(String(talent_payload.get("body", "")).contains("+2") and String(talent_payload.get("meta", "")).contains("2 P"), "Talentbeschreibung bleibt kurz und nennt Zahlen als Fakten")
 
 	var research_instance := available_research.get_instance_id()
+	var talent_instance := child_talent.get_instance_id()
+	var research_provider_before := screen.tooltip_provider_for(available_research)
+	var talent_provider_before := screen.tooltip_provider_for(child_talent)
 	var same_content: Variant = _fixture(2, &"research", "Forschung 18", "4 Talentpunkte · 2 frei")
 	_check(same_content.content_hash() == fixture.content_hash(), "Revision ist nicht Teil des Inhalts-Hashs")
 	_check(not screen.apply_view_model(same_content), "Neue Revision mit gleichem Inhalt erzeugt keinen UI-Churn")
@@ -136,6 +145,22 @@ func _run() -> void:
 	_check(screen.apply_view_model(tab_only_change), "Reiner Tabwechsel wird angewendet")
 	_check(screen.research_action(&"research_available").get_instance_id() == research_instance, "Tabwechsel baut Forschungskarten nicht neu")
 	_check(screen.selected_tab() == &"talents", "Tabwechsel aus dem ViewModel bleibt autoritativ")
+
+	child_talent.grab_focus()
+	await process_frame
+	var rank_change: Variant = _rank_change_fixture(4, &"talents")
+	_check(screen.apply_view_model(rank_change), "Rang- und Zustandsänderungen werden sichtbar angewendet")
+	await process_frame
+	_check(screen.research_action(&"research_available").get_instance_id() == research_instance, "Forschungsrang aktualisiert die bestehende Buttoninstanz in-place")
+	_check(screen.talent_action(&"plan_child").get_instance_id() == talent_instance, "Talentrang aktualisiert die bestehende Buttoninstanz in-place")
+	_check(get_root().gui_get_focus_owner() == child_talent, "In-place-Rangupdate bewahrt den Fokus am Ausgangselement")
+	_check(screen.tooltip_provider_for(screen.research_action(&"research_available")) == research_provider_before, "Forschungsquelle bewahrt ihren stabilen Provider")
+	_check(screen.tooltip_provider_for(screen.talent_action(&"plan_child")) == talent_provider_before, "Talentquelle bewahrt ihren stabilen Provider")
+	var updated_research_payload := screen.info_payload_for(screen.research_action(&"research_available"))
+	_check(String(updated_research_payload.get("body", "")).contains("+25 %") and String(updated_research_payload.get("meta", "")) == "3 Forschung", "Stabiler Forschungsprovider liefert die neuen Rangfakten")
+	var updated_talent_payload := screen.info_payload_for(screen.talent_action(&"plan_child"))
+	_check(String(updated_talent_payload.get("body", "")).contains("+3") and String(updated_talent_payload.get("meta", "")) == "3 P", "Stabiler Talentprovider liefert die neuen Rangfakten")
+	_check(_state_icon_kind(screen.talent_action(&"plan_child")) == &"check", "In-place-Talentupdate aktualisiert den sichtbaren Zustand")
 
 	screen.size = Vector2(850.0, 720.0)
 	await process_frame
@@ -164,6 +189,49 @@ func _fixture(revision: int, tab: StringName, research_balance: String, talent_b
 		true,
 		research,
 		_fixture_branches()
+	)
+
+
+func _rank_change_fixture(revision: int, tab: StringName) -> Variant:
+	var research: Array = [
+		_research_item(&"research_active", "Frühe Einordnung", "Rang 2/2", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false),
+		ProgressionViewModelScript.ResearchItemViewModel.create(
+			&"research_available",
+			"Schnellauswertung",
+			"Rang 1/2",
+			"3 Forschung",
+			&"research",
+			ProgressionViewModelScript.ItemState.AVAILABLE,
+			true,
+			_info("Schnellauswertung", "+25 % Befundfortschritt.", "3 Forschung", &"research", AlveolusVisualTheme.GOLD)
+		),
+		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false),
+	]
+	var branches := _fixture_branches()
+	branches[0] = _branch(&"planning", "Planung", &"plan", AlveolusVisualTheme.GOLD, [
+		_talent(&"plan_root", "Organisation I", "2 P", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.ACTIVE, true),
+		ProgressionViewModelScript.TalentNodeViewModel.create(
+			&"plan_child",
+			"Organisation II",
+			"3 P",
+			&"plan",
+			1,
+			0,
+			PackedStringArray(["plan_root"]),
+			ProgressionViewModelScript.ItemState.ACTIVE,
+			true,
+			_info("Organisation II", "+3 Kapazität.", "3 P", &"plan", AlveolusVisualTheme.COBALT)
+		),
+		_talent(&"plan_locked", "Karte halten", "1 P", 1, 2, PackedStringArray(["plan_root"]), ProgressionViewModelScript.ItemState.LOCKED, false),
+	])
+	return ProgressionViewModelScript.create(
+		revision,
+		tab,
+		"Forschung 15",
+		"4 Talentpunkte · 1 frei",
+		true,
+		research,
+		branches
 	)
 
 
@@ -253,6 +321,8 @@ func _check_source_contracts() -> void:
 	_check(not screen_source.contains("func _process("), "Progression-Screen definiert keine Prozessschleife")
 	_check(not screen_source.contains("func _physics_process("), "Progression-Screen definiert keine Physikschleife")
 	_check(not screen_source.contains("focus_entered.connect"), "Fokus allein öffnet keine Detailkarte")
+	_check(screen_source.contains("_sync_research") and screen_source.contains("_refresh_talents"), "Rangänderungen aktualisieren vorhandene Karten differenziell")
+	_check(screen_source.contains("context_detail_id") and screen_source.contains("_info_payload_for_stable_id"), "Kontextprovider werden über stabile fachliche IDs aufgelöst")
 	_check(screen_source.contains("TALENT_SYMBOLS_BY_ID") and screen_source.contains("_build_talent_symbol_content"), "Talentbaum baut seine Knoten ausschließlich aus eindeutigen Symbolen")
 	_check(branch_source.contains("draw_polyline") and not branch_source.contains("draw_circle"), "Talentverbindungen verwenden Linien ohne Kreispunkte")
 	_check(model_source.contains("Array[ResearchItemViewModel]") and model_source.contains("Array[TalentBranchViewModel]"), "ViewModel hält Kindeinträge typisiert")

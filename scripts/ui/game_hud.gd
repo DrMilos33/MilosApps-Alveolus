@@ -2206,17 +2206,16 @@ func _apply_progression_screen_model() -> void:
 func _register_progression_context_sources() -> void:
 	if context_detail_controller == null or progression_screen == null:
 		return
-	for source in progression_context_sources:
-		if is_instance_valid(source):
-			context_detail_controller.unregister_source(source)
+	var registrations := progression_screen.context_detail_registrations()
+	context_detail_controller.sync_sources(
+		progression_screen.context_detail_scope_id(),
+		registrations
+	)
 	progression_context_sources.clear()
-	for registration in progression_screen.context_detail_registrations():
+	for registration in registrations:
 		var source := registration.get("source") as Control
-		var provider: Callable = registration.get("provider", Callable())
-		if source == null or not provider.is_valid():
-			continue
-		register_context_detail(source, provider, bool(registration.get("hover_enabled", true)))
-		progression_context_sources.append(source)
+		if source != null and is_instance_valid(source):
+			progression_context_sources.append(source)
 
 
 func _map_progression_compatibility_controls() -> void:

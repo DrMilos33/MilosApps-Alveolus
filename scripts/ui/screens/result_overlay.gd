@@ -187,14 +187,16 @@ func _rebuild_modal() -> void:
 	title.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	heading.add_child(title)
 
-	if not _view_model.get_reason().is_empty():
-		var reason := AlveolusUIComponents.label(_view_model.get_reason(), AlveolusVisualTheme.TYPE_BODY_LABEL)
+	var reason_text := _view_model.get_reason().strip_edges()
+	if not reason_text.is_empty():
+		var reason := AlveolusUIComponents.label(reason_text, AlveolusVisualTheme.TYPE_BODY_LABEL)
 		reason.name = "Reason"
 		reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_body_content.add_child(reason)
-	if not _view_model.get_detail().is_empty():
-		var detail := AlveolusUIComponents.label(_view_model.get_detail(), AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	var detail_text := _view_model.get_detail().strip_edges()
+	if not detail_text.is_empty():
+		var detail := AlveolusUIComponents.label(detail_text, AlveolusVisualTheme.TYPE_MUTED_LABEL)
 		detail.name = "Detail"
 		detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

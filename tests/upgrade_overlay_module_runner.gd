@@ -119,11 +119,19 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 
 	_check(overlay.modal_sheet().theme_type_variation == AlveolusVisualTheme.TYPE_MODAL_SHEET, "Ausbauwahl besitzt die zentrale ModalSheet-Rolle")
 	_check(overlay.modal_sheet().get_meta(&"alveolus_component", &"") == &"modal_sheet", "Ausbauwahl stammt aus der gemeinsamen ModalSheet-Komponente")
+	var level_up_titles := overlay.modal_sheet().find_children("*", "Label", true, false).filter(
+		func(node: Node) -> bool: return (node as Label).text == "Level Up!"
+	)
+	_check(level_up_titles.size() == 1, "Ausbauwahl besitzt genau eine knappe Level-Up-Überschrift")
+	var level_up_title: Label = null
+	if level_up_titles.size() == 1:
+		level_up_title = level_up_titles[0] as Label
+	_check(level_up_title != null and level_up_title.name == "LevelUpTitle", "Level-Up-Überschrift besitzt einen eindeutigen lokalen Präsentationsknoten")
+	_check(level_up_title != null and level_up_title.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "Level Up! ist lokal typografisch zentriert")
 	_check(
-		overlay.modal_sheet().find_children("*", "Label", true, false).any(
-			func(node: Node) -> bool: return (node as Label).text == "Level Up!"
-		),
-		"Ausbauwahl benennt den Levelaufstieg knapp und eindeutig"
+		level_up_title != null
+		and absf(level_up_title.get_global_rect().get_center().x - overlay.modal_sheet().get_global_rect().get_center().x) <= 1.0,
+		"Level Up! ist geometrisch zur Modalmitte zentriert"
 	)
 	_check(overlay.body_scroll().follow_focus, "Responsiver Inhaltsviewport folgt Tastatur- und Gamepadfokus")
 	_check(overlay.body_scroll().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Ausbauwahl scrollt niemals horizontal")
@@ -131,6 +139,8 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(not overlay.education_panel().visible, "Eine einzelne normale Option zeigt trotz vorhandenem Text keine Einführung")
 	_check(overlay.cards().size() == 1 and overlay.cards_grid().columns == 1, "Eine einzelne Option bleibt eine eigenständige kompakte Karte")
 	_assert_card_contract(overlay.cards()[0], ordinary_single.option_at(0).id())
+	var ordinary_title := overlay.cards()[0].find_child("UpgradeTitle", true, false) as Label
+	_check(ordinary_title != null and ordinary_title.text == ordinary_single.option_at(0).title(), "Kartenüberschrift übernimmt ausschließlich den Presenter-Text aus dem View-Model")
 	_check(get_root().gui_get_focus_owner() == overlay.neutral_focus_target(), "Mauspräsentation parkt Fokus sicher im Modal statt auf einer Hintergrundaktion")
 	_check(not _visible_focus_ring(overlay.cards()[0]), "Ohne expliziten Fokus bleibt der Cyanring verborgen")
 	_check(_focus_target_inside(overlay.neutral_focus_target(), overlay.neutral_focus_target().focus_next, overlay), "Tab vom neutralen Fokusplatz bleibt im blockierenden Modal")

@@ -17,7 +17,7 @@ func _run() -> void:
 	get_root().add_child(host)
 
 	var source := PanelContainer.new()
-	source.position = Vector2(406.0, 78.0)
+	source.position = Vector2(406.0, 168.0)
 	source.size = Vector2(62.0, 48.0)
 	host.add_child(source)
 	var focus_child := Button.new()
@@ -28,6 +28,10 @@ func _run() -> void:
 	var controller := ContextDetailControllerScript.new()
 	host.add_child(controller)
 	await _settle()
+	var opened_events := [0]
+	var closed_events := [0]
+	controller.detail_opened.connect(func(_source: Control, _explicit: bool) -> void: opened_events[0] += 1)
+	controller.detail_closed.connect(func() -> void: closed_events[0] += 1)
 
 	var long_copy := [false]
 	var provider_calls := [0]
@@ -40,7 +44,12 @@ func _run() -> void:
 			"accent": AlveolusVisualTheme.COBALT,
 			"icon_kind": &"finding_progress",
 		}
-	controller.register_source(source, provider)
+	controller.sync_sources(&"progression", [{
+		"id": &"research:quick_test",
+		"source": source,
+		"provider": provider,
+		"hover_enabled": true,
+	}])
 
 	_check(controller.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Der Full-rect-Controller ignoriert Mausereignisse")
 	_check(not controller.is_processing(), "Der Controller besitzt keine dauerhafte Prozessschleife")
@@ -58,8 +67,24 @@ func _run() -> void:
 	_check(hover_copy == ["Schnelltest", "Ein kompakter Befundhinweis.", "Passiv · 1 K"], "Hover übernimmt Titel, Body und Meta vollständig")
 	_check(_inside_viewport(controller.card, Vector2(480.0, 320.0)), "Die Hoverkarte bleibt vollständig im Viewport: %s" % controller.card.get_global_rect())
 	_check(not controller.card.get_global_rect().intersects(source.get_global_rect()), "Die Hoverkarte überdeckt ihren Auslöser nicht")
+	_check(controller.card.get_global_rect().end.x <= source.get_global_rect().position.x - 5.5, "AUTO fällt am rechten Rand diagonal nach links oberhalb zurück")
+	_check(controller.card.get_global_rect().end.y <= source.get_global_rect().position.y - 5.5, "AUTO hält auch im Links-Fallback die Karte oberhalb der Quelle")
 	_check(_tree_ignores_mouse(controller.card), "Karte und kompletter Unterbaum ignorieren Mausereignisse")
 	var short_height := controller.card.size.y
+	long_copy[0] = true
+	controller.sync_sources(&"progression", [{
+		"id": &"research:quick_test",
+		"source": source,
+		"provider": provider,
+		"hover_enabled": true,
+	}])
+	await _settle()
+	_check(controller.is_open() and controller.active_source() == source, "Stable-ID-Sync bewahrt die geöffnete Quellinstanz")
+	_check(opened_events[0] == 1 and closed_events[0] == 0, "Provider-Update erzeugt keinen Close/Open-Zyklus")
+	_check(provider_calls[0] == 2, "Stable-ID-Sync wertet ausschließlich die aktive Quelle neu aus")
+	_check(controller.body_label.text.contains("längerer Befundhinweis"), "Offener Tooltip übernimmt aktualisierte Rangdaten in-place")
+	_check(controller.card.size.y > short_height, "In-place-Refresh misst die neue Inhaltshöhe erneut")
+	hover_copy = [controller.title_label.text, controller.body_label.text, controller.meta_label.text]
 
 	source.mouse_exited.emit()
 	await _settle()
@@ -76,10 +101,9 @@ func _run() -> void:
 	_check(controller.toggle_focused(focus_child), "Erneutes ui_info wird vom selben Ursprung verarbeitet")
 	_check(not controller.is_open(), "Erneutes ui_info schließt die ausdrückliche Karte")
 
-	long_copy[0] = true
 	source.mouse_entered.emit()
 	await _settle()
-	_check(provider_calls[0] == 3, "Dynamische Provider werden bei jedem erneuten Öffnen ausgewertet")
+	_check(provider_calls[0] == 4, "Dynamische Provider werden bei jedem erneuten Öffnen ausgewertet")
 	_check(controller.card.size.y > short_height, "Die Kartenhöhe folgt dem tatsächlichen mehrzeiligen Inhalt: kurz=%.1f lang=%.1f" % [short_height, controller.card.size.y])
 	_check(is_zero_approx(controller.card.custom_minimum_size.y), "Die Karte reserviert keine feste Leerraumhöhe")
 	source.hide()
@@ -94,6 +118,23 @@ func _run() -> void:
 	source.queue_free()
 	await _settle()
 	_check(not controller.is_open() and controller.active_source() == null, "Eine freigegebene Quelle hinterlässt keine schwebende Karte")
+
+	var preferred_source := PanelContainer.new()
+	preferred_source.position = Vector2(24.0, 188.0)
+	preferred_source.size = Vector2(62.0, 48.0)
+	host.add_child(preferred_source)
+	controller.register_source(preferred_source, func() -> Dictionary:
+		return {"title": "Befund", "body": "+2 Monsterherden", "accent": AlveolusVisualTheme.CORAL}
+	)
+	preferred_source.mouse_entered.emit()
+	await _settle()
+	_check(controller.card.get_global_rect().position.x >= preferred_source.get_global_rect().end.x + 5.5, "AUTO bevorzugt diagonal rechts oberhalb")
+	_check(controller.card.get_global_rect().end.y <= preferred_source.get_global_rect().position.y - 5.5, "Bevorzugte AUTO-Position liegt vollständig oberhalb")
+	_check(_inside_viewport(controller.card, Vector2(480.0, 320.0)), "Bevorzugte diagonale Position bleibt viewportgebunden")
+	preferred_source.mouse_exited.emit()
+	await _settle()
+	preferred_source.queue_free()
+	await _settle()
 
 	var ability_strip := PanelContainer.new()
 	ability_strip.position = Vector2(112.0, 264.0)
