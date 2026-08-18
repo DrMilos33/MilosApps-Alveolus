@@ -66,7 +66,7 @@ static func tutorial_hint_definitions() -> Dictionary:
 static func enemy_definitions() -> Dictionary:
 	return {
 		&"pneumococcus": EnemyDefinition.create(
-			&"pneumococcus", "Bakterium", 22.0, 60.0, 2.2, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
+			&"pneumococcus", "Bakterium", 22.0, 45.0, 2.2, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
 		),
 		&"bacterial_cluster": EnemyDefinition.create(
 			&"bacterial_cluster", "Bakteriengruppe", 74.0, 45.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"

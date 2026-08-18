@@ -37,11 +37,11 @@ func _test_catalog_contract() -> void:
 	_near(levels[3].final_spawn_interval, 0.108, "Fall 3 endet mit dem verlangsamten Spawnintervall")
 
 	var enemies := ContentCatalog.enemy_definitions()
-	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 60.0, "Bakterium verwendet die neue Basisgeschwindigkeit")
+	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 45.0, "Bakterium verwendet die neue Basisgeschwindigkeit")
 	_near((enemies[&"bacterial_cluster"] as EnemyDefinition).speed, 45.0, "Bakteriengruppe verwendet die neue Basisgeschwindigkeit")
 	_near((enemies[&"minor_focus"] as EnemyDefinition).speed, 20.0, "Kleiner Herd verwendet die neue Basisgeschwindigkeit")
 	_near((enemies[&"infection_focus"] as EnemyDefinition).speed, 30.0, "Infektionsherd verwendet die neue Basisgeschwindigkeit")
-	_near(PlayerStats.BASE_MOVEMENT_SPEED, 300.0, "Doctor Milos verwendet die neue Basisgeschwindigkeit")
+	_near(PlayerStats.BASE_MOVEMENT_SPEED, 150.0, "Doctor Milos verwendet die neue Basisgeschwindigkeit")
 
 	var treatments := TreatmentDefinition.catalog()
 	_near((treatments[&"treatment_precision"] as TreatmentDefinition).base_damage, 16.0, "Impuls bleibt unverändert")
