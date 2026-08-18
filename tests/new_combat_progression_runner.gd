@@ -230,6 +230,21 @@ func _test_defense_cells_use_geometry_and_per_cell_cooldowns() -> void:
 	world.step_fixed(0.0011)
 	_equal(hit_counts[first], 2, "Die erste Zelle darf nach 0,1 Sekunden erneut treffen")
 	_equal(hit_counts[second], 2, "Die zweite Zelle besitzt denselben unabhängigen Cooldown")
+
+	world.clear()
+	world.configure_stats(1, CombatDistanceScale.world_from_stage(4), DefenseCellWorld.DEFAULT_HIT_RADIUS, 12.0, 0.1)
+	var hits_before_radius_check := hit_damages.size()
+	positions[first] = avatar.global_position
+	positions[second] = Vector2(-200.0, -200.0)
+	query.rebuild(handles)
+	world.step_fixed(0.0)
+	_equal(hit_damages.size(), hits_before_radius_check, "Ein Gegner innerhalb des Orbitradius, aber außerhalb der sichtbaren Zellhitbox, wird nicht getroffen")
+	positions[first] = world.cell_position(0)
+	query.rebuild(handles)
+	world.step_fixed(0.0)
+	_equal(hit_damages.size(), hits_before_radius_check + 1, "Ein Gegner an der sichtbaren Zelle wird innerhalb der kleinen festen Hitbox getroffen")
+	_near(world.orbit_radius, 120.0, "Radiusstufe 4 steuert ausschließlich den Zellenorbit")
+	_near(world.hit_radius, 15.0, "Die physische Zellenhitbox bleibt an der sichtbaren Zellgröße gekoppelt")
 	avatar.free()
 
 

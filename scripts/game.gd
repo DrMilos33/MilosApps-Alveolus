@@ -91,7 +91,9 @@ var current_upgrade_options: Array[UpgradeDefinition] = []
 var active_boss: InfectionEnemy
 var active_boss_handles: PackedInt64Array = PackedInt64Array()
 var active_boss_handle_by_instance: Dictionary = {}
+var active_boss_phase_by_handle: Dictionary = {}
 var boss_aggregate_maximum: float = 0.0
+var boss_aggregate_phase: int = 0
 var enemy_runtime_resistance_profiles: Dictionary = {}
 
 var pending_run_context: RunContext
@@ -1278,7 +1280,9 @@ func start_run(run_context: RunContext = null) -> void:
 	active_boss = null
 	active_boss_handles.clear()
 	active_boss_handle_by_instance.clear()
+	active_boss_phase_by_handle.clear()
 	boss_aggregate_maximum = 0.0
+	boss_aggregate_phase = 0
 	intro_lesson = 1 if selected_level.is_tutorial else 0
 	intro_phase = &"await_primary_materialization" if selected_level.is_tutorial else &""
 	intro_primary_enemy = null
@@ -1973,12 +1977,12 @@ func _immune_step(delta: float) -> void:
 		return
 	var count := stats.immune_cell_count()
 	var orbit_radius := stats.immune_orbit_radius()
-	var collision_radius := 15.0
+	var collision_radius := DefenseCellWorld.DEFAULT_HIT_RADIUS
 	var damage := stats.immune_damage
 	var hit_interval := 0.1
 	if build_state != null:
 		count = maxi(1, roundi(build_state.value(RunBuildState.DEFENSE_CELL_PROJECTILES, float(count), PackedStringArray(["defense_cell"]))))
-		collision_radius = build_state.value(RunBuildState.DEFENSE_CELL_RADIUS, collision_radius, PackedStringArray(["defense_cell"]))
+		orbit_radius = build_state.value(RunBuildState.DEFENSE_CELL_RADIUS, orbit_radius, PackedStringArray(["defense_cell"]))
 		damage = build_state.value(RunBuildState.DEFENSE_CELL_DAMAGE, damage, PackedStringArray(["defense_cell"]))
 		hit_interval = build_state.value(RunBuildState.DEFENSE_CELL_HIT_INTERVAL, hit_interval, PackedStringArray(["defense_cell"]))
 	defense_cell_world.configure_stats(count, orbit_radius, collision_radius, damage, hit_interval)
@@ -2136,7 +2140,7 @@ func _spawn_enemy(
 		enemy.minions_requested.connect(_on_minions_requested)
 		enemy.damage_feedback.connect(_on_enemy_damage_feedback)
 		enemy.health_changed.connect(_on_enemy_health_changed.bind(enemy))
-		enemy.boss_phase_changed.connect(_on_boss_phase_changed)
+		enemy.boss_phase_changed.connect(_on_boss_phase_changed.bind(enemy))
 		enemy.materialized.connect(_on_enemy_materialized)
 		enemy.damage_applied.connect(_on_enemy_damage_applied)
 		simulation_root.add_child(enemy)
@@ -2179,8 +2183,10 @@ func _spawn_boss() -> void:
 		return
 	active_boss_handles.clear()
 	active_boss_handle_by_instance.clear()
+	active_boss_phase_by_handle.clear()
 	active_boss = null
 	boss_aggregate_maximum = 0.0
+	boss_aggregate_phase = 0
 	for boss_index in range(maxi(1, config.boss_count)):
 		var boss := _spawn_enemy(
 			&"infection_focus",
@@ -2215,6 +2221,7 @@ func _register_active_boss(enemy: InfectionEnemy) -> void:
 		return
 	active_boss_handles.append(handle)
 	active_boss_handle_by_instance[enemy.get_instance_id()] = handle
+	active_boss_phase_by_handle[handle] = 0
 	boss_aggregate_maximum += maxf(enemy.max_health, 0.0)
 	if active_boss == null:
 		active_boss = enemy
@@ -2225,6 +2232,7 @@ func _remove_active_boss(enemy: InfectionEnemy) -> bool:
 		return false
 	var handle := int(active_boss_handle_by_instance.get(enemy.get_instance_id(), EntityHandle.INVALID))
 	active_boss_handle_by_instance.erase(enemy.get_instance_id())
+	active_boss_phase_by_handle.erase(handle)
 	var index := active_boss_handles.find(handle)
 	if index >= 0:
 		active_boss_handles.remove_at(index)
@@ -2271,6 +2279,8 @@ func _show_active_boss_hud() -> void:
 		return
 	hud.show_boss(maximum, config.boss_phase_minions.size())
 	hud.update_boss_health(float(snapshot.get("current", 0.0)), maximum)
+	if boss_aggregate_phase > 0:
+		hud.show_boss_phase(boss_aggregate_phase)
 
 func _on_minions_requested(origin: Vector2, count: int) -> void:
 	if _fixed_step_active:
@@ -2286,9 +2296,20 @@ func _apply_minions_requested(origin: Vector2, count: int) -> void:
 		var position := topology.wrap_position(origin + Vector2.from_angle(angle) * rng.randf_range(88.0, 130.0))
 		_spawn_enemy(&"pneumococcus", position, -1.0, true)
 
-func _on_boss_phase_changed(phase: int) -> void:
-	hud.show_boss_phase(phase)
-	if discovery_manager.request(&"boss_phases", active_boss):
+func _on_boss_phase_changed(phase: int, enemy: InfectionEnemy) -> void:
+	if not is_instance_valid(enemy) or enemy_world == null:
+		return
+	var handle := int(active_boss_handle_by_instance.get(enemy.get_instance_id(), EntityHandle.INVALID))
+	if not EntityHandle.is_valid(handle) or enemy_world.resolve(handle) != enemy:
+		return
+	var previous_phase := int(active_boss_phase_by_handle.get(handle, 0))
+	if phase <= previous_phase:
+		return
+	active_boss_phase_by_handle[handle] = phase
+	if phase > boss_aggregate_phase:
+		boss_aggregate_phase = phase
+		hud.show_boss_phase(boss_aggregate_phase)
+	if discovery_manager.request(&"boss_phases", enemy):
 		_try_present_next_discovery()
 
 func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
@@ -3489,7 +3510,9 @@ func _cleanup_run_nodes() -> void:
 	active_boss = null
 	active_boss_handles.clear()
 	active_boss_handle_by_instance.clear()
+	active_boss_phase_by_handle.clear()
 	boss_aggregate_maximum = 0.0
+	boss_aggregate_phase = 0
 	enemy_runtime_resistance_profiles.clear()
 	intro_enemy_roles.clear()
 	intro_pickup_roles.clear()

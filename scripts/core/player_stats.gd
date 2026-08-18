@@ -318,7 +318,7 @@ func immune_radius() -> float:
 	))
 
 func immune_orbit_radius() -> float:
-	return 80.0 + float(immune_level) * 18.0 if immune_level > 0 else 0.0
+	return immune_radius()
 
 func support_recovery() -> float:
 	if support_level <= 0:

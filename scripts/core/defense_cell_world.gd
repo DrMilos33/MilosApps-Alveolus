@@ -8,13 +8,14 @@ signal enemy_hit(handle: int, damage: float)
 
 const ORBIT_SPEED := 1.7
 const MIN_HIT_INTERVAL := 0.1
+const DEFAULT_HIT_RADIUS := 15.0
 
 var topology: ArenaTopology
 var avatar: Node2D
 var query: CombatQuery
 var count: int = 0
 var orbit_radius: float = 0.0
-var hit_radius: float = 15.0
+var hit_radius: float = DEFAULT_HIT_RADIUS
 var damage: float = 0.0
 var hit_interval: float = MIN_HIT_INTERVAL
 var angle: float = 0.0

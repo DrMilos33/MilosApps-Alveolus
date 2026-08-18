@@ -142,6 +142,24 @@ func _test_runtime_config_and_double_boss() -> void:
 	game.spawn_accumulator = 999999.0
 	_equal(game.config.boss_count, 2, "Der Doppelboss-Vertrag erreicht RunConfig")
 	_equal(game.state.boss_count_target, 2, "RunState erwartet beide Bosse")
+	game.stats.immune_level = 1
+	game._immune_step(0.0)
+	_near(game.defense_cell_world.orbit_radius, 120.0, "Game leitet Radiusstufe 4 an den Abwehrzellenorbit weiter")
+	_near(game.defense_cell_world.hit_radius, 15.0, "Game hält die physische Abwehrzellenhitbox fest klein")
+	game.build_state.add_modifier(ModifierDefinition.create(
+		&"test_defense_orbit",
+		RunBuildState.DEFENSE_CELL_RADIUS,
+		ModifierDefinition.Operation.ADD,
+		30.0,
+		&"test",
+		PackedStringArray(["defense_cell"])
+	))
+	game._immune_step(0.0)
+	_near(game.defense_cell_world.orbit_radius, 150.0, "Radius-Buildmodifikator vergrößert ausschließlich den Abwehrzellenorbit")
+	_near(game.defense_cell_world.hit_radius, 15.0, "Radius-Buildmodifikator vergrößert die physische Hitbox nicht")
+	game.build_state.remove_modifier(&"test_defense_orbit")
+	game.stats.immune_level = 0
+	game.defense_cell_world.clear()
 
 	var finish_events := [0]
 	var finish_success := [false]
@@ -166,6 +184,19 @@ func _test_runtime_config_and_double_boss() -> void:
 	_near(float(initial_snapshot.get("current", 0.0)), first.max_health + second.max_health, "Boss-HUD aggregiert das aktuelle Leben beider Bosse")
 	_near(float(initial_snapshot.get("maximum", 0.0)), first.max_health + second.max_health, "Boss-HUD aggregiert das Maximalleben beider Bosse")
 	_equal(int(initial_snapshot.get("remaining", 0)), 2, "Boss-HUD meldet zwei verbleibende Bosse")
+	var seen_without_boss_phase: Dictionary = {}
+	for discovery_id in game.discovery_definitions:
+		if discovery_id != &"boss_phases":
+			seen_without_boss_phase[discovery_id] = true
+	game.discovery_manager.configure(game.discovery_definitions, seen_without_boss_phase)
+	first.take_damage(first.max_health * 0.31)
+	_equal(game.boss_aggregate_phase, 1, "Die erste erreichte Doppelbossphase wird aggregiert")
+	_equal(game.discovery_manager.active.get("target"), first, "Bossphasen-Discovery verwendet den tatsächlich emittierenden Boss")
+	game._on_discovery_dismissed()
+	first.take_damage(first.max_health * 0.31)
+	_equal(game.boss_aggregate_phase, 2, "Die höchste erreichte Phase steigt deterministisch")
+	second.take_damage(second.max_health * 0.31)
+	_equal(game.boss_aggregate_phase, 2, "Eine niedrigere Phase des zweiten Bosses lässt die aggregierte Anzeige nicht zurückspringen")
 
 	var stale_handle := int(handles[0])
 	first.take_damage(first.health)
