@@ -388,13 +388,15 @@ func _contained_position(
 			maxf(0.0, viewport_size.y - VIEWPORT_MARGIN * 2.0)
 		)
 	)
-	# AUTO is one global rule for every context source: diagonally above and
-	# right first, then diagonally above and left. If neither complete rectangle
-	# fits, the preferred right-hand position is clamped deterministically to
-	# the viewport instead of switching to a screen-specific side/below layout.
+	# AUTO is one global rule at the actual source Control: diagonally right/left
+	# above first, then right/left below. Only after all complete candidates fail
+	# do we clamp in the same stable order, rejecting any result that would cover
+	# the source.
 	var candidates: Array[Vector2] = [
 		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.position.y - card_size.y - SOURCE_GAP),
 		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.position.y - card_size.y - SOURCE_GAP),
+		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.end.y + SOURCE_GAP),
+		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.end.y + SOURCE_GAP),
 	]
 	for candidate in candidates:
 		if bounds.encloses(Rect2(candidate, card_size)):
@@ -402,10 +404,36 @@ func _contained_position(
 	var maximum := bounds.end - card_size
 	maximum.x = maxf(maximum.x, bounds.position.x)
 	maximum.y = maxf(maximum.y, bounds.position.y)
-	return Vector2(
-		clampf(candidates[0].x, bounds.position.x, maximum.x),
-		clampf(candidates[0].y, bounds.position.y, maximum.y)
-	)
+	for candidate in candidates:
+		var contained := Vector2(
+			clampf(candidate.x, bounds.position.x, maximum.x),
+			clampf(candidate.y, bounds.position.y, maximum.y)
+		)
+		if not Rect2(contained, card_size).intersects(source_rect):
+			return contained
+
+	# A gap can be impossible by only a few pixels at very small viewports. Keep
+	# the card source-exclusive even then by retrying the same order flush with
+	# the source before treating the geometry as physically impossible.
+	var flush_candidates: Array[Vector2] = [
+		Vector2(source_rect.end.x, source_rect.position.y - card_size.y),
+		Vector2(source_rect.position.x - card_size.x, source_rect.position.y - card_size.y),
+		Vector2(source_rect.end.x, source_rect.end.y),
+		Vector2(source_rect.position.x - card_size.x, source_rect.end.y),
+	]
+	for candidate in flush_candidates:
+		var flush_contained := Vector2(
+			clampf(candidate.x, bounds.position.x, maximum.x),
+			clampf(candidate.y, bounds.position.y, maximum.y)
+		)
+		if not Rect2(flush_contained, card_size).intersects(source_rect):
+			return flush_contained
+
+	# A rectangle that cannot fit on any side of the source cannot be both fully
+	# contained and source-exclusive. Production cards are width-constrained and
+	# do not reach this geometry; preserve the stronger no-cover contract if a
+	# synthetic caller nevertheless supplies it.
+	return flush_candidates[0]
 
 
 func _set_surface_opacity(opacity: float) -> void:

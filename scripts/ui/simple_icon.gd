@@ -4,10 +4,10 @@ extends Control
 const GLYPH_ARTBOARD := 52.0
 const IMPORTED_GLYPH_EXTENT := 0.76
 const DRAWN_KINDS: Array[StringName] = [
-	&"back", &"chevron_right", &"chevron_down", &"play", &"story", &"lexicon", &"clock", &"boss", &"clinic", &"offline",
+	&"back", &"chevron_right", &"chevron_down", &"play", &"story", &"lexicon", &"clock", &"boss", &"boss_phases", &"infection_focus", &"clinic", &"character_stats", &"offline",
 	&"passive_research", &"antibiotic", &"automatic_therapy", &"treatment", &"immune",
-	&"neutrophil_orbit", &"support", &"supportive_oxygenation", &"practice", &"research",
-	&"archive", &"levels", &"settings", &"stability_reserve", &"therapy_precision", &"treatment_precision", &"preanalysis",
+	&"neutrophil_orbit", &"support", &"supportive_oxygenation", &"practice", &"research", &"research_reward",
+	&"archive", &"levels", &"settings", &"stability_reserve", &"patient_stability", &"therapy_precision", &"treatment_precision", &"preanalysis",
 	&"second_opinion", &"analysis", &"analysis_pickup", &"sample", &"sample_logistics",
 	&"reaction", &"finding", &"finding_progress", &"plan", &"components", &"ability",
 	&"passive", &"reserve", &"treatment_spread", &"treatment_pierce",
@@ -78,9 +78,9 @@ func _draw() -> void:
 			]), accent)
 		&"circle":
 			draw_circle(Vector2.ZERO, 8.0, accent)
-		&"boss":
+		&"boss", &"boss_phases", &"infection_focus":
 			_draw_boss()
-		&"clinic":
+		&"clinic", &"character_stats":
 			draw_arc(Vector2.ZERO, 17.0, 0.0, TAU, 28, accent, 2.5, true)
 			_draw_cross(Vector2.ZERO)
 		&"offline":
@@ -98,13 +98,13 @@ func _draw() -> void:
 			_draw_support()
 		&"practice":
 			_draw_practice()
-		&"research":
+		&"research", &"research_reward":
 			_draw_flask()
 		&"archive", &"levels":
 			_draw_archive()
 		&"settings":
 			_draw_settings()
-		&"stability_reserve":
+		&"stability_reserve", &"patient_stability":
 			_draw_shield()
 			_draw_cross(Vector2.ZERO, 0.72)
 		&"therapy_precision", &"treatment_precision", &"target":

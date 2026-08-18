@@ -209,10 +209,11 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(registrations.size() == 2 and bool(registrations[0].get("hover_enabled", false)), "Beide stabilen Slots exponieren hoverfähige ContextDetail-Registrierungen")
 	_check(registrations.all(func(registration: Dictionary) -> bool:
 		return (
-			registration.get("anchor") == hud.ability_panel()
-			and int(registration.get("placement", -1)) == ContextDetailController.Placement.ABOVE_CENTER
+			registration.get("source") is Control
+			and not registration.has("anchor")
+			and not registration.has("placement")
 		)
-	), "Beide Fähigkeiten verankern ihren Tooltip stabil oberhalb der gemeinsamen Leiste")
+	), "Beide Fähigkeiten übergeben ausschließlich ihr tatsächliches Source-Control an die globale AUTO-Regel")
 	var hover_provider := hud.tooltip_provider_for(hud.ability_buttons()[0])
 	_check(hover_provider.is_valid() and hover_provider == hud.ui_info_provider_for(hud.ability_buttons()[0]), "Maus-Hover und ui_info teilen dieselbe stabile Informationsquelle")
 	var hover_payload: Dictionary = hover_provider.call()
@@ -375,7 +376,7 @@ func _vital_snapshot() -> Dictionary:
 func _stat_rows() -> Array:
 	return [
 		{"id": &"defense", "icon_id": &"defense_training", "value": "8 %", "accessible_name": "Effektive Verteidigung", "priority": 100},
-		{"id": &"movement_speed", "icon_id": &"movement_training", "value": "338", "accessible_name": "Bewegungstempo", "priority": 90},
+		{"id": &"movement_speed", "icon_id": &"movement_training", "value": "300", "accessible_name": "Geschwindigkeit", "priority": 90},
 		{"id": &"life_regeneration", "icon_id": &"life_regeneration", "value": "0,8/s", "accessible_name": "Regeneration", "priority": 80},
 		{"id": &"experience_gain", "icon_id": &"experience_gain", "value": "+15 %", "accessible_name": "EXP-Multiplikator", "priority": 70},
 		{"id": &"resistance_fire", "icon_id": &"damage_fire", "value": "0 %", "accessible_name": "Feuerresistenz", "priority": 60},

@@ -276,14 +276,14 @@ func _run() -> void:
 	var module_catalog := ContentCatalog.loadout_module_definitions()
 	var prepared := PreparedLoadout.default_loadout()
 	var validation := LoadoutValidator.validate(prepared, module_catalog, {}, 8)
-	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"high_load"], "validation": validation}, module_catalog.values(), prepared)
+	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"monster_health_15"], "validation": validation}, module_catalog.values(), prepared)
 	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Impuls"), "PreparedLoadout wird ohne UI-Adapter gelesen")
 	_check(hud.preparation_capacity_label.text.contains("6 / 8"), "Validator liefert die Kapazität direkt")
 	_check(hud.current_preparation_snapshot.get("treatment_id") == "treatment_precision", "PreparedLoadout erzeugt den Start-Snapshot")
 	prepared.treatment_id = &""
 	validation = LoadoutValidator.validate(prepared, module_catalog, {}, 8)
-	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"high_load"], "validation": validation}, module_catalog.values(), prepared)
-	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Wählen") and _named_label_text(hud.preparation_slots.get_child(1) as Control, "Title").contains("Abwehrstoß"), "Leere Grundbehandlung verschiebt aktive Slots nicht")
+	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"monster_health_15"], "validation": validation}, module_catalog.values(), prepared)
+	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Wählen") and _named_label_text(hud.preparation_slots.get_child(1) as Control, "Title").contains("idk name stoß"), "Leere Grundbehandlung verschiebt aktive Slots nicht")
 
 	var intro_view := prep_view.duplicate(true)
 	intro_view["tutorial_locked"] = true
@@ -316,7 +316,7 @@ func _run() -> void:
 	var research_events: Array[StringName] = []
 	hud.research_purchase_requested.connect(func(id: StringName) -> void: research_events.append(id))
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
-	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 8, "Die acht Forschungen nutzen bei 1280 Pixeln ein kompaktes Dreispaltenbrett")
+	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 8, "Die acht Forschungen nutzen bei 1280 Pixeln ein kompaktes Vierspaltenbrett")
 	_check(hud.research_buy_buttons.has(&"movement_training") and SimpleIcon.supports(&"movement_training"), "Bewegungstraining ist als achte Forschung mit zentral registrierter Bewegungsglyphe verfügbar")
 	var movement_training_card := hud.research_buy_buttons[&"movement_training"] as Button
 	var movement_training_glyph_found := false
@@ -333,7 +333,13 @@ func _run() -> void:
 	await process_frame
 	var research_payload := hud.context_detail_controller.current_payload()
 	_check(hud.context_detail_controller.is_open() and not hud.context_detail_controller.is_explicit(), "Mouseover öffnet die kompakte Forschungs-Kontextkarte")
-	_check(research_payload.get("title", "") == "Stärkere Behandlung" and String(research_payload.get("body", "")).contains("Schaden"), "Die Forschungs-Kontextkarte erklärt die überfahrene Karte")
+	var therapy_precision_definition := ContentCatalog.research_definitions().filter(func(definition: ResearchDefinition) -> bool: return definition.id == &"therapy_precision")[0] as ResearchDefinition
+	_check(
+		research_payload.get("title", "") == "Stärkere Behandlung"
+		and String(research_payload.get("body", "")).contains("Schaden")
+		and String(research_payload.get("body", "")).contains("Gesamt: %s" % therapy_precision_definition.total_effect_text(meta.rank(&"therapy_precision"))),
+		"Die Forschungs-Kontextkarte erklärt die Karte und übernimmt ihre Gesamtwirkung aus der Definition"
+	)
 	research_source.mouse_exited.emit()
 	await process_frame
 	_check(not hud.context_detail_controller.is_open(), "Die Forschungs-Kontextkarte schließt beim Verlassen der Karte")
@@ -358,13 +364,19 @@ func _run() -> void:
 	for branch_panel in hud.talent_grid.get_children():
 		var branch := (branch_panel as Control).find_child("Tree", true, false) as TalentTreeBranch
 		_check(branch != null and branch.node_count() == 4 and branch.edge_count() == 3, "Der Talentast besitzt Einstieg, Voraussetzungen und eine sichtbare Verzweigung")
-		_check((branch_panel as Control).custom_minimum_size.y >= branch.custom_minimum_size.y + 50.0, "Jede Talentastkarte meldet ihre vollständige Baumhöhe an das responsive Raster")
+		_check(branch_panel is VBoxContainer and (branch_panel as Control).theme_type_variation != AlveolusVisualTheme.TYPE_ACTION_CARD, "Der kompakte Talentbaum verwendet keine große Astkarte")
 	await process_frame
 	await process_frame
 	var treatment_root := hud.talent_buttons[&"treatment_damage_training"] as Button
 	var spread_branch := hud.talent_buttons[&"spread_penetration"] as Button
 	var manual_branch := hud.talent_buttons[&"manual_treatment_aim"] as Button
 	var persistence_branch := hud.talent_buttons[&"piercing_persistence"] as Button
+	_check(
+		int(treatment_root.get_meta(&"talent_rank_maximum", 0)) == 1
+		and int(spread_branch.get_meta(&"talent_rank_maximum", 0)) == 3
+		and String(spread_branch.get_meta(&"alveolus_accessible_name", "")).contains("Rang 0 von 3"),
+		"Produktive Talentwerte steuern Rangpips und Accessible Name direkt"
+	)
 	var root_child := treatment_root.get_node_or_null(treatment_root.focus_neighbor_bottom) as Button
 	var branch_sibling := spread_branch.get_node_or_null(spread_branch.focus_neighbor_right) as Button
 	var branch_sibling_right := manual_branch.get_node_or_null(manual_branch.focus_neighbor_right) as Button

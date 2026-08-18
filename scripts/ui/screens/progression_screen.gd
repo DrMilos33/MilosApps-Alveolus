@@ -20,7 +20,6 @@ const TalentTreeBranchType := preload("res://scripts/ui/talent_tree_branch.gd")
 const ROUTE_ID := &"research"
 const CONTEXT_DETAIL_SCOPE_ID := &"progression"
 const RESEARCH_WIDE_COLUMNS := 4
-const RESEARCH_CARD_HEIGHT := 68.0
 const TALENT_SYMBOLS_BY_ID := {
 	&"treatment_damage_training": &"treatment",
 	&"manual_treatment_aim": &"target",
@@ -420,9 +419,8 @@ func _sync_research(items: Array) -> void:
 		var item: Variant = items[index]
 		var button := _research_buttons.get(item.id()) as Button
 		if button == null:
-			button = AlveolusUIComponents.selection_card("", "", "", false, false)
+			button = AlveolusUIComponents.compact_research()
 			button.name = "Research_%s" % String(item.id())
-			button.custom_minimum_size.y = RESEARCH_CARD_HEIGHT
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			button.clip_contents = true
 			button.tooltip_text = ""
@@ -436,7 +434,7 @@ func _sync_research(items: Array) -> void:
 func _update_research_button(button: Button, item: Variant) -> void:
 	var state := int(item.state())
 	var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
-	button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD if active else AlveolusVisualTheme.TYPE_SELECTION_CARD
+	button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_COMPACT_RESEARCH if active else AlveolusVisualTheme.TYPE_COMPACT_RESEARCH
 	button.set_meta(&"stable_focus_id", item.id())
 	button.set_meta(&"item_state", _state_name(state))
 	button.set_meta(&"item_interactive", item.interactive())
@@ -498,9 +496,8 @@ func _rebuild_talents(branches: Array) -> void:
 			var state := int(node_model.state())
 			var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
 			var symbol_kind := _talent_symbol_kind(node_model.id(), node_model.icon_kind(), used_symbols)
-			var button := AlveolusUIComponents.selection_card("", "", "", active, false)
+			var button := AlveolusUIComponents.talent_node(active)
 			button.name = "Talent_%s" % String(node_model.id())
-			button.custom_minimum_size = Vector2(TalentTreeBranch.NODE_WIDTH, TalentTreeBranch.NODE_HEIGHT)
 			button.clip_contents = true
 			button.tooltip_text = ""
 			button.set_meta(&"stable_focus_id", node_model.id())
@@ -568,7 +565,7 @@ func _refresh_talents(branches: Array) -> void:
 			var state := int(node_model.state())
 			var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
 			var symbol_kind := _talent_symbol_kind(node_model.id(), node_model.icon_kind(), used_symbols)
-			button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD if active else AlveolusVisualTheme.TYPE_SELECTION_CARD
+			button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE if active else AlveolusVisualTheme.TYPE_TALENT_NODE
 			button.set_meta(&"stable_focus_id", node_model.id())
 			button.set_meta(&"item_state", _state_name(state))
 			button.set_meta(&"item_interactive", node_model.interactive())

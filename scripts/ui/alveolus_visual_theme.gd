@@ -79,6 +79,10 @@ const TEXT_DISPLAY := 36
 const BUTTON_HEIGHT_PRIMARY := 48
 const BUTTON_HEIGHT_SECONDARY := 44
 const TOUCH_TARGET_MINIMUM := 44
+# Progression carriers need their own density tokens: the 88-px SelectionCard
+# safe area is intentionally too large for the research board and talent tree.
+const COMPACT_RESEARCH_HEIGHT := 68
+const TALENT_NODE_SIZE := 68
 const CARD_RADIUS := 6
 const CONTROL_RADIUS := 4
 const MODAL_RADIUS := 6
@@ -116,6 +120,10 @@ const TYPE_TAB_BUTTON := &"TabButton"
 const TYPE_SELECTED_TAB_BUTTON := &"SelectedTabButton"
 const TYPE_SELECTION_CARD := &"SelectionCard"
 const TYPE_SELECTED_CARD := &"SelectedCard"
+const TYPE_COMPACT_RESEARCH := &"CompactResearch"
+const TYPE_SELECTED_COMPACT_RESEARCH := &"SelectedCompactResearch"
+const TYPE_TALENT_NODE := &"TalentNode"
+const TYPE_SELECTED_TALENT_NODE := &"SelectedTalentNode"
 const TYPE_CHOICE_ROW := &"ChoiceRow"
 const TYPE_SELECTED_CHOICE_ROW := &"SelectedChoiceRow"
 const TYPE_PANEL_CARD := &"PanelCard"
@@ -234,6 +242,10 @@ static func _configure_variations(theme: Theme) -> void:
 	theme.set_font_size("font_size", TYPE_NAVIGATION_BUTTON, TEXT_CAPTION)
 	_register_button_variation(theme, TYPE_SELECTION_CARD, COBALT, false, false, 88, false, true)
 	_register_button_variation(theme, TYPE_SELECTED_CARD, TEAL, false, false, 88, true, true)
+	_register_button_variation(theme, TYPE_COMPACT_RESEARCH, COBALT, false, false, COMPACT_RESEARCH_HEIGHT, false, true)
+	_register_button_variation(theme, TYPE_SELECTED_COMPACT_RESEARCH, TEAL, false, false, COMPACT_RESEARCH_HEIGHT, true, true)
+	_register_button_variation(theme, TYPE_TALENT_NODE, COBALT, false, false, TALENT_NODE_SIZE, false, true)
+	_register_button_variation(theme, TYPE_SELECTED_TALENT_NODE, TEAL, false, false, TALENT_NODE_SIZE, true, true)
 	_register_button_variation(theme, TYPE_CHOICE_ROW, COBALT, false, false, 64, false, true)
 	_register_button_variation(theme, TYPE_SELECTED_CHOICE_ROW, TEAL, false, false, 64, true, true)
 	_register_segmented_tab_variation(theme, TYPE_SEGMENTED_TAB, false)

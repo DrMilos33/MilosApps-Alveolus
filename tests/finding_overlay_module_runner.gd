@@ -132,15 +132,16 @@ func _assert_finding_interaction() -> void:
 	var all_hover_only := registrations.size() == 3
 	for registration in registrations:
 		var registration_source := registration.get("source") as Control
-		var registration_anchor := registration.get("anchor") as Control
 		all_hover_only = all_hover_only \
 			and bool(registration.get("hover_enabled", false)) \
-			and registration_anchor != null \
 			and registration_source != null \
-			and registration_source.is_ancestor_of(registration_anchor) \
-			and registration_anchor.size.x < registration_source.size.x
+			and not registration.has("anchor") \
+			and not registration.has("placement")
 	_check(all_hover_only, "Registrierungen öffnen automatisch ausschließlich per Maus-Hover")
-	_check(registrations.all(func(registration: Dictionary) -> bool: return (registration.get("anchor") as Control).get_meta(&"alveolus_component", &"") == &"context_anchor"), "Befund verankert Tooltips an einem kompakten Teil der Reaktionszeile statt am Vollbreiten-Button")
+	_check(registrations.all(func(registration: Dictionary) -> bool:
+		var source := registration.get("source") as Control
+		return source != null and source.has_meta(&"reaction_id")
+	), "Befund verwendet jeden echten Reaktionsbutton als globale AUTO-Quelle")
 
 	var selected: Array[StringName] = []
 	var confirmed: Array[Array] = []

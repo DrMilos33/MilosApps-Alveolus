@@ -6,11 +6,15 @@ class RelatedTermPresentationStub:
 	var id: StringName
 	var display_name: String
 	var explanation: String
+	var meaning: String
+	var icon_id: StringName
 
-	func _init(id_value: StringName, display_name_value: String, explanation_value: String) -> void:
+	func _init(id_value: StringName, display_name_value: String, explanation_value: String, icon_value: StringName) -> void:
 		id = id_value
 		display_name = display_name_value
 		explanation = explanation_value
+		meaning = explanation_value
+		icon_id = icon_value
 
 
 class RelatedLexiconViewModelStub:
@@ -127,8 +131,8 @@ func _test_related_term_chips(lexicon: LexiconMasterDetail) -> void:
 	view_model.display_name = "Testeintrag"
 	view_model.summary = "Test für DTO-basierte verwandte Begriffe."
 	view_model._related_presentations = [
-		RelatedTermPresentationStub.new(&"term_treatment_speed", "Behandlungstempo", "Bestimmt die Zeit zwischen automatischen Impulsen."),
-		RelatedTermPresentationStub.new(&"term_radius", "Radius", "Bestimmt die Größe einer Flächenwirkung."),
+		RelatedTermPresentationStub.new(&"term_treatment_speed", "Behandlungstempo", "Bestimmt die Zeit zwischen automatischen Impulsen.", &"damage_wind"),
+		RelatedTermPresentationStub.new(&"term_radius", "Radius", "Bestimmt die Größe einer Flächenwirkung.", &"damage_earth"),
 	]
 	lexicon._show_detail(view_model)
 	await process_frame
@@ -142,11 +146,14 @@ func _test_related_term_chips(lexicon: LexiconMasterDetail) -> void:
 		_check(first_chip != null and first_chip.focus_mode == Control.FOCUS_ALL, "Verwandte Begriffe sind per Tastatur fokussierbar")
 		_check(first_chip.tooltip_text.is_empty(), "Verwandte Chips erzeugen keinen konkurrierenden nativen Tooltip")
 		_check(first_chip.get_meta(&"lexicon_related_term_id", &"") == &"term_treatment_speed", "Der Chip bewahrt die stabile Term-ID des DTOs")
+		var chip_icons: Array[Node] = first_chip.find_children("*", "SimpleIcon", true, false)
+		_check(chip_icons.size() == 1 and (chip_icons[0] as SimpleIcon).kind == &"damage_wind", "Der verwandte Begriff übernimmt sein datengetriebenes DTO-Icon")
 		_check(String(first_chip.get_meta(&"context_detail_stable_id", &"")).begins_with("lexicon:related:test_parent:"), "Die Controllerregistrierung besitzt eine stabile Parent-/Term-ID")
 		_check(bool(emitted_registrations[0].get("hover_enabled", false)), "Mouse-Hover ist ausschließlich für verwandte Begriffschips aktiviert")
 		var provider: Callable = emitted_registrations[0].get("provider", Callable())
 		var hover_payload: Dictionary = provider.call() if provider.is_valid() else {}
 		_check(String(hover_payload.get("title", "")) == "Behandlungstempo" and String(hover_payload.get("body", "")).contains("automatischen Impulsen"), "Hover und ui_info erhalten dieselbe fertige DTO-Erklärung")
+		_check(StringName(hover_payload.get("icon_kind", &"")) == &"damage_wind", "Der Kontextpayload übernimmt dasselbe DTO-Icon wie der Chip")
 
 		var controller := ContextDetailController.new()
 		get_root().add_child(controller)
@@ -192,7 +199,7 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	var tempo_id := &"term_treatment_speed"
 	_check(lexicon.context_detail_payload(tempo_id).is_empty(), "Auch ein direkter Begriffsprovider liefert keine redundante Detailkarte")
 	_check(lexicon.select_entry(tempo_id), "Behandlungstempo ist direkt lesbar")
-	_check(lexicon.detail_gameplay_text.text.contains("Intervall"), "Detail erklärt Behandlungstempo verständlich")
+	_check(lexicon.detail_gameplay_text.text.contains("Behandlungsrate"), "Detail erklärt Behandlungstempo verständlich")
 
 func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)

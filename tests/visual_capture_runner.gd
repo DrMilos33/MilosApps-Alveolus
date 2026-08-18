@@ -1,7 +1,7 @@
 extends SceneTree
 
 const OUTPUT_DIR := "res://.codex-temp/visual_restart/screens"
-const EXPECTED_CAPTURE_COUNT := 26
+const EXPECTED_CAPTURE_COUNT := 29
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
@@ -60,14 +60,56 @@ func _capture_suite(game: Node) -> void:
 	await _capture("story")
 	game._show_practice()
 	await _capture("practice")
+	game.meta.research_ranks[&"stability_reserve"] = 3
 	game._show_research()
 	await _settle()
 	_verify_document_page(game.hud, game.hud.research_overlay, "research")
+	if not _verify_research_capture(game):
+		return
 	await _capture("research")
+	var research_source: Button = game.hud.progression_screen.research_action(&"stability_reserve")
+	if research_source == null:
+		capture_failed = true
+		push_error("Mehr Leben besitzt keine stabile Tooltipquelle")
+		return
+	research_source.mouse_entered.emit()
+	await _settle()
+	var research_payload: Dictionary = game.hud.context_detail_controller.current_payload()
+	if game.hud.context_detail_controller.active_source() != research_source \
+		or not String(research_payload.get("body", "")).contains("Gesamt: +9 Leben"):
+		capture_failed = true
+		push_error("Forschung zeigt die Rangsumme nicht ausschließlich im stabilen Tooltip")
+		return
+	await _capture("research_tooltip")
+	game.hud.close_all_context_details()
 	game.hud._select_research_tab(&"talents")
 	await _settle()
 	_verify_document_page(game.hud, game.hud.research_overlay, "talents")
+	if not _verify_talent_tree(game.hud.progression_screen):
+		return
 	await _capture("talents")
+	game.meta.talent_ranks[&"treatment_damage_training"] = 1
+	game.meta.talent_ranks[&"spread_penetration"] = 1
+	game.hud.refresh_talents(game._talent_view_model())
+	await _settle()
+	var ranked_talent: Button = game.hud.progression_screen.talent_action(&"spread_penetration")
+	var rank_pips := ranked_talent.find_child("TalentRankPips", true, false) as Control if ranked_talent != null else null
+	if ranked_talent == null \
+		or int(ranked_talent.get_meta(&"talent_rank_current", 0)) != 1 \
+		or int(ranked_talent.get_meta(&"talent_rank_maximum", 0)) != 3 \
+		or not String(ranked_talent.get_meta(&"alveolus_accessible_name", "")).contains("Rang 1 von 3") \
+		or rank_pips == null:
+		capture_failed = true
+		push_error("Talentbaum aktualisiert Mehrfachrang/Pips/Accessibility nicht in-place")
+		return
+	ranked_talent.mouse_entered.emit()
+	await _settle()
+	if game.hud.context_detail_controller.active_source() != ranked_talent:
+		capture_failed = true
+		push_error("Talentdetails öffnen nicht am tatsächlichen kompakten Knoten")
+		return
+	await _capture("talents_ranked_tooltip")
+	game.hud.close_all_context_details()
 	game._show_level_select()
 	await _capture("levels")
 	for discovery_id in game.discovery_definitions:
@@ -87,6 +129,27 @@ func _capture_suite(game: Node) -> void:
 	if not _verify_lexicon_type_presentation(game.hud.lexicon_master_detail):
 		return
 	await _capture("lexicon_types")
+	var related_chips: Array[Node] = game.hud.lexicon_master_detail.detail_related_chips.get_children()
+	var related_chip := related_chips[0] as Button if not related_chips.is_empty() else null
+	if related_chip == null \
+		or related_chip.focus_mode != Control.FOCUS_ALL \
+		or StringName(related_chip.get_meta(&"lexicon_related_term_id", &"")) == &"" \
+		or not related_chip.tooltip_text.is_empty():
+		capture_failed = true
+		push_error("Lexikon-Verweis besitzt keinen stabilen fokussierbaren DTO-Chip")
+		return
+	game.hud.lexicon_master_detail.detail_scroll.ensure_control_visible(related_chip)
+	await _settle()
+	related_chip.mouse_entered.emit()
+	await _settle()
+	var related_payload: Dictionary = game.hud.context_detail_controller.current_payload()
+	if game.hud.context_detail_controller.active_source() != related_chip \
+		or String(related_payload.get("body", "")).strip_edges().is_empty():
+		capture_failed = true
+		push_error("Lexikon-Verweis zeigt seine DTO-Erklärung nicht über ContextDetail")
+		return
+	await _capture("lexicon_related_tooltip")
+	game.hud.close_all_context_details()
 	game.hud.show_settings(true, true)
 	await _capture("settings")
 
@@ -138,13 +201,27 @@ func _capture_suite(game: Node) -> void:
 	await _settle()
 	await _capture("pause_stats_treatment")
 	game.hud.hide_pause()
-	game.hud.show_upgrade_choices(ContentCatalog.upgrade_definitions().slice(0, 3), game.stats, true, false)
+	var upgrade_by_id: Dictionary = {}
+	for upgrade in ContentCatalog.upgrade_definitions():
+		upgrade_by_id[upgrade.id] = upgrade
+	var visual_upgrades: Array[UpgradeDefinition] = [
+		upgrade_by_id[&"potency"] as UpgradeDefinition,
+		upgrade_by_id[&"rhythm"] as UpgradeDefinition,
+		upgrade_by_id[&"neutrophils"] as UpgradeDefinition,
+	]
+	game.hud.show_upgrade_choices(visual_upgrades, game.stats, true, false)
 	await _settle()
 	if not _verify_level_up_title(game.hud.upgrade_screen):
+		return
+	if not _verify_upgrade_capture(game, visual_upgrades):
 		return
 	await _capture("upgrades")
 	await _capture_transient_dialogs(game)
 	game.hud.show_end(game.selected_level, true, "Der Herd ist kontrolliert.", 151.0, 5, 74, 22, true)
+	game.hud.set_result_reward_presentations(game.result_reward_presentations(22))
+	await _settle()
+	if not _verify_result_rewards(game.hud.result_screen):
+		return
 	await _capture("result")
 
 func _populate_character_stats_capture(game: Node) -> void:
@@ -245,6 +322,134 @@ func _verify_level_up_title(upgrade_screen: UpgradeOverlay) -> bool:
 	capture_failed = true
 	push_error("Level-Up-Capture zentriert die lokale Überschrift nicht im Modal")
 	return false
+
+
+func _verify_research_capture(game: Node) -> bool:
+	var screen := game.hud.progression_screen as ProgressionScreen
+	var definitions := ContentCatalog.research_definitions()
+	var valid := screen.research_columns() == 4 and definitions.size() == 8
+	for definition in definitions:
+		var action := screen.research_action(definition.id)
+		valid = valid \
+			and action != null \
+			and action.theme_type_variation in [
+				AlveolusVisualTheme.TYPE_COMPACT_RESEARCH,
+				AlveolusVisualTheme.TYPE_SELECTED_COMPACT_RESEARCH,
+			]
+		if action == null:
+			continue
+		for node in _descendants(action):
+			if node is Label and (node as Label).is_visible_in_tree():
+				valid = valid and not (node as Label).text.contains("Gesamt:")
+	if valid:
+		return true
+	capture_failed = true
+	push_error("Forschungs-Capture zeigt nicht acht kompakte Karten in zwei Viererreihen oder verrät Gesamtwerte auf der Karte")
+	return false
+
+
+func _verify_talent_tree(screen: ProgressionScreen) -> bool:
+	var branch := screen.talent_branch(&"treatment")
+	if branch == null:
+		capture_failed = true
+		push_error("Talentbaum besitzt keinen Behandlungshauptast")
+		return false
+	var ids: Array[StringName] = [
+		&"treatment_damage_training",
+		&"spread_penetration",
+		&"manual_treatment_aim",
+		&"piercing_persistence",
+	]
+	var symbols: Dictionary = {}
+	var valid := branch.node_count() == 4 and branch.edge_count() == 3
+	var root := screen.talent_action(ids[0])
+	for id in ids:
+		var action := screen.talent_action(id)
+		valid = valid \
+			and action != null \
+			and action.custom_minimum_size.is_equal_approx(Vector2(68.0, 68.0)) \
+			and action.theme_type_variation in [
+				AlveolusVisualTheme.TYPE_TALENT_NODE,
+				AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE,
+			]
+		if action != null:
+			symbols[StringName(action.get_meta(&"talent_symbol_kind", &""))] = true
+			if id != ids[0] and root != null:
+				valid = valid and root.global_position.y < action.global_position.y
+	valid = valid and symbols.size() == 4
+	if valid:
+		return true
+	capture_failed = true
+	push_error("Talent-Capture besitzt nicht Root, drei Abzweigungen, eindeutige Symbole und drei sichtbare Voraussetzungen")
+	return false
+
+
+func _verify_upgrade_capture(game: Node, options: Array[UpgradeDefinition]) -> bool:
+	var cards: Array[Button] = game.hud.upgrade_screen.cards()
+	var valid: bool = cards.size() == options.size()
+	var stats := game.stats as PlayerStats
+	for index in range(mini(cards.size(), options.size())):
+		var card: Button = cards[index]
+		var option: UpgradeDefinition = options[index]
+		var preview: UpgradePreview = stats.preview_upgrade(option)
+		var expected_icon: StringName = preview.presentation_icon_id
+		if expected_icon == &"":
+			expected_icon = option.resolved_icon_id(stats.prepared_treatment)
+		var icon := card.find_child("UpgradeIcon", true, false) as SimpleIcon
+		var heading := card.find_child("UpgradeTitle", true, false) as Label
+		valid = valid \
+			and icon != null \
+			and icon.kind == expected_icon \
+			and icon.custom_minimum_size.x >= 32.0 \
+			and heading != null \
+			and heading.text == option.resolved_component_name(stats.prepared_treatment, game.hud._upgrade_component_titles())
+		var visible_copy := ""
+		for node in _descendants(card):
+			if node is RichTextLabel:
+				visible_copy += (node as RichTextLabel).get_parsed_text() + " "
+			elif node is Label:
+				visible_copy += (node as Label).text + " "
+		if option.id == &"rhythm":
+			valid = valid and visible_copy.contains("/s") and not visible_copy.contains("Intervall")
+		if option.id == &"neutrophils":
+			valid = valid and visible_copy.contains("Radius 4")
+		valid = valid \
+			and not visible_copy.to_lower().contains(" px") \
+			and not visible_copy.contains("Stufe")
+	if valid:
+		return true
+	capture_failed = true
+	push_error("Ausbau-Capture übernimmt Icons, Komponentenname, Rate oder Radius nicht datengetrieben")
+	return false
+
+
+func _verify_result_rewards(result: ResultOverlay) -> bool:
+	var strip := result.find_child("RewardStrip", true, false) as GridContainer
+	var research := result.find_child("Reward_research", true, false) as Control
+	var research_value := research.find_child("Optional_reward_Body", true, false) as Label if research != null else null
+	var valid := strip != null \
+		and strip.columns == 4 \
+		and strip.get_child_count() == 4 \
+		and research != null \
+		and research.find_child("RewardIcon", true, false) is SimpleIcon \
+		and research_value != null \
+		and research_value.text == "+22" \
+		and result.find_child("Reward_experience", true, false) == null
+	for placeholder in ["+ irgendwas", "+ maybe nochwas", "+ idk"]:
+		var found := false
+		for label in result.find_children("*", "Label", true, false):
+			if (label as Label).text == placeholder:
+				found = true
+				break
+		valid = valid and found
+	for label in result.find_children("*", "Label", true, false):
+		valid = valid and (label as Label).text != "Belohnung"
+	if valid:
+		return true
+	capture_failed = true
+	push_error("Ergebnis-Capture besitzt nicht Forschung plus exakt drei angeforderte Placeholder-Spalten")
+	return false
+
 
 func _capture_preparation_editor_states(game: Node) -> void:
 	# The current balance profile deliberately exposes exactly two active
@@ -379,48 +584,21 @@ func _capture_transient_dialogs(game: Node) -> void:
 		push_error("Befund besitzt keine Hover-Tooltipquelle für die visuelle Abnahme")
 		return
 	var tooltip_source := registrations[0].get("source") as Control
-	var tooltip_anchor := registrations[0].get("anchor") as Control
-	if tooltip_source == null or tooltip_anchor == null:
+	if tooltip_source == null or registrations[0].has("anchor"):
 		capture_failed = true
-		push_error("Befund-Tooltipquelle oder ihr kompakter Anker ist ungültig")
+		push_error("Befund-Tooltip verwendet nicht ausschließlich das tatsächliche Source-Control")
 		return
 	tooltip_source.mouse_entered.emit()
 	await _settle()
 	var tooltip_card := game.hud.context_detail_controller.card as Control
-	var source_rect := tooltip_anchor.get_global_rect()
+	var source_rect := tooltip_source.get_global_rect()
 	var tooltip_rect := tooltip_card.get_global_rect()
-	var above_source := tooltip_rect.end.y <= source_rect.position.y + 0.5
-	var right_above := tooltip_rect.position.x >= source_rect.end.x - 0.5 and above_source
-	var left_above := tooltip_rect.end.x <= source_rect.position.x + 0.5 and above_source
-	var right_aligned_above := absf(tooltip_rect.end.x - source_rect.end.x) <= 1.0 and above_source
-	var left_aligned_above := absf(tooltip_rect.position.x - source_rect.position.x) <= 1.0 and above_source
-	var scaled_gap := ContextDetailController.SOURCE_GAP * capture_scale
-	var scaled_margin := ContextDetailController.VIEWPORT_MARGIN * capture_scale
-	var vertical_candidate_fits := source_rect.position.y - tooltip_rect.size.y - scaled_gap >= scaled_margin
-	var right_candidate_fits := vertical_candidate_fits \
-		and source_rect.end.x + scaled_gap + tooltip_rect.size.x <= float(capture_size.x) - scaled_margin
-	var left_candidate_fits := vertical_candidate_fits \
-		and source_rect.position.x - scaled_gap - tooltip_rect.size.x >= scaled_margin
-	var right_aligned_candidate_fits := vertical_candidate_fits \
-		and source_rect.end.x - tooltip_rect.size.x >= scaled_margin \
-		and source_rect.end.x <= float(capture_size.x) - scaled_margin
-	var left_aligned_candidate_fits := vertical_candidate_fits \
-		and source_rect.position.x >= scaled_margin \
-		and source_rect.position.x + tooltip_rect.size.x <= float(capture_size.x) - scaled_margin
-	var valid_preferred_placement := right_above if right_candidate_fits else (
-		left_above if left_candidate_fits else (
-			right_aligned_above if right_aligned_candidate_fits else (
-				left_aligned_above if left_aligned_candidate_fits else above_source
-			)
-		)
-	)
-	var title := game.hud.finding_screen.modal_sheet().find_child("FindingTitle", true, false) as Control
-	var effect := game.hud.finding_screen.effect_label() as Control
-	var covers_core_copy := (title != null and tooltip_rect.intersects(title.get_global_rect())) \
-		or (effect != null and tooltip_rect.intersects(effect.get_global_rect()))
-	if not tooltip_card.is_visible_in_tree() or not _inside_capture_viewport(tooltip_card) or not valid_preferred_placement or covers_core_copy:
+	if not tooltip_card.is_visible_in_tree() \
+		or not _inside_capture_viewport(tooltip_card) \
+		or tooltip_rect.intersects(source_rect) \
+		or game.hud.context_detail_controller.active_source() != tooltip_source:
 		capture_failed = true
-		push_error("Befund-Tooltip nutzt keine mögliche triggernahe Platzierung ohne Titel-/Effektüberdeckung (Anker %s, Karte %s)" % [source_rect, tooltip_rect])
+		push_error("Befund-Tooltip bleibt nicht viewportgebunden und frei von seiner tatsächlichen Quelle (Quelle %s, Karte %s)" % [source_rect, tooltip_rect])
 		return
 	await _capture("finding_tooltip")
 	game.hud.close_all_context_details()

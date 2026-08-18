@@ -256,7 +256,7 @@ func _stat_sections(life_value: String = "80 / 90", include_second_ability: bool
 			"rows": [
 				{"id": &"life", "label": "Leben", "value": life_value},
 				{"id": &"shield", "label": "Schild", "value": "12 / 20"},
-				{"id": &"movement_speed", "label": "Bewegung", "value": "338"},
+				{"id": &"movement_speed", "label": "Geschwindigkeit", "value": "300"},
 				{"id": &"defense", "label": "Verteidigung", "value": "18,4 %"},
 				{"id": &"life_regeneration", "label": "Regeneration", "value": "4/s"},
 				{"id": &"experience_gain", "label": "Erfahrung", "value": "+20 %"},

@@ -398,10 +398,11 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 func _card_accessible_name(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> String:
 	var parts := PackedStringArray([option.title(), option.effect()])
 	for row in option.value_rows():
+		var row_prefix := "%s " % row.label() if not row.label().is_empty() else ""
 		if row.before_value().is_empty():
-			parts.append("%s %s" % [row.label(), row.value()])
+			parts.append("%s%s" % [row_prefix, row.value()])
 		else:
-			parts.append("%s %s zu %s" % [row.label(), row.before_value(), row.value()])
+			parts.append("%s%s zu %s" % [row_prefix, row.before_value(), row.value()])
 	return ". ".join(parts)
 
 
@@ -414,7 +415,8 @@ func _build_value_copy(row: UpgradeOverlayViewModel.ValueRowViewModel) -> RichTe
 		AlveolusVisualTheme.heading_font(),
 		AlveolusVisualTheme.TEXT_BODY
 	)
-	_append_colored_text(copy, "%s  " % row.label(), AlveolusVisualTheme.IVORY_DEEP)
+	if not row.label().is_empty():
+		_append_colored_text(copy, "%s  " % row.label(), AlveolusVisualTheme.IVORY_DEEP)
 	if not row.before_value().is_empty():
 		_append_colored_text(copy, row.before_value(), AlveolusVisualTheme.IVORY_DEEP)
 		_append_colored_text(copy, "  →  ", AlveolusVisualTheme.MUTED)

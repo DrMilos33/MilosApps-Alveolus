@@ -25,8 +25,8 @@ func _test_names_and_level_language() -> void:
 	var discoveries := ContentCatalog.discovery_definitions()
 	var sample: DiscoveryDefinition = discoveries[&"analysis_pickup"]
 	var treatment: DiscoveryDefinition = discoveries[&"automatic_therapy"]
-	_check(sample.title == "Probe", "Probe bleibt der Anzeigename der Erfahrung")
-	_check(sample.gameplay_text.contains("Erfahrungspunkte"), "Das Lexikon erklärt Probe als Erfahrung")
+	_check(sample.title == "Erfahrung", "Erfahrung ist der sichtbare Name des Runfortschritts")
+	_check(sample.gameplay_text.contains("Erfahrung"), "Das Lexikon erklärt Erfahrung als Runfortschritt")
 	_check(sample.gameplay_text.contains("Level"), "Das Lexikon nennt den Fortschritt Level")
 	_check(not sample.gameplay_text.contains("Probenstufe"), "Das Lexikon verwendet keine Probenstufe")
 	_check(treatment.title == "Behandlung", "Die automatische Behandlung besitzt einen einfachen Namen")
@@ -49,12 +49,12 @@ func _test_enemy_and_character_values() -> void:
 		var definition: DiscoveryDefinition = discoveries[id]
 		_check(definition.gameplay_text.contains("GRUNDWERTE"), "%s zeigt Grundwerte" % id)
 		_check(definition.gameplay_text.contains("Leben"), "%s zeigt Leben" % id)
-		_check(definition.gameplay_text.contains("Tempo"), "%s zeigt Tempo" % id)
+		_check(definition.gameplay_text.contains("Geschwindigkeit"), "%s zeigt Geschwindigkeit" % id)
 		_check(definition.gameplay_text.contains("Schaden"), "%s zeigt Schaden" % id)
 		_check(not definition.gameplay_text.contains("Kontaktschaden"), "%s verwendet keinen veralteten Schadensbegriff" % id)
-		_check(definition.gameplay_text.contains("Probe"), "%s zeigt den Probenertrag" % id)
+		_check(definition.gameplay_text.contains("Erfahrung"), "%s zeigt den Erfahrungsertrag" % id)
 	var character: DiscoveryDefinition = discoveries[&"character_stats"]
-	for label in ["Bewegung", "Leben", "Schaden", "Intervall", "Reichweite", "Ziel", "Probenradius"]:
+	for label in ["Geschwindigkeit", "Leben", "Schaden", "Rate", "Reichweite", "Ziel", "Erfahrungsradius"]:
 		_check(character.gameplay_text.contains(label), "Arztwerte enthalten %s" % label)
 
 func _test_default_character_entry() -> void:

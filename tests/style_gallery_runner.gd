@@ -44,6 +44,8 @@ func _run() -> void:
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_SLIDER_ROW) == &"HSlider", "SliderRow behält native Range-Semantik")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_DAMAGE_TYPE_ROW) == &"PanelContainer", "DamageTypeRow besitzt eine zentrale semantische Theme-Variante")
 	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_DAMAGE_TYPE_CHIP) == &"PanelContainer", "DamageTypeChip besitzt eine zentrale semantische Theme-Variante")
+	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_COMPACT_RESEARCH) == &"Button", "CompactResearch besitzt eine zentrale semantische Theme-Variante")
+	_check(visual_theme.get_type_variation_base(AlveolusVisualTheme.TYPE_TALENT_NODE) == &"Button", "TalentNode besitzt eine zentrale semantische Theme-Variante")
 	var line_edit_style := visual_theme.get_stylebox("normal", &"LineEdit") as StyleBoxFlat
 	_check(line_edit_style != null and _contrast_ratio(visual_theme.get_color("font_color", &"LineEdit"), line_edit_style.bg_color) >= 4.5, "Formfelder nutzen lesbare Bio-Lumen-Schrift auf dunkler Fläche")
 	_check(visual_theme.has_stylebox("focus", AlveolusVisualTheme.TYPE_SLIDER_ROW), "SliderRow besitzt einen sichtbaren Fokusvertrag")
@@ -93,6 +95,10 @@ func _run() -> void:
 		AlveolusVisualTheme.TYPE_QUIET_BUTTON,
 		AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON,
 		AlveolusVisualTheme.TYPE_SELECTED_CARD,
+		AlveolusVisualTheme.TYPE_COMPACT_RESEARCH,
+		AlveolusVisualTheme.TYPE_SELECTED_COMPACT_RESEARCH,
+		AlveolusVisualTheme.TYPE_TALENT_NODE,
+		AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE,
 		AlveolusVisualTheme.TYPE_CHOICE_ROW,
 		AlveolusVisualTheme.TYPE_SELECTED_CHOICE_ROW,
 	]:
@@ -166,8 +172,15 @@ func _run() -> void:
 	var selected_tab_normal := visual_theme.get_stylebox("normal", AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB) as StyleBoxFlat
 	var selected_tab_focus := visual_theme.get_stylebox("focus", AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB) as StyleBoxFlat
 	_check(selected_tab_focus.bg_color.is_equal_approx(selected_tab_normal.bg_color), "Der Fokusring eines ausgewählten Tabs überdeckt dessen Auswahlfüllung nicht")
-	var selected_card_focus := visual_theme.get_stylebox("focus", AlveolusVisualTheme.TYPE_SELECTED_CARD) as StyleBoxFlat
-	_check(selected_card_focus.bg_color.a <= 0.12 and selected_card_focus.border_color.is_equal_approx(AlveolusVisualTheme.FOCUS_RING), "Der Kartenfokus bleibt ein transparenter Ring über dem sichtbaren Auswahlzustand")
+	for compact_card_type in [
+		AlveolusVisualTheme.TYPE_COMPACT_RESEARCH,
+		AlveolusVisualTheme.TYPE_SELECTED_CARD,
+		AlveolusVisualTheme.TYPE_SELECTED_COMPACT_RESEARCH,
+		AlveolusVisualTheme.TYPE_TALENT_NODE,
+		AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE,
+	]:
+		var compact_card_focus := visual_theme.get_stylebox("focus", compact_card_type) as StyleBoxFlat
+		_check(compact_card_focus.bg_color.a <= 0.12 and compact_card_focus.border_color.is_equal_approx(AlveolusVisualTheme.FOCUS_RING) and compact_card_focus.border_width_left >= 3, "%s besitzt einen sichtbaren Fokusring ohne den Grundzustand zu überdecken" % compact_card_type)
 
 	_check(AlveolusVisualTheme.DAMAGE_TYPE_ORDER == [&"fire", &"water", &"earth", &"wind"], "Schadenstypen besitzen die verbindliche Reihenfolge Feuer, Wasser, Erde, Wind")
 	var expected_damage_accents := {
@@ -247,6 +260,8 @@ func _run() -> void:
 	var slider_parts := AlveolusUIComponents.slider_row("Menülautstärke", 0.0, 100.0, 65.0)
 	var choice_row := AlveolusUIComponents.choice_row("Bakterium", "Pneumokokke")
 	var choice_card := AlveolusUIComponents.choice_card("Fokusfeld", "Verstärkt den Zielbereich")
+	var compact_research := AlveolusUIComponents.compact_research(true)
+	var talent_node := AlveolusUIComponents.talent_node(true)
 	var damage_row_parts := AlveolusUIComponents.damage_type_row(&"water", "", "10 %", "Resistenz", "+")
 	var damage_row := damage_row_parts["panel"] as PanelContainer
 	var damage_chip_parts := AlveolusUIComponents.damage_type_chip(&"fire", "", "15 %", "Verwundbarkeit", "−")
@@ -388,6 +403,14 @@ func _run() -> void:
 	_check(choice_row.custom_minimum_size.y == 64.0 and choice_card.custom_minimum_size.y == 88.0, "ChoiceRow und ChoiceCard besitzen getrennte feste Dichten")
 	_check(choice_row.theme_type_variation == AlveolusVisualTheme.TYPE_CHOICE_ROW, "ChoiceRow nutzt die kompakte zentrale Kartenrolle")
 	_check(choice_card.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTION_CARD, "ChoiceCard behält die ausführliche zentrale Kartenrolle")
+	_check(compact_research.custom_minimum_size.y == AlveolusVisualTheme.COMPACT_RESEARCH_HEIGHT and compact_research.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_COMPACT_RESEARCH, "CompactResearch bündelt 68-px-Dichte und Selected-Zustand")
+	_check(talent_node.custom_minimum_size == Vector2.ONE * AlveolusVisualTheme.TALENT_NODE_SIZE and talent_node.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE, "TalentNode bündelt quadratische Dichte und Selected-Zustand")
+	var selection_card_theme_minimum := visual_theme.get_stylebox("normal", AlveolusVisualTheme.TYPE_SELECTION_CARD).get_minimum_size().y
+	var compact_research_theme_minimum := visual_theme.get_stylebox("normal", AlveolusVisualTheme.TYPE_COMPACT_RESEARCH).get_minimum_size().y
+	var talent_node_theme_minimum := visual_theme.get_stylebox("normal", AlveolusVisualTheme.TYPE_TALENT_NODE).get_minimum_size().y
+	_check(compact_research_theme_minimum < selection_card_theme_minimum and talent_node_theme_minimum < selection_card_theme_minimum, "Kompakte Progressionsrollen erben nicht die 88-px-Innenränder der SelectionCard")
+	_check(compact_research.get_meta(&"alveolus_component", &"") == &"compact_research" and talent_node.get_meta(&"alveolus_component", &"") == &"talent_node", "Kompakte Progressionscontrols tragen ihre zentralen Komponentenrollen")
+	_check(not compact_research.has_theme_stylebox_override("normal") and not talent_node.has_theme_stylebox_override("normal"), "Kompakte Progressionsrollen erzeugen keine lokalen StyleBox-Kopien")
 	_check(damage_row.theme_type_variation == AlveolusVisualTheme.TYPE_DAMAGE_TYPE_ROW and damage_row.get_meta(&"damage_type_id") == &"water", "DamageTypeRow transportiert seine semantische Rolle")
 	_check((damage_row_parts["icon"] as SimpleIcon).kind == &"damage_water" and (damage_row_parts["name"] as Label).text == "Wasser" and (damage_row_parts["value"] as Label).text == "10 %", "DamageTypeRow enthält Icon, ausgeschriebenen Namen und fertig formatierten Wert")
 	_check((damage_row_parts["indicator"] as Label).text == "+" and (damage_row_parts["meaning"] as Label).text == "Resistenz", "DamageTypeRow unterstützt Vorzeichen und Bedeutungslabel")

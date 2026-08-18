@@ -49,14 +49,16 @@ func _run() -> void:
 	var active_research := screen.research_action(&"research_active")
 	var available_research := screen.research_action(&"research_available")
 	var locked_research := screen.research_action(&"research_locked")
-	_check(active_research.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD, "Aktive Forschung verwendet die semantische Auswahlkarte")
+	_check(active_research.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_COMPACT_RESEARCH, "Aktive Forschung verwendet die semantische Kompaktrolle")
 	_check(_state_icon_kind(active_research) == &"check", "Aktive Forschung ist zusätzlich mit Check markiert")
 	_check(bool(available_research.get_meta(&"item_interactive", false)), "Verfügbare Forschung ist interaktiv")
 	_check(not bool(locked_research.get_meta(&"item_interactive", true)), "Gesperrte Forschung löst keine Kaufabsicht aus")
 	_check(_state_icon_kind(locked_research) == &"locked", "Gesperrte Forschung ist zusätzlich mit Schloss markiert")
+	_check(locked_research.theme_type_variation == AlveolusVisualTheme.TYPE_COMPACT_RESEARCH, "Gesperrte Forschung bewahrt die fokussierbare kompakte Grundrolle")
 	_check(locked_research.focus_mode == Control.FOCUS_ALL, "Gesperrte Forschung bleibt für ui_info fokussierbar")
 	_check(String(locked_research.get_meta(&"alveolus_accessible_name", "")).contains("gesperrt"), "Nicht sichtbarer zugänglicher Name benennt den Zustand ausdrücklich")
-	_check(active_research.custom_minimum_size.y <= 68.0, "Forschungskarten bleiben kompakt")
+	_check(active_research.custom_minimum_size.y == AlveolusVisualTheme.COMPACT_RESEARCH_HEIGHT and active_research.get_combined_minimum_size().y <= 68.0, "Forschungskarten bleiben einschließlich Theme-Innenrändern kompakt")
+	_check(active_research.get_meta(&"alveolus_component", &"") == &"compact_research", "Forschung verwendet die zentrale Komponentenrolle compact_research")
 	for card in [active_research, available_research, locked_research]:
 		var card_text := _descendant_text(card).to_lower()
 		_check(not card_text.contains("aktiv") and not card_text.contains("verfügbar") and not card_text.contains("gesperrt"), "Karten wiederholen ihren Zustand nicht als Statuswort")
@@ -127,10 +129,12 @@ func _run() -> void:
 	for branch_talent in [left_talent, child_talent, right_talent]:
 		_check(branch_talent.get_node_or_null(branch_talent.focus_neighbor_top) == root_talent, "Jede Spezialisierung kehrt per D-Pad zum Root zurück")
 	_check(_state_icon_kind(root_talent) == &"check", "Aktives Talent besitzt Check plus Auswahlfarbe")
-	_check(root_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD, "Aktiver Root besitzt den zentralen Selected-Ring")
+	_check(root_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE, "Aktiver Root besitzt den zentralen Selected-Ring der Talentrolle")
 	_check(String(root_talent.get_meta(&"alveolus_accessible_name", "")).contains("Rang 1 von 1"), "Der zugängliche Rootname nennt den visuellen Rang ausdrücklich")
 	_check(_state_icon_kind(child_talent) == &"diamond", "Verfügbares Talent ist zusätzlich zur Farbe mit einem Marker gekennzeichnet")
-	_check(_state_icon_kind(screen.talent_action(&"piercing_persistence")) == &"locked", "Gesperrtes Talent besitzt Schloss plus gedämpfte Farbe")
+	var locked_talent := screen.talent_action(&"piercing_persistence")
+	_check(_state_icon_kind(locked_talent) == &"locked", "Gesperrtes Talent besitzt Schloss plus gedämpfte Farbe")
+	_check(locked_talent.theme_type_variation == AlveolusVisualTheme.TYPE_TALENT_NODE and locked_talent.focus_mode == Control.FOCUS_ALL, "Gesperrtes Talent bewahrt die fokussierbare zentrale Talentrolle")
 	var talent_symbols: Dictionary = {}
 	for talent_id in [&"treatment_damage_training", &"spread_penetration", &"manual_treatment_aim", &"piercing_persistence"]:
 		var talent_button := screen.talent_action(talent_id)
@@ -139,7 +143,8 @@ func _run() -> void:
 		if symbol != null:
 			talent_symbols[symbol.kind] = true
 		_check(_descendant_text(talent_button).is_empty(), "Talentknoten zeigt weder Titel, Kosten noch Beschreibung dauerhaft")
-		_check(is_equal_approx(talent_button.custom_minimum_size.x, TalentTreeBranch.NODE_WIDTH) and is_equal_approx(talent_button.custom_minimum_size.y, TalentTreeBranch.NODE_HEIGHT), "Talentknoten bleibt ein kompakter quadratischer Symbolknoten")
+		_check(is_equal_approx(talent_button.custom_minimum_size.x, TalentTreeBranch.NODE_WIDTH) and is_equal_approx(talent_button.custom_minimum_size.y, TalentTreeBranch.NODE_HEIGHT) and talent_button.get_combined_minimum_size().y <= TalentTreeBranch.NODE_HEIGHT, "Talentknoten bleibt einschließlich Theme-Innenrändern kompakt und quadratisch")
+		_check(talent_button.get_meta(&"alveolus_component", &"") == &"talent_node", "Talentknoten verwendet die zentrale Komponentenrolle talent_node")
 		_check(_rank_pip_count(talent_button) == int(talent_button.get_meta(&"talent_rank_maximum", 0)), "Mehrfachränge werden als kompakte Pips sichtbar")
 	_check(talent_symbols.size() == 4, "Alle sichtbaren Talentknoten verwenden eindeutig verschiedene Symbole")
 	var talent_tooltip := screen.tooltip_provider_for(child_talent)
@@ -177,6 +182,7 @@ func _run() -> void:
 	var updated_talent_payload := screen.info_payload_for(screen.talent_action(&"manual_treatment_aim"))
 	_check(String(updated_talent_payload.get("body", "")).contains("+3") and String(updated_talent_payload.get("meta", "")) == "3 P", "Stabiler Talentprovider liefert die neuen Rangfakten")
 	_check(_state_icon_kind(screen.talent_action(&"manual_treatment_aim")) == &"check", "In-place-Talentupdate aktualisiert den sichtbaren Zustand")
+	_check(screen.talent_action(&"manual_treatment_aim").theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE, "In-place-Talentupdate wechselt in die zentrale Selected-Talentrolle")
 	_check(int(screen.talent_action(&"manual_treatment_aim").get_meta(&"talent_rank_current", 0)) == 1, "In-place-Talentupdate aktualisiert die sichtbaren Rangpips")
 
 	screen.size = Vector2(850.0, 720.0)
@@ -355,6 +361,8 @@ func _check_source_contracts() -> void:
 		_check(not model_source.contains(forbidden), "Progression-ViewModel greift nicht auf %s zu" % forbidden)
 	_check(not model_source.contains("AlveolusVisualTheme"), "ViewModel hängt nicht vom visuellen Theme ab")
 	_check(not screen_source.contains("StyleBox"), "Progression-Screen erzeugt keine lokale StyleBox-Kopie")
+	_check(not screen_source.contains("selection_card("), "Progression verwendet keine 88-px-SelectionCard für kompakte Forschung oder Talente")
+	_check(screen_source.contains("AlveolusUIComponents.compact_research") and screen_source.contains("AlveolusUIComponents.talent_node"), "Progression konstruiert beide kompakten Rollen über zentrale Komponenten")
 	_check(not screen_source.contains("Shader"), "Progression-Screen erzeugt keinen lokalen Shader")
 	_check(not screen_source.contains("func _process("), "Progression-Screen definiert keine Prozessschleife")
 	_check(not screen_source.contains("func _physics_process("), "Progression-Screen definiert keine Physikschleife")

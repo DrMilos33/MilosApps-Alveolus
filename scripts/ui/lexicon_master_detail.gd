@@ -583,7 +583,7 @@ func _rebuild_related_term_chips(view_model: LexiconEntryViewModel) -> void:
 		var chip := AlveolusUIComponents.action_button(
 			display_name,
 			AlveolusUIComponents.ACTION_QUIET,
-			&"lexicon",
+			StringName(snapshot.get("icon_id", &"lexicon")),
 			AlveolusVisualTheme.COBALT
 		)
 		chip.name = "Related_%s" % String(term_id).replace("/", "_")
@@ -633,12 +633,18 @@ func _related_term_snapshot(dto: Variant) -> Dictionary:
 	var term_id := StringName(_dto_value(dto, &"id", &""))
 	var display_name := String(_dto_value(dto, &"display_name", "")).strip_edges()
 	var explanation := String(_dto_value(dto, &"explanation", "")).strip_edges()
+	if explanation.is_empty():
+		explanation = String(_dto_value(dto, &"meaning", "")).strip_edges()
+	var icon_id := StringName(_dto_value(dto, &"icon_id", &"lexicon"))
+	if icon_id == &"":
+		icon_id = &"lexicon"
 	if term_id == &"" or display_name.is_empty() or explanation.is_empty():
 		return {}
 	return {
 		"id": term_id,
 		"display_name": display_name,
 		"explanation": explanation,
+		"icon_id": icon_id,
 	}
 
 
@@ -649,7 +655,7 @@ func _related_term_context_payload(snapshot: Dictionary) -> Dictionary:
 		"body": String(snapshot.get("explanation", "")),
 		"meta": "Lexikon",
 		"accent": AlveolusVisualTheme.COBALT,
-		"icon_kind": &"lexicon",
+		"icon_kind": StringName(snapshot.get("icon_id", &"lexicon")),
 	}
 
 

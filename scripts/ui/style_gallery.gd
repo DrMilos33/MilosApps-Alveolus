@@ -323,9 +323,9 @@ func _build_preparation_view() -> Control:
 	catalog.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var catalog_content := catalog.get_meta("content") as VBoxContainer
 	for data in [
-		["Behandlungslinie", "Trifft alle Bakterien in einer Linie.", "Aktiv · 2"],
+		["Fetter lazer", "Trifft alle Bakterien in einer Linie.", "Aktiv · 2"],
 		["Schildfeld", "Verlangsamt Gegner im Bereich.", "Aktiv · 2"],
-		["Schnelltest", "Proben füllen den Befund schneller.", "Passiv · 1"],
+		["Schnelltest", "Erfahrung füllt den Fortschritt schneller.", "Passiv · 1"],
 	]:
 		catalog_content.add_child(AlveolusUIComponents.selection_card(data[0], data[1], data[2]))
 	planning_row.add_child(catalog)
@@ -375,7 +375,7 @@ func _build_lexicon_view() -> Control:
 	stats.columns = 2
 	stats.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	stats.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
-	for data in [["Leben", "18"], ["Tempo", "72"], ["Schaden", "5"], ["Proben", "1"]]:
+	for data in [["Leben", "18"], ["Geschwindigkeit", "72"], ["Schaden", "5"], ["Erfahrung", "1"]]:
 		var row := AlveolusUIComponents.stat_row(data[0], data[1])
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stats.add_child(row)

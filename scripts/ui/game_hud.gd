@@ -407,6 +407,7 @@ var result_reason_text: String = ""
 var result_detail_text: String = ""
 var result_stats_data: Array[ResultOverlayViewModel.StatViewModel] = []
 var result_reward_text: String = ""
+var result_reward_items: Array[ResultOverlayViewModel.RewardViewModel] = []
 var result_unlock_text: String = ""
 var result_mastery_text: String = ""
 var end_panel: PanelContainer
@@ -2103,7 +2104,8 @@ func _refresh_progression_research_cache(meta: MetaProgressionState, definitions
 			definition.id,
 			state,
 			available,
-			info
+			info,
+			definition.total_effect_text(rank)
 		))
 
 
@@ -2166,7 +2168,9 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 				PackedStringArray(_view_value(talent, &"required_ids", PackedStringArray())),
 				state,
 				interactive,
-				info
+				info,
+				current_rank,
+				max_rank
 			))
 		if node_models.is_empty():
 			continue
@@ -2490,7 +2494,7 @@ func show_story() -> void:
 		story_view_model = StoryScreenViewModel.create([
 			{"id": &"welcome", "title": "Willkommen bei ALVEOLUS", "body": "Du leitest ALVEOLUS, einen kleinen Forschungscampus für schwierige Lungenfälle.", "next_label": "Weiter"},
 			{"id": &"lung_model", "title": "Das Lungenmodell", "body": "Jeder Fall wird als begehbares Lungenmodell dargestellt. Du koordinierst die Behandlung direkt im Modell.", "next_label": "Weiter"},
-			{"id": &"mission", "title": "Deine Aufgabe", "body": "Stoppe Bakterien, stärke die Abwehr und halte Doctor Milos am Leben. Gesammelte Proben helfen dem Campus weiter.", "next_label": "Zum Campus"},
+			{"id": &"mission", "title": "Deine Aufgabe", "body": "Stoppe Bakterien, stärke die Abwehr und halte Doctor Milos am Leben. Gesammelte Erfahrung hilft dem Campus weiter.", "next_label": "Zum Campus"},
 		], 1, &"prologue", true, true, "Überspringen")
 	story_screen.present(story_view_model, story_index, false)
 	_prepare_optional_navigation_focus.call_deferred(story_overlay, story_next_button)
@@ -2791,7 +2795,7 @@ func _case_modifier_fact(modifier: Variant) -> Dictionary:
 			amount = (value - 1.0) * 100.0 if operation == &"multiply" else value
 			beneficial = amount <= 0.0
 		&"enemy_speed":
-			caption = "Gegnertempo"
+			caption = "Gegnergeschwindigkeit"
 			amount = (value - 1.0) * 100.0 if operation == &"multiply" else value
 			beneficial = amount <= 0.0
 		&"enemy_damage", &"contact_damage":
@@ -2866,14 +2870,14 @@ func _refresh_run_stats() -> void:
 func _run_stat_descriptors(current_stability: float, maximum_stability: float) -> Array:
 	var descriptors: Array = []
 	var wanted := {
-		&"defense": [&"defense_training", 100, "Verteidigung"],
-		&"movement_speed": [&"movement_training", 90, "Bewegung"],
-		&"life_regeneration": [&"life_regeneration", 80, "Regeneration"],
-		&"experience_gain": [&"experience_gain", 70, "Erfahrung"],
-		&"resistance_fire": [&"damage_fire", 60, "Feuerresistenz"],
-		&"resistance_water": [&"damage_water", 50, "Wasserresistenz"],
-		&"resistance_earth": [&"damage_earth", 40, "Erdresistenz"],
-		&"resistance_wind": [&"damage_wind", 30, "Windresistenz"],
+		&"defense": [&"defense_training", 100],
+		&"movement_speed": [&"movement_training", 90],
+		&"life_regeneration": [&"life_regeneration", 80],
+		&"experience_gain": [&"experience_gain", 70],
+		&"resistance_fire": [&"damage_fire", 60],
+		&"resistance_water": [&"damage_water", 50],
+		&"resistance_earth": [&"damage_earth", 40],
+		&"resistance_wind": [&"damage_wind", 30],
 	}
 	var shield_current := float(run_hud_vitals.get("shield_current", 0.0))
 	var shield_maximum := float(run_hud_vitals.get("shield_maximum", 0.0))
@@ -2886,10 +2890,11 @@ func _run_stat_descriptors(current_stability: float, maximum_stability: float) -
 				continue
 			var mapping: Array = wanted[stat_id]
 			var value := String(row.get("value", "–"))
+			var label := String(row.get("label", stat_id))
 			descriptors.append(HudStatDescriptor.create(
 				mapping[0],
 				value,
-				"%s: %s" % [String(mapping[2]), value],
+				"%s: %s" % [label, value],
 				int(mapping[1]),
 				stat_id
 			))
@@ -2937,7 +2942,7 @@ func _refresh_pause_stats() -> void:
 	# such as "Schaden" remain unambiguous without six bulky group cards.
 	var column_groups := [
 		["ALLGEMEIN", "BEHANDLUNG"],
-		["AKTIV", "ABWEHR", "REGENERATION", "PROBEN"],
+		["AKTIV", "ABWEHR", "REGENERATION", "ERFAHRUNG"],
 	]
 	for group_order in column_groups:
 		var column := VBoxContainer.new()
@@ -2963,7 +2968,7 @@ func _refresh_pause_stats() -> void:
 			group_lines.append("%s:  %s" % [String(row.get("label", "")), String(row.get("value", ""))])
 		text_grouped[group] = group_lines
 	pause_stats_label.text = _stat_group_text(text_grouped, ["ALLGEMEIN", "BEHANDLUNG"])
-	pause_stats_label_right.text = _stat_group_text(text_grouped, ["AKTIV", "ABWEHR", "REGENERATION", "PROBEN"])
+	pause_stats_label_right.text = _stat_group_text(text_grouped, ["AKTIV", "ABWEHR", "REGENERATION", "ERFAHRUNG"])
 	if pause_stats_scroll != null:
 		pause_stats_scroll.scroll_vertical = 0
 		_update_pause_stats_scroll_mode.call_deferred()
@@ -3036,7 +3041,7 @@ func _pause_stat_group_accent(group: String) -> Color:
 		"AKTIV": return COLOR_BLUE
 		"ABWEHR": return COLOR_RED
 		"REGENERATION": return COLOR_TEAL.lightened(0.10)
-		"PROBEN": return COLOR_BLUE.lightened(0.10)
+		"ERFAHRUNG": return COLOR_BLUE.lightened(0.10)
 	return COLOR_MUTED
 
 func _pause_stat_group_icon(group: String) -> StringName:
@@ -3046,7 +3051,7 @@ func _pause_stat_group_icon(group: String) -> StringName:
 		"AKTIV": return &"ability"
 		"ABWEHR": return &"immune"
 		"REGENERATION": return &"support"
-		"PROBEN": return &"sample"
+		"ERFAHRUNG": return &"experience_gain"
 	return &"information"
 
 func _stat_group_text(grouped: Dictionary, order: Array[String]) -> String:
@@ -3271,22 +3276,24 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 	current_upgrade_options = options.duplicate()
 	upgrade_view_revision += 1
 	var rows: Array = []
-	var component_titles := {
-		&"ability_defense_burst": "Abwehrstoß",
-		&"ability_treatment_line": "Behandlungslinie",
-	}
+	var component_titles := _upgrade_component_titles()
 	for definition in options:
 		if definition == null:
 			continue
 		var preview := stats.preview_upgrade(definition)
-		var comparison := _split_upgrade_comparison(preview.before_after_text)
+		var before_value := preview.before_value.strip_edges()
+		var after_value := preview.after_value.strip_edges()
+		var icon_id := preview.presentation_icon_id
+		if icon_id == &"":
+			icon_id = definition.resolved_icon_id(stats.prepared_treatment)
 		rows.append({
 			"id": definition.id,
 			"title": definition.resolved_component_name(stats.prepared_treatment, component_titles),
 			"effect": preview.effect_text,
-			"before": comparison[0],
-			"after": comparison[1],
-			"icon_id": _upgrade_icon_kind(definition),
+			"before": before_value,
+			"after": after_value,
+			"value_rows": _upgrade_value_rows(definition, before_value, after_value),
+			"icon_id": icon_id,
 			"accent_role": _upgrade_accent_role(definition),
 		})
 	var model := UpgradeOverlayViewModel.create(
@@ -3309,14 +3316,39 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 	if upgrade_target_preview != null:
 		upgrade_target_preview.clear()
 
-func _split_upgrade_comparison(copy: String) -> Array[String]:
-	var separator_index := copy.find(">")
-	if separator_index < 0:
-		return ["", copy.strip_edges()]
-	return [
-		copy.substr(0, separator_index).strip_edges(),
-		copy.substr(separator_index + 1).strip_edges(),
-	]
+func _upgrade_component_titles() -> Dictionary:
+	var result: Dictionary = {}
+	for ability_value in AbilityDefinition.catalog().values():
+		var ability := ability_value as AbilityDefinition
+		if ability != null:
+			result[ability.id] = ability.display_name
+	return result
+
+func _upgrade_value_rows(definition: UpgradeDefinition, before_value: String, after_value: String) -> Array[Dictionary]:
+	if definition.preview_stat == &"" or after_value.is_empty():
+		return []
+	# Most structured preview values already include their semantic unit (for
+	# example "18 Schaden"). Only the stage/rate/time rows need a separate
+	# leading label; keeping the default empty avoids "Schaden 18 Schaden".
+	var label := ""
+	match definition.preview_style:
+		&"distance_stage":
+			label = "Reichweite" if definition.preview_stat == RunBuildState.TREATMENT_RANGE else "Radius"
+		&"tempo":
+			label = "Rate"
+		&"cooldown":
+			label = "Abklingzeit"
+		_:
+			# The top-level structured before/after values already include their
+			# semantic unit. Rendering them as a comparison avoids duplicated copy.
+			return []
+	return [{
+		"id": definition.preview_stat,
+		"label": label,
+		"before": before_value,
+		"value": after_value,
+		"accent_role": _upgrade_accent_role(definition),
+	}]
 
 func _upgrade_accent_role(definition: UpgradeDefinition) -> StringName:
 	match definition.path:
@@ -3326,17 +3358,6 @@ func _upgrade_accent_role(definition: UpgradeDefinition) -> StringName:
 			return &"turquoise"
 		_:
 			return &"teal"
-
-func _intro_upgrade_copy(id: StringName) -> String:
-	match id:
-		&"potency":
-			return "Deine Behandlung verursacht jetzt mehr Schaden."
-		&"neutrophils":
-			return "Abwehrzellen schützen den Nahbereich automatisch."
-		&"oxygenation":
-			return "Regeneration stellt regelmäßig Leben wieder her."
-		_:
-			return "Diese Verbesserung verstärkt deine Behandlung."
 
 func activate_upgrade(index: int) -> void:
 	if not upgrade_overlay.visible or index < 0 or index >= current_upgrade_options.size():
@@ -3397,7 +3418,7 @@ func _pause_view_model() -> PauseOverlayViewModel:
 func _pause_stat_group_role(group: String) -> StringName:
 	match group:
 		"BEHANDLUNG": return &"teal"
-		"AKTIV", "PROBEN": return &"cobalt"
+		"AKTIV", "ERFAHRUNG": return &"cobalt"
 		"ABWEHR": return &"coral"
 		"REGENERATION": return &"turquoise"
 	return &"gold"
@@ -3600,15 +3621,40 @@ func show_end(level: LevelDefinition, success: bool, reason: String, elapsed: fl
 	result_detail_text = level.victory_text if success else ""
 	result_stats_data = [
 		ResultOverlayViewModel.StatViewModel.new(&"time", "Zeit", _clock_text(elapsed), false),
-		ResultOverlayViewModel.StatViewModel.new(&"analysis", "Analyselevel", str(analysis_level), true),
+		ResultOverlayViewModel.StatViewModel.new(&"analysis", "Erfahrungslevel", str(analysis_level), true),
 		ResultOverlayViewModel.StatViewModel.new(&"defeats", "Bakterien", str(defeats), false),
 	]
-	result_reward_text = "+%d Forschung" % reward if reward > 0 else ""
+	result_reward_text = ""
+	result_reward_items.clear()
+	if reward > 0:
+		result_reward_items.append(ResultOverlayViewModel.RewardViewModel.new(
+			&"research",
+			&"research",
+			"+%d" % reward,
+			&"gold",
+			"Forschung: +%d" % reward
+		))
 	result_unlock_text = "Neuer Fall freigeschaltet" if unlocked_new else ""
 	result_mastery_text = ""
 	_refresh_result_screen()
 	end_overlay.show()
 	result_screen.grab_initial_focus.call_deferred()
+
+func set_result_reward_presentations(presentations: Array[RewardPresentation]) -> void:
+	result_reward_text = ""
+	result_reward_items.clear()
+	for presentation in presentations:
+		if presentation == null or presentation.stable_id() != &"research":
+			continue
+		result_reward_items.append(ResultOverlayViewModel.RewardViewModel.new(
+			presentation.stable_id(),
+			presentation.icon_id(),
+			presentation.formatted_value(),
+			&"gold",
+			presentation.accessibility_text()
+		))
+		break
+	_refresh_result_screen()
 
 func _refresh_result_screen() -> void:
 	if result_screen == null:
@@ -3623,7 +3669,8 @@ func _refresh_result_screen() -> void:
 		result_stats_data,
 		result_reward_text,
 		result_unlock_text,
-		result_mastery_text
+		result_mastery_text,
+		result_reward_items
 	))
 	_map_result_compatibility_controls()
 
@@ -5228,17 +5275,6 @@ func _level_placeholder(accent: Color) -> Panel:
 	question.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(question)
 	return panel
-
-func _upgrade_icon_kind(definition: UpgradeDefinition) -> StringName:
-	if definition.id == &"mobility" or definition.preview_context_tags.has("movement"):
-		return &"movement_training"
-	match definition.path:
-		UpgradeDefinition.Path.IMMUNE:
-			return &"immune"
-		UpgradeDefinition.Path.SUPPORT:
-			return &"support"
-		_:
-			return &"antibiotic"
 
 func _overlay_base(color: Color) -> ColorRect:
 	var overlay := ColorRect.new()

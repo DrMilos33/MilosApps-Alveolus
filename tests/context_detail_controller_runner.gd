@@ -136,6 +136,39 @@ func _run() -> void:
 	preferred_source.queue_free()
 	await _settle()
 
+	var placement_viewport := Vector2(480.0, 320.0)
+	var placement_card_size := Vector2(100.0, 60.0)
+	var right_above_source := Rect2(Vector2(100.0, 100.0), Vector2(40.0, 30.0))
+	var right_above := controller._contained_position(right_above_source, placement_card_size, placement_viewport)
+	_check(
+		right_above == Vector2(146.0, 34.0),
+		"AUTO verwendet als ersten vollständigen Kandidaten diagonal rechts oberhalb"
+	)
+	var left_above_source := Rect2(Vector2(400.0, 100.0), Vector2(40.0, 30.0))
+	var left_above := controller._contained_position(left_above_source, placement_card_size, placement_viewport)
+	_check(
+		left_above == Vector2(294.0, 34.0),
+		"AUTO verwendet bei fehlendem Rechtsraum als zweiten Kandidaten diagonal links oberhalb"
+	)
+	var right_below_source := Rect2(Vector2(100.0, 18.0), Vector2(40.0, 30.0))
+	var right_below := controller._contained_position(right_below_source, placement_card_size, placement_viewport)
+	_check(
+		right_below == Vector2(146.0, 54.0),
+		"Am oberen Viewportrand folgt auf beide oberen Kandidaten diagonal rechts unterhalb"
+	)
+	var left_below_source := Rect2(Vector2(400.0, 18.0), Vector2(40.0, 30.0))
+	var left_below := controller._contained_position(left_below_source, placement_card_size, placement_viewport)
+	_check(
+		left_below == Vector2(294.0, 54.0),
+		"AUTO verwendet erst nach rechts unten den vierten Kandidaten diagonal links unterhalb"
+	)
+	var complete_placements: Array[Vector2] = [right_above, left_above, right_below, left_below]
+	for placement in complete_placements:
+		_check(
+			_inside_detail_bounds(placement, placement_card_size, placement_viewport),
+			"Jeder vollständige AUTO-Kandidat bleibt innerhalb des Detail-Viewports: %s" % placement
+		)
+
 	var wide_source_rect := Rect2(Vector2(24.0, 188.0), Vector2(432.0, 48.0))
 	var wide_card_size := Vector2(280.0, 60.0)
 	var wide_fallback := controller._contained_position(
@@ -145,20 +178,38 @@ func _run() -> void:
 	)
 	_check(
 		is_equal_approx(wide_fallback.x, 480.0 - ContextDetailController.VIEWPORT_MARGIN - wide_card_size.x),
-		"Nach beiden diagonalen Kandidaten wird die bevorzugte Rechtsposition deterministisch an den Viewport gebunden"
+		"Nach allen vier diagonalen Kandidaten wird die bevorzugte Rechtsposition deterministisch an den Viewport gebunden"
 	)
 	_check(
 		wide_fallback.y + wide_card_size.y <= wide_source_rect.position.y - ContextDetailController.SOURCE_GAP + 0.5,
 		"Der Vollbreiten-Fallback bleibt vollständig oberhalb der Quelle"
 	)
-	var top_bound_fallback := controller._contained_position(
-		Rect2(Vector2(24.0, 18.0), Vector2(62.0, 40.0)),
-		Vector2(220.0, 84.0),
-		Vector2(480.0, 320.0)
+	_check(
+		_inside_detail_bounds(wide_fallback, wide_card_size, placement_viewport),
+		"Auch der geklemmte Vollbreiten-Fallback bleibt vollständig innerhalb der Viewport-Margen"
 	)
 	_check(
-		top_bound_fallback == Vector2(92.0, ContextDetailController.VIEWPORT_MARGIN),
-		"Fehlt oberhalb vertikaler Platz, bleibt AUTO beim bevorzugten Rechtskandidaten und klemmt ihn reproduzierbar in den Viewport"
+		not Rect2(wide_fallback, wide_card_size).intersects(wide_source_rect),
+		"Viewport-Clamping überdeckt die tatsächliche Quelle nicht"
+	)
+	var overlap_prone_source := Rect2(Vector2(300.0, 100.0), Vector2(60.0, 60.0))
+	var overlap_prone_card_size := Vector2(220.0, 200.0)
+	var source_safe_fallback := controller._contained_position(
+		overlap_prone_source,
+		overlap_prone_card_size,
+		placement_viewport
+	)
+	_check(
+		source_safe_fallback == Vector2(74.0, ContextDetailController.VIEWPORT_MARGIN),
+		"Der deterministische Clamp verwirft einen überdeckenden Rechtskandidaten zugunsten des sicheren Linkskandidaten"
+	)
+	_check(
+		_inside_detail_bounds(source_safe_fallback, overlap_prone_card_size, placement_viewport),
+		"Der quellenexklusive Fallback bleibt vollständig innerhalb der Viewport-Margen"
+	)
+	_check(
+		not Rect2(source_safe_fallback, overlap_prone_card_size).intersects(overlap_prone_source),
+		"Der geklemmte Fallback überdeckt die Quelle auch bei fehlendem vertikalem Platz nie"
 	)
 
 	var ability_strip := PanelContainer.new()
@@ -238,6 +289,15 @@ func _inside_viewport(control: Control, viewport_size: Vector2) -> bool:
 		and rect.position.y >= -0.5 \
 		and rect.end.x <= viewport_size.x + 0.5 \
 		and rect.end.y <= viewport_size.y + 0.5
+
+
+func _inside_detail_bounds(position: Vector2, card_size: Vector2, viewport_size: Vector2) -> bool:
+	var margin := ContextDetailController.VIEWPORT_MARGIN
+	var rect := Rect2(position, card_size)
+	return rect.position.x >= margin - 0.5 \
+		and rect.position.y >= margin - 0.5 \
+		and rect.end.x <= viewport_size.x - margin + 0.5 \
+		and rect.end.y <= viewport_size.y - margin + 0.5
 
 
 func _tree_ignores_mouse(node: Node) -> bool:

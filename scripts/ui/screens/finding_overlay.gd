@@ -244,7 +244,6 @@ func context_detail_registrations() -> Array[Dictionary]:
 			"source": source,
 			"provider": entry.get("provider", Callable()),
 			"hover_enabled": true,
-			"anchor": _info_anchor(entry),
 		})
 	return result
 
@@ -428,25 +427,7 @@ func _build_reactions() -> void:
 		_reaction_grid.add_child(button)
 		_reaction_buttons[reaction.id()] = button
 		_reaction_order.append(reaction.id())
-		# A full-width compact choice cannot support an outside diagonal tooltip.
-		# Anchor the detail card to the lower edge of the title region instead: the
-		# preferred right-above placement stays deterministic without covering the
-		# finding title or the mechanical effect line.
-		var info_anchor := Control.new()
-		info_anchor.name = "ContextAnchor"
-		info_anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		info_anchor.focus_mode = Control.FOCUS_NONE
-		info_anchor.anchor_left = 0.0
-		info_anchor.anchor_right = 0.0
-		info_anchor.anchor_top = 1.0
-		info_anchor.anchor_bottom = 1.0
-		info_anchor.offset_left = 12.0
-		info_anchor.offset_right = 145.0
-		info_anchor.offset_top = -2.0
-		info_anchor.offset_bottom = -1.0
-		info_anchor.set_meta(&"alveolus_component", &"context_anchor")
-		button.add_child(info_anchor)
-		_register_info_source(button, reaction.info(), info_anchor)
+		_register_info_source(button, reaction.info())
 
 
 func _build_reserve_swap() -> void:
@@ -682,8 +663,7 @@ func _restore_follow_focus() -> void:
 
 func _register_info_source(
 	source: Control,
-	info: FindingOverlayViewModel.InfoViewModel,
-	anchor: Control = null
+	info: FindingOverlayViewModel.InfoViewModel
 ) -> void:
 	if source == null or info == null:
 		return
@@ -691,7 +671,6 @@ func _register_info_source(
 	_info_sources[source_id] = {
 		"source": weakref(source),
 		"provider": _info_payload.bind(info.duplicate_immutable()),
-		"anchor": weakref(anchor) if anchor != null else null,
 	}
 
 
@@ -708,12 +687,6 @@ func _info_provider_for(source: Control) -> Callable:
 		return Callable()
 	var entry := _info_sources.get(source.get_instance_id(), {}) as Dictionary
 	return entry.get("provider", Callable()) as Callable
-
-
-func _info_anchor(entry: Dictionary) -> Control:
-	var anchor_ref := entry.get("anchor") as WeakRef
-	var anchor_value: Variant = anchor_ref.get_ref() if anchor_ref != null else null
-	return anchor_value as Control if anchor_value != null and is_instance_valid(anchor_value) else null
 
 
 func _prune_info_sources() -> void:

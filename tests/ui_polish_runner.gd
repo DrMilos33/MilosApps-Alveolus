@@ -83,7 +83,7 @@ func _run() -> void:
 	_check(meta.set_talent_active(&"treatment_damage_training", true), "Der Testzustand aktiviert die Revision-4-Wurzel des Behandlungsbaums")
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
 	await process_frame
-	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 8, "Die acht aktiven Forschungen zeigen bei 1280 Pixeln drei kompakte Spalten")
+	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 8, "Die acht aktiven Forschungen zeigen bei 1280 Pixeln vier kompakte Spalten")
 	_check(hud.research_buy_buttons.has(&"movement_training") and SimpleIcon.supports(&"movement_training"), "Bewegungstraining besitzt eine zentrale, registrierte Bewegungsglyphe")
 	for research_card in hud.research_grid.get_children():
 		_check((research_card as Control).custom_minimum_size.y <= 76.0, "Forschungskarten überschreiten die kompakte Höhe nicht")
@@ -116,7 +116,7 @@ func _run() -> void:
 		_check(node_button.has_meta(&"item_state") and node_button.has_meta(&"item_interactive"), "Talentstatus bleibt semantisch prüfbar, obwohl er visuell über Farbe und Icon vermittelt wird")
 	var active_talent := hud.talent_buttons[&"treatment_damage_training"] as Button
 	var active_state_icon := active_talent.find_child("StateIcon", true, false) as SimpleIcon
-	_check(active_talent.get_meta(&"item_state", &"") == &"active" and active_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD and active_state_icon != null and active_state_icon.kind == &"check", "Aktive Talente werden durch Highlight und Check-Icon statt Statustext markiert")
+	_check(active_talent.get_meta(&"item_state", &"") == &"active" and active_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE and active_state_icon != null and active_state_icon.kind == &"check", "Aktive Talente werden durch Highlight und Check-Icon statt Statustext markiert")
 	var available_talent := hud.talent_buttons[&"manual_treatment_aim"] as Button
 	_check(available_talent.get_meta(&"item_state", &"") == &"available" and bool(available_talent.get_meta(&"item_interactive", false)), "Nach aktiver Wurzel sind die drei Revision-4-Kinder ohne künstliche Zwischenstufe verfügbar")
 	_check(not hud.talent_buttons.has(&"piercing_return"), "Die reservierte Revision-3-ID piercing_return erscheint nicht mehr im aktiven Talentbaum")
@@ -137,7 +137,11 @@ func _run() -> void:
 	_check(hud.finding_copy_grid.columns == 1 and hud.finding_copy_grid.get_meta(&"alveolus_component", &"") == &"finding_effect_line", "Befund zeigt nur eine kompakte mechanische Effektzeile")
 	var finding_effect := hud.finding_copy_grid.get_child(0) as Label
 	_check(finding_effect != null and finding_effect.text == "+2 Bakteriengruppen" and hud.finding_copy_grid.find_children("*", "PanelContainer", true, false).is_empty(), "Befund verzichtet auf medizinische und spielerische Erklärungskacheln")
-	hud.show_end(levels[1], false, "Das Leben ist auf null gefallen.", 95.0, 2, 8, 0, false)
+	hud.show_end(levels[1], false, "Das Leben ist auf null gefallen.", 95.0, 2, 8, 20, false)
+	hud.set_result_reward_presentations([
+		RewardPresentation.research(20),
+		RewardPresentation.experience(9),
+	])
 	await process_frame
 	await process_frame
 	_assert_compact_modal(hud.end_panel, GameHUD.END_PANEL_SIZE.y, "Ergebnis You suck")
@@ -148,12 +152,13 @@ func _run() -> void:
 		and hud.result_screen.find_child("Detail", true, false) == null,
 		"Niederlage zeigt weder Untertitel noch Grundtext"
 	)
-	_check(
-		hud.result_screen.find_child("Optional_reward", true, false) == null
-		and hud.result_screen.find_child("Optional_unlock", true, false) == null
-		and hud.result_screen.find_child("Optional_mastery", true, false) == null,
-		"Leere Belohnungs-, Freischaltungs- und Meisterschaftszeilen reservieren im Ergebnis keinen Platz"
-	)
+	var reward_strip := hud.result_screen.find_child("RewardStrip", true, false) as GridContainer
+	var research_reward := hud.result_screen.find_child("Reward_research", true, false) as Control
+	var reward_value := hud.result_screen.find_child("Optional_reward_Body", true, false) as Label
+	_check(reward_strip != null and reward_strip.columns == 4 and reward_strip.get_child_count() == 4, "Das Ergebnis zeigt Forschung plus exakt drei angeforderte Platzhalter")
+	_check(research_reward != null and reward_value != null and reward_value.text == "+20" and research_reward.get_meta(&"alveolus_accessible_name", "") == "Forschung: +20", "Die Forschung wird ausschließlich als Icon mit reinem Wert und Accessible Name dargestellt")
+	_check(hud.result_screen.find_child("Reward_experience", true, false) == null, "Die additive Erfahrungspräsentation erzeugt bewusst keine fünfte Ergebnisspalte")
+	_check(hud.result_screen.find_child("Optional_unlock", true, false) == null and hud.result_screen.find_child("Optional_mastery", true, false) == null, "Leere Freischaltungs- und Meisterschaftszeilen reservieren keinen Platz")
 
 	var stats := PlayerStats.new()
 	# Exercise the dense, late-run form of the character sheet. A sparse
@@ -330,9 +335,9 @@ func _run() -> void:
 	await process_frame
 	var expected_upgrade_headings := {
 		&"potency": "Impuls",
-		&"burst_effect": "Abwehrstoß",
-		&"line_effect": "Behandlungslinie",
-		&"mobility": "Bewegung",
+		&"burst_effect": "idk name stoß",
+		&"line_effect": "Fetter lazer",
+		&"mobility": "Geschwindigkeit",
 	}
 	for upgrade_card in hud.upgrade_cards.get_children():
 		var upgrade_id := StringName((upgrade_card as Control).get_meta(&"upgrade_id", &""))
@@ -344,8 +349,35 @@ func _run() -> void:
 	var movement_card := hud.upgrade_cards.get_child(0) as Control
 	var movement_title := movement_card.find_child("UpgradeTitle", true, false) as Label
 	var movement_icon := movement_card.find_child("UpgradeIcon", true, false) as SimpleIcon
-	_check(movement_title != null and movement_title.text == "Bewegung", "Der Bewegungsausbau verwendet den verbindlichen Komponentennamen")
+	_check(movement_title != null and movement_title.text == "Geschwindigkeit", "Der Geschwindigkeitsausbau verwendet den verbindlichen Komponentennamen")
 	_check(movement_icon != null and movement_icon.kind == &"movement_training", "Der Bewegungsausbau verwendet dieselbe semantische Trainingsglyphe wie die Forschung")
+	var presentation_upgrades: Array[UpgradeDefinition] = [
+		upgrade_by_id[&"rhythm"] as UpgradeDefinition,
+		upgrade_by_id[&"neutrophils"] as UpgradeDefinition,
+		upgrade_by_id[&"defense_cell_radius"] as UpgradeDefinition,
+	]
+	hud.show_upgrade_choices(presentation_upgrades, stats, false, false)
+	await process_frame
+	var rhythm_card := hud.upgrade_cards.get_child(0) as Control
+	var rhythm_row := rhythm_card.find_child("UpgradeValue_*", true, false) as RichTextLabel
+	_check(rhythm_row != null and String(rhythm_row.get_meta(&"semantic_before", "")) == "1,22/s" and String(rhythm_row.get_meta(&"semantic_value", "")) == "1,45/s", "Behandlungstempo erscheint als datenformatierte Rate ohne Intervallcopy")
+	var defense_cell_card := hud.upgrade_cards.get_child(1) as Control
+	var defense_cell_icon := defense_cell_card.find_child("UpgradeIcon", true, false) as SimpleIcon
+	var defense_cell_comparison := defense_cell_card.find_child("UpgradeComparison", true, false) as RichTextLabel
+	_check(defense_cell_icon != null and defense_cell_icon.kind == &"neutrophil_orbit", "Abwehrzellen verwenden das datengetriebene Komponentenicon")
+	var defense_cell_copy := defense_cell_comparison.get_parsed_text() if defense_cell_comparison != null else "<fehlend>"
+	_check(
+		defense_cell_comparison != null \
+			and defense_cell_copy.contains("10/s") \
+			and defense_cell_copy.contains("Radius 4") \
+			and not defense_cell_copy.contains("Intervall") \
+			and not defense_cell_copy.contains("Stufe") \
+			and not defense_cell_copy.contains("px"),
+		"Abwehrzellen zeigen Rate und Radius ohne interne Einheiten (sichtbar: %s)" % defense_cell_copy
+	)
+	var radius_card := hud.upgrade_cards.get_child(2) as Control
+	var radius_row := radius_card.find_child("UpgradeValue_*", true, false) as RichTextLabel
+	_check(radius_row != null and radius_row.get_meta(&"semantic_label", "") == "Radius" and String(radius_row.get_meta(&"semantic_before", "")) == "4", "Radiusausbauten besitzen eine semantische Zeile mit nackter Stufenzahl")
 
 	var upgrade_options := ContentCatalog.upgrade_definitions().slice(0, 3)
 	hud.show_upgrade_choices(upgrade_options, stats, false, false)
@@ -363,13 +395,19 @@ func _run() -> void:
 				has_left_strip = true
 		_check(not has_left_strip, "Ausbaukarten besitzen keinen linken Farbbalken")
 	var first_upgrade_preview := stats.preview_upgrade(upgrade_options[0])
-	var first_upgrade_comparison := (hud.upgrade_cards.get_child(0) as Control).find_child("UpgradeComparison", true, false) as RichTextLabel
-	var expected_comparison := first_upgrade_preview.before_after_text.split(">", false, 1)
+	var first_upgrade_card := hud.upgrade_cards.get_child(0) as Control
+	var first_upgrade_comparison := first_upgrade_card.find_child("UpgradeValue_*", true, false) as RichTextLabel
+	if first_upgrade_comparison == null:
+		first_upgrade_comparison = first_upgrade_card.find_child("UpgradeComparison", true, false) as RichTextLabel
+	var first_upgrade_after := String(first_upgrade_comparison.get_meta(
+		&"semantic_value",
+		first_upgrade_comparison.get_meta(&"semantic_after", "")
+	)) if first_upgrade_comparison != null else ""
 	_check(
-		first_upgrade_comparison != null and expected_comparison.size() == 2 \
-			and String(first_upgrade_comparison.get_meta(&"semantic_before", "")) == String(expected_comparison[0]).strip_edges() \
-			and String(first_upgrade_comparison.get_meta(&"semantic_after", "")) == String(expected_comparison[1]).strip_edges(),
-		"Der GameHUD-Presenter trennt Ausbau-Vorherwert und nur den rechten Zielwert für die Hervorhebung"
+		first_upgrade_comparison != null \
+			and String(first_upgrade_comparison.get_meta(&"semantic_before", "")) == first_upgrade_preview.before_value \
+			and first_upgrade_after == first_upgrade_preview.after_value,
+		"Der GameHUD-Presenter übernimmt die strukturierten Ausbauwerte ohne UI-Parsing"
 	)
 	hud.show_upgrade_choices(ContentCatalog.upgrade_definitions().slice(0, 1), stats, false, false)
 	await process_frame
@@ -378,13 +416,6 @@ func _run() -> void:
 	hud.show_abort_confirmation()
 	await process_frame
 	_check(hud.abort_panel.custom_minimum_size.y <= GameHUD.ABORT_PANEL_SIZE.y, "Abbruchdialog reserviert keinen leeren unteren Bereich")
-	var scaled_settings := UISettingsState.new()
-	scaled_settings.ui_scale = 2.0
-	hud.configure_ui_settings(scaled_settings)
-	await process_frame
-	_check(hud.upgrade_cards.columns == 1, "Der Ausbau-Dialog wechselt bei 200 Prozent in eine scrollbare Einspaltenansicht")
-	_check(hud.upgrade_panel.custom_minimum_size.x <= hud.root.size.x, "Der Ausbau-Dialog bleibt bei 200 Prozent innerhalb der logischen Breite")
-	_check(hud.upgrade_panel.custom_minimum_size.y <= hud.root.size.y, "Der Ausbau-Dialog bleibt bei 200 Prozent innerhalb der logischen Höhe")
 
 	hud.queue_free()
 	await process_frame

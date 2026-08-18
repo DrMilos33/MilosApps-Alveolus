@@ -518,6 +518,34 @@ static func selection_card(
 ) -> Button:
 	return choice_card(title, description, meta, selected, disabled)
 
+## Structured research content is attached by the owning screen; this carrier
+## centralizes the compact geometry and every native button state.
+static func compact_research(selected: bool = false, disabled: bool = false) -> Button:
+	return _choice_control(
+		"",
+		"",
+		"",
+		selected,
+		disabled,
+		AlveolusVisualTheme.COMPACT_RESEARCH_HEIGHT,
+		&"compact_research"
+	)
+
+## Icon-only talent carrier. Titles and effects belong to the shared detail
+## provider, never to the persistent node surface.
+static func talent_node(selected: bool = false, disabled: bool = false) -> Button:
+	var control := _choice_control(
+		"",
+		"",
+		"",
+		selected,
+		disabled,
+		AlveolusVisualTheme.TALENT_NODE_SIZE,
+		&"talent_node"
+	)
+	control.custom_minimum_size.x = AlveolusVisualTheme.TALENT_NODE_SIZE
+	return control
+
 static func badge(text_value: String, accent: Color = AlveolusVisualTheme.COBALT) -> PanelContainer:
 	var badge_panel := panel(AlveolusVisualTheme.TYPE_BADGE)
 	badge_panel.add_theme_stylebox_override("panel", AlveolusVisualTheme.surface_role_style(
@@ -818,11 +846,15 @@ static func _choice_control(
 	component_name: StringName
 ) -> Button:
 	var control := Button.new()
-	var compact_row := component_name == &"choice_row"
-	if compact_row:
-		control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CHOICE_ROW if selected else AlveolusVisualTheme.TYPE_CHOICE_ROW
-	else:
-		control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD if selected else AlveolusVisualTheme.TYPE_SELECTION_CARD
+	match component_name:
+		&"choice_row":
+			control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CHOICE_ROW if selected else AlveolusVisualTheme.TYPE_CHOICE_ROW
+		&"compact_research":
+			control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_COMPACT_RESEARCH if selected else AlveolusVisualTheme.TYPE_COMPACT_RESEARCH
+		&"talent_node":
+			control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE if selected else AlveolusVisualTheme.TYPE_TALENT_NODE
+		_:
+			control.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD if selected else AlveolusVisualTheme.TYPE_SELECTION_CARD
 	control.text = title if description.is_empty() else "%s\n%s" % [title, description]
 	if not meta.is_empty():
 		control.text += "\n%s" % meta

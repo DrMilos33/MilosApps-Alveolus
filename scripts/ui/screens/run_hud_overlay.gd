@@ -250,8 +250,6 @@ func context_detail_registrations() -> Array[Dictionary]:
 			"source": _ability_buttons[slot],
 			"provider": _ability_info_payload.bind(slot),
 			"hover_enabled": true,
-			"anchor": _ability_panel,
-			"placement": ContextDetailController.Placement.ABOVE_CENTER,
 		})
 	return result
 
@@ -431,7 +429,7 @@ func _build_analysis() -> void:
 	_analysis_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_analysis_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	stack.add_child(_analysis_bar)
-	_analysis_panel.set_meta(&"alveolus_accessible_name", "Level und Befund")
+	_analysis_panel.set_meta(&"alveolus_accessible_name", "Level und Erfahrung")
 
 
 func _build_stats() -> void:
