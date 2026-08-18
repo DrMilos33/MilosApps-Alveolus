@@ -4,7 +4,7 @@ extends Node2D
 signal finished(projectile: TherapyProjectile)
 signal discovery_ready(projectile: TherapyProjectile)
 
-const DEFAULT_SPEED := 720.0
+const DEFAULT_SPEED := 576.0
 
 var target: InfectionEnemy
 var topology: ArenaTopology
