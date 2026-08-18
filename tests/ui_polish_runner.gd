@@ -80,10 +80,11 @@ func _run() -> void:
 
 	var meta := MetaProgressionState.new()
 	meta.set_unlimited_test_progression(true)
-	_check(meta.set_talent_active(&"manual_treatment_aim", true), "Der Testzustand aktiviert den Wurzelknoten des Behandlungsbaums")
+	_check(meta.set_talent_active(&"treatment_damage_training", true), "Der Testzustand aktiviert die Revision-4-Wurzel des Behandlungsbaums")
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
 	await process_frame
-	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 7, "Die sieben aktiven Forschungen zeigen bei 1280 Pixeln drei kompakte Spalten")
+	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 8, "Die acht aktiven Forschungen zeigen bei 1280 Pixeln drei kompakte Spalten")
+	_check(hud.research_buy_buttons.has(&"movement_training") and SimpleIcon.supports(&"movement_training"), "Bewegungstraining besitzt eine zentrale, registrierte Bewegungsglyphe")
 	for research_card in hud.research_grid.get_children():
 		_check((research_card as Control).custom_minimum_size.y <= 76.0, "Forschungskarten überschreiten die kompakte Höhe nicht")
 	hud._select_research_tab(&"talents")
@@ -113,12 +114,12 @@ func _run() -> void:
 		_check(node_button.custom_minimum_size.y <= TalentTreeBranch.NODE_HEIGHT, "Talentknoten bleiben auf die kompakte Baumhöhe begrenzt")
 		_check(not _contains_text(node_button, "VERFÜGBAR") and not _contains_text(node_button, "AKTIV") and not _contains_text(node_button, "BRAUCHT"), "Talentknoten erklären ihren Zustand ohne wiederholte Statuswörter")
 		_check(node_button.has_meta(&"item_state") and node_button.has_meta(&"item_interactive"), "Talentstatus bleibt semantisch prüfbar, obwohl er visuell über Farbe und Icon vermittelt wird")
-	var active_talent := hud.talent_buttons[&"manual_treatment_aim"] as Button
+	var active_talent := hud.talent_buttons[&"treatment_damage_training"] as Button
 	var active_state_icon := active_talent.find_child("StateIcon", true, false) as SimpleIcon
 	_check(active_talent.get_meta(&"item_state", &"") == &"active" and active_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD and active_state_icon != null and active_state_icon.kind == &"check", "Aktive Talente werden durch Highlight und Check-Icon statt Statustext markiert")
-	var locked_talent := hud.talent_buttons[&"piercing_return"] as Button
-	var locked_state_icon := locked_talent.find_child("StateIcon", true, false) as SimpleIcon
-	_check(locked_talent.get_meta(&"item_state", &"") == &"locked" and not bool(locked_talent.get_meta(&"item_interactive", true)) and locked_state_icon != null and locked_state_icon.kind == &"locked", "Noch gesperrte Folgeknoten zeigen ein eindeutiges Schloss ohne Textballast")
+	var available_talent := hud.talent_buttons[&"manual_treatment_aim"] as Button
+	_check(available_talent.get_meta(&"item_state", &"") == &"available" and bool(available_talent.get_meta(&"item_interactive", false)), "Nach aktiver Wurzel sind die drei Revision-4-Kinder ohne künstliche Zwischenstufe verfügbar")
+	_check(not hud.talent_buttons.has(&"piercing_return"), "Die reservierte Revision-3-ID piercing_return erscheint nicht mehr im aktiven Talentbaum")
 
 	var finding_reactions: Array = [
 		{"id": &"observe", "title": "Weiter beobachten", "description": "Befundfortschritt erhöhen."},
@@ -172,19 +173,32 @@ func _run() -> void:
 	hud.update_run_stats(stats, state)
 	hud.set_run_stats_visibility(true)
 	hud.show_running_hud()
+	hud.update_defeat_research_reward(23)
 	await process_frame
 	var run_stat_rows := hud.run_hud_screen.stat_rows()
-	_check(hud.run_hud_screen.run_stats_strip().visible and not run_stat_rows.is_empty(), "Optionale Charakterwerte erscheinen oben rechts")
-	var has_treatment_power := false
+	var expected_run_stat_ids: Array[StringName] = [
+		&"defense", &"movement_speed", &"life_regeneration", &"experience_gain",
+		&"resistance_fire", &"resistance_water", &"resistance_earth", &"resistance_wind",
+	]
+	var actual_run_stat_ids: Array[StringName] = []
 	for row in run_stat_rows:
+		actual_run_stat_ids.append(StringName(row.get_meta(&"stat_id", &"")))
 		var accessible_text := String(row.get_meta(&"alveolus_accessible_name", ""))
-		if accessible_text.contains("Behandlungsschaden") and accessible_text.contains("18"):
-			has_treatment_power = true
-	_check(has_treatment_power, "HUD-Anzeige zeigt echte dynamische Werte")
+		_check(not accessible_text.contains("Behandlung") and not accessible_text.contains("Fokusfeld") and not accessible_text.contains("Notfallhilfe"), "Das Run-HUD hält Behandlungs- und Fähigkeitswerte aus dem Grundwertband heraus")
+	_check(hud.run_hud_screen.run_stats_strip().visible and actual_run_stat_ids == expected_run_stat_ids, "Oben rechts erscheinen ausschließlich die acht stabilen Grundwerte")
 	_check(not hud.run_hud_screen.run_stats_strip().is_class("Panel"), "Die Runstatistik besitzt keine eigene Hintergrundkachel")
 	_check(hud.run_hud_screen.run_stats_strip().mouse_filter == Control.MOUSE_FILTER_IGNORE, "Die Runstatistik blockiert keine Ziele im Spiel")
-	_check(run_stat_rows.size() <= 5, "Die Runstatistik bleibt auf höchstens fünf Werte begrenzt")
+	_check(run_stat_rows.size() == 8, "Die Runstatistik zeigt genau die vier Kernwerte und vier Typresistenzen")
 	_check(hud.run_hud_screen.run_stats_strip() is HFlowContainer and hud.run_hud_screen.run_stats_strip().get_meta(&"alveolus_component", &"") == &"transparent_run_stats", "Die Runstatistik verwendet ein flaches transparentes Statband")
+	var defeat_reward_panel := hud.run_hud_screen.defeat_research_reward_panel()
+	_check(
+		defeat_reward_panel.visible
+		and hud.run_hud_screen.defeat_research_reward_icon().kind == &"research"
+		and hud.run_hud_screen.defeat_research_reward_value_label().text == "+23"
+		and String(defeat_reward_panel.get_meta(&"alveolus_accessible_name", "")).contains("23"),
+		"Die Niederlagenprognose steht als zugängliches Forschungssymbol mit Zahl links vom Timer"
+	)
+	_check(defeat_reward_panel.get_global_rect().end.x <= hud.timer_panel.get_global_rect().position.x + 0.5, "Forschungsprognose und Rundendauer überlappen nicht")
 	var stat_strip_rect := hud.run_hud_screen.run_stats_strip().get_global_rect()
 	var timer_rect := hud.timer_panel.get_global_rect()
 	var hud_rect := hud.run_hud_screen.get_global_rect()
@@ -208,7 +222,7 @@ func _run() -> void:
 	var stat_row_counts: Array[int] = []
 	for row_level in stat_row_order:
 		stat_row_counts.append(int(stat_row_populations[row_level]))
-	_check(stat_row_counts == [4, 1], "Kampfwerte stehen rechts unter der Zeit in Viererreihen")
+	_check(stat_row_counts == [4, 4], "Kampfgrundwerte stehen rechts unter der Zeit in zwei vollständigen Viererreihen")
 	# Force the reusable strip into a genuinely constrained width. Target
 	# resolutions normally still expose the 1280×720 design canvas, while the
 	# FlowContainer must nevertheless wrap correctly if future HUD elements use
@@ -216,7 +230,7 @@ func _run() -> void:
 	hud.run_stats_panel.set_anchor(SIDE_LEFT, 0.0)
 	hud.run_stats_panel.set_anchor(SIDE_RIGHT, 0.0)
 	hud.run_stats_panel.offset_left = 0.0
-	hud.run_stats_panel.offset_right = 250.0
+	hud.run_stats_panel.offset_right = 280.0
 	await process_frame
 	await process_frame
 	var wrapped_rows := {}
@@ -235,15 +249,34 @@ func _run() -> void:
 	_check(hud.is_pause_stats_open() and hud.pause_screen.current_mode() == PauseOverlay.Mode.STATS, "Charakterwerte-Submenü öffnet als expliziter Modus innerhalb der Pause")
 	var pause_stats_grid := hud.pause_screen.stats_grid()
 	var pause_stats_scroll := hud.pause_screen.body_scroll()
+	var pause_stat_sections := hud.pause_screen.stat_sections()
 	var pause_stat_rows := hud.pause_screen.stat_rows()
-	_check(pause_stats_grid.columns == 2, "Charakterwerte verwenden bei 1280 × 720 exakt zwei Wertspalten")
-	var expected_stat_rows := stats.stat_rows(state.stability, state.max_stability, TherapyAvatar.MOVE_SPEED).size()
-	_check(pause_stat_rows.size() == expected_stat_rows and pause_stats_grid.get_child_count() == expected_stat_rows and expected_stat_rows > 13, "Alle Basis- und optionalen Charakterwerte erscheinen als einzelne sichtbare Zeilen")
+	_check(pause_stats_grid.columns == 1, "Die Accordion-Abschnitte bleiben in einer klaren vertikalen Reihenfolge")
+	var expected_section_ids: Array[StringName] = [
+		&"general",
+		&"treatment:treatment_precision",
+		&"ability:0:ability_focus_field",
+		&"ability:1:ability_emergency_support",
+	]
+	var actual_section_ids: Array[StringName] = []
+	for section_panel in pause_stat_sections:
+		var stable_section_id := StringName(section_panel.get_meta(&"section_id", &""))
+		actual_section_ids.append(stable_section_id)
+		_check(section_panel.get_meta(&"alveolus_component", &"") == &"stat_accordion_section", "Jede Charakterwertegruppe verwendet die gemeinsame Accordion-Sektion")
+		_check(hud.pause_screen.section_header(stable_section_id) != null, "Jede Charakterwertegruppe besitzt eine fokussierbare Abschnittsüberschrift")
+		_check(hud.pause_screen.section_body(stable_section_id).columns == 2, "Geöffnete Abschnittswerte nutzen bei 1280 × 720 zwei kompakte Spalten")
+	_check(actual_section_ids == expected_section_ids and pause_stats_grid.get_child_count() == expected_section_ids.size(), "Grundwerte, Behandlung und beide belegten Aktivslots erscheinen als vier stabile Abschnitte")
+	_check(hud.pause_screen.is_section_expanded(&"general"), "Grundwerte sind beim ersten Öffnen sichtbar")
+	_check(not hud.pause_screen.is_section_expanded(&"treatment:treatment_precision") and not hud.pause_screen.is_section_expanded(&"ability:0:ability_focus_field") and not hud.pause_screen.is_section_expanded(&"ability:1:ability_emergency_support"), "Behandlung und Aktivslots beginnen platzsparend eingeklappt")
+	var expected_stat_rows := 0
+	for section in stats.stat_sections(state.stability, state.max_stability):
+		expected_stat_rows += section.row_count()
+	_check(pause_stat_rows.size() == expected_stat_rows and expected_stat_rows > 13, "Alle Werte liegen genau einmal in ihren stabilen Abschnitten")
 	var value_right_edges := {}
 	var previous_rows := {}
 	for row_index in range(pause_stat_rows.size()):
 		var stat_row := pause_stat_rows[row_index]
-		_check(stat_row.has_meta(&"stat_group") and stat_row.is_visible_in_tree(), "Jeder Charakterwert ist eine sichtbare StatRow statt einer Gruppenkarte")
+		_check(stat_row.has_meta(&"stat_group") and stat_row.has_meta(&"stat_id"), "Jeder Charakterwert besitzt stabile Abschnitts- und Zeilen-IDs")
 		var marker := stat_row.find_child("StatIcon", true, false) as SimpleIcon
 		var caption := stat_row.find_child("StatLabel", true, false) as Label
 		var value := stat_row.find_child("StatValue", true, false) as Label
@@ -251,19 +284,28 @@ func _run() -> void:
 		if marker == null or caption == null or value == null:
 			continue
 		_check(value.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT, "Jeder Charakterwert ist am rechten Spaltenrand ausgerichtet")
+		# Eingeklappte Accordion-Abschnitte bleiben als stabile Controls erhalten,
+		# nehmen aber bewusst nicht am Layout teil. Geometrie wird daher nur für
+		# die tatsächlich sichtbaren Grundwerte geprüft.
+		if not stat_row.is_visible_in_tree():
+			continue
 		var marker_rect := marker.get_global_rect()
 		var caption_rect := caption.get_global_rect()
 		var value_rect := value.get_global_rect()
 		_check(marker_rect.end.x <= caption_rect.position.x + 0.5 and caption_rect.end.x <= value_rect.position.x + 0.5, "Icon, Label und Value einer StatRow überlappen einander nicht")
-		var column_index := row_index % pause_stats_grid.columns
+		var section_id := StringName(stat_row.get_meta(&"stat_group", &""))
+		var section_body := hud.pause_screen.section_body(section_id)
+		var column_index := stat_row.get_index() % maxi(1, section_body.columns)
 		if previous_rows.has(column_index):
 			var previous_stat_row := previous_rows[column_index] as PanelContainer
-			_check(previous_stat_row.get_global_rect().end.y <= stat_row.get_global_rect().position.y + 0.5, "Charakterwertzeilen überlappen vertikal nicht")
+			if previous_stat_row.is_visible_in_tree() and stat_row.is_visible_in_tree():
+				_check(previous_stat_row.get_global_rect().end.y <= stat_row.get_global_rect().position.y + 0.5, "Sichtbare Charakterwertzeilen überlappen vertikal nicht")
 		previous_rows[column_index] = stat_row
-		if value_right_edges.has(column_index):
-			_check(is_equal_approx(float(value_right_edges[column_index]), value_rect.end.x), "Alle Value-Endkanten einer Charakterwertspalte sind bündig")
+		var value_column_key := "%s:%d" % [section_id, column_index]
+		if value_right_edges.has(value_column_key):
+			_check(is_equal_approx(float(value_right_edges[value_column_key]), value_rect.end.x), "Alle Value-Endkanten einer Abschnittsspalte sind bündig")
 		else:
-			value_right_edges[column_index] = value_rect.end.x
+			value_right_edges[value_column_key] = value_rect.end.x
 	_check(
 		pause_stats_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and not pause_stats_scroll.get_v_scroll_bar().visible,
 		"Charakterwerte benötigen bei 1280 × 720 keinen Scrollbalken (Inhalt %.1f, Fläche %.1f, Modus %d)" % [pause_stats_grid.get_combined_minimum_size().y, pause_stats_scroll.size.y, pause_stats_scroll.vertical_scroll_mode]
@@ -276,6 +318,34 @@ func _run() -> void:
 	hud._on_run_stats_toggle(false)
 	_check(visibility_events == [false], "Anzeigeeinstellung meldet Änderungen an den Spielstand")
 	_check(not hud.run_stats_panel.visible, "Deaktivierte Anzeige verschwindet sofort")
+
+	var upgrade_by_id: Dictionary = {}
+	for definition in ContentCatalog.upgrade_definitions():
+		upgrade_by_id[definition.id] = definition
+	var heading_upgrade_ids: Array[StringName] = [&"potency", &"burst_effect", &"line_effect", &"mobility"]
+	var heading_upgrades: Array[UpgradeDefinition] = []
+	for upgrade_id in heading_upgrade_ids:
+		heading_upgrades.append(upgrade_by_id[upgrade_id] as UpgradeDefinition)
+	hud.show_upgrade_choices(heading_upgrades, stats, false, false)
+	await process_frame
+	var expected_upgrade_headings := {
+		&"potency": "Präziser Impuls",
+		&"burst_effect": "Abwehrstoß",
+		&"line_effect": "Behandlungslinie",
+		&"mobility": "Bewegung",
+	}
+	for upgrade_card in hud.upgrade_cards.get_children():
+		var upgrade_id := StringName((upgrade_card as Control).get_meta(&"upgrade_id", &""))
+		var upgrade_title := (upgrade_card as Control).find_child("UpgradeTitle", true, false) as Label
+		_check(upgrade_title != null and upgrade_title.text == String(expected_upgrade_headings.get(upgrade_id, "")), "GameHUD löst die Ausbauüberschrift %s auf den betroffenen Komponentenname auf" % upgrade_id)
+	var movement_upgrades: Array[UpgradeDefinition] = [upgrade_by_id[&"mobility"] as UpgradeDefinition]
+	hud.show_upgrade_choices(movement_upgrades, stats, false, false)
+	await process_frame
+	var movement_card := hud.upgrade_cards.get_child(0) as Control
+	var movement_title := movement_card.find_child("UpgradeTitle", true, false) as Label
+	var movement_icon := movement_card.find_child("UpgradeIcon", true, false) as SimpleIcon
+	_check(movement_title != null and movement_title.text == "Bewegung", "Der Bewegungsausbau verwendet den verbindlichen Komponentennamen")
+	_check(movement_icon != null and movement_icon.kind == &"movement_training", "Der Bewegungsausbau verwendet dieselbe semantische Trainingsglyphe wie die Forschung")
 
 	var upgrade_options := ContentCatalog.upgrade_definitions().slice(0, 3)
 	hud.show_upgrade_choices(upgrade_options, stats, false, false)

@@ -95,7 +95,7 @@ func _test_stat_sections_and_headings() -> void:
 	_equal(potency.heading_component_id(treatment.id), treatment.id, "Allgemeines Behandlungsupgrade folgt dynamisch der vorbereiteten Behandlung")
 	_equal(potency.resolved_component_name(treatment), "Präziser Impuls", "UI erhält nur den aufgelösten Komponentennamen")
 	var mobility := _upgrade(&"mobility")
-	_equal(mobility.resolved_component_name(treatment), "Doctor Milos", "Allgemeiner Bewegungsausbau benennt seine Komponente stabil")
+	_equal(mobility.resolved_component_name(treatment), "Bewegung", "Allgemeiner Bewegungsausbau benennt seine Komponente stabil")
 
 
 func _upgrade(id: StringName) -> UpgradeDefinition:

@@ -64,7 +64,9 @@ func _run() -> void:
 	var visible_copy := _visible_label_copy(unlocked)
 	_check(not visible_copy.contains("Boss") and not visible_copy.contains("Min."), "Sichtbare Fallkartencopy enthält weder Boss- noch Minutenzeit")
 	var summary := unlocked.find_child("Summary", true, false) as Label
-	_check(summary != null and summary.max_lines_visible == 2, "Bestwert und Fortschritt sind in einer kompakten, höchstens zweizeiligen Zusammenfassung gebündelt")
+	_check(summary != null and summary.max_lines_visible == 2 and not summary.text.contains("Beste Zeit"), "Nur der kurze Fortschritt steht in einer höchstens zweizeiligen Zusammenfassung")
+	var unlocked_title := unlocked.find_child("Title", true, false) as Label
+	_check(unlocked_title != null and unlocked_title.size.x >= 150.0 and unlocked_title.text == "Lokaler Herd", "Falltitel nutzt die verfügbare Kartenbreite ohne unnötige Ellipse")
 	_check(unlocked.find_child("Best", true, false) == null and unlocked.find_child("Record", true, false) == null, "Fallkarte reserviert keine getrennten Metadatenzeilen")
 	_check(is_equal_approx(unlocked.custom_minimum_size.y, CaseArchiveScreen.CARD_HEIGHT), "Desktop-Fallkarten besitzen eine dichte inhaltsgerechte Höhe")
 	_check(CaseArchiveScreen.CARD_HEIGHT <= 144.0 and CaseArchiveScreen.CARD_HEIGHT_COMPACT < CaseArchiveScreen.CARD_HEIGHT, "Fallkarten bleiben kompakt und werden im kleinen Viewport nochmals dichter")
@@ -113,19 +115,19 @@ func _fixture_entries() -> Array[CaseArchiveViewModel.CaseEntryViewModel]:
 	var result: Array[CaseArchiveViewModel.CaseEntryViewModel] = []
 	result.append(CaseArchiveViewModel.CaseEntryViewModel.new(
 		&"intro", 0, "Das Lungenmodell", "Intro · Abgeschlossen", "Ereignisgesteuert · Lektion 3",
-		"Beste Zeit 2:10", "1 Sieg · Lv 1 · Ziele 1/1", true, true, AlveolusVisualTheme.GOLD
+		"", "1 Sieg · Lv 1 · 4 Bakt.", true, true, AlveolusVisualTheme.GOLD
 	))
 	result.append(CaseArchiveViewModel.CaseEntryViewModel.new(
 		&"case_01", 1, "Lokaler Herd", "Fall 01 · Bereit", "3:00 Min. · Boss 2:15 Min.",
-		"Noch kein Sieg", "0 Siege · Lv 0 · Ziele 0/3", false, true, AlveolusVisualTheme.COBALT
+		"", "Noch kein Sieg", false, true, AlveolusVisualTheme.COBALT
 	))
 	result.append(CaseArchiveViewModel.CaseEntryViewModel.new(
 		&"case_02", 2, "Die Ausbreitung", "Fall 02 · Gesperrt", "4:00 Min. · Boss 3:00 Min.",
-		"Noch kein Sieg", "0 Siege · Lv 0 · Ziele 0/3", false, false, AlveolusVisualTheme.CORAL
+		"", "Noch kein Sieg", false, false, AlveolusVisualTheme.CORAL
 	))
 	result.append(CaseArchiveViewModel.CaseEntryViewModel.new(
 		&"case_03", 3, "Schwerer Verlauf", "Fall 03 · Gesperrt", "5:00 Min. · Boss 3:45 Min.",
-		"Noch kein Sieg", "0 Siege · Lv 0 · Ziele 0/3", false, false, AlveolusVisualTheme.TURQUOISE
+		"", "Noch kein Sieg", false, false, AlveolusVisualTheme.TURQUOISE
 	))
 	return result
 

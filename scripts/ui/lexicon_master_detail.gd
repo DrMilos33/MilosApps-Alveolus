@@ -41,6 +41,7 @@ var detail_gameplay_text: Label
 var detail_gameplay_panel: PanelContainer
 var detail_stats_title: Label
 var detail_stats_grid: GridContainer
+var detail_type_sections: VBoxContainer
 var detail_medical_title: Label
 var detail_medical_text: Label
 var detail_medical_panel: PanelContainer
@@ -48,6 +49,7 @@ var detail_related_title: Label
 var detail_related_text: Label
 var empty_detail_label: Label
 var _context_detail_sources: Dictionary = {}
+var _detail_type_grids: Array[GridContainer] = []
 
 func _ready() -> void:
 	if provider == null:
@@ -366,6 +368,12 @@ func _build_detail_content() -> void:
 	detail_stats_grid.add_theme_constant_override("v_separation", 8)
 	detail_content.add_child(detail_stats_grid)
 
+	detail_type_sections = VBoxContainer.new()
+	detail_type_sections.name = "TypePresentations"
+	detail_type_sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_type_sections.add_theme_constant_override("separation", 10)
+	detail_content.add_child(detail_type_sections)
+
 	var gameplay_section := AlveolusUIComponents.semantic_copy_section("IM SPIEL", "", &"ability", AlveolusVisualTheme.TEAL)
 	detail_gameplay_panel = gameplay_section["panel"]
 	detail_gameplay_title = gameplay_section["title"]
@@ -476,6 +484,9 @@ func _show_empty_detail() -> void:
 	detail_summary.hide()
 	detail_stats_title.hide()
 	detail_stats_grid.hide()
+	_clear_children(detail_type_sections)
+	_detail_type_grids.clear()
+	detail_type_sections.hide()
 	detail_gameplay_title.hide()
 	detail_gameplay_text.hide()
 	detail_gameplay_panel.hide()
@@ -504,8 +515,12 @@ func _show_detail(view_model: LexiconEntryViewModel) -> void:
 	detail_medical_name.text = view_model.medical_name
 	detail_medical_name.visible = not view_model.medical_name.is_empty() and not view_model.locked
 
+	var type_presentations := view_model.type_presentations()
+	var has_structured_types := not type_presentations.is_empty()
 	_clear_children(detail_stats_grid)
 	for row in view_model.stat_rows:
+		if has_structured_types and _is_legacy_type_row(row.id):
+			continue
 		var stat_panel := AlveolusUIComponents.value_row(row.label, row.formatted_value())
 		stat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stat_panel.set_meta(&"lexicon_stat_id", row.id)
@@ -519,8 +534,10 @@ func _show_detail(view_model: LexiconEntryViewModel) -> void:
 			value_label.custom_minimum_size.x = 72.0
 			value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		detail_stats_grid.add_child(stat_panel)
-	detail_stats_title.visible = not view_model.stat_rows.is_empty()
-	detail_stats_grid.visible = not view_model.stat_rows.is_empty()
+	var has_stat_rows := detail_stats_grid.get_child_count() > 0
+	detail_stats_title.visible = has_stat_rows
+	detail_stats_grid.visible = has_stat_rows
+	_rebuild_type_presentations(type_presentations)
 
 	detail_gameplay_text.text = view_model.gameplay_text
 	detail_gameplay_title.visible = not view_model.gameplay_text.is_empty() and not view_model.locked
@@ -534,6 +551,92 @@ func _show_detail(view_model: LexiconEntryViewModel) -> void:
 	detail_related_title.visible = not view_model.related_names.is_empty() and not view_model.locked
 	detail_related_text.visible = detail_related_title.visible
 	detail_scroll.scroll_vertical = 0
+
+func _rebuild_type_presentations(
+	presentations: Array[LexiconEntryViewModel.TypePresentation]
+) -> void:
+	_clear_children(detail_type_sections)
+	_detail_type_grids.clear()
+	if presentations.is_empty():
+		detail_type_sections.hide()
+		return
+
+	var current_role: StringName = &""
+	var current_grid: GridContainer = null
+	for presentation in presentations:
+		if presentation == null:
+			continue
+		if presentation.semantic_role != current_role:
+			current_role = presentation.semantic_role
+			var group := VBoxContainer.new()
+			group.name = "TypeGroup_%s" % current_role
+			group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			group.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+			group.set_meta(&"lexicon_semantic_role", current_role)
+			var title := AlveolusUIComponents.label(
+				_type_section_title(current_role),
+				AlveolusVisualTheme.TYPE_EYEBROW_LABEL
+			)
+			group.add_child(title)
+			current_grid = GridContainer.new()
+			current_grid.name = "TypeGrid_%s" % current_role
+			current_grid.columns = 1 if _is_compact() else 2
+			current_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			current_grid.add_theme_constant_override("h_separation", 10)
+			current_grid.add_theme_constant_override("v_separation", 8)
+			group.add_child(current_grid)
+			detail_type_sections.add_child(group)
+			_detail_type_grids.append(current_grid)
+
+		var parts := AlveolusUIComponents.damage_type_chip(
+			presentation.type_id,
+			presentation.display_name,
+			presentation.formatted_value,
+			presentation.meaning,
+			_type_indicator_text(presentation.indicator)
+		)
+		var chip := parts["panel"] as PanelContainer
+		chip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		chip.set_meta(&"lexicon_semantic_role", presentation.semantic_role)
+		chip.set_meta(&"lexicon_icon_id", presentation.icon_id)
+		chip.set_meta(&"lexicon_indicator", presentation.indicator)
+		var icon := parts["icon"] as SimpleIcon
+		if icon != null:
+			icon.configure(
+				presentation.icon_id,
+				AlveolusVisualTheme.damage_type_accent(presentation.type_id)
+			)
+		current_grid.add_child(chip)
+
+	detail_type_sections.visible = detail_type_sections.get_child_count() > 0
+
+func _is_legacy_type_row(row_id: StringName) -> bool:
+	return row_id in [
+		&"damage_types",
+		&"damage_type",
+		&"treatment_damage_type",
+		&"resistances",
+	]
+
+func _type_section_title(semantic_role: StringName) -> String:
+	match semantic_role:
+		&"damage_share":
+			return "Schadenstypen"
+		&"resistance_effective":
+			return "Effektive Resistenzen"
+	return "Typwerte"
+
+func _type_indicator_text(indicator: StringName) -> String:
+	match indicator:
+		&"share":
+			return "•"
+		&"mitigation":
+			return "↓"
+		&"vulnerability":
+			return "↑"
+		&"neutral":
+			return "–"
+	return ""
 
 func _configure_focus_neighbors() -> void:
 	var category_count := LexiconCatalog.CATEGORY_ORDER.size()
@@ -649,6 +752,9 @@ func _apply_responsive_layout() -> void:
 	list_panel.visible = not compact or not compact_detail_visible
 	detail_panel.visible = not compact or compact_detail_visible
 	detail_stats_grid.columns = 1 if compact else 2
+	for type_grid in _detail_type_grids:
+		if type_grid != null and is_instance_valid(type_grid):
+			type_grid.columns = 1 if compact else 2
 	if compact_back_button != null:
 		compact_back_button.visible = compact and compact_detail_visible
 

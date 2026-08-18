@@ -16,7 +16,7 @@ const DRAWN_KINDS: Array[StringName] = [
 	&"unlock_spread_treatment", &"unlock_piercing_treatment", &"unlock_defense_burst",
 	&"unlock_treatment_line", &"unlock_protection_field", &"unlock_sample_pull", &"quick_test",
 	&"reserve_buffer", &"defense_readiness", &"deployment_routine", &"experience_gain",
-	&"defense_training", &"life_regeneration",
+	&"defense_training", &"life_regeneration", &"movement_training", &"mobility",
 	&"damage_fire", &"damage_water", &"damage_earth", &"damage_wind",
 	&"fire", &"water", &"earth", &"wind",
 	&"locked", &"check", &"remove", &"restart", &"diamond", &"circle", &"target",
@@ -116,6 +116,8 @@ func _draw() -> void:
 		&"life_regeneration":
 			_draw_support()
 			_draw_cross(Vector2.ZERO, 0.58)
+		&"movement_training", &"mobility":
+			_draw_movement_training()
 		&"preanalysis", &"finding":
 			_draw_finding(false)
 		&"finding_progress":
@@ -201,6 +203,16 @@ func _draw_clock(offset: Vector2 = Vector2.ZERO, radius: float = 17.0) -> void:
 	draw_arc(offset, radius, 0.0, TAU, 28, accent, 2.5, true)
 	draw_line(offset, offset + Vector2(0, -radius * 0.58), accent, 2.5, true)
 	draw_line(offset, offset + Vector2(radius * 0.52, radius * 0.30), accent, 2.5, true)
+
+func _draw_movement_training() -> void:
+	# Three staggered lanes read as acceleration at small HUD and research sizes
+	# without borrowing an unrelated treatment or damage symbol.
+	for index in range(3):
+		var y := -12.0 + float(index) * 12.0
+		var start_x := -18.0 + float(index) * 4.0
+		draw_line(Vector2(start_x, y), Vector2(10.0, y), Color(accent, 0.62 + float(index) * 0.16), 2.5, true)
+		draw_line(Vector2(10.0, y), Vector2(3.0, y - 6.0), accent, 2.5, true)
+		draw_line(Vector2(10.0, y), Vector2(3.0, y + 6.0), accent, 2.5, true)
 
 func _draw_boss() -> void:
 	draw_circle(Vector2.ZERO, 13.0, Color(accent, 0.18))

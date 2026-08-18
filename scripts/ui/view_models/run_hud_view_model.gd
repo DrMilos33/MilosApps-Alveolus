@@ -7,6 +7,17 @@ extends RefCounted
 ## This model copies only stable IDs and primitive values; no run/domain object
 ## crosses into the screen module.
 
+const BASIC_STAT_IDS: Array[StringName] = [
+	&"defense",
+	&"movement_speed",
+	&"life_regeneration",
+	&"experience_gain",
+	&"resistance_fire",
+	&"resistance_water",
+	&"resistance_earth",
+	&"resistance_wind",
+]
+
 class StatValueViewModel:
 	extends RefCounted
 
@@ -195,6 +206,10 @@ var _shield_current := 0.0
 var _shield_maximum := 0.0
 var _timer_text := "00:00"
 var _timer_tone: StringName = &"neutral"
+var _defeat_reward_visible := false
+var _defeat_reward_icon_id: StringName = &"research"
+var _defeat_reward_formatted_value := ""
+var _defeat_reward_accessible_name := ""
 var _boss_visible := false
 var _boss_title := "Infektionsherd"
 var _boss_current := 0.0
@@ -211,8 +226,11 @@ var _content_hash := ""
 
 ## Vital snapshot keys:
 ## stability_current/maximum, shield_current/maximum, timer_text/tone,
+## defeat_research_reward ({visible, icon_id, value, accessible_name}),
 ## boss_visible/title/current/maximum/phase, analysis_current/target/level.
-## Stat rows accept id, icon_id, value, accessible_name and priority.
+## Stat rows accept id, icon_id, value, accessible_name and priority. Only the
+## eight stable general-stat IDs in BASIC_STAT_IDS cross into the run HUD;
+## treatment and ability values belong to the pause detail view.
 ## Ability rows accept slot (0/1), title, icon_id, occupied, ready,
 ## effect_text, fact_rows ({label, value}), cooldown_remaining/total, targeting
 ## and key_glyph_text.
@@ -249,6 +267,20 @@ static func create(
 	result._timer_tone = StringName(String(vital.get("timer_tone", "neutral")))
 	if result._timer_tone not in [&"neutral", &"attention", &"danger"]:
 		result._timer_tone = &"neutral"
+	var reward_value: Variant = vital.get("defeat_research_reward", {})
+	if reward_value is Dictionary:
+		var reward: Dictionary = (reward_value as Dictionary).duplicate(true)
+		result._defeat_reward_formatted_value = String(reward.get("value", "")).strip_edges()
+		result._defeat_reward_visible = bool(reward.get(
+			"visible",
+			not result._defeat_reward_formatted_value.is_empty()
+		)) and not result._defeat_reward_formatted_value.is_empty()
+		result._defeat_reward_icon_id = StringName(String(reward.get("icon_id", "research")))
+		if result._defeat_reward_icon_id == &"":
+			result._defeat_reward_icon_id = &"research"
+		result._defeat_reward_accessible_name = String(reward.get("accessible_name", "")).strip_edges()
+		if result._defeat_reward_visible and result._defeat_reward_accessible_name.is_empty():
+			result._defeat_reward_accessible_name = "Forschung bei Niederlage: %s" % result._defeat_reward_formatted_value
 	result._boss_visible = bool(vital.get("boss_visible", false))
 	result._boss_title = String(vital.get("boss_title", "Infektionsherd")).strip_edges()
 	if result._boss_title.is_empty():
@@ -315,6 +347,22 @@ func round_time_text() -> String:
 
 func timer_tone() -> StringName:
 	return _timer_tone
+
+
+func defeat_research_reward_visible() -> bool:
+	return _defeat_reward_visible
+
+
+func defeat_research_reward_icon_id() -> StringName:
+	return _defeat_reward_icon_id
+
+
+func defeat_research_reward_formatted_value() -> String:
+	return _defeat_reward_formatted_value
+
+
+func defeat_research_reward_accessible_name() -> String:
+	return _defeat_reward_accessible_name
 
 
 func boss_visible() -> bool:
@@ -398,7 +446,12 @@ func _copy_stats(source_rows: Array) -> void:
 		var row := row_value as Dictionary
 		var stat_id := StringName(String(row.get("id", "")))
 		var value_text := String(row.get("value", "")).strip_edges()
-		if stat_id == &"" or value_text.is_empty() or seen_ids.has(stat_id):
+		if (
+			stat_id == &""
+			or not BASIC_STAT_IDS.has(stat_id)
+			or value_text.is_empty()
+			or seen_ids.has(stat_id)
+		):
 			continue
 		seen_ids[stat_id] = true
 		var icon_id := StringName(String(row.get("icon_id", "information")))
@@ -479,6 +532,10 @@ func _calculate_content_hash() -> String:
 		_float_key(_shield_maximum),
 		_length_prefixed(_timer_text),
 		_length_prefixed(String(_timer_tone)),
+		"1" if _defeat_reward_visible else "0",
+		_length_prefixed(String(_defeat_reward_icon_id)),
+		_length_prefixed(_defeat_reward_formatted_value),
+		_length_prefixed(_defeat_reward_accessible_name),
 		"1" if _boss_visible else "0",
 		_length_prefixed(_boss_title),
 		_float_key(_boss_current),

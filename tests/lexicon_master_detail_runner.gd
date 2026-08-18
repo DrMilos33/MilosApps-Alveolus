@@ -50,6 +50,7 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.empty_detail_label.visible and lexicon.empty_detail_label.text == "Eintrag auswählen.", "Die leere Detailfläche gibt eine knappe neutrale Anleitung")
 	_check(lexicon.empty_detail_label.size_flags_vertical == Control.SIZE_SHRINK_BEGIN, "Die leere Anleitung reserviert keinen unnötigen vertikalen Leerraum")
 	_check(lexicon.detail_panel.size_flags_vertical == Control.SIZE_SHRINK_BEGIN, "Auch die leere Detailfläche selbst kollabiert auf ihre knappe Anleitung")
+	_check(not lexicon.detail_type_sections.visible, "Die leere Detailfläche zeigt keine veralteten Typdaten")
 	_check(MedicalLexiconIllustration.SAFE_MARGIN >= 4.0, "Lexikonillustrationen reservieren einen festen Sicherheitsabstand zum Kachelrand")
 	for button in lexicon.entry_buttons.values():
 		_check((button as Button).theme_type_variation in [AlveolusVisualTheme.TYPE_SELECTION_CARD, AlveolusVisualTheme.TYPE_SELECTED_CARD], "Jede Lexikonzeile verwendet eine zentrale Auswahlkartenrolle")
@@ -89,7 +90,8 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.select_entry(&"pneumococcus"), "Entdecktes Bakterium ist auswählbar")
 	_check(not lexicon.detail_illustration.locked, "Entdeckte Illustration ist sichtbar")
-	_check(lexicon.detail_stats_grid.get_child_count() == 8, "Acht Gegnerwerte einschließlich Schadenstyp und Resistenzen werden strukturiert dargestellt")
+	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Sechs kompakte Gegnerwerte bleiben neben der strukturierten Typdarstellung sichtbar")
+	_assert_type_presentations(lexicon, &"pneumococcus")
 	_check(lexicon.detail_title.text == "Bakterium", "Detailtitel verwendet einfachen Namen")
 	_check(lexicon.detail_medical_name.text == "Pneumokokke", "Fachbegriff bleibt als zweite Ebene")
 
@@ -97,6 +99,7 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.detail_illustration.locked, "Gesperrter Eintrag zeichnet die Silhouette")
 	_check(lexicon.detail_title.text == "Noch nicht beobachtet", "Gesperrter Eintrag verrät keinen Namen")
 	_check(not lexicon.detail_stats_grid.visible, "Gesperrter Eintrag verrät keine Werte")
+	_check(not lexicon.detail_type_sections.visible, "Gesperrter Eintrag verrät keine Schadenstypen oder Resistenzen")
 	_check(not lexicon.detail_medical_name.visible, "Gesperrter Eintrag verrät keinen Fachbegriff")
 
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_TERMS)
@@ -118,7 +121,7 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	await process_frame
 	_check(lexicon.detail_stats_grid.columns == 2, "Breites Lexikon zeigt zwei kompakte Wertkarten pro Zeile")
 	_check(lexicon.detail_stats_grid.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "Die Werteansicht nutzt die gesamte verfügbare Detailbreite")
-	_check(lexicon.detail_stats_grid.get_child_count() == 8, "Die Zwei-Spalten-Wertansicht behält alle acht Basiswerte")
+	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Die Zwei-Spalten-Wertansicht behält alle nicht redundanten Basiswerte")
 	for stat_child in lexicon.detail_stats_grid.get_children():
 		var stat_panel := stat_child as PanelContainer
 		_check(stat_panel != null and stat_panel.get_meta(&"alveolus_component", &"") == &"value_row", "Jeder Basiswert verwendet die zentrale kompakte Wertzeile")
@@ -129,6 +132,8 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 			var value_label := stat_panel.find_child("Value", true, false) as Label
 			_check(name_label != null and name_label.autowrap_mode == TextServer.AUTOWRAP_OFF, "Wertbezeichnungen brechen niemals zeichenweise um")
 			_check(value_label != null and value_label.custom_minimum_size.x >= 72.0, "Der rechtsbündige Wert behält eine stabile lesbare Spalte")
+	for type_grid in lexicon._detail_type_grids:
+		_check(type_grid.columns == 2, "Breite Schadenstypgruppen ordnen ihre vier Einträge in zwei Spalten")
 
 	# The scene has an 800-px minimum, which is intentionally still below the
 	# 820-px master/detail breakpoint. Pin it to the top-left so the test covers
@@ -139,6 +144,8 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	await process_frame
 	await process_frame
 	_check(lexicon.detail_stats_grid.columns == 1, "Kompaktes Lexikon zeigt genau eine Wertkarte pro Zeile")
+	for type_grid in lexicon._detail_type_grids:
+		_check(type_grid.columns == 1, "Kompakte Schadenstypgruppen bleiben als einzelne lesbare Zeilen erhalten")
 	_check(lexicon.category_bar.columns == 2, "Kompaktes Lexikon ordnet auch die Kategorien in zwei Spalten")
 	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Kompaktes Lexikon aktiviert den vertikalen Seitenscroll")
 	_check(lexicon.content_row.custom_minimum_size.y >= LexiconMasterDetail.COMPACT_CONTENT_MIN_HEIGHT, "Liste und Detail kollabieren bei kompakter Höhe nicht zu einem leeren Streifen")
@@ -164,6 +171,33 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	await process_frame
 	await process_frame
 	_check(lexicon.detail_stats_grid.columns == 2, "Nach Rückkehr zur breiten Ansicht werden wieder zwei Wertkarten je Zeile gezeigt")
+	for type_grid in lexicon._detail_type_grids:
+		_check(type_grid.columns == 2, "Nach Rückkehr zur breiten Ansicht nutzen auch Schadenstypen wieder zwei Spalten")
+
+func _assert_type_presentations(lexicon: LexiconMasterDetail, entry_id: StringName) -> void:
+	var model := lexicon.entry_view_models.get(entry_id) as LexiconEntryViewModel
+	var presentations := model.type_presentations() if model != null else []
+	var chips: Array[Node] = lexicon.detail_type_sections.find_children("DamageTypeChip_*", "PanelContainer", true, false)
+	_check(lexicon.detail_type_sections.visible, "Schadenstypen und effektive Resistenzen besitzen einen sichtbaren strukturierten Bereich")
+	_check(presentations.size() == 8 and chips.size() == presentations.size(), "Vier Schadensanteile und vier effektive Resistenzen werden vollständig als zentrale Chips dargestellt")
+	if presentations.size() != chips.size():
+		return
+	var expected_order: Array[StringName] = [&"fire", &"water", &"earth", &"wind", &"fire", &"water", &"earth", &"wind"]
+	for index in range(chips.size()):
+		var chip := chips[index] as PanelContainer
+		var presentation := presentations[index]
+		_check(chip.get_meta(&"alveolus_component", &"") == &"damage_type_chip", "Jeder Typwert verwendet ausschließlich die zentrale DamageTypeChip-Komponente")
+		_check(chip.get_meta(&"damage_type_id", &"") == expected_order[index], "Typwert %d folgt der festen Reihenfolge Feuer, Wasser, Erde, Wind" % index)
+		_check(chip.get_meta(&"lexicon_semantic_role", &"") == presentation.semantic_role, "Typwert %d transportiert seine DTO-Semantik ohne UI-Ableitung" % index)
+		_check(chip.get_meta(&"lexicon_icon_id", &"") == presentation.icon_id, "Typwert %d übernimmt seine fertige Iconrolle aus dem DTO" % index)
+		var icon := chip.find_child("DamageTypeIcon", true, false) as SimpleIcon
+		var name_label := chip.find_child("DamageTypeName", true, false) as Label
+		var value_label := chip.find_child("DamageTypeValue", true, false) as Label
+		var meaning_label := chip.find_child("DamageTypeMeaning", true, false) as Label
+		_check(icon != null and icon.kind == presentation.icon_id, "Typwert %d zeigt das DTO-Icon" % index)
+		_check(name_label != null and name_label.text == presentation.display_name, "Typwert %d nennt den Schadenstyp ausgeschrieben" % index)
+		_check(value_label != null and value_label.text == presentation.formatted_value, "Typwert %d zeigt ausschließlich den fertig formatierten DTO-Wert" % index)
+		_check(meaning_label != null and meaning_label.text == presentation.meaning, "Typwert %d erklärt seinen Wert zusätzlich zur Farbe" % index)
 
 func _test_game_hud_embedding() -> void:
 	var hud := GameHUD.new()

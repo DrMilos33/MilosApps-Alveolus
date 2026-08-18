@@ -69,7 +69,12 @@ var _stats_button: Button
 var _abort_button: Button
 var _intro_skip_button: Button
 var _back_button: Button
+var _stat_sections: Array[PanelContainer] = []
 var _stat_rows: Array[PanelContainer] = []
+var _section_controls: Dictionary = {}
+var _section_headers: Dictionary = {}
+var _section_bodies: Dictionary = {}
+var _expanded_sections: Dictionary = {}
 
 
 func _init() -> void:
@@ -101,7 +106,7 @@ func apply_view_model(view_model: PauseOverlayViewModel, mode: int = Mode.MENU) 
 	_applied_revision = view_model.revision()
 	_applied_content_hash = view_model.content_hash()
 	if content_changed:
-		_rebuild_stat_rows()
+		_sync_stat_sections()
 	AlveolusUIComponents.set_button_disabled(_stats_button, not view_model.has_stats())
 	_intro_skip_button.visible = view_model.show_intro_skip()
 	_apply_mode(mode)
@@ -181,10 +186,38 @@ func stats_grid() -> GridContainer:
 	return _stats_grid
 
 
+func stat_sections() -> Array[PanelContainer]:
+	var result: Array[PanelContainer] = []
+	result.assign(_stat_sections)
+	return result
+
+
 func stat_rows() -> Array[PanelContainer]:
 	var result: Array[PanelContainer] = []
 	result.assign(_stat_rows)
 	return result
+
+
+func section_header(section_id: StringName) -> Button:
+	return _section_headers.get(section_id) as Button
+
+
+func section_body(section_id: StringName) -> GridContainer:
+	return _section_bodies.get(section_id) as GridContainer
+
+
+func is_section_expanded(section_id: StringName) -> bool:
+	return bool(_expanded_sections.get(section_id, false))
+
+
+func set_section_expanded(section_id: StringName, expanded: bool) -> bool:
+	if not _section_controls.has(section_id) or is_section_expanded(section_id) == expanded:
+		return false
+	_expanded_sections[section_id] = expanded
+	_apply_section_expansion(section_id)
+	_update_focus_trap()
+	_queue_responsive_layout()
+	return true
 
 
 func resume_action() -> Button:
@@ -410,18 +443,18 @@ func _build_stats_body() -> void:
 	_stats_body.add_child(_empty_stats_label)
 
 	_stats_grid = GridContainer.new()
-	_stats_grid.name = "StatColumns"
-	_stats_grid.columns = 2
+	_stats_grid.name = "StatSections"
+	_stats_grid.columns = 1
 	_stats_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_stats_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
-	_stats_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
+	_stats_grid.add_theme_constant_override("h_separation", 0)
+	_stats_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTENT_GAP)
 	_stats_body.add_child(_stats_grid)
 
 
-func _rebuild_stat_rows() -> void:
-	for child in _stats_grid.get_children():
-		_stats_grid.remove_child(child)
-		child.queue_free()
+func _sync_stat_sections() -> void:
+	var preserved_scroll := _body_scroll.scroll_vertical
+	var preserved_focus_id := _focused_section_id()
+	_stat_sections.clear()
 	_stat_rows.clear()
 	if _view_model == null:
 		_empty_stats_label.show()
@@ -429,40 +462,204 @@ func _rebuild_stat_rows() -> void:
 		return
 	_empty_stats_label.visible = not _view_model.has_stats()
 	_stats_grid.visible = _view_model.has_stats()
-	for stat in _view_model.stats():
-		var row_panel := AlveolusUIComponents.value_row(stat.label(), stat.formatted_value())
-		row_panel.name = "StatRow_%s" % String(stat.id())
-		row_panel.custom_minimum_size.y = 36.0
-		row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row_panel.set_meta(&"stat_id", stat.id())
-		row_panel.set_meta(&"stat_group", stat.group())
-		row_panel.set_meta(&"stat_accent_role", stat.accent_role())
-		row_panel.tooltip_text = "%s: %s" % [stat.label(), stat.formatted_value()]
-		var inset := row_panel.get_child(0) as MarginContainer
-		var line := inset.get_child(0) as HBoxContainer
-		var marker := SimpleIcon.new()
-		marker.name = "StatIcon"
-		marker.custom_minimum_size = Vector2(18.0, 18.0)
-		marker.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		marker.configure(stat.icon_id(), _accent_color(stat.accent_role()))
-		line.add_child(marker)
-		line.move_child(marker, 0)
-		var caption := line.get_child(1) as Label
-		caption.name = "StatLabel"
-		caption.autowrap_mode = TextServer.AUTOWRAP_OFF
-		caption.custom_minimum_size.x = STAT_LABEL_MINIMUM_WIDTH
-		caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		var value := line.get_child(2) as Label
-		value.name = "StatValue"
-		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		_stats_grid.add_child(row_panel)
-		# Measure only after the row is attached so the label resolves the
-		# actual Bio-Lumen font and size inherited from the overlay theme.
-		value.custom_minimum_size.x = _measured_stat_value_width(value)
-		_stat_rows.append(row_panel)
+	var live_section_ids: Dictionary = {}
+	for section_index in range(_view_model.section_count()):
+		var section := _view_model.section_at(section_index)
+		var section_id: StringName = section.id()
+		live_section_ids[section_id] = true
+		var section_panel := _section_controls.get(section_id) as PanelContainer
+		if section_panel == null:
+			section_panel = _create_stat_section(section)
+			_section_controls[section_id] = section_panel
+			_stats_grid.add_child(section_panel)
+			_expanded_sections[section_id] = section_id == &"general"
+		_stats_grid.move_child(section_panel, section_index)
+		_update_stat_section(section, section_panel)
+		_stat_sections.append(section_panel)
+	for stale_id_value in _section_controls.keys():
+		var stale_id := StringName(String(stale_id_value))
+		if live_section_ids.has(stale_id):
+			continue
+		var stale_panel := _section_controls.get(stale_id) as PanelContainer
+		_section_controls.erase(stale_id)
+		_section_headers.erase(stale_id)
+		_section_bodies.erase(stale_id)
+		_expanded_sections.erase(stale_id)
+		if stale_panel != null:
+			_stats_grid.remove_child(stale_panel)
+			stale_panel.queue_free()
+	_update_focus_trap()
 	_queue_responsive_layout()
+	_restore_stats_view_state.call_deferred(preserved_focus_id, preserved_scroll)
+
+
+func _create_stat_section(section: PauseOverlayViewModel.SectionViewModel) -> PanelContainer:
+	var section_id := section.id()
+	var section_panel := AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_PANEL_INSET)
+	section_panel.name = "StatSection_%s" % _safe_node_suffix(section_id)
+	section_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section_panel.set_meta(&"alveolus_component", &"stat_accordion_section")
+	section_panel.set_meta(&"section_id", section_id)
+	var stack := VBoxContainer.new()
+	stack.name = "SectionStack"
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	var header := AlveolusUIComponents.action_button(
+		section.display_title(),
+		AlveolusUIComponents.ACTION_QUIET
+	)
+	header.name = "SectionHeader"
+	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	header.toggle_mode = true
+	header.focus_mode = Control.FOCUS_ALL
+	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	header.set_meta(&"section_id", section_id)
+	header.toggled.connect(_on_section_toggled.bind(section_id))
+	header.focus_entered.connect(_ensure_focus_visible.bind(header))
+	stack.add_child(header)
+	var body := GridContainer.new()
+	body.name = "SectionRows"
+	body.columns = 2
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
+	body.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
+	body.set_meta(&"section_id", section_id)
+	stack.add_child(body)
+	section_panel.add_child(AlveolusUIComponents.margin(stack, AlveolusVisualTheme.GRID_UNIT))
+	_section_headers[section_id] = header
+	_section_bodies[section_id] = body
+	return section_panel
+
+
+func _update_stat_section(section: PauseOverlayViewModel.SectionViewModel, _section_panel: PanelContainer) -> void:
+	var section_id := section.id()
+	var body := _section_bodies.get(section_id) as GridContainer
+	var header := _section_headers.get(section_id) as Button
+	if body == null or header == null:
+		return
+	header.set_meta(&"section_id", section_id)
+	header.set_meta(&"alveolus_accessible_name", "%s ein- oder ausklappen" % section.display_title())
+	_sync_section_rows(section, body)
+	_apply_section_expansion(section_id)
+
+
+func _sync_section_rows(section: PauseOverlayViewModel.SectionViewModel, body: GridContainer) -> void:
+	var existing_rows: Dictionary = {}
+	for child in body.get_children():
+		if child is PanelContainer and child.has_meta(&"stat_id"):
+			existing_rows[StringName(String(child.get_meta(&"stat_id")))] = child
+	var live_row_ids: Dictionary = {}
+	for row_index in range(section.row_count()):
+		var stat := section.row_at(row_index)
+		var row_id: StringName = stat.id()
+		live_row_ids[row_id] = true
+		var row_panel := existing_rows.get(row_id) as PanelContainer
+		if row_panel == null:
+			row_panel = _create_stat_row(stat)
+			body.add_child(row_panel)
+		body.move_child(row_panel, row_index)
+		_update_stat_row(stat, row_panel)
+		_stat_rows.append(row_panel)
+	for stale_id_value in existing_rows.keys():
+		var stale_id := StringName(String(stale_id_value))
+		if live_row_ids.has(stale_id):
+			continue
+		var stale_row := existing_rows.get(stale_id) as PanelContainer
+		if stale_row != null:
+			body.remove_child(stale_row)
+			stale_row.queue_free()
+
+
+func _create_stat_row(stat: PauseOverlayViewModel.StatValueViewModel) -> PanelContainer:
+	var row_panel := AlveolusUIComponents.value_row(stat.label(), stat.formatted_value())
+	row_panel.name = "StatRow_%s" % _safe_node_suffix(stat.id())
+	row_panel.custom_minimum_size.y = 36.0
+	row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var inset := row_panel.get_child(0) as MarginContainer
+	var line := inset.get_child(0) as HBoxContainer
+	var marker := SimpleIcon.new()
+	marker.name = "StatIcon"
+	marker.custom_minimum_size = Vector2(18.0, 18.0)
+	marker.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	line.add_child(marker)
+	line.move_child(marker, 0)
+	var caption := line.get_child(1) as Label
+	caption.name = "StatLabel"
+	caption.autowrap_mode = TextServer.AUTOWRAP_OFF
+	caption.custom_minimum_size.x = STAT_LABEL_MINIMUM_WIDTH
+	caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	var value := line.get_child(2) as Label
+	value.name = "StatValue"
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	return row_panel
+
+
+func _update_stat_row(stat: PauseOverlayViewModel.StatValueViewModel, row_panel: PanelContainer) -> void:
+	row_panel.set_meta(&"stat_id", stat.id())
+	row_panel.set_meta(&"stat_group", stat.section_id())
+	row_panel.set_meta(&"stat_accent_role", stat.accent_role())
+	row_panel.tooltip_text = "%s: %s" % [stat.label(), stat.formatted_value()]
+	var marker := row_panel.find_child("StatIcon", true, false) as SimpleIcon
+	var caption := row_panel.find_child("StatLabel", true, false) as Label
+	var value := row_panel.find_child("StatValue", true, false) as Label
+	if marker != null:
+		marker.configure(stat.icon_id(), _accent_color(stat.accent_role()))
+	if caption != null:
+		caption.text = stat.label()
+	if value != null:
+		value.text = stat.formatted_value()
+		# The row is already attached when refreshed, so the inherited Bio-Lumen
+		# font is available for deterministic value-column measurement.
+		value.custom_minimum_size.x = _measured_stat_value_width(value)
+
+
+func _on_section_toggled(expanded: bool, section_id: StringName) -> void:
+	if not _section_controls.has(section_id):
+		return
+	_expanded_sections[section_id] = expanded
+	_apply_section_expansion(section_id)
+	_update_focus_trap()
+	_queue_responsive_layout()
+
+
+func _apply_section_expansion(section_id: StringName) -> void:
+	var expanded := is_section_expanded(section_id)
+	var header := _section_headers.get(section_id) as Button
+	var body := _section_bodies.get(section_id) as GridContainer
+	var section := _view_model.section_by_id(section_id) if _view_model != null else null
+	if header != null:
+		header.set_pressed_no_signal(expanded)
+		var title := section.display_title() if section != null else "Werte"
+		header.text = "%s  %s" % ["▾" if expanded else "▸", title]
+		header.tooltip_text = "%s %s" % [title, "einklappen" if expanded else "ausklappen"]
+	if body != null:
+		body.visible = expanded
+
+
+func _focused_section_id() -> StringName:
+	if not is_inside_tree():
+		return &""
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if focus_owner != null and focus_owner.has_meta(&"section_id"):
+		return StringName(String(focus_owner.get_meta(&"section_id")))
+	return &""
+
+
+func _restore_stats_view_state(section_id: StringName, scroll_value: int) -> void:
+	if _body_scroll == null:
+		return
+	if section_id != &"":
+		var header := _section_headers.get(section_id) as Button
+		if header != null and header.is_visible_in_tree() and get_viewport().gui_get_focus_owner() != header:
+			header.grab_focus()
+	_body_scroll.scroll_vertical = clampi(scroll_value, 0, roundi(_body_scroll.get_v_scroll_bar().max_value))
+
+
+func _safe_node_suffix(value: StringName) -> String:
+	return String(value).replace(":", "_").replace("/", "_").replace(" ", "_")
 
 
 func _apply_mode(mode: int) -> void:
@@ -488,6 +685,11 @@ func _update_focus_trap() -> void:
 			if not button.disabled and button.visible:
 				visible_actions.append(button)
 	else:
+		if _view_model != null:
+			for section in _view_model.sections():
+				var header := _section_headers.get(section.id()) as Button
+				if header != null and header.visible and not header.disabled:
+					visible_actions.append(header)
 		visible_actions.append(_back_button)
 	for index in range(visible_actions.size()):
 		var action := visible_actions[index]
@@ -536,7 +738,11 @@ func _update_responsive_layout() -> void:
 	var compact_menu := sheet_width < COMPACT_MENU_BREAKPOINT
 	_menu_actions.columns = 2 if compact_menu else 3
 	_set_compact_menu_layout(compact_menu)
-	_stats_grid.columns = 1 if sheet_width < COMPACT_STATS_BREAKPOINT else 2
+	_stats_grid.columns = 1
+	for body_value in _section_bodies.values():
+		var section_body := body_value as GridContainer
+		if section_body != null:
+			section_body.columns = 1 if sheet_width < COMPACT_STATS_BREAKPOINT else 2
 	_set_compact_stat_label_width(compact_menu)
 
 	_body_scroll.custom_minimum_size.y = 0.0

@@ -88,6 +88,12 @@ var run_hud_vitals: Dictionary = {
 	"analysis_current": 0,
 	"analysis_target": 0,
 	"analysis_level": 0,
+	"defeat_research_reward": {
+		"visible": false,
+		"icon_id": &"research",
+		"value": "",
+		"accessible_name": "",
+	},
 }
 var run_hud_stat_rows: Array = []
 var run_hud_ability_rows: Array = [
@@ -2432,25 +2438,22 @@ func show_level_select(meta: MetaProgressionState, levels: Array[LevelDefinition
 		var unlocked := meta.is_level_unlocked(level.order)
 		var record := meta.get_level_record(level.id)
 		var status := "GESPERRT" if not unlocked else ("ABGESCHLOSSEN" if record.victories > 0 else "BEREIT")
-		var best := "Noch kein Sieg"
-		if record.best_time >= 0.0:
-			best = "Beste Zeit %s" % _format_duration(floori(record.best_time), false)
-		var mastery_total := 0
-		var mastery_done := 0
-		for objective in MasteryObjectiveDefinition.definitions():
-			if objective.level_id != level.id:
-				continue
-			mastery_total += 1
-			if meta.has_completed_mastery(objective.id):
-				mastery_done += 1
+		var record_summary := "Noch kein Sieg"
+		if record.victories > 0:
+			record_summary = "%d %s · Lv %d · %d Bakt." % [
+				record.victories,
+				"Sieg" if record.victories == 1 else "Siege",
+				record.highest_analysis,
+				record.best_defeats,
+			]
 		entries.append(CaseArchiveViewModel.CaseEntryViewModel.new(
 			level.id,
 			level.order,
 			_level_card_title(level),
 			"%s · %s" % ["INTRO" if level.is_tutorial else "FALL %02d" % level.order, status],
 			"",
-			best,
-			"%d Siege · Lv %d · %d Bakt. · Ziele %d/%d" % [record.victories, record.highest_analysis, record.best_defeats, mastery_done, mastery_total],
+			"",
+			record_summary,
 			level.is_tutorial,
 			unlocked,
 			_level_accent(level)
@@ -2858,7 +2861,7 @@ func _refresh_run_stats() -> void:
 		for index in range(descriptors.size()):
 			var descriptor := descriptors[index] as HudStatDescriptor
 			run_hud_stat_rows.append({
-				"id": StringName("%s_%d" % [String(descriptor.icon_id), index]),
+				"id": descriptor.id,
 				"icon_id": descriptor.icon_id,
 				"value": descriptor.formatted_value,
 				"accessible_name": descriptor.accessible_name,
@@ -2869,24 +2872,48 @@ func _refresh_run_stats() -> void:
 func _run_stat_descriptors(current_stability: float, maximum_stability: float) -> Array:
 	var descriptors: Array = []
 	var wanted := {
-		"BEHANDLUNG:Schaden": [&"treatment", 100, "Behandlungsschaden"],
-		"BEHANDLUNG:Intervall": [&"automatic_therapy", 90, "Behandlungsintervall"],
-		"BEHANDLUNG:Ziele": [&"therapy_precision", 80, "Behandlungsziele"],
-		"ABWEHR:Zellen": [&"immune", 70, "Abwehrzellen"],
-		"PROBEN:Aufnahmeradius": [&"sample", 60, "Probenradius"],
+		&"defense": [&"defense_training", 100, "Verteidigung"],
+		&"movement_speed": [&"movement_training", 90, "Bewegung"],
+		&"life_regeneration": [&"life_regeneration", 80, "Regeneration"],
+		&"experience_gain": [&"experience_gain", 70, "Erfahrung"],
+		&"resistance_fire": [&"damage_fire", 60, "Feuerresistenz"],
+		&"resistance_water": [&"damage_water", 50, "Wasserresistenz"],
+		&"resistance_earth": [&"damage_earth", 40, "Erdresistenz"],
+		&"resistance_wind": [&"damage_wind", 30, "Windresistenz"],
 	}
-	for row in current_player_stats.stat_rows(current_stability, maximum_stability, TherapyAvatar.MOVE_SPEED):
-		var key := "%s:%s" % [String(row.get("group", "")), String(row.get("label", ""))]
-		if not wanted.has(key):
+	var shield_current := float(run_hud_vitals.get("shield_current", 0.0))
+	var shield_maximum := float(run_hud_vitals.get("shield_maximum", 0.0))
+	for section in current_player_stats.stat_sections(current_stability, maximum_stability, shield_current, shield_maximum):
+		if section == null or section.id() != &"general":
 			continue
-		var mapping: Array = wanted[key]
-		descriptors.append(HudStatDescriptor.create(
-			mapping[0],
-			String(row.get("value", "–")),
-			String(mapping[2]),
-			int(mapping[1])
-		))
+		for row in section.rows():
+			var stat_id := StringName(row.get("id", &""))
+			if not wanted.has(stat_id):
+				continue
+			var mapping: Array = wanted[stat_id]
+			var value := String(row.get("value", "–"))
+			descriptors.append(HudStatDescriptor.create(
+				mapping[0],
+				value,
+				"%s: %s" % [String(mapping[2]), value],
+				int(mapping[1]),
+				stat_id
+			))
+		break
 	return descriptors
+
+func update_defeat_research_reward(value: int) -> void:
+	var normalized := maxi(0, value)
+	var next_reward := {
+		"visible": normalized > 0,
+		"icon_id": &"research",
+		"value": "+%d" % normalized if normalized > 0 else "",
+		"accessible_name": "Forschungsgewinn bei Niederlage: %d" % normalized if normalized > 0 else "",
+	}
+	if run_hud_vitals.get("defeat_research_reward", {}) == next_reward:
+		return
+	run_hud_vitals["defeat_research_reward"] = next_reward
+	_apply_run_hud_model()
 
 func _refresh_pause_stats() -> void:
 	if pause_stats_grid == null or pause_stats_label == null or pause_stats_label_right == null:
@@ -3219,6 +3246,10 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 	current_upgrade_options = options.duplicate()
 	upgrade_view_revision += 1
 	var rows: Array = []
+	var component_titles := {
+		&"ability_defense_burst": "Abwehrstoß",
+		&"ability_treatment_line": "Behandlungslinie",
+	}
 	for definition in options:
 		if definition == null:
 			continue
@@ -3226,7 +3257,7 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 		var comparison := _split_upgrade_comparison(preview.before_after_text)
 		rows.append({
 			"id": definition.id,
-			"title": definition.title,
+			"title": definition.resolved_component_name(stats.prepared_treatment, component_titles),
 			"effect": _intro_upgrade_copy(definition.id) if scripted_intro else preview.effect_text,
 			"before": "" if scripted_intro else comparison[0],
 			"after": "" if scripted_intro else comparison[1],
@@ -3326,24 +3357,17 @@ func _hide_pause_stats() -> void:
 
 
 func _pause_view_model() -> PauseOverlayViewModel:
-	var rows: Array = []
+	var sections: Array = []
 	if current_player_stats != null:
-		var current := current_run_state.stability if current_run_state != null else -1.0
-		var maximum := current_run_state.max_stability if current_run_state != null else -1.0
-		var index := 0
-		for row_value in current_player_stats.stat_rows(current, maximum, TherapyAvatar.MOVE_SPEED):
-			var row := row_value as Dictionary
-			var group := String(row.get("group", "ALLGEMEIN"))
-			rows.append({
-				"id": StringName("%s_%d" % [group.to_lower(), index]),
-				"group": StringName(group.to_lower()),
-				"label": String(row.get("label", "")),
-				"value": String(row.get("value", "")),
-				"icon_id": _pause_stat_group_icon(group),
-				"accent_role": _pause_stat_group_role(group),
-			})
-			index += 1
-	return PauseOverlayViewModel.create(rows, pause_view_revision, pause_is_intro)
+		var current_life := current_run_state.stability if current_run_state != null else -1.0
+		var maximum_life := current_run_state.max_stability if current_run_state != null else -1.0
+		sections = current_player_stats.stat_sections(
+			current_life,
+			maximum_life,
+			float(run_hud_vitals.get("shield_current", 0.0)),
+			float(run_hud_vitals.get("shield_maximum", 0.0))
+		)
+	return PauseOverlayViewModel.create(sections, pause_view_revision, pause_is_intro)
 
 
 func _pause_stat_group_role(group: String) -> StringName:
@@ -3473,7 +3497,13 @@ func _register_finding_context_sources() -> void:
 		var provider: Callable = registration.get("provider", Callable())
 		if source == null or not provider.is_valid():
 			continue
-		register_context_detail(source, provider, bool(registration.get("hover_enabled", true)))
+		register_context_detail(
+			source,
+			provider,
+			bool(registration.get("hover_enabled", true)),
+			registration.get("anchor") as Control,
+			int(registration.get("placement", ContextDetailController.Placement.AUTO))
+		)
 		finding_context_sources.append(source)
 
 
@@ -5173,6 +5203,8 @@ func _level_placeholder(accent: Color) -> Panel:
 	return panel
 
 func _upgrade_icon_kind(definition: UpgradeDefinition) -> StringName:
+	if definition.id == &"mobility" or definition.preview_context_tags.has("movement"):
+		return &"movement_training"
 	match definition.path:
 		UpgradeDefinition.Path.IMMUNE:
 			return &"immune"

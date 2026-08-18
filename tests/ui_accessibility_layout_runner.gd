@@ -13,6 +13,9 @@ func _initialize() -> void:
 func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
 	var meta := MetaProgressionState.new()
+	# Structured type values belong to discovered entries. Keep opening and
+	# category changes selection-neutral, but unlock the explicit fixture entry.
+	meta.mark_discovery_seen(&"pneumococcus")
 	var jobs := ContentCatalog.clinic_job_definitions()
 	var levels := ContentCatalog.level_definitions()
 	var research := ContentCatalog.research_definitions()
@@ -56,13 +59,15 @@ func _run() -> void:
 		hud.configure_ui_settings(settings)
 		await _settle()
 		var canvas_size := Vector2i(get_root().get_visible_rect().size)
+		var character_stats := _character_stats_fixture()
 		var show_discovery_screen := func() -> void:
 			hud._hide_all()
 			hud.show_running_hud()
 			hud.show_discovery(discoveries[&"pneumococcus"], hud.root.size * 0.5)
 		var show_run_screen := func() -> void:
 			var state := RunState.new()
-			hud.update_run_stats(PlayerStats.new(), state)
+			hud.update_run_stats(character_stats, state)
+			hud.update_defeat_research_reward(18)
 			hud.set_run_stats_visibility(true)
 			hud.show_running_hud()
 		var show_upgrade_screen := func() -> void:
@@ -70,7 +75,7 @@ func _run() -> void:
 			hud.show_running_hud()
 			hud.show_upgrade_choices(upgrades.slice(0, 3), PlayerStats.new(), true, true)
 		var show_pause_stats_screen := func() -> void:
-			hud.show_pause(false, PlayerStats.new(), RunState.new())
+			hud.show_pause(false, character_stats, RunState.new())
 			hud._show_pause_stats()
 		var show_abort_screen := func() -> void:
 			hud.show_pause(false, PlayerStats.new(), RunState.new())
@@ -109,7 +114,7 @@ func _run() -> void:
 			{"id": "discovery", "overlay": hud.discovery_tooltip, "show": show_discovery_screen},
 			{"id": "run", "overlay": hud.gameplay_hud, "show": show_run_screen},
 			{"id": "upgrade", "overlay": hud.upgrade_overlay, "show": show_upgrade_screen},
-			{"id": "pause", "overlay": hud.pause_overlay, "show": func() -> void: hud.show_pause(false, PlayerStats.new(), RunState.new())},
+			{"id": "pause", "overlay": hud.pause_overlay, "show": func() -> void: hud.show_pause(false, character_stats, RunState.new())},
 			{"id": "pause_stats", "overlay": hud.pause_overlay, "show": show_pause_stats_screen},
 			{"id": "abort", "overlay": hud.abort_overlay, "show": show_abort_screen},
 			{"id": "intro_skip", "overlay": hud.intro_skip_overlay, "show": show_intro_skip_screen},
@@ -121,6 +126,20 @@ func _run() -> void:
 			await _settle()
 			var overlay := screen["overlay"] as Control
 			var context := "%s bei %s und %d %%" % [screen["id"], viewport_size, roundi(float(setup["scale"]) * 100.0)]
+			if screen["id"] == "lexicon":
+				var lexicon := hud.lexicon_master_detail
+				_check(lexicon.selected_entry_id == &"", "%s markiert beim Öffnen keinen Eintrag automatisch" % context)
+				lexicon.select_category(LexiconEntryDefinition.CATEGORY_TERMS)
+				await _settle()
+				_check(lexicon.selected_entry_id == &"", "%s markiert beim Kategorienwechsel keinen Begriff automatisch" % context)
+				_check(lexicon.context_detail_sources().is_empty(), "%s registriert für Begriffe keine redundante Detailkarte" % context)
+				for term_button_value in lexicon.entry_buttons.values():
+					var term_button := term_button_value as Button
+					if term_button != null and term_button.is_visible_in_tree():
+						_check(term_button.tooltip_text.is_empty(), "%s zeigt Begriffe ohne Maus-Tooltip" % context)
+				lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
+				_check(lexicon.select_entry(&"pneumococcus"), "%s kann einen bekannten Gegner ausdrücklich für die Typwerte auswählen" % context)
+				await _settle()
 			_check(overlay.visible, "%s ist sichtbar" % context)
 			_check(_inside_viewport(overlay, canvas_size), "%s füllt den Viewport ohne Überlauf" % context)
 			if screen["id"] in ["practice", "research", "talents", "levels", "preparation", "preparation_picker", "preparation_intro_locked", "lexicon", "settings"]:
@@ -329,6 +348,17 @@ func _run() -> void:
 				var expected_stat_columns := 1 if hud.root.size.x < 820.0 else 2
 				_check(lexicon.detail_stats_grid.columns == expected_stat_columns, "%s zeigt Basiswerte in %d Gridspalten" % [context, expected_stat_columns])
 				_check(lexicon.detail_gameplay_panel != null and lexicon.detail_medical_panel != null, "%s trennt Spielwirkung und medizinischen Hintergrund semantisch" % context)
+				var type_chips := _semantic_controls(lexicon.detail_type_sections, &"damage_type_chip")
+				_check(type_chips.size() == 8, "%s zeigt vier Schadenstypen und vier effektive Resistenzen als strukturierte Chips" % context)
+				for chip in type_chips:
+					_check(
+						DamageTypeCatalog.ALL_IDS.has(StringName(String(chip.get_meta(&"damage_type_id", &""))))
+							and chip.find_child("DamageTypeIcon", true, false) is SimpleIcon
+							and chip.find_child("DamageTypeName", true, false) is Label
+							and chip.find_child("DamageTypeValue", true, false) is Label,
+						"%s bindet jeden Typchip an Icon, Name und fertigen Wert" % context
+					)
+				_check(not _visible_copy_contains_internal_distance_unit(lexicon.detail_content), "%s zeigt keine Pixel- oder Weltmaße im Lexikon" % context)
 				var detail_bar := lexicon.detail_scroll.get_v_scroll_bar()
 				if detail_bar.visible:
 					for stat_child in lexicon.detail_stats_grid.get_children():
@@ -339,19 +369,62 @@ func _run() -> void:
 			if screen["id"] == "upgrade":
 				_check(_inside_viewport(hud.upgrade_panel, canvas_size), "%s hält den Ausbau-Dialog vollständig im Viewport" % context)
 				_check(_has_scroll_ancestor(hud.upgrade_cards), "%s hält alle Ausbauoptionen scrollbar erreichbar" % context)
+				var level_up_title := hud.upgrade_screen.find_child("LevelUpTitle", true, false) as Label
+				_check(
+					level_up_title != null
+						and level_up_title.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER
+						and absf(level_up_title.get_global_rect().get_center().x - hud.upgrade_panel.get_global_rect().get_center().x) <= 1.0,
+					"%s zentriert Level Up! lokal und geometrisch im Ausbau-Dialog" % context
+				)
 			if screen["id"] == "story":
 				_check(_inside_viewport(hud.story_panel, canvas_size), "%s hält die Prologkarte vollständig im Viewport (Karte %s, Canvas %s)" % [context, hud.story_panel.get_global_rect(), canvas_size])
 				var story_scroll := hud.story_screen.focus_scroll()
 				_check(story_scroll != null and story_scroll.follow_focus and story_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "%s verwendet den responsiven StoryScroll ohne horizontalen Überlauf" % context)
 				_check(story_scroll.is_ancestor_of(hud.story_next_button) and _control_fully_visible_within_clips(hud.story_next_button, canvas_size), "%s hält die fokussierte Fortsetzen-Aktion im StoryScroll sichtbar (Aktion %s, Scroll %s)" % [context, hud.story_next_button.get_global_rect(), story_scroll.get_global_rect()])
 			if screen["id"] == "run":
-				var semantic_stat_strip := hud.run_hud_screen.run_stats_strip()
+				var run_hud := hud.run_hud_screen
+				var semantic_stat_strip := run_hud.run_stats_strip()
 				_check(semantic_stat_strip == hud.run_stats_strip and semantic_stat_strip.get_meta(&"alveolus_component", &"") == &"transparent_run_stats", "%s ordnet Runwerte als transparentes horizontales Statband des RunHUDOverlay an" % context)
+				_check(run_hud.stat_rows().size() == 8 and _hud_row_populations(run_hud.stat_rows()) == [4, 4], "%s zeigt ausschließlich acht Grundwerte in zwei Viererreihen" % context)
+				for stat_row in run_hud.stat_rows():
+					_check(RunHUDViewModel.BASIC_STAT_IDS.has(stat_row.get_meta(&"stat_id", &"")), "%s enthält keine Behandlungs- oder Fähigkeitswerte im Kampfstreifen" % context)
+				var reward_panel := run_hud.defeat_research_reward_panel()
+				var reward_rect := reward_panel.get_global_rect()
+				var timer_rect := run_hud.timer_panel().get_global_rect()
+				_check(
+					reward_panel.is_visible_in_tree()
+						and run_hud.defeat_research_reward_icon().kind == &"research"
+						and run_hud.defeat_research_reward_value_label().text == "+18"
+						and not String(reward_panel.get_meta(&"alveolus_accessible_name", "")).is_empty()
+						and reward_rect.end.x <= timer_rect.position.x + 0.5,
+					"%s zeigt den zugänglich benannten Forschungsgewinn als Symbol und Zahl links vom Timer" % context
+				)
 			if screen["id"] == "pause":
 				_check(not _contains_text(hud.pause_overlay, "RUNMENÜ"), "%s enthält keinen überflüssigen Runmenü-Obertitel" % context)
 				_check(hud.pause_screen.current_mode() == PauseOverlay.Mode.MENU and not hud.pause_screen.body_scroll().is_ancestor_of(hud.pause_resume_button), "%s hält Weiter fest außerhalb des responsiven Inhaltsviewports" % context)
 			if screen["id"] == "pause_stats":
-				_check(hud.pause_screen.current_mode() == PauseOverlay.Mode.STATS and not hud.pause_screen.body_scroll().is_ancestor_of(hud.pause_stats_back_button), "%s zeigt Charakterwerte im gemeinsamen PauseOverlay mit festem Rückweg" % context)
+				var pause_screen := hud.pause_screen
+				_check(pause_screen.current_mode() == PauseOverlay.Mode.STATS and not pause_screen.body_scroll().is_ancestor_of(hud.pause_stats_back_button), "%s zeigt Charakterwerte im gemeinsamen PauseOverlay mit festem Rückweg" % context)
+				_check(
+					pause_screen.stat_sections().size() == 3
+						and pause_screen.section_header(&"general") != null
+						and pause_screen.section_header(&"treatment:treatment_precision") != null
+						and pause_screen.section_header(&"ability:0:ability_focus_field") != null
+						and pause_screen.section_header(&"ability:1:ability_treatment_line") == null,
+					"%s zeigt nur Grundwerte, Behandlung und den belegten Aktivslot ohne leere Aktivsektion" % context
+				)
+				for section_id in [&"general", &"treatment:treatment_precision", &"ability:0:ability_focus_field"]:
+					var section_header := pause_screen.section_header(section_id)
+					_check(
+						section_header != null
+							and section_header.focus_mode == Control.FOCUS_ALL
+							and not String(section_header.get_meta(&"alveolus_accessible_name", "")).is_empty(),
+						"%s besitzt für %s einen fokussierbaren und zugänglich benannten Accordion-Kopf" % [context, section_id]
+					)
+				_check(pause_screen.is_section_expanded(&"general") and pause_screen.section_body(&"general").is_visible_in_tree(), "%s öffnet Grundwerte standardmäßig" % context)
+				_check(not pause_screen.is_section_expanded(&"treatment:treatment_precision") and not pause_screen.section_body(&"treatment:treatment_precision").visible, "%s reserviert für die geschlossene Behandlung keinen Body-Leerraum" % context)
+			if screen["id"] == "finding" and viewport_size == Vector2i(1280, 720):
+				await _check_finding_tooltip_placement(hud, canvas_size, context)
 			if screen["id"] == "abort":
 				_check(_inside_viewport(hud.abort_panel, canvas_size), "%s hält die Abbruchbestätigung vollständig im Viewport" % context)
 			if screen["id"] == "intro_skip":
@@ -431,8 +504,36 @@ func _run() -> void:
 	_check(_has_scroll_ancestor(hud.preparation_catalog), "Komponentenkatalog bleibt bei großer UI scrollbar")
 	_check(_has_descendant_type(hud.practice_overlay, "ScrollContainer"), "Praxis bleibt bei großer UI scrollbar")
 
-	# The densest combat-HUD combination is validated separately because optional
-	# run stats, boss information and transient alerts do not normally coexist in
+	# Stable section IDs must retain disclosure state, focus and node identity
+	# across a content refresh. An unoccupied second active slot must never leave
+	# a dormant accordion panel or a blank-space reserve behind.
+	var refreshed_stats := _character_stats_fixture()
+	hud.show_pause(false, refreshed_stats, RunState.new())
+	hud._show_pause_stats()
+	await _settle()
+	var treatment_section_id := &"treatment:treatment_precision"
+	var treatment_header := hud.pause_screen.section_header(treatment_section_id)
+	var treatment_header_instance := treatment_header.get_instance_id() if treatment_header != null else 0
+	_check(hud.pause_screen.set_section_expanded(treatment_section_id, true), "Charakterwerte lassen die Behandlung ausdrücklich ausklappen")
+	_check(hud.pause_screen.set_section_expanded(&"general", false), "Charakterwerte lassen Grundwerte unabhängig einklappen")
+	if treatment_header != null:
+		treatment_header.grab_focus()
+	refreshed_stats.defense = 7.0
+	hud.pause_view_revision += 1
+	hud.pause_screen.apply_view_model(hud._pause_view_model(), PauseOverlay.Mode.STATS)
+	await _settle()
+	_check(
+		hud.pause_screen.section_header(treatment_section_id) != null
+			and hud.pause_screen.section_header(treatment_section_id).get_instance_id() == treatment_header_instance
+			and hud.pause_screen.is_section_expanded(treatment_section_id)
+			and not hud.pause_screen.is_section_expanded(&"general"),
+		"Accordion-IDs bewahren Control-Instanz und Aufklappzustand beim Werte-Refresh"
+	)
+	_check(get_root().gui_get_focus_owner() == hud.pause_screen.section_header(treatment_section_id), "Accordion-Refresh bewahrt den Fokus am gleichen Sektionskopf")
+	_check(hud.pause_screen.section_header(&"ability:1:ability_treatment_line") == null, "Leerer Aktivslot bleibt auch nach einem Refresh ohne Sektion und Blank Space")
+
+	# The densest combat-HUD combination is validated separately because the
+	# optional eight-value strip and transient alerts do not normally coexist in
 	# a static screen capture. Critical rows must win without geometry collisions.
 	for compact_setup in [
 		Vector2i(1280, 720),
@@ -447,7 +548,8 @@ func _run() -> void:
 		hud.alert_time = 0.0
 		hud.alert_label.hide()
 		var compact_state := RunState.new()
-		hud.update_run_stats(PlayerStats.new(), compact_state)
+		hud.update_run_stats(_character_stats_fixture(), compact_state)
+		hud.update_defeat_research_reward(18)
 		hud.set_run_stats_visibility(true)
 		hud.show_running_hud()
 		hud.update_shield(24.0, 40.0)
@@ -460,21 +562,148 @@ func _run() -> void:
 		var compact_context := "%s bei 200 %%" % compact_setup
 		var run_hud := hud.run_hud_screen
 		_check(run_hud.run_stats_strip().visible and _rects_separate(run_hud.run_stats_strip(), run_hud.shield_panel()), "%s trennt optionale Werte und Schutzleiste im RunHUDOverlay" % compact_context)
+		_check(run_hud.stat_rows().size() == 8 and _hud_row_populations(run_hud.stat_rows()) == [4, 4], "%s hält acht Grundwerte in zwei Viererreihen" % compact_context)
+		_check(
+			run_hud.defeat_research_reward_panel().visible
+				and run_hud.defeat_research_reward_panel().get_global_rect().end.x <= run_hud.timer_panel().get_global_rect().position.x + 0.5,
+			"%s hält den Forschungsgewinn links vom freistehenden Timer" % compact_context
+		)
 		_check(_rects_separate(run_hud.analysis_panel(), hud.finding_progress_panel), "%s ordnet Probe und Befund ohne Überlagerung" % compact_context)
 		_check(_rects_separate(hud.finding_progress_panel, run_hud.ability_panel()), "%s reserviert getrennte Befund- und Fähigkeitsreihen" % compact_context)
-		hud.show_boss(100.0, 2)
-		hud.update_boss_health(64.0, 100.0)
 		hud.show_alert("BELASTUNGSSCHUB", AlveolusVisualTheme.CORAL, 2.0)
 		await _settle()
-		_check(run_hud.run_stats_strip().visible and _rects_separate(run_hud.run_stats_strip(), run_hud.analysis_panel()), "%s hält vierwertige Runstatistik unter dem Timer trotz Boss und Alarm lesbar" % compact_context)
+		_check(run_hud.run_stats_strip().visible and _rects_separate(run_hud.run_stats_strip(), run_hud.analysis_panel()), "%s hält die zweireihige Grundwertanzeige unter dem Timer trotz Alarm lesbar" % compact_context)
 		_check(_rects_separate(run_hud.timer_panel(), run_hud.pause_action()), "%s trennt freistehende Rundendauer und Pauseaktion" % compact_context)
-		_check(not run_hud.boss_panel().visible, "%s hält die veraltete Bosskachel dormant" % compact_context)
 		_check(_rects_separate(hud.alert_label, run_hud.run_stats_strip()), "%s trennt Alarm und Kampfwerte" % compact_context)
 		_check(_rects_separate(hud.alert_label, hud.finding_progress_panel), "%s trennt Alarm und untere Befundreihe" % compact_context)
 
 	hud.queue_free()
 	await process_frame
 	_finish()
+
+
+func _character_stats_fixture() -> PlayerStats:
+	var stats := PlayerStats.new()
+	stats.configure_prepared_treatment(TreatmentDefinition.catalog()[&"treatment_precision"])
+	stats.prepared_abilities.assign([
+		AbilityDefinition.catalog()[&"ability_focus_field"],
+	])
+	stats.defense = 6.0
+	stats.life_regeneration_per_second = 1.5
+	return stats
+
+
+func _check_finding_tooltip_placement(hud: GameHUD, viewport_size: Vector2i, context: String) -> void:
+	var registrations := hud.finding_screen.context_detail_registrations()
+	_check(not registrations.is_empty(), "%s besitzt mindestens eine stabile Befund-Tooltipquelle" % context)
+	if registrations.is_empty():
+		return
+	var source_registrations: Array = [registrations[0]]
+	if registrations.size() > 1:
+		source_registrations.append(registrations[registrations.size() - 1])
+	var observed_right_above := false
+	var observed_left_fallback := false
+	var observed_right_aligned_fallback := false
+	var observed_left_aligned_fallback := false
+	var right_candidate_possible := false
+	var left_candidate_possible := false
+	var right_aligned_candidate_possible := false
+	var left_aligned_candidate_possible := false
+	for registration_value in source_registrations:
+		var registration := registration_value as Dictionary
+		var source := registration.get("source") as Control
+		var anchor := registration.get("anchor") as Control
+		_check(source != null and source.is_visible_in_tree() and anchor != null and anchor.is_visible_in_tree(), "%s bindet den Befund-Tooltip an eine sichtbare Reaktion mit kompaktem Anker" % context)
+		if source == null or not source.is_visible_in_tree() or anchor == null or not anchor.is_visible_in_tree():
+			continue
+		source.mouse_entered.emit()
+		await _settle()
+		var card := hud.context_detail_controller.card
+		var source_rect := anchor.get_global_rect()
+		var card_rect := card.get_global_rect()
+		var right_above := card_rect.position.x >= source_rect.end.x - 0.5 and card_rect.end.y <= source_rect.position.y + 0.5
+		var left_above := card_rect.end.x <= source_rect.position.x + 0.5 and card_rect.end.y <= source_rect.position.y + 0.5
+		var right_aligned_above := absf(card_rect.end.x - source_rect.end.x) <= 1.0 and card_rect.end.y <= source_rect.position.y + 0.5
+		var left_aligned_above := absf(card_rect.position.x - source_rect.position.x) <= 1.0 and card_rect.end.y <= source_rect.position.y + 0.5
+		var transform := anchor.get_global_transform_with_canvas()
+		var source_scale := maxf(transform.x.length(), transform.y.length())
+		var scaled_gap := ContextDetailController.SOURCE_GAP * source_scale
+		var scaled_margin := ContextDetailController.VIEWPORT_MARGIN * source_scale
+		var vertical_candidate_fits := source_rect.position.y - card_rect.size.y - scaled_gap >= scaled_margin
+		var right_candidate_fits := source_rect.end.x + scaled_gap + card_rect.size.x <= float(viewport_size.x) - scaled_margin \
+			and vertical_candidate_fits
+		var left_candidate_fits := source_rect.position.x - card_rect.size.x - scaled_gap >= scaled_margin \
+			and vertical_candidate_fits
+		var right_aligned_candidate_fits := source_rect.end.x - card_rect.size.x >= scaled_margin \
+			and source_rect.end.x <= float(viewport_size.x) - scaled_margin \
+			and vertical_candidate_fits
+		var left_aligned_candidate_fits := source_rect.position.x >= scaled_margin \
+			and source_rect.position.x + card_rect.size.x <= float(viewport_size.x) - scaled_margin \
+			and vertical_candidate_fits
+		right_candidate_possible = right_candidate_possible or right_candidate_fits
+		left_candidate_possible = left_candidate_possible or (not right_candidate_fits and left_candidate_fits)
+		right_aligned_candidate_possible = right_aligned_candidate_possible or (not right_candidate_fits and not left_candidate_fits and right_aligned_candidate_fits)
+		left_aligned_candidate_possible = left_aligned_candidate_possible or (not right_candidate_fits and not left_candidate_fits and not right_aligned_candidate_fits and left_aligned_candidate_fits)
+		observed_right_above = observed_right_above or (right_candidate_fits and right_above)
+		observed_left_fallback = observed_left_fallback or (not right_candidate_fits and left_candidate_fits and left_above)
+		observed_right_aligned_fallback = observed_right_aligned_fallback or (not right_candidate_fits and not left_candidate_fits and right_aligned_candidate_fits and right_aligned_above)
+		observed_left_aligned_fallback = observed_left_aligned_fallback or (not right_candidate_fits and not left_candidate_fits and not right_aligned_candidate_fits and left_aligned_candidate_fits and left_aligned_above)
+		_check(card.is_visible_in_tree() and _inside_viewport(card, viewport_size), "%s hält den Befund-Tooltip vollständig im Viewport" % context)
+		var title := hud.finding_screen.modal_sheet().find_child("FindingTitle", true, false) as Control
+		var effect := hud.finding_screen.effect_label() as Control
+		_check((title == null or not card_rect.intersects(title.get_global_rect())) and (effect == null or not card_rect.intersects(effect.get_global_rect())), "%s verdeckt weder Befundtitel noch mechanische Effektzeile" % context)
+		_check(
+			right_above if right_candidate_fits else (
+				left_above if left_candidate_fits else (
+					right_aligned_above if right_aligned_candidate_fits else left_aligned_above
+				)
+			),
+			"%s setzt den Befund-Tooltip diagonal oder bei Vollbreite direkt oberhalb" % context
+		)
+	_check(not right_candidate_possible or observed_right_above, "%s deckt jede mögliche Position diagonal rechts-oben ab" % context)
+	_check(not left_candidate_possible or observed_left_fallback, "%s deckt jeden möglichen Viewport-Fallback diagonal links-oben ab" % context)
+	_check(not right_aligned_candidate_possible or observed_right_aligned_fallback, "%s deckt den rechtsbündigen Vollbreiten-Fallback ab" % context)
+	_check(not left_aligned_candidate_possible or observed_left_aligned_fallback, "%s deckt den linksbündigen Vollbreiten-Fallback ab" % context)
+	hud.close_all_context_details()
+	await _settle()
+
+
+func _semantic_controls(root_node: Node, component_id: StringName) -> Array[Control]:
+	var result: Array[Control] = []
+	if root_node == null:
+		return result
+	for node in _descendants(root_node):
+		if node is Control and node.get_meta(&"alveolus_component", &"") == component_id:
+			result.append(node as Control)
+	return result
+
+
+func _visible_copy_contains_internal_distance_unit(root_node: Node) -> bool:
+	if root_node == null:
+		return false
+	for node in _descendants(root_node):
+		if not node is Label or not (node as Label).is_visible_in_tree():
+			continue
+		var copy := (node as Label).text.to_lower()
+		if copy.contains(" px") or copy.contains("pixel") or copy.contains("weltpunkt") or copy.contains("weltmaß"):
+			return true
+	return false
+
+
+func _hud_row_populations(rows: Array[HBoxContainer]) -> Array[int]:
+	var levels: Dictionary = {}
+	var order: Array[int] = []
+	for row in rows:
+		var level := roundi(row.global_position.y)
+		if not levels.has(level):
+			levels[level] = 0
+			order.append(level)
+		levels[level] = int(levels[level]) + 1
+	var result: Array[int] = []
+	for level in order:
+		result.append(int(levels[level]))
+	return result
+
 
 func _check_minimum_text(root_control: Control, context: String, minimum_size: int = MIN_TEXT_SIZE) -> void:
 	for node in _descendants(root_control):

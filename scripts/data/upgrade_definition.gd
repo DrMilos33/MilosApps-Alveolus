@@ -91,12 +91,12 @@ func configure_preview(
 func heading_component_id(prepared_treatment_id: StringName = &"") -> StringName:
 	## Upgrade cards render the resolved component name as their heading. General
 	## treatment upgrades follow the currently prepared treatment dynamically.
-	if preview_context_tags.has("treatment") and prepared_treatment_id != &"":
+	if preview_context_tags.has("treatment") and not preview_context_tags.has("active") and prepared_treatment_id != &"":
 		return prepared_treatment_id
 	if preview_context_tags.has("defense_cell") or id == &"neutrophils":
 		return &"defense_cells"
 	if id == &"mobility":
-		return &"doctor"
+		return &"movement"
 	return required_component_ids[0] if required_component_ids.size() == 1 else &""
 
 
@@ -106,7 +106,7 @@ func resolved_component_name(prepared_treatment: TreatmentDefinition, component_
 		return prepared_treatment.display_name
 	match component_id:
 		&"defense_cells": return "Abwehrzellen"
-		&"doctor": return "Doctor Milos"
+		&"movement": return "Bewegung"
 	return String(component_titles.get(component_id, title))
 
 func path_name() -> String:

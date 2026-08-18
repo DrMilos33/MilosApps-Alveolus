@@ -131,8 +131,16 @@ func _assert_finding_interaction() -> void:
 	var registrations := overlay.context_detail_registrations()
 	var all_hover_only := registrations.size() == 3
 	for registration in registrations:
-		all_hover_only = all_hover_only and bool(registration.get("hover_enabled", false))
+		var registration_source := registration.get("source") as Control
+		var registration_anchor := registration.get("anchor") as Control
+		all_hover_only = all_hover_only \
+			and bool(registration.get("hover_enabled", false)) \
+			and registration_anchor != null \
+			and registration_source != null \
+			and registration_source.is_ancestor_of(registration_anchor) \
+			and registration_anchor.size.x < registration_source.size.x
 	_check(all_hover_only, "Registrierungen öffnen automatisch ausschließlich per Maus-Hover")
+	_check(registrations.all(func(registration: Dictionary) -> bool: return (registration.get("anchor") as Control).get_meta(&"alveolus_component", &"") == &"context_anchor"), "Befund verankert Tooltips an einem kompakten Teil der Reaktionszeile statt am Vollbreiten-Button")
 
 	var selected: Array[StringName] = []
 	var confirmed: Array[Array] = []
@@ -151,7 +159,9 @@ func _assert_finding_interaction() -> void:
 	_check(overlay.handle_ui_cancel(true) and cancelled.size() == 1, "Oberstes Befundmodal emittiert den Cancel-Intent")
 	_check(overlay.grab_initial_focus(), "Befund kann seinen Auswahlfokus setzen")
 	await process_frame
+	await process_frame
 	_check(get_root().gui_get_focus_owner() == observe, "Ausgewählte Reaktion wird beim Fokus-Restore bevorzugt")
+	_check(overlay.body_scroll().scroll_vertical == 0 and overlay.effect_label().get_global_rect().position.y >= overlay.body_scroll().get_global_rect().position.y - 0.5, "Kompaktes Öffnen hält die mechanische Effektzeile trotz Reaktionsfokus vollständig sichtbar")
 	_assert_focus_trap(overlay)
 
 	var reserve_invalid := FindingOverlayViewModel.ReserveSwapViewModel.new(

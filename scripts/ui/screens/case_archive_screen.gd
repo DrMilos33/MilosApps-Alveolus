@@ -198,6 +198,8 @@ func _build_case_card(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: 
 
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
 
 	# Until bespoke case art exists, every card uses the same semantic inset and
@@ -233,11 +235,13 @@ func _build_case_card(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: 
 		status_text += " · Markiert"
 	var status := AlveolusUIComponents.label(status_text, AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
 	status.name = "Status"
+	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status.add_theme_color_override("font_color", entry.get_accent().lightened(0.16))
 	copy.add_child(status)
 
 	var title := AlveolusUIComponents.label(entry.get_title(), AlveolusVisualTheme.TYPE_SECTION_LABEL)
 	title.name = "Title"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.max_lines_visible = 1
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -248,6 +252,7 @@ func _build_case_card(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: 
 		AlveolusVisualTheme.TYPE_MUTED_LABEL
 	)
 	summary.name = "Summary"
+	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	summary.max_lines_visible = 2
 	summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -259,6 +264,7 @@ func _build_case_card(entry: CaseArchiveViewModel.CaseEntryViewModel, selected: 
 	var card_margin := AlveolusUIComponents.margin(row, 12)
 	card_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(card_margin)
+	card_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	return card
 
 
@@ -267,11 +273,11 @@ func _emit_case_selected(case_id: StringName) -> void:
 
 
 func _compact_summary(best_text: String, record_text: String) -> String:
-	if best_text.is_empty():
+	# Records are the only card-level performance fact. Historical duration is
+	# deliberately omitted from the archive overview and remains in save data.
+	if not record_text.is_empty():
 		return record_text
-	if record_text.is_empty():
-		return best_text
-	return "%s · %s" % [best_text, record_text]
+	return best_text
 
 
 func _refresh_card_widths() -> void:

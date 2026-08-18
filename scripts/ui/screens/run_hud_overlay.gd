@@ -14,8 +14,10 @@ const WIDE_MARGIN := 16.0
 const COMPACT_MARGIN := 8.0
 const STAT_COLUMN_COUNT := 4
 const STAT_ROW_WIDTH := 72.0
-const STAT_ROW_HEIGHT := 22.0
+const STAT_ROW_HEIGHT := 20.0
 const STAT_GAP := 4
+const STAT_VALUE_MINIMUM_WIDTH := 42.0
+const DEFEAT_REWARD_WIDTH := 62.0
 const ABILITY_WIDTH := 146.0
 const ABILITY_HEIGHT := 38.0
 const ABILITY_GAP := 6.0
@@ -33,6 +35,9 @@ var _shield_bar: ProgressBar
 var _shield_value: Label
 var _timer_panel: Panel
 var _timer_value: Label
+var _defeat_reward_panel: Panel
+var _defeat_reward_icon: SimpleIcon
+var _defeat_reward_value: Label
 var _boss_panel: Panel
 var _boss_icon: SimpleIcon
 var _boss_title: Label
@@ -133,6 +138,18 @@ func timer_panel() -> Panel:
 
 func timer_value_label() -> Label:
 	return _timer_value
+
+
+func defeat_research_reward_panel() -> Panel:
+	return _defeat_reward_panel
+
+
+func defeat_research_reward_icon() -> SimpleIcon:
+	return _defeat_reward_icon
+
+
+func defeat_research_reward_value_label() -> Label:
+	return _defeat_reward_value
 
 
 func boss_panel() -> Panel:
@@ -272,6 +289,7 @@ func grab_ability_focus(slot: int = 0) -> bool:
 func _build() -> void:
 	_build_stability()
 	_build_shield()
+	_build_defeat_reward()
 	_build_timer()
 	_build_boss()
 	_build_analysis()
@@ -337,6 +355,31 @@ func _build_timer() -> void:
 	_timer_panel.set_meta(&"alveolus_accessible_name", "Rundendauer")
 
 
+func _build_defeat_reward() -> void:
+	_defeat_reward_panel = _surface_panel(
+		"DefeatResearchReward",
+		AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE,
+		AlveolusVisualTheme.GOLD
+	)
+	_make_hud_surface_transparent(_defeat_reward_panel, &"transparent_defeat_research_reward")
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_END
+	row.add_theme_constant_override("separation", 2)
+	_defeat_reward_panel.add_child(_full_inset(row, 0))
+	_defeat_reward_icon = _hud_icon("DefeatRewardIcon", &"research", AlveolusVisualTheme.GOLD, 15.0)
+	row.add_child(_defeat_reward_icon)
+	_defeat_reward_value = AlveolusUIComponents.label("0", AlveolusVisualTheme.TYPE_HUD_LABEL)
+	_defeat_reward_value.name = "DefeatRewardValue"
+	_defeat_reward_value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_defeat_reward_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_defeat_reward_value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_defeat_reward_value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_defeat_reward_value.modulate = AlveolusVisualTheme.GOLD
+	row.add_child(_defeat_reward_value)
+	_defeat_reward_panel.set_meta(&"alveolus_accessible_name", "Forschung bei Niederlage")
+	_defeat_reward_panel.hide()
+
+
 func _build_boss() -> void:
 	_boss_panel = _surface_panel("Boss", AlveolusVisualTheme.SurfaceRole.HUD_ALERT, AlveolusVisualTheme.CORAL)
 	_make_hud_surface_transparent(_boss_panel, &"dormant_boss_compatibility")
@@ -400,6 +443,7 @@ func _build_stats() -> void:
 	_stats_strip.add_theme_constant_override("h_separation", STAT_GAP)
 	_stats_strip.add_theme_constant_override("v_separation", 4)
 	_stats_strip.set_meta(&"alveolus_component", &"transparent_run_stats")
+	_stats_strip.resized.connect(_on_stats_strip_resized)
 	add_child(_stats_strip)
 
 
@@ -434,7 +478,6 @@ func _build_abilities() -> void:
 		row.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_theme_constant_override("separation", 5)
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.z_index = 1
 		row.set_meta(&"alveolus_component", &"ability_track_readout")
 		card.add_child(_full_inset(row, 6))
 		var icon := _hud_icon("AbilityIcon%d" % (slot + 1), &"ability", AlveolusVisualTheme.TURQUOISE, 22.0)
@@ -530,6 +573,16 @@ func _apply_vitals() -> void:
 			timer_color = AlveolusVisualTheme.CORAL
 	if _timer_value.modulate != timer_color:
 		_timer_value.modulate = timer_color
+	var reward_visible := _view_model.defeat_research_reward_visible()
+	_defeat_reward_panel.visible = reward_visible
+	if reward_visible:
+		var reward_kind := _view_model.defeat_research_reward_icon_id()
+		if _defeat_reward_icon.kind != reward_kind or _defeat_reward_icon.accent != AlveolusVisualTheme.GOLD:
+			_defeat_reward_icon.configure(reward_kind, AlveolusVisualTheme.GOLD)
+		_set_label_text(_defeat_reward_value, _view_model.defeat_research_reward_formatted_value())
+		var reward_accessible_name := _view_model.defeat_research_reward_accessible_name()
+		if _defeat_reward_panel.get_meta(&"alveolus_accessible_name", "") != reward_accessible_name:
+			_defeat_reward_panel.set_meta(&"alveolus_accessible_name", reward_accessible_name)
 	# Boss health remains part of the immutable compatibility snapshot, but its
 	# former card is deliberately dormant. The world presentation owns boss
 	# health; this overlay keeps the top-right lane for elapsed run time only.
@@ -594,9 +647,9 @@ func _build_stat_row(stat: RunHUDViewModel.StatValueViewModel) -> void:
 	_stat_icons.append(icon)
 	var value := AlveolusUIComponents.label(stat.formatted_value(), AlveolusVisualTheme.TYPE_HUD_LABEL)
 	value.name = "StatValue"
-	value.custom_minimum_size = Vector2(0.0, STAT_ROW_HEIGHT)
+	value.custom_minimum_size = Vector2(STAT_VALUE_MINIMUM_WIDTH, STAT_ROW_HEIGHT)
 	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	value.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
@@ -638,8 +691,11 @@ func _apply_abilities() -> void:
 		if _ability_glyphs[slot].modulate != AlveolusVisualTheme.IVORY:
 			_ability_glyphs[slot].modulate = AlveolusVisualTheme.IVORY
 		_set_label_text(_ability_statuses[slot], ability.status_text())
-		if _ability_statuses[slot].modulate != accent:
-			_ability_statuses[slot].modulate = accent
+		var status_color := AlveolusVisualTheme.TURQUOISE.lightened(0.30) if ability.targeting() else (
+			AlveolusVisualTheme.IVORY if ability.ready() else AlveolusVisualTheme.GOLD.lightened(0.18)
+		)
+		if _ability_statuses[slot].modulate != status_color:
+			_ability_statuses[slot].modulate = status_color
 		_set_progress(_ability_bars[slot], ability.cooldown_progress(), 1.0)
 		AlveolusUIComponents.apply_hud_cooldown_track(_ability_bars[slot], accent)
 		if not _ability_cards[slot].has_meta(&"targeting") or _ability_cards[slot].get_meta(&"targeting") != ability.targeting():
@@ -688,10 +744,12 @@ func _ability_info_payload(slot: int) -> Dictionary:
 	var ability := _view_model.ability_at(slot)
 	if ability == null or not ability.occupied():
 		return {}
+	var facts := ability.facts_text()
+	var effect := ability.effect_text()
 	return {
-		"title": "",
-		"body": ability.facts_text(),
-		"meta": "",
+		"title": ability.title(),
+		"body": effect if not effect.is_empty() else facts,
+		"meta": facts if not facts.is_empty() and facts != effect else "",
 		"icon_kind": &"",
 		"accent": AlveolusVisualTheme.TURQUOISE if ability.ready() else AlveolusVisualTheme.COBALT,
 		"maximum_width": 244.0,
@@ -741,12 +799,14 @@ func _apply_wide_layout() -> void:
 	var pause_width := 44.0
 	var pause_left := width - margin - pause_width
 	var timer_left := pause_left - 6.0 - timer_width
+	var reward_left := timer_left - 4.0 - DEFEAT_REWARD_WIDTH
 	var stability_left := floorf((width - vital_width) * 0.5)
 	_place(_stability_panel, Rect2(stability_left, 10.0, vital_width, 30.0))
 	_place(_shield_panel, Rect2(margin, 14.0, 230.0, 24.0))
+	_place(_defeat_reward_panel, Rect2(reward_left, 12.0, DEFEAT_REWARD_WIDTH, 24.0))
 	_place(_timer_panel, Rect2(timer_left, 12.0, timer_width, 24.0))
 	_place(_pause_button, Rect2(pause_left, 2.0, pause_width, 44.0))
-	var stats_width := 304.0
+	var stats_width := 336.0
 	_place(_stats_strip, Rect2(width - margin - stats_width, 50.0, stats_width, 44.0))
 	_fit_stat_columns(stats_width)
 	_stats_strip.alignment = FlowContainer.ALIGNMENT_END
@@ -766,13 +826,15 @@ func _apply_compact_layout() -> void:
 	var timer_width := 72.0
 	var pause_left := width - margin - pause_width
 	var timer_left := pause_left - gap - timer_width
-	var vital_width := minf(220.0, maxf(132.0, timer_left - margin - gap))
+	var reward_left := timer_left - 4.0 - DEFEAT_REWARD_WIDTH
+	var vital_width := minf(220.0, maxf(132.0, reward_left - margin - gap))
 	_place(_stability_panel, Rect2(margin, 8.0, vital_width, 30.0))
 	_place(_shield_panel, Rect2(margin, 40.0, vital_width, 22.0))
+	_place(_defeat_reward_panel, Rect2(reward_left, 10.0, DEFEAT_REWARD_WIDTH, 24.0))
 	_place(_timer_panel, Rect2(timer_left, 10.0, timer_width, 24.0))
 	_place(_pause_button, Rect2(pause_left, 0.0, pause_width, 44.0))
-	var stats_width := minf(236.0, width - margin * 2.0)
-	_place(_stats_strip, Rect2(width - margin - stats_width, 52.0, stats_width, 44.0))
+	var stats_width := minf(280.0, width - margin * 2.0)
+	_place(_stats_strip, Rect2(width - margin - stats_width, 64.0, stats_width, 44.0))
 	_fit_stat_columns(stats_width)
 	_stats_strip.alignment = FlowContainer.ALIGNMENT_END
 	var visible_abilities := _visible_ability_count()
@@ -830,18 +892,24 @@ func _fit_stat_columns(available_width: float) -> void:
 		row.custom_minimum_size.x = row_width
 
 
+func _on_stats_strip_resized() -> void:
+	if _stats_strip.size.x > 0.0:
+		_fit_stat_columns(_stats_strip.size.x)
+
+
 func _stat_accent(stat: RunHUDViewModel.StatValueViewModel) -> Color:
+	if String(stat.id()).begins_with("resistance_"):
+		var damage_type_id := StringName(String(stat.id()).trim_prefix("resistance_"))
+		return AlveolusVisualTheme.damage_type_accent(damage_type_id).lightened(0.22)
 	match stat.icon_id():
-		&"treatment":
-			return AlveolusVisualTheme.TURQUOISE.lightened(0.22)
-		&"automatic_therapy":
-			return AlveolusVisualTheme.GOLD.lightened(0.12)
-		&"therapy_precision":
-			return Color("8fc9ff")
-		&"immune":
-			return AlveolusVisualTheme.CORAL.lightened(0.18)
-		&"sample":
-			return AlveolusVisualTheme.TEAL.lightened(0.30)
+		&"movement_training":
+			return AlveolusVisualTheme.TURQUOISE.lightened(0.32)
+		&"defense_training":
+			return AlveolusVisualTheme.GOLD.lightened(0.20)
+		&"life_regeneration":
+			return AlveolusVisualTheme.TEAL.lightened(0.36)
+		&"experience_gain":
+			return AlveolusVisualTheme.SKY_DEEP.lightened(0.32)
 	return AlveolusVisualTheme.IVORY
 
 

@@ -30,6 +30,8 @@ func _test_source_boundaries() -> void:
 		"ContentCatalog",
 		"AbilityDefinition",
 		"UpgradeDefinition",
+		"calculate_run_reward",
+		"award_run",
 		"ConfigFile",
 		"FileAccess",
 		"save_game",
@@ -44,6 +46,7 @@ func _test_source_boundaries() -> void:
 	_check(not source.contains("func _process") and not source.contains("func _physics_process"), "Run-HUD besitzt keine dauerhafte Prozessschleife")
 	_check(not source.contains("Timer.new") and not source.contains("create_timer"), "Run-HUD besitzt keinen eigenen Countdown oder Animationstimer")
 	_check(not source.contains("Color.WHITE") and not source.contains("PAPER_LIGHT"), "Run-HUD erzeugt keine weißen Flächen")
+	_check(source.contains("BASIC_STAT_IDS"), "Run-HUD-View-Model begrenzt den Kampfstreifen auf stabile Grundwert-IDs")
 
 
 func _test_immutable_view_model() -> RunHUDViewModel:
@@ -55,19 +58,30 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	_check(view_model.content_hash().length() == 64, "Run-HUD-View-Model besitzt einen SHA-256-Inhaltshash")
 	_check(view_model.stability_text() == "76 / 100" and view_model.shield_text() == "12", "Leben und Schild sind präsentationsfertig und nur lesbar")
 	_check(view_model.round_time_text() == "03:36" and view_model.timer_text() == "03:36", "Rundendauer ist präsentationsfertig und frei von Boss-Chrome")
+	_check(
+		view_model.defeat_research_reward_visible()
+		and view_model.defeat_research_reward_icon_id() == &"research"
+		and view_model.defeat_research_reward_formatted_value() == "+18"
+		and view_model.defeat_research_reward_accessible_name() == "Forschungsgewinn bei Niederlage: 18",
+		"Niederlagenprognose ist als reine Symbol-Zahl-Präsentation mit Accessible Name kopiert"
+	)
 	_check(view_model.boss_visible() and view_model.boss_percentage_text() == "64 %", "Bossstatus enthält Sichtbarkeit und Prozentwert")
 	_check(view_model.analysis_text() == "Lv 3 · 7/12", "Analyse und Proben bilden eine kompakte gemeinsame Anzeige")
-	_check(view_model.stat_count() == 5 and view_model.ability_count() == 2, "Snapshot enthält fünf kompakte Werte und exakt zwei Fähigkeitsslots")
-	_check(view_model.stat_at(0).id() == &"therapy_power", "Runwerte werden nach stabiler Priorität sortiert")
+	_check(view_model.stat_count() == 8 and view_model.ability_count() == 2, "Snapshot enthält acht kompakte Grundwerte und exakt zwei Fähigkeitsslots")
+	_check(view_model.stat_at(0).id() == &"defense", "Grundwerte werden nach stabiler Priorität sortiert")
+	_check(view_model.stats().all(func(stat: RunHUDViewModel.StatValueViewModel) -> bool:
+		return RunHUDViewModel.BASIC_STAT_IDS.has(stat.id())
+	), "Behandlungs- und Fähigkeitswerte gelangen nicht in den Kampfstreifen")
 	_check(view_model.ability_at(0).title() == "Fokusfeld" and view_model.ability_at(1).title() == "Notfallhilfe", "Fähigkeiten werden unabhängig von der Eingabereihenfolge nach Slot normalisiert")
 	_check(view_model.ability_at(0).effect_text() == "Priorisiert Ziele und verstärkt die Behandlung im Zielgebiet.", "Fähigkeitswirkung wird präsentationsfertig und nur lesbar kopiert")
-	_check(view_model.ability_at(0).facts_text() == "Abklingzeit: 10 s\nRadius: 120 px", "Fähigkeit stellt ausschließlich strukturierte Fakten kompakt bereit")
+	_check(view_model.ability_at(0).facts_text() == "Abklingzeit: 10 s\nRadius: 4", "Fähigkeit stellt ausschließlich strukturierte Fakten ohne interne Weltmaße bereit")
 	_check(view_model.ability_at(0).targeting() and view_model.ability_at(0).status_text() == "Ziel wählen", "Targeting besitzt Vorrang vor dem Bereitstatus")
 	_check(is_equal_approx(view_model.ability_at(1).cooldown_progress(), 0.4), "Cooldownfortschritt wird aus kopierten Presenterwerten berechnet")
 	_check(view_model.ability_at(-1) == null and view_model.ability_at(2) == null, "Ungültige Fähigkeitsslots werden sicher abgewiesen")
 
 	vital["timer_text"] = "Fremde Mutation"
 	(vital["nested"] as Dictionary)["mutable"] = false
+	(vital["defeat_research_reward"] as Dictionary)["value"] = "+999"
 	stats[0]["value"] = "999"
 	abilities[0]["title"] = "Fremde Fähigkeit"
 	abilities[0]["effect_text"] = "Fremde Wirkung"
@@ -79,15 +93,24 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	returned_stats.clear()
 	returned_abilities.clear()
 	_check(view_model.timer_text() == "03:36", "Tiefe Quellmutationen erreichen den Vital-Snapshot nicht")
-	_check(view_model.stat_count() == 5 and view_model.stat_at(0).formatted_value() == "+18 %", "Runwertarrays sind defensiv kopiert")
+	_check(view_model.defeat_research_reward_formatted_value() == "+18", "Tiefe Quellmutationen erreichen die Niederlagenprognose nicht")
+	_check(view_model.stat_count() == 8 and view_model.stat_at(0).formatted_value() == "8 %", "Grundwertarrays sind defensiv kopiert")
 	_check(view_model.ability_count() == 2 and view_model.ability_at(1).title() == "Notfallhilfe" and view_model.ability_at(1).facts_text().contains("12 s"), "Fähigkeitsarrays, Namen und Fakten sind defensiv kopiert")
 
 	var equivalent: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), _stat_rows(), _ability_rows(), 23)
 	_check(equivalent.content_hash() == view_model.content_hash(), "Revision ist nicht Teil des semantischen HUD-Hashs")
+	var changed_reward_vital := _vital_snapshot()
+	(changed_reward_vital["defeat_research_reward"] as Dictionary)["value"] = "+19"
+	var changed_reward: RunHUDViewModel = RunHUDViewModelScript.create(changed_reward_vital, _stat_rows(), _ability_rows(), 23)
+	_check(changed_reward.content_hash() != view_model.content_hash(), "Niederlagenprognose ist Bestandteil des semantischen HUD-Hashs")
 	var legacy_vital := _vital_snapshot()
 	legacy_vital.erase("round_time_text")
 	var legacy_timer: RunHUDViewModel = RunHUDViewModelScript.create(legacy_vital, _stat_rows(), _ability_rows(), 23)
 	_check(legacy_timer.timer_text() == "01:24", "Legacy-Bosschrome wird bis zur Presenterumstellung auf den reinen Uhrwert reduziert")
+	var no_reward_vital := _vital_snapshot()
+	no_reward_vital.erase("defeat_research_reward")
+	var no_reward: RunHUDViewModel = RunHUDViewModelScript.create(no_reward_vital, _stat_rows(), _ability_rows(), 23)
+	_check(not no_reward.defeat_research_reward_visible(), "Ohne Presenterprognose bleibt die Niederlagenforschung vollständig ausgeblendet")
 	var one_slot: RunHUDViewModel = RunHUDViewModelScript.create(_vital_snapshot(), [], [
 		{"slot": 0, "title": "Fokusfeld", "effect_text": "Verstärkt die Behandlung.", "occupied": true, "key_glyph_text": "Q"},
 	], 24)
@@ -106,6 +129,7 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 
 	_assert_surface(hud.stability_panel(), AlveolusVisualTheme.SurfaceRole.HUD_VITAL, "Leben")
 	_assert_surface(hud.shield_panel(), AlveolusVisualTheme.SurfaceRole.HUD_VITAL, "Schild")
+	_assert_surface(hud.defeat_research_reward_panel(), AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, "Niederlagenforschung")
 	_assert_surface(hud.timer_panel(), AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, "Timer")
 	_assert_surface(hud.boss_panel(), AlveolusVisualTheme.SurfaceRole.HUD_ALERT, "Boss")
 	_assert_surface(hud.analysis_panel(), AlveolusVisualTheme.SurfaceRole.HUD_OBJECTIVE, "Analyse")
@@ -115,6 +139,16 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(hud.stability_bar().value == 76.0 and hud.stability_bar().max_value == 100.0, "Lebensleiste übernimmt Presenterwerte")
 	_check(hud.stability_value_label().text == "76 / 100", "Lebenswert bleibt immer sichtbar")
 	_check(hud.shield_panel().visible and hud.shield_bar().value == 12.0, "Schild bleibt auch als eigene kritische Anzeige sichtbar")
+	_check(
+		hud.defeat_research_reward_panel().visible
+		and hud.defeat_research_reward_icon().kind == &"research"
+		and hud.defeat_research_reward_value_label().text == "+18",
+		"Niederlagenforschung zeigt ausschließlich Symbol und Zahl"
+	)
+	_check(
+		hud.defeat_research_reward_panel().get_meta(&"alveolus_accessible_name", "") == "Forschungsgewinn bei Niederlage: 18",
+		"Niederlagenforschung besitzt ihren vollständigen Accessible Name"
+	)
 	_check(hud.timer_value_label().text == "03:36", "Freistehende Rundendauer besitzt keine eigene Fortschrittslogik")
 	_check(not hud.boss_panel().visible and hud.boss_value_label().text == "64 %", "Die frühere Bosskarte bleibt dormant, während der Kompatibilitätssnapshot gebunden bleibt")
 	_check(hud.analysis_value_label().text == "Lv 3 · 7/12" and hud.analysis_bar().value == 7.0, "Proben und Analyse bleiben als kompakte Zielanzeige sichtbar")
@@ -122,14 +156,25 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(hud.stability_panel().get_meta(&"alveolus_component", &"") == &"transparent_hud_vital" and is_zero_approx(hud.stability_panel().self_modulate.a), "Leben schwebt ohne Kartenfläche über dem Run")
 	_check(hud.analysis_panel().size.y <= 30.0 and is_zero_approx(hud.analysis_panel().self_modulate.a), "Befund und Level bleiben ohne Kachel als dezente Zielzeile kompakt")
 	_check(hud.timer_panel().size.x <= 82.0 and hud.timer_panel().global_position.x > 640.0 and is_zero_approx(hud.timer_panel().self_modulate.a), "Rundendauer sitzt freistehend oben rechts")
+	_check(
+		is_zero_approx(hud.defeat_research_reward_panel().self_modulate.a)
+		and hud.defeat_research_reward_panel().get_global_rect().end.x <= hud.timer_panel().get_global_rect().position.x + 0.5
+		and hud.timer_panel().get_global_rect().position.x - hud.defeat_research_reward_panel().get_global_rect().end.x <= 4.5,
+		"Symbol und Zahl der Niederlagenforschung liegen transparent unmittelbar links vom Timer"
+	)
 
 	_check(hud.run_stats_strip().is_class("HFlowContainer") and not hud.run_stats_strip().is_class("Panel"), "Runwerte besitzen einen transparenten Flow statt einer eigenen Panel-Fläche")
-	_check(hud.stat_rows().size() == 5, "Alle fünf präsentierten Runwerte sind sichtbar")
+	_check(hud.stat_rows().size() == 8, "Alle acht präsentierten Grundwerte sind sichtbar")
 	for row in hud.stat_rows():
 		_check(row.get_child_count() == 2 and row.get_child(0) is SimpleIcon and row.get_child(1) is Label, "Runwert zeigt ausschließlich Icon und Wert")
 		_check(row.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Transparenter Runwert blockiert kein Gameplay-Pointerevent")
 		_check((row.get_child(0) as SimpleIcon).accent == (row.get_child(1) as Label).modulate, "Icon und Wert teilen ihren semantischen Farbakzent")
-	_check(_row_populations(hud.stat_rows()) == [4, 1], "Kampfwerte stehen rechts unter der Zeit in exakt vier Spalten")
+		var stat_icon := row.get_child(0) as SimpleIcon
+		var stat_value := row.get_child(1) as Label
+		_check(stat_value.global_position.x - stat_icon.get_global_rect().end.x <= 3.5, "Icon und Zahl bilden eine enge lesbare Einheit")
+		_check(stat_value.size.x >= RunHUDOverlay.STAT_VALUE_MINIMUM_WIDTH - 0.5 and not stat_value.text.is_empty(), "Jeder kompakte Grundwert besitzt sichtbar lesbare Zahlenbreite")
+		_check(RunHUDViewModel.BASIC_STAT_IDS.has(row.get_meta(&"stat_id", &"")), "Kampfstreifen enthält ausschließlich stabile Grundwert-IDs")
+	_check(_row_populations(hud.stat_rows()) == [4, 4], "Grundwerte stehen rechts unter der Zeit in exakt vier Spalten")
 
 	_check(hud.ability_cards().size() == 2 and hud.ability_buttons().size() == 2, "Run-HUD behält exakt zwei stabile logische Fähigkeitsslots")
 	_check(hud.ability_icons().size() == 2 and hud.ability_key_labels().size() == 2, "Jeder Fähigkeitsslot besitzt Icon und Glyphtext")
@@ -140,9 +185,11 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 		var track_background := bar.get_theme_stylebox("background") as StyleBoxFlat
 		var track_fill := bar.get_theme_stylebox("fill") as StyleBoxFlat
 		_check(bar.get_meta(&"alveolus_component", &"") == &"ability_cooldown_track", "Cooldown verwendet die explizite kompakte Track-Komponente")
-		_check(track_background != null and track_background.bg_color.a >= 0.50 and track_background.bg_color.a <= 0.60, "Cooldowntrack besitzt genug dunklen Kontrast über hellem Gewebe")
-		_check(track_background != null and track_background.border_color.a >= 0.75, "Cooldowntrack erhält eine klar lesbare semantische Kontur")
-		_check(track_fill != null and track_fill.bg_color.a >= 0.38 and track_fill.bg_color.a <= 0.45, "Cooldownfortschritt bleibt transparent, ist aber auch auf hellem Gewebe eindeutig sichtbar")
+		_check(track_background != null and track_background.bg_color.a >= 0.70 and track_background.bg_color.a <= 0.75, "Cooldowntrack besitzt genug dunklen Kontrast über hellem Gewebe")
+		_check(track_background != null and track_background.border_color.a >= 0.90, "Cooldowntrack erhält eine klar lesbare semantische Kontur")
+		_check(track_fill != null and track_fill.bg_color.a >= 0.34 and track_fill.bg_color.a <= 0.38, "Cooldownfortschritt bleibt transparent, ist aber auch auf hellem Gewebe eindeutig sichtbar")
+	var readouts := hud.find_children("*", "HBoxContainer", true, false).filter(func(node: Node) -> bool: return node.get_meta(&"alveolus_component", &"") == &"ability_track_readout")
+	_check(readouts.size() == 2 and readouts.all(func(node: Node) -> bool: return (node as CanvasItem).z_index == 0), "Fähigkeitsreadouts bleiben hinter späteren blockierenden Modalebenen")
 	for icon in hud.ability_icons():
 		_check(icon.visible and icon.custom_minimum_size.x >= 22.0 and icon.modulate.a > 0.95, "Belegte Fähigkeit zeigt ihr Icon klar über dem Cooldowntrack")
 	_check(hud.ability_key_labels().all(func(label: Label) -> bool: return label.modulate == AlveolusVisualTheme.IVORY), "Shortcuts bleiben unabhängig vom Cooldownzustand kräftig lesbar")
@@ -170,11 +217,11 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(hover_provider.is_valid() and hover_provider == hud.ui_info_provider_for(hud.ability_buttons()[0]), "Maus-Hover und ui_info teilen dieselbe stabile Informationsquelle")
 	var hover_payload: Dictionary = hover_provider.call()
 	_check(
-		hover_payload.get("title", "") == ""
-		and hover_payload.get("meta", "") == ""
-		and StringName(String(hover_payload.get("icon_kind", ""))) == &""
-		and hover_payload.get("body", "") == "Abklingzeit: 10 s\nRadius: 120 px",
-		"Fähigkeitstooltip enthält nur strukturierte Fakten ohne Titelduplikat"
+		hover_payload.get("title", "") == "Fokusfeld"
+		and hover_payload.get("body", "") == "Priorisiert Ziele und verstärkt die Behandlung im Zielgebiet."
+		and hover_payload.get("meta", "") == "Abklingzeit: 10 s\nRadius: 4"
+		and StringName(String(hover_payload.get("icon_kind", ""))) == &"",
+		"Fähigkeitstooltip verbindet Namen, Kernwirkung und strukturierte Fakten"
 	)
 	_check(is_equal_approx(float(hover_payload.get("surface_opacity", 0.0)), 0.86), "Fähigkeitstooltip fordert eine dezente halbtransparente Fläche an")
 	_check(hud.pause_action().get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "Pause bleibt eine ruhige HUD-Aktion")
@@ -204,8 +251,10 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 		original_ability_ids.append(card.get_instance_id())
 	var updated_vital := _vital_snapshot()
 	updated_vital["round_time_text"] = "03:37"
+	(updated_vital["defeat_research_reward"] as Dictionary)["value"] = "+19"
+	(updated_vital["defeat_research_reward"] as Dictionary)["accessible_name"] = "Forschungsgewinn bei Niederlage: 19"
 	var updated_stats := _stat_rows()
-	updated_stats[0]["value"] = "+19 %"
+	updated_stats[0]["value"] = "9 %"
 	var updated_abilities := _ability_rows()
 	updated_abilities[0]["cooldown_remaining"] = 6.8
 	var updated: RunHUDViewModel = RunHUDViewModelScript.create(updated_vital, updated_stats, updated_abilities, 23)
@@ -214,21 +263,22 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(_instance_ids(hud.stat_rows()) == original_stat_ids, "Wertupdates erzeugen keine neuen Stat-Nodes")
 	_check(_instance_ids(hud.ability_cards()) == original_ability_ids, "Cooldownupdates erzeugen keine neuen Fähigkeitsslots")
 	_check(hud.timer_value_label().text == "03:37", "Presenterupdate ändert die Rundendauer exakt einmal")
+	_check(hud.defeat_research_reward_value_label().text == "+19", "Presenterupdate aktualisiert die Niederlagenprognose in-place")
 	_check(not hud.apply_view_model(updated), "Identischer Snapshot ist idempotent")
 
 	for viewport_size in [Vector2i(1280, 720), Vector2i(1024, 576), Vector2i(960, 540)]:
 		_resize_logical_host(host, viewport_size)
 		await _settle()
 		_assert_critical_layout(hud, viewport_size)
-		_check(_row_populations(hud.stat_rows()) == [4, 1], "%s hält rechts unter der Zeit exakt vier Kampfwerte pro Reihe" % viewport_size)
+		_check(_row_populations(hud.stat_rows()) == [4, 4], "%s hält rechts unter der Zeit exakt vier Grundwerte pro Reihe" % viewport_size)
 
 	# Logical 480 × 270 corresponds to the required 960 × 540 at 200 percent.
 	_resize_logical_host(host, Vector2i(480, 270))
 	await _settle()
 	_assert_critical_layout(hud, Vector2i(480, 270))
 	_check(hud.ability_panel().columns == 2, "Auch bei 200 Prozent bleiben zwei belegte Fähigkeiten eindeutig nebeneinander")
-	_check(hud.stability_panel().visible and hud.shield_panel().visible and hud.timer_panel().visible and hud.analysis_panel().visible, "200-Prozent-Layout blendet keinen gameplaykritischen Wert aus")
-	_check(_row_populations(hud.stat_rows()) == [4, 1], "Auch bei 200 Prozent bleiben exakt vier Kampfwerte pro Reihe")
+	_check(hud.stability_panel().visible and hud.shield_panel().visible and hud.defeat_research_reward_panel().visible and hud.timer_panel().visible and hud.analysis_panel().visible, "200-Prozent-Layout blendet keinen gameplaykritischen Wert aus")
+	_check(_row_populations(hud.stat_rows()) == [4, 4], "Auch bei 200 Prozent bleiben exakt vier Grundwerte pro Reihe")
 	_check(hud.run_stats_strip().get_global_rect().end.y <= hud.analysis_panel().get_global_rect().position.y + 0.5, "Kompakte Statzeilen kollidieren nicht mit Analyse und Proben")
 
 	var one_slot_model: RunHUDViewModel = RunHUDViewModelScript.create(updated_vital, [], [
@@ -271,6 +321,7 @@ func _assert_critical_layout(hud: RunHUDOverlay, viewport_size: Vector2i) -> voi
 	var controls: Array[Control] = [
 		hud.stability_panel(),
 		hud.shield_panel(),
+		hud.defeat_research_reward_panel(),
 		hud.timer_panel(),
 		hud.boss_panel(),
 		hud.run_stats_strip(),
@@ -303,6 +354,12 @@ func _vital_snapshot() -> Dictionary:
 		"shield_maximum": 20.0,
 		"timer_text": "BOSS IN · 01:24",
 		"round_time_text": "03:36",
+		"defeat_research_reward": {
+			"visible": true,
+			"icon_id": &"research",
+			"value": "+18",
+			"accessible_name": "Forschungsgewinn bei Niederlage: 18",
+		},
 		"boss_visible": true,
 		"boss_title": "Infektionsherd",
 		"boss_current": 64.0,
@@ -317,11 +374,16 @@ func _vital_snapshot() -> Dictionary:
 
 func _stat_rows() -> Array:
 	return [
-		{"id": &"sample_radius", "icon_id": &"sample", "value": "96", "accessible_name": "Probenradius", "priority": 60},
-		{"id": &"therapy_targets", "icon_id": &"therapy_precision", "value": "3", "accessible_name": "Behandlungsziele", "priority": 80},
-		{"id": &"therapy_power", "icon_id": &"treatment", "value": "+18 %", "accessible_name": "Behandlungsschaden", "priority": 100},
-		{"id": &"immune_cells", "icon_id": &"immune", "value": "2", "accessible_name": "Abwehrzellen", "priority": 70},
-		{"id": &"therapy_interval", "icon_id": &"automatic_therapy", "value": "0,82 s", "accessible_name": "Behandlungsintervall", "priority": 90},
+		{"id": &"defense", "icon_id": &"defense_training", "value": "8 %", "accessible_name": "Effektive Verteidigung", "priority": 100},
+		{"id": &"movement_speed", "icon_id": &"movement_training", "value": "250", "accessible_name": "Bewegungstempo", "priority": 90},
+		{"id": &"life_regeneration", "icon_id": &"life_regeneration", "value": "0,8/s", "accessible_name": "Regeneration", "priority": 80},
+		{"id": &"experience_gain", "icon_id": &"experience_gain", "value": "+15 %", "accessible_name": "EXP-Multiplikator", "priority": 70},
+		{"id": &"resistance_fire", "icon_id": &"damage_fire", "value": "0 %", "accessible_name": "Feuerresistenz", "priority": 60},
+		{"id": &"resistance_water", "icon_id": &"damage_water", "value": "9 %", "accessible_name": "Wasserresistenz", "priority": 50},
+		{"id": &"resistance_earth", "icon_id": &"damage_earth", "value": "5 %", "accessible_name": "Erdresistenz", "priority": 40},
+		{"id": &"resistance_wind", "icon_id": &"damage_wind", "value": "-10 %", "accessible_name": "Windresistenz", "priority": 30},
+		{"id": &"therapy_damage", "icon_id": &"treatment", "value": "16", "accessible_name": "Behandlungsschaden", "priority": 200},
+		{"id": &"ability_damage", "icon_id": &"ability", "value": "38", "accessible_name": "Fähigkeitsschaden", "priority": 190},
 	]
 
 
@@ -354,7 +416,7 @@ func _ability_rows() -> Array:
 			"cooldown_total": 10.0,
 			"fact_rows": [
 				{"label": "Abklingzeit", "value": "10 s"},
-				{"label": "Radius", "value": "120 px"},
+				{"label": "Radius", "value": "4"},
 			],
 			"targeting": true,
 			"key_glyph_text": "Q",

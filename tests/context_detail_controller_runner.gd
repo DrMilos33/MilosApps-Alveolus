@@ -136,6 +136,22 @@ func _run() -> void:
 	preferred_source.queue_free()
 	await _settle()
 
+	var wide_source_rect := Rect2(Vector2(24.0, 188.0), Vector2(432.0, 48.0))
+	var wide_card_size := Vector2(280.0, 60.0)
+	var wide_fallback := controller._contained_position(
+		wide_source_rect,
+		wide_card_size,
+		Vector2(480.0, 320.0)
+	)
+	_check(
+		is_equal_approx(wide_fallback.x, wide_source_rect.end.x - wide_card_size.x),
+		"Eine fast vollbreite Quelle richtet den Tooltip deterministisch oberhalb rechtsbündig aus"
+	)
+	_check(
+		wide_fallback.y + wide_card_size.y <= wide_source_rect.position.y - ContextDetailController.SOURCE_GAP + 0.5,
+		"Der Vollbreiten-Fallback bleibt vollständig oberhalb der Quelle"
+	)
+
 	var ability_strip := PanelContainer.new()
 	ability_strip.position = Vector2(112.0, 264.0)
 	ability_strip.size = Vector2(256.0, 40.0)

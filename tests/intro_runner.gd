@@ -23,6 +23,7 @@ func _run_intro() -> void:
 	game._on_level_selected(&"intro")
 	game.start_run()
 	_check(game.intro_phase == &"await_movement", "Intro wartet zuerst auf echte Bewegung")
+	_check(game.stats.prepared_treatment != null and game.stats.prepared_treatment.id == &"treatment_precision", "Intro trägt die Identität des gezeigten Präzisen Impulses für generische UI-Präsentation")
 	game.state.tick(999.0)
 	_check(game.state.active and not game.state.boss_spawned, "Ereignisintro besitzt keine Zeitdeadline")
 
@@ -106,6 +107,7 @@ func _run_intro() -> void:
 		return
 	_check(game.current_upgrade_options.size() == 1 and game.current_upgrade_options[0].id == &"potency", "Lektion 1 zeigt nur Gezielte Wirksamkeit")
 	_check(not game.hud.upgrade_target_preview.visible and game.hud.upgrade_target_preview.target_type == &"", "Die Intro-Verbesserung zeichnet keine Welt- oder Zielvorschau")
+	_check(_scripted_upgrade_card_has_heading(game.hud, "Präziser Impuls"), "Die Intro-Verbesserung benennt die tatsächlich gezeigte Behandlung")
 	_check(_scripted_upgrade_card_is_qualitative(game.hud, "Deine Behandlung verursacht jetzt mehr Schaden."), "Die Wirkungslektion erklärt den Nutzen qualitativ und ohne Vorher/Nachher-Grundwerte")
 	game._on_upgrade_chosen(game.current_upgrade_options[0])
 
@@ -152,6 +154,17 @@ func _scripted_upgrade_card_is_qualitative(hud: GameHUD, expected_copy: String) 
 	# The numeric comparison row is intentionally absent for scripted lessons;
 	# exactly two copy controls leave room only for title and qualitative effect.
 	return text.contains(expected_copy) and _control_copy_count(card) == 2
+
+
+func _scripted_upgrade_card_has_heading(hud: GameHUD, expected_heading: String) -> bool:
+	if hud == null or hud.upgrade_cards == null:
+		return false
+	for child in hud.upgrade_cards.get_children():
+		if not child is Control or child.is_queued_for_deletion():
+			continue
+		var heading := (child as Control).find_child("UpgradeTitle", true, false) as Label
+		return heading != null and heading.text == expected_heading
+	return false
 
 func _control_text(node: Node) -> String:
 	var result := ""

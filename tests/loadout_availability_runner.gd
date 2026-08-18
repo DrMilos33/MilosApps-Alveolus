@@ -53,6 +53,7 @@ func _run() -> void:
 	var meta := MetaProgressionState.new()
 	meta.set_unlimited_test_progression(true)
 	for research in ContentCatalog.research_definitions():
+		_true(SimpleIcon.supports(research.id), "%s besitzt eine registrierte semantische Forschungsglyphe" % String(research.id))
 		meta.research_ranks[research.id] = research.max_level
 		_true(LoadoutAvailabilityPolicy.research_purchase_enabled(research), "%s bleibt im aktuellen Testschritt kaufbar" % String(research.id))
 	var available := LoadoutAvailabilityPolicy.selectable_ids(definitions, meta.research_ranks)

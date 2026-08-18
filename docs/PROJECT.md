@@ -20,7 +20,7 @@ entsteht durch:
 - einen begrenzten Behandlungsplan vor jedem Fall;
 - zwei bewusst eingesetzte aktive Fähigkeiten;
 - Fallmerkmale, Befunde und Reaktionen während des Runs;
-- sieben globale Forschungen für intrinsische Werte und
+- acht globale Forschungen für intrinsische Werte und
   Behandlungsfreischaltungen;
 - zufällige Run-Ausbaustufen, die mit dem vorbereiteten Plan interagieren.
 
@@ -37,15 +37,16 @@ entsteht durch:
   verbliebene Passiv- und Reservefelder dienen ausschließlich der
   Save-/Schema-Kompatibilität.
 - Der aktuelle Produktkatalog umfasst drei Behandlungen, sechs sichtbare aktive
-  Fähigkeiten, sieben globale Forschungen, vier Rangtalente und 17
+  Fähigkeiten, acht globale Forschungen, vier Rangtalente und 18
   Run-Ausbaustufen.
 - Praxis mit Offline-Forschung und Klinikfällen, Forschungsbrett, Talente,
   Meisterschaft, kategorisiertes Lexikon und lokale Savegame-Version 6.
 - Hauptfälle haben keine Zeitbegrenzung; ihr Boss erscheint nach 180 Sekunden.
   Doctor Milos startet mit 100 Leben.
 - Die sichtbaren Kampfbegriffe lauten Leben, Schaden, Regeneration, Schild und
-  Verteidigung. Feuer, Wasser, Erde, Wind, Blut, Holy und Undead sind die sieben
-  festen Schadenstypen.
+  Verteidigung. Feuer, Wasser, Erde und Wind sind die vier aktiven
+  Schadenstypen. Die UI zeigt Verteidigung und Resistenzen ausschließlich als
+  bereits berechnete effektive Prozentwerte.
 - Maus, Tastatur und Gamepad, UI-Sounds, Audioeinstellungen, UI-Skalierung von
   75 bis 200 Prozent,
   reduzierte Bewegung und anpassbare Eingaben.
@@ -149,6 +150,13 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-044 | Ersetzt D-006 und die Versionsangabe aus D-035 hinsichtlich des aktuellen Formats: Savegame-Version 6 und Talentbaum-Revision 3 sind verbindlich. Migrationen bewahren Forschung, Meisterschaft und übrigen Fortschritt; entfernte alte Talentbelegungen werden erstattet. |
 | D-045 | Hauptfälle besitzen keine Ablaufzeit und rufen den Boss nach 180 Sekunden. Doctor Milos hat 100 Basisleben. Beim ersten Abschluss eines Falls ist noch keine Variation aktiv; danach wird die Variation aus dem Fallseed erzeugt, und dieser Seed rotiert ausschließlich nach einem Sieg. `minor_focus` bleibt ein freisetzendes Nebenziel, besitzt aber eine mobile Basisgeschwindigkeit von 12 px/s, bevor Fallmodifikatoren wirken. |
 | D-046 | Feuer, Wasser, Erde, Wind, Blut, Holy und Undead bilden ein festes Set aus sieben Schadenstypen. Angriffe und Gegner besitzen explizite Schadensprofile, Spieler und Gegner explizite Resistenzen; allgemeine Verteidigung reduziert eingehenden Schaden zusätzlich, bevor Schild absorbiert. Abwehrzellen treffen nur über die tatsächliche Geometrie jeder einzelnen Zelle und können je Zelle höchstens einmal pro 0,1 Sekunden Schaden auslösen. |
+| D-047 | Ersetzt den Schadenstypanteil aus D-046; dessen Treffergeometrie und Schadensreihenfolge bleiben unberührt. Aktiv sind ausschließlich Feuer, Wasser, Erde und Wind. Jede sichtbare Typangabe kombiniert Name, eigenes Symbol und Wert; Feuer verwendet Koralle/Orange, Wasser Kobalt/Cyan, Erde Honiggold/Ocker und Wind Türkis/Mint. Farbe allein vermittelt niemals den Typ. |
+| D-048 | Kampfentfernungen werden zentral als Stufen geführt. Die UI zeigt ausschließlich `Radius N` oder `Reichweite N` und niemals Pixel-, Welt- oder intern umgerechnete Entfernungen; Körpergrößen verwenden eine getrennte Größenklasse. Verteidigungs- und Resistenzanzeigen erhalten fertig berechnete effektive Prozentwerte und zeigen weder Roh-Ratings noch Formeln. |
+| D-049 | Ersetzt D-043 sowie ausschließlich die Angabe zur Baumrevision aus D-044; dessen Save-v6- und Migrationsvertrag bleibt bestehen. Talentbaum-Revision 4 beginnt mit `treatment_damage_training` und verzweigt in `spread_penetration`, `manual_treatment_aim` und `piercing_persistence`; `piercing_return` bleibt entfernt und reserviert. Revision-3-Belegungen werden zurückgesetzt beziehungsweise erstattet, Forschung und Meisterschaft bleiben erhalten. |
+| D-050 | Ersetzt den Forschungsumfang aus D-042: Acht globale Forschungen umfassen zusätzlich `movement_training` mit drei Rängen; der Run-Katalog umfasst 18 Ausbauten einschließlich `mobility`. Beide Einträge bleiben in stabiler Reihenfolge hinten angehängt und verwenden sichtbar eine semantische Bewegungs- beziehungsweise Trainingsglyphe statt eines unbekannten Platzhalters. |
+| D-051 | Präzisiert D-036 für Kampf- und Pausenwerte: Oben rechts zeigt das Run-HUD ausschließlich kompakte Grundwerte. Links vom Rundentimer steht die mit derselben Belohnungsfunktion wie die Niederlage berechnete Forschungsprognose als zugängliches Symbol-Wert-Paar. Charakterwerte erscheinen in stabilen einklappbaren Sektionen `Grundwerte`, `Behandlung`, `Aktiv 1` und `Aktiv 2`; leere Aktivplätze erzeugen keine Sektion, und der Aufklappzustand bleibt bei Aktualisierungen erhalten. |
+| D-052 | Kontextquellen verwenden stabile IDs und werden differenziell synchronisiert. Wert- oder Rangänderungen aktualisieren bestehende Controls und Inhalte an Ort und Stelle, ohne alle Quellen ab- und wieder anzumelden oder eine offene Detailansicht zu schließen. Befunddetails liegen bevorzugt diagonal rechts oberhalb ihres Auslösers, bei Platzmangel diagonal links oberhalb und immer vollständig im Viewport. |
+| D-053 | Run-Ausbaukarten tragen als Überschrift ausschließlich den betroffenen Komponentennamen; Wirkung und Änderung stehen nur darunter. Das Level-Up-Modal zentriert `Level Up!` lokal. Eine Niederlage zeigt exakt den Titel `You suck` und weder Untertitel noch Grundtext. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

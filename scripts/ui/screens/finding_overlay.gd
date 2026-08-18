@@ -125,8 +125,12 @@ func grab_initial_focus() -> bool:
 	var target := default_focus_control()
 	if target == null or not is_inside_tree() or not is_visible_in_tree() or not target.is_visible_in_tree():
 		return false
+	# Focus remains on the first actionable reaction, but opening the compact
+	# modal must not auto-scroll the mechanical result out of view. Re-enable
+	# follow-focus after the opening frame so later D-pad navigation still tracks.
+	_body_scroll.follow_focus = false
 	target.grab_focus()
-	_ensure_focus_visible.call_deferred(target)
+	_reset_opening_scroll.call_deferred()
 	return true
 
 
@@ -240,6 +244,7 @@ func context_detail_registrations() -> Array[Dictionary]:
 			"source": source,
 			"provider": entry.get("provider", Callable()),
 			"hover_enabled": true,
+			"anchor": _info_anchor(entry),
 		})
 	return result
 
@@ -423,7 +428,25 @@ func _build_reactions() -> void:
 		_reaction_grid.add_child(button)
 		_reaction_buttons[reaction.id()] = button
 		_reaction_order.append(reaction.id())
-		_register_info_source(button, reaction.info())
+		# A full-width compact choice cannot support an outside diagonal tooltip.
+		# Anchor the detail card to the lower edge of the title region instead: the
+		# preferred right-above placement stays deterministic without covering the
+		# finding title or the mechanical effect line.
+		var info_anchor := Control.new()
+		info_anchor.name = "ContextAnchor"
+		info_anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		info_anchor.focus_mode = Control.FOCUS_NONE
+		info_anchor.anchor_left = 0.0
+		info_anchor.anchor_right = 0.0
+		info_anchor.anchor_top = 1.0
+		info_anchor.anchor_bottom = 1.0
+		info_anchor.offset_left = 12.0
+		info_anchor.offset_right = 145.0
+		info_anchor.offset_top = -2.0
+		info_anchor.offset_bottom = -1.0
+		info_anchor.set_meta(&"alveolus_component", &"context_anchor")
+		button.add_child(info_anchor)
+		_register_info_source(button, reaction.info(), info_anchor)
 
 
 func _build_reserve_swap() -> void:
@@ -643,13 +666,32 @@ func _ensure_focus_visible(control: Control) -> void:
 		_body_scroll.ensure_control_visible(control)
 
 
-func _register_info_source(source: Control, info: FindingOverlayViewModel.InfoViewModel) -> void:
+func _reset_opening_scroll() -> void:
+	if _body_scroll == null:
+		return
+	_body_scroll.scroll_vertical = 0
+	if is_inside_tree():
+		get_tree().process_frame.connect(_restore_follow_focus, CONNECT_ONE_SHOT)
+
+
+func _restore_follow_focus() -> void:
+	if _body_scroll != null:
+		_body_scroll.scroll_vertical = 0
+		_body_scroll.follow_focus = true
+
+
+func _register_info_source(
+	source: Control,
+	info: FindingOverlayViewModel.InfoViewModel,
+	anchor: Control = null
+) -> void:
 	if source == null or info == null:
 		return
 	var source_id := source.get_instance_id()
 	_info_sources[source_id] = {
 		"source": weakref(source),
 		"provider": _info_payload.bind(info.duplicate_immutable()),
+		"anchor": weakref(anchor) if anchor != null else null,
 	}
 
 
@@ -666,6 +708,12 @@ func _info_provider_for(source: Control) -> Callable:
 		return Callable()
 	var entry := _info_sources.get(source.get_instance_id(), {}) as Dictionary
 	return entry.get("provider", Callable()) as Callable
+
+
+func _info_anchor(entry: Dictionary) -> Control:
+	var anchor_ref := entry.get("anchor") as WeakRef
+	var anchor_value: Variant = anchor_ref.get_ref() if anchor_ref != null else null
+	return anchor_value as Control if anchor_value != null and is_instance_valid(anchor_value) else null
 
 
 func _prune_info_sources() -> void:

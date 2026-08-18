@@ -399,6 +399,11 @@ func _contained_position(
 		# then left. This keeps the source visible and follows reading direction.
 		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.position.y - card_size.y - SOURCE_GAP),
 		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.position.y - card_size.y - SOURCE_GAP),
+		# A wide compact choice can leave no horizontal room on either side. Keep
+		# the detail above it and align to its right/left edge before considering
+		# same-height or below-source fallbacks.
+		Vector2(source_rect.end.x - card_size.x, source_rect.position.y - card_size.y - SOURCE_GAP),
+		Vector2(source_rect.position.x, source_rect.position.y - card_size.y - SOURCE_GAP),
 		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.position.y),
 		Vector2(source_rect.position.x - card_size.x - SOURCE_GAP, source_rect.position.y),
 		Vector2(source_rect.end.x + SOURCE_GAP, source_rect.end.y + SOURCE_GAP),

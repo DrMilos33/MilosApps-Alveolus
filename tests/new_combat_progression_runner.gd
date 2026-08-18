@@ -29,9 +29,9 @@ func _test_research_catalog_contract() -> void:
 		&"experience_gain",
 		&"defense_training",
 		&"life_regeneration",
-		&"movement_training",
 		&"unlock_spread_treatment",
 		&"unlock_piercing_treatment",
+		&"movement_training",
 	]
 	var definitions := ContentCatalog.research_definitions()
 	_equal(definitions.size(), expected_ids.size(), "Es gibt exakt acht aktive Forschungen")

@@ -557,11 +557,11 @@ static func apply_hud_cooldown_track(control: ProgressBar, accent: Color) -> Pro
 		return null
 	if control.get_meta(&"alveolus_hud_cooldown_accent", Color.TRANSPARENT) == accent:
 		return control
-	var background := AlveolusVisualTheme.bar_style(Color(AlveolusVisualTheme.PETROL_DEEP, 0.56), 7, true)
-	background.border_color = Color(accent.lightened(0.18), 0.78)
+	var background := AlveolusVisualTheme.bar_style(Color(AlveolusVisualTheme.PETROL_DEEP.darkened(0.12), 0.72), 7, true)
+	background.border_color = Color(accent.lightened(0.24), 0.92)
 	background.set_border_width_all(1)
 	control.add_theme_stylebox_override("background", background)
-	control.add_theme_stylebox_override("fill", AlveolusVisualTheme.bar_style(Color(accent.lightened(0.12), 0.42), 7, true))
+	control.add_theme_stylebox_override("fill", AlveolusVisualTheme.bar_style(Color(accent.darkened(0.08), 0.36), 7, true))
 	control.set_meta(&"alveolus_hud_cooldown_accent", accent)
 	return control
 

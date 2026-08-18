@@ -227,7 +227,7 @@ Baum kann zurückgesetzt werden.
 | Breiter Abwehrstoß | 2 | +1 Radiusstufe | Radiusstufe 7 | Abwehrstoß ausgerüstet |
 | Stärkere Behandlungslinie | 3 | +16 Schaden | 98 Schaden | Behandlungslinie ausgerüstet |
 | Breitere Behandlungslinie | 2 | +16 Breite | 70 Breite | Behandlungslinie ausgerüstet |
-| Beweglichkeit | 3 | Bewegung ×1,05 | Bewegung ×1,1576 | Doctor Milos |
+| Beweglichkeit | 3 | Bewegung ×1,05 | Bewegung ×1,1576 | Bewegung |
 
 Die Spalte `Voll ausgebaut` zeigt jeden Ausbau isoliert auf seinem jeweiligen
 Grundwert. Kombinierte Additionen, Forschungsmultiplikatoren und weitere

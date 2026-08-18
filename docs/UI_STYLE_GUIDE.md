@@ -39,6 +39,9 @@ und Eingabetests in diesem Projekt machen die Regeln überprüfbar.
 - Text berührt niemals seine bemalte Fläche: Primär-, Sekundär- und Gefahrbuttons besitzen in jedem Zustand mindestens 18 Pixel horizontalen Innenabstand, Auswahlzeilen mindestens 12 Pixel und gestylte Textbadges mindestens 8 Pixel. Lokale Zustands- oder Farb-Overrides müssen diese Safe Area erhalten; Panels mit eigenem `MarginContainer` werden nicht doppelt gepolstert.
 - Ausführliche Hilfen oder Wirkungsbeschreibungen belegen keine dauerhafte Kopf- oder Brettfläche. Auf Maus-Hover öffnen sie als kompakter Tooltip; Tastatur und Gamepad öffnen dieselbe Information ausschließlich über `ui_info` als kompakte Detailkarte. Reiner Fokus öffnet nichts. Beide Darstellungen verändern die Geometrie der Ansicht nicht.
 - Medizinische Einordnung und unmittelbare Spielwirkung verwenden getrennte semantische Flächen mit eigenem Icon und Akzent. Die Trennung darf nicht nur durch Farbe vermittelt werden und verwandelt kurze Inhalte nicht in zusätzliche Textwände.
+- Aktive Schadenstypen sind ausschließlich Feuer, Wasser, Erde und Wind. Jede Darstellung kombiniert Name, eigenes Symbol und Wert; Feuer verwendet Koralle/Orange, Wasser Kobalt/Cyan, Erde Honiggold/Ocker und Wind Türkis/Mint. Farbe ist dabei nur Verstärkung, niemals alleiniger Informationsträger. Das Lexikon stellt die vier Angaben als gestaltete strukturierte Zeilen beziehungsweise Chips dar, nicht als unverbundene Textliste.
+- Die UI erhält bereits berechnete Werte. Verteidigung und Resistenzen erscheinen als effektive Prozentwerte; Roh-Ratings, Minderungskurven und Formeln bleiben außerhalb der sichtbaren Oberfläche.
+- Radius und Reichweite werden ausschließlich als zentrale Stufen `Radius N` beziehungsweise `Reichweite N` gezeigt. Interne Weltwerte, Pixelangaben oder eine Umrechnung in UI-Code sind unzulässig. Körpergrößen verwenden stattdessen ihre getrennte benannte Größenklasse.
 
 ## Tokens
 
@@ -69,6 +72,8 @@ Alle Werte liegen in `AlveolusVisualTheme`:
 - Gamepad-Y ist exklusiv für `ui_info`; die kontextspezifische Upgrade-Neuwahl liegt auf Gamepad-X. Ohne registrierte Detailquelle bleibt `ui_info` wirkungslos, statt eine fremde Aktion auszulösen.
 - Während die Detailkarte offen ist, schließt `ui_info` oder `ui_cancel` ausschließlich diese oberste Ebene. Der Fokus bleibt am Auslöser beziehungsweise kehrt dorthin zurück; das Öffnen oder Schließen löst dessen eigentliche Aktion nicht aus.
 - Tooltip und Detailkarte verwenden dieselben Inhaltsdaten. Medizinische Einordnung und unmittelbare Spielwirkung bleiben als zwei semantisch getrennte, nicht nur farbcodierte Flächen erkennbar.
+- Registrierte Kontextquellen besitzen stabile IDs und werden differenziell synchronisiert. Bestehende Controls und offene Inhalte werden bei Rang- oder Wertänderungen an Ort und Stelle aktualisiert; ein pauschales Abmelden und erneutes Registrieren aller Quellen sowie Close/Open-Flackern sind unzulässig.
+- Ein Befundtooltip liegt bevorzugt diagonal rechts oberhalb seines Auslösers, bei Platzmangel diagonal links oberhalb. Beide Varianten bleiben vollständig innerhalb des Viewports und direkt dem Ausgangselement zugeordnet.
 
 ## Einsatzplanung
 
@@ -89,14 +94,21 @@ Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht 
 ## Run-HUD
 
 - Oben rechts stehen ausschließlich die verstrichene Rundenzeit und das kompakte Pause-Icon frei über dem Spielfeld; beide besitzen weder Kachel noch Rahmen. Ein separater Boss-Timer ist dort nicht dauerhaft sichtbar.
-- Optionale Kampfwerte stehen direkt unter der Rundenzeit als enge, farbcodierte `Icon + Wert`-Paare ohne Überschrift, Kachel oder Mausblockade. Sie werden mit vier Werten pro Reihe angeordnet und dürfen bei kleiner Breite in weitere Vierer- beziehungsweise Teilreihen umbrechen.
+- Links von der Rundenzeit steht die Forschungsprognose für eine aktuelle Niederlage als einzelnes `Symbol + Zahl`-Paar ohne Kachel. Sie verwendet dieselbe zentrale Belohnungsberechnung wie das Ergebnis, besitzt einen zugänglichen Namen und zeigt keine hergeleitete UI-Schätzung.
+- Oben rechts stehen unter der Rundenzeit ausschließlich kompakte Grundwerte als enge, farbcodierte `Icon + Wert`-Paare ohne Überschrift, Kachel oder Mausblockade. Behandlungs- und Fähigkeitswerte gehören nicht in dieses Band. Die Grundwerte werden mit vier Werten pro Reihe angeordnet und dürfen bei kleiner Breite in weitere Vierer- beziehungsweise Teilreihen umbrechen.
 - Vollständige Erklärungen und alle weiteren Werte liegen ausschließlich im pausierten Untermenü „Charakterwerte“.
-- Das Pausenmenü trägt den geometrisch zentrierten Titel „Pause“ ohne dekoratives Symbol und benennt die behandelnde Figur als „Doctor Milos“. Es ist nicht scrollbar: Titel und Fortsetzen bleiben sichtbar, die übrigen Aktionen liegen in einem responsiven Raster. Charakterwerte bilden einen ruhigen zweispaltigen Statblock. Jede Zeile besitzt einen farbcodierten semantischen Marker, eine linksbündige Bezeichnung und einen an einer gemeinsamen rechten Kante ausgerichteten Wert. Gruppenkarten und dreispaltige Textblöcke sind unzulässig; nur bei zukünftig mehr als neun Zeilen je Spalte darf der innere Wertebereich scrollen, die Zurückaktion bleibt fest sichtbar.
+- Das Pausenmenü trägt den geometrisch zentrierten Titel „Pause“ ohne dekoratives Symbol und benennt die behandelnde Figur als „Doctor Milos“. Es ist nicht scrollbar: Titel und Fortsetzen bleiben sichtbar, die übrigen Aktionen liegen in einem responsiven Raster. Charakterwerte bilden stabile einklappbare Sektionen in der Reihenfolge `Grundwerte`, `Behandlung`, `Aktiv 1`, `Aktiv 2`. `Grundwerte` enthält maximales Leben, aktuellen Schild und Schildmaximum, effektive Verteidigung, Bewegungstempo, Regeneration pro Sekunde, EXP-Multiplikator sowie die vier effektiven Resistenzen. Leere Aktivplätze erzeugen keine Sektion. Jede Zeile besitzt einen farbcodierten semantischen Marker, eine linksbündige Bezeichnung und einen an einer gemeinsamen rechten Kante ausgerichteten Wert. Der Aufklappzustand sowie Fokus und Scrollposition bleiben bei Wertaktualisierungen erhalten; nur der innere Wertebereich darf bei Bedarf scrollen, die Zurückaktion bleibt fest sichtbar.
 - Befunde zeigen unter dem Titel nur eine knappe mechanische Effektzeile und exakt drei Reaktionskarten. Medizinische und spielerische Erklärungskarten werden dort nicht wiederholt; Hintergrundwissen liegt im Lexikon.
 - Dauerhaft sichtbar sind nur Zustand, verstrichene Rundenzeit, aktuelle Ziele und unmittelbar bedienbare Fähigkeiten. Zustand, Befund und Level verwenden keine umgebende Kachel; der Levelbalken ist innerhalb seiner freien HUD-Zone zentriert. Massive weiße oder deckende Petrol-Hintergründe sind unzulässig.
 - Belegte aktive Fähigkeiten sitzen kompakt am unteren Rand als schmale Abklingzeitspuren. Icon, Shortcut und verbleibende Zeit liegen gemeinsam auf der Spur; ein dauerhafter Fähigkeitsname oder eine zusätzliche Kartenfläche entfällt. Maus-Hover beziehungsweise `ui_info` liefert die vollständige Wirkung. Leere Plätze werden nicht dargestellt und reagieren nicht auf Eingaben.
 - Wird eine belegte, aber noch nicht bereite Fähigkeit ausgelöst, bestätigt ausschließlich ein leiser Fehlersound den blockierten Versuch; zusätzlicher Text, Toast oder Dialog ist unzulässig.
 - `Strg+R` fordert während eines laufenden oder pausierten Falls einen Neustart desselben Falls an. Standard ist ein einzelner kompakter Bestätigungsdialog; die Option „Neustart bestätigen“ darf ihn abschalten. Der Shortcut umgeht niemals einen bereits bindenden Pflichtdialog.
+
+## Ausbauten und Ergebnis
+
+- Eine Run-Ausbaukarte verwendet als Überschrift ausschließlich den betroffenen Komponentennamen. Allgemeine Behandlungsverbesserungen tragen den Namen der aktuell ausgerüsteten Behandlung; andere Karten heißen entsprechend `Abwehrzellen`, `Abwehrstoß`, `Behandlungslinie` oder `Bewegung`. Wirkung und Vorher-Nachher-Änderung stehen nur darunter.
+- Das Level-Up-Modal zentriert den Titel `Level Up!` innerhalb seiner eigenen Fläche, unabhängig von umgebenden HUD-Ankern.
+- Eine Niederlage zeigt exakt den Titel `You suck`. Ein Untertitel, Grundtext oder eine wiederholte Niederlagenursache wird nicht reserviert oder dargestellt.
 
 ## Campus
 
@@ -108,10 +120,11 @@ Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht 
 
 - Dauerhafte Fortschrittsoptionen erscheinen als responsives kompaktes Brett statt als lange Dokumentliste.
 - Forschungskarten sind höchstens 76 Pixel hoch; sichtbar bleiben Icon, Titel, Rang beziehungsweise Kosten und ein eindeutiger Zustand.
+- `movement_training` und der Run-Ausbau `mobility` verwenden eine gemeinsame semantische Bewegungs- beziehungsweise Trainingsglyphe; ein generisches Fragezeichen oder unbekannter Platzhalter ist dafür unzulässig.
 - Talentknoten sind kompakte quadratische Symbolknoten. Jedes Talent verwendet innerhalb des Baums ein eigenes, semantisch passendes Symbol. Dauerhafte Titel-, Kosten- oder Beschreibungstexte sind im Knoten unzulässig; aktiv und gesperrt werden zusätzlich zum Farbzustand mit Check beziehungsweise Schloss markiert.
 - Die vollständige Wirkung erscheint per Maus-Hover als kompakter Tooltip und per `ui_info` als inhaltsgleiche Detailkarte; reiner Tastatur-/Gamepadfokus öffnet nichts. Beide Darstellungen belegen keinen dauerhaften Platz oberhalb des Bretts. Ein nativer Tooltip darf ergänzen, ist aber niemals die einzige Informationsquelle.
 - Talenttooltips nennen zuerst Titel und Kosten, danach eine kurze Wirkung und nur die entscheidenden Zahlenfakten. Voraussetzungen oder Sperrgründe erscheinen ausschließlich, wenn sie für die aktuelle Aktion relevant sind.
-- Forschung verwendet auf breiten Ansichten bis zu drei Spalten. Talente bilden drei getrennte Äste mit gezeichneten Verbindungen und echten Voraussetzungen; jede Verzweigung folgt auf einen freigeschalteten Elternknoten. Bei kleiner logischer Breite werden Äste auf zwei beziehungsweise eine Spalte reduziert und vertikal gescrollt.
+- Forschung verwendet auf breiten Ansichten bis zu drei Spalten. Talentbaum-Revision 4 beginnt mit `treatment_damage_training` und verzweigt in `spread_penetration`, `manual_treatment_aim` und `piercing_persistence`; `piercing_return` bleibt entfernt und erhält keinen neuen sichtbaren Knoten. Die drei Äste besitzen gezeichnete Verbindungen und echte Voraussetzungen. Bei kleiner logischer Breite werden Äste auf zwei beziehungsweise eine Spalte reduziert und vertikal gescrollt.
 - Auf niedrigen 200-Prozent-Ansichten bleiben die beiden Progressionstabs sichtbar; Summary und Brett beziehungsweise Baum liegen in einer fokusfolgenden Scrollfläche, während ein über Maus-Hover oder `ui_info` angefordertes Detail als viewportgebundener Tooltip beziehungsweise Detailkarte erscheint. Reiner Fokus öffnet es nicht. Baumränder führen per D-Pad zu Tabs oder Nachbarästen statt in Selbstschleifen. Ein aktiver Elternknoten mit aktiven Nachfolgern erklärt die Sperre und bleibt unverändert, bis die Nachfolger ausdrücklich zurückgesetzt wurden.
 
 ## Einstellungen
@@ -119,7 +132,7 @@ Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht 
 - Audio, Anzeige und Bedienung verwenden inhaltsgetriebene Bio-Lumen-Gruppen ohne reservierten Leerraum. Desktop darf zwei gleichgewichtete Spalten nutzen; kompakte Ansichten stapeln sie in einem eindeutigen vertikalen Scrollpfad.
 - Jede Option und jeder Schalter nennt links sichtbar seinen Zweck und hält die Bedienung rechts in derselben mindestens 44 Pixel hohen Zeile. Schalter liegen direkt in dieser Zeile und erhalten keine eigene Hintergrundkachel; namenlose Toggle-Karten sind unzulässig.
 - Jede konfigurierbare Aktion besitzt eine kompakte Karte mit kurzer spielerischer Bezeichnung und zwei direkt darunterliegenden Tastaturfeldern. Beide Felder können unabhängig belegt werden, damit beispielsweise `W` und `Pfeil hoch` gleichzeitig bestehen bleiben. Breite Ansichten zeigen drei dieser Karten pro Reihe, mittlere zwei und kompakte eine; interne Aktionsnamen, übergroße Einzelkarten und dekorativer Leerraum sind unzulässig.
-- Controller- und Mausbelegungen bleiben für Laufzeit, Glyphen und Save v5 kompatibel, sind in der aktuellen Einstellungsansicht jedoch visuell ausgeblendet. Ihre Entfernung aus der Oberfläche darf bestehende Belegungen nicht löschen oder umdeuten.
+- Controller- und Mausbelegungen bleiben für Laufzeit, Glyphen und Save v6 kompatibel, sind in der aktuellen Einstellungsansicht jedoch visuell ausgeblendet. Ihre Entfernung aus der Oberfläche darf bestehende Belegungen nicht löschen oder umdeuten.
 - Wird eine Taste gewählt, die bereits einer anderen konfigurierbaren Aktion gehört, öffnet vor jeder Änderung ein kompakter Pflichtdialog. Bestätigen verschiebt die Taste atomar zur neuen Aktion; Abbrechen erhält beide bisherigen Belegungen. Ein Tastendruck darf nie zwei konkurrierende Aktionen auslösen.
 
 ## Semantische Varianten
@@ -172,7 +185,12 @@ Die UI- und Binding-Runner, darunter `tests/style_gallery_runner.gd`, prüfen:
 - Maus-Hover als einzigen automatischen Tooltip-Auslöser sowie stilles Schließen ohne Fokus- oder Aktionswechsel;
 - dass Tastatur-/Gamepadfokus allein keine Detailkarte öffnet, `ui_info` jedoch inhaltsgleiche Informationen zeigt und `ui_info` beziehungsweise `ui_cancel` mit erhaltenem Auslöserfokus schließt;
 - konfigurierbare `ui_info`-Belegungen und passende Tastatur-/Gamepadglyphen;
-- zwei unabhängige Tastaturplätze je konfigurierbarer Aktion, Save-v5-Erhalt ausgeblendeter Maus-/Controllerbindungen und den atomaren Konfliktdialog;
+- zwei unabhängige Tastaturplätze je konfigurierbarer Aktion, Save-v6-Erhalt ausgeblendeter Maus-/Controllerbindungen und den atomaren Konfliktdialog;
+- vier aktive Schadenstypen mit redundantem Namen, Symbol und Wert sowie ausschließlich effektive Verteidigungs-/Resistenzprozente;
+- zentrale Radius-/Reichweitenstufen ohne sichtbare Pixel- oder Weltwerte;
+- differenziellen Kontextquellen-Sync mit stabilen IDs, flackerfreier Aktualisierung und viewportgebundener diagonaler Befundplatzierung;
+- stabile Charakterwert-Sektionen samt erhaltenem Aufklappzustand sowie das Grundwerte-only-HUD mit zentral berechneter Niederlagen-Forschungsprognose;
+- Komponentenüberschriften auf Ausbaukarten, lokal zentriertes `Level Up!` und die untertitellose Niederlage `You suck`;
 - das kachellose Run-HUD mit verstrichener Rundenzeit, Viererreihen optionaler Werte sowie Abklingzeitspuren für ausschließlich belegte Fähigkeiten;
 - Mindestschrift und Kontrast;
 - gemeinsame Zentrierung von Symbol und Text;

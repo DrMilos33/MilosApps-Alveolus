@@ -40,7 +40,7 @@ func _draw() -> void:
 				var point := target_position + Vector2.from_angle(float(index) * PI) * 98.0
 				draw_circle(point, 10.0, Color(0.95, 0.73, 0.38, 0.28))
 				draw_circle(point, 6.0, Color("f1bc62"))
-			_draw_caption(target_position + Vector2(0, 138), "2 Abwehrzellen · Radius 116", accent)
+			_draw_caption(target_position + Vector2(0, 138), "2 Abwehrzellen · Radius 1", accent)
 		&"stability_bar":
 			var bar := highlighter.bounds().grow(-5.0)
 			draw_rect(bar, Color(0.28, 0.55, 0.75, 0.18), true)

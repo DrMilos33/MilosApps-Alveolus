@@ -20,10 +20,10 @@ const TalentTreeBranchType := preload("res://scripts/ui/talent_tree_branch.gd")
 const ROUTE_ID := &"research"
 const CONTEXT_DETAIL_SCOPE_ID := &"progression"
 const TALENT_SYMBOLS_BY_ID := {
+	&"treatment_damage_training": &"treatment",
 	&"manual_treatment_aim": &"target",
 	&"spread_penetration": &"treatment_spread",
 	&"piercing_persistence": &"treatment_pierce",
-	&"piercing_return": &"return",
 }
 const TALENT_SYMBOL_FALLBACKS: Array[StringName] = [
 	&"plan", &"components", &"reserve", &"target",

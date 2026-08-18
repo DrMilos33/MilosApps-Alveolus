@@ -312,7 +312,15 @@ func _run() -> void:
 	var research_events: Array[StringName] = []
 	hud.research_purchase_requested.connect(func(id: StringName) -> void: research_events.append(id))
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
-	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 7, "Die sieben Forschungen nutzen bei 1280 Pixeln ein kompaktes Dreispaltenbrett")
+	_check(hud.research_grid.columns == 3 and hud.research_grid.get_child_count() == 8, "Die acht Forschungen nutzen bei 1280 Pixeln ein kompaktes Dreispaltenbrett")
+	_check(hud.research_buy_buttons.has(&"movement_training") and SimpleIcon.supports(&"movement_training"), "Bewegungstraining ist als achte Forschung mit zentral registrierter Bewegungsglyphe verfügbar")
+	var movement_training_card := hud.research_buy_buttons[&"movement_training"] as Button
+	var movement_training_glyph_found := false
+	for icon_node in movement_training_card.find_children("*", "SimpleIcon", true, false):
+		if (icon_node as SimpleIcon).kind == &"movement_training":
+			movement_training_glyph_found = true
+			break
+	_check(movement_training_glyph_found, "Die Forschungskarte verwendet ihre semantische Bewegungsglyphe statt eines Fallback-Icons")
 	_check((hud.research_grid.get_child(0) as Control).custom_minimum_size.y <= 76.0, "Forschungskarten bleiben kompakt")
 	for research_button in hud.research_buy_buttons.values():
 		_check((research_button as Button).tooltip_text.is_empty(), "Forschung nutzt ausschließlich die gemeinsame Kontextkarte")
@@ -349,16 +357,17 @@ func _run() -> void:
 		_check((branch_panel as Control).custom_minimum_size.y >= branch.custom_minimum_size.y + 50.0, "Jede Talentastkarte meldet ihre vollständige Baumhöhe an das responsive Raster")
 	await process_frame
 	await process_frame
-	var treatment_root := hud.talent_buttons[&"manual_treatment_aim"] as Button
+	var treatment_root := hud.talent_buttons[&"treatment_damage_training"] as Button
 	var spread_branch := hud.talent_buttons[&"spread_penetration"] as Button
+	var manual_branch := hud.talent_buttons[&"manual_treatment_aim"] as Button
 	var persistence_branch := hud.talent_buttons[&"piercing_persistence"] as Button
-	var return_leaf := hud.talent_buttons[&"piercing_return"] as Button
 	var root_child := treatment_root.get_node_or_null(treatment_root.focus_neighbor_bottom) as Button
 	var branch_sibling := spread_branch.get_node_or_null(spread_branch.focus_neighbor_right) as Button
-	_check(root_child in [spread_branch, persistence_branch], "D-Pad nach unten folgt vom Wurzeltalent einem gezeichneten Kind")
-	_check(branch_sibling == persistence_branch, "D-Pad seitwärts wechselt innerhalb derselben Talentbaumstufe")
+	var branch_sibling_right := manual_branch.get_node_or_null(manual_branch.focus_neighbor_right) as Button
+	_check(root_child in [spread_branch, manual_branch, persistence_branch], "D-Pad nach unten folgt vom Wurzeltalent einem gezeichneten Kind")
+	_check(branch_sibling == manual_branch and branch_sibling_right == persistence_branch, "D-Pad seitwärts folgt den drei Geschwistertalenten derselben Baumstufe")
 	_check(treatment_root.get_node_or_null(treatment_root.focus_neighbor_top) == hud.talent_tab_button, "D-Pad kann den Behandlungsbaum nach oben zu den festen Tabs verlassen")
-	_check(return_leaf.get_node_or_null(return_leaf.focus_neighbor_top) == persistence_branch, "Der Rückkehrlaser führt nach oben zu seiner sichtbaren Voraussetzung")
+	_check(not hud.talent_buttons.has(&"piercing_return"), "Die reservierte Revision-3-ID piercing_return erscheint nicht mehr im aktiven Talentbaum")
 	_check(treatment_root.custom_minimum_size.y <= 76.0, "Talentknoten bleiben auf die kompakte Baumdichte begrenzt")
 	persistence_branch.grab_focus()
 	await process_frame
@@ -367,7 +376,7 @@ func _run() -> void:
 	await process_frame
 	var talent_payload := hud.context_detail_controller.current_payload()
 	_check(hud.context_detail_controller.is_explicit() and talent_payload.get("title", "") == "Anhaltender Laser" and String(talent_payload.get("body", "")).contains("0,5"), "Die ausdrückliche Talentdetailkarte ist vollständig")
-	_check(String(talent_payload.get("meta", "")).contains("Manuelle Zielsteuerung"), "Die Talentdetailkarte nennt die konkrete Voraussetzung des Knotens")
+	_check(String(talent_payload.get("meta", "")).contains("Behandlungsgrundlage"), "Die Talentdetailkarte nennt die Revision-4-Wurzel als konkrete Voraussetzung")
 	hud.close_context_detail()
 	_check(hud.talent_points_label.text.to_lower().contains("0 frei"), "Freie Talentpunkte werden in Sentence Case gezeigt")
 	var reset_caption := (hud.talent_reset_button as IconTextButton).caption.text
@@ -388,21 +397,41 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var focus_after_reset := get_root().gui_get_focus_owner()
-	var first_tree_root := hud.talent_buttons[&"manual_treatment_aim"] as Button
+	var first_tree_root := hud.talent_buttons[&"treatment_damage_training"] as Button
 	_check(hud.talent_reset_button.disabled and focus_after_reset == first_tree_root, "Nach dem Talent-Reset wechselt der Fokus vom deaktivierten Reset sicher zum ersten Baumknoten")
 	_check(_inside_viewport(first_tree_root, get_root().size), "Der Fokus nach dem Talent-Reset bleibt sichtbar im Talentbaum")
 
 	hud.configure_active_abilities([
-		{"id": &"ability_focus_field", "title": "Fokusfeld", "description": "", "fact_rows": [{"label": "Abklingzeit", "value": "16 s"}, {"label": "Radius", "value": "165"}], "cooldown_remaining": 0.0, "cooldown_total": 16.0, "ready": true},
+		{"id": &"ability_focus_field", "title": "Fokusfeld", "description": "Behandlung im Zielgebiet verursacht 25 % mehr Schaden.", "fact_rows": [{"label": "Abklingzeit", "value": "16 s"}, {"label": "Radius", "value": "6"}], "cooldown_remaining": 0.0, "cooldown_total": 16.0, "ready": true},
 		{"id": &"ability_emergency_support", "title": "Notfallhilfe", "description": "", "fact_rows": [{"label": "Abklingzeit", "value": "28 s"}, {"label": "Heilung", "value": "14"}, {"label": "Schild", "value": "8"}], "cooldown_remaining": 7.2, "cooldown_total": 28.0, "ready": false}
 	])
 	hud.show_running_hud()
 	hud.set_run_stats_visibility(true)
 	hud.update_run_stats(PlayerStats.new())
+	hud.update_defeat_research_reward(17)
+	await process_frame
 	_check(hud.run_hud_screen != null and hud.run_hud_screen.is_visible_in_tree(), "Das neue RunHUDOverlay ist im laufenden Run sichtbar")
-	_check(hud.run_hud_screen.stat_rows().size() == 5 and hud.run_stats_strip.visible, "Das RunHUDOverlay zeigt die fünf priorisierten Statzeilen")
+	var expected_run_stat_ids: Array[StringName] = [
+		&"defense", &"movement_speed", &"life_regeneration", &"experience_gain",
+		&"resistance_fire", &"resistance_water", &"resistance_earth", &"resistance_wind",
+	]
+	var actual_run_stat_ids: Array[StringName] = []
+	for stat_row in hud.run_hud_screen.stat_rows():
+		actual_run_stat_ids.append(StringName(stat_row.get_meta(&"stat_id", &"")))
+	_check(actual_run_stat_ids == expected_run_stat_ids and hud.run_stats_strip.visible, "Das RunHUDOverlay zeigt ausschließlich die acht stabilen Grundwerte in Prioritätsreihenfolge")
 	for stat_row in hud.run_hud_screen.stat_rows():
 		_check(stat_row.get_child_count() == 2 and stat_row.get_child(0) is SimpleIcon and stat_row.get_child(1) is Label, "Jede sichtbare Statzeile besteht kompakt aus Icon und Wert")
+		var accessible_stat := String(stat_row.get_meta(&"alveolus_accessible_name", ""))
+		_check(not accessible_stat.contains("Behandlung") and not accessible_stat.contains("Fokusfeld") and not accessible_stat.contains("Notfallhilfe"), "Das kompakte Run-HUD enthält keine Behandlungs- oder Fähigkeitswerte")
+	var defeat_reward_panel := hud.run_hud_screen.defeat_research_reward_panel()
+	_check(
+		defeat_reward_panel.visible
+		and hud.run_hud_screen.defeat_research_reward_icon().kind == &"research"
+		and hud.run_hud_screen.defeat_research_reward_value_label().text == "+17"
+		and String(defeat_reward_panel.get_meta(&"alveolus_accessible_name", "")).contains("17"),
+		"Links der Rundendauer steht die zugängliche Forschungsprognose nur als Symbol und Zahl"
+	)
+	_check(defeat_reward_panel.get_global_rect().end.x <= hud.timer_panel.get_global_rect().position.x + 0.5, "Die Forschungsprognose liegt kollisionsfrei links vom Timer")
 	_check(hud.ability_panel.visible, "Q/E-Anzeige erscheint für vorbereitete Fähigkeiten")
 	_check(hud.ability_key_labels[0].text == "Q" and hud.ability_key_labels[1].text == "E", "Das RunHUDOverlay zeigt Fähigkeitsbelegungen als scharfen Glyph-Text")
 	_check(hud.ability_cooldown_labels[0].text == "Bereit", "Bereite Fähigkeit wird in Sentence Case klar markiert")
@@ -413,7 +442,11 @@ func _run() -> void:
 	var run_ability_button := (hud.run_hud_screen.ability_buttons()[0] as Button)
 	run_ability_button.mouse_entered.emit()
 	await process_frame
-	_check(hud.context_detail_controller.is_open() and hud.context_detail_controller.current_payload().get("title", "") == "" and String(hud.context_detail_controller.current_payload().get("body", "")).contains("Abklingzeit: 16 s"), "Mouseover erklärt die aktiven Fähigkeitswerte ohne doppelten Titel")
+	var ability_detail_payload := hud.context_detail_controller.current_payload()
+	var ability_detail_body := String(ability_detail_payload.get("body", ""))
+	var ability_detail_meta := String(ability_detail_payload.get("meta", ""))
+	_check(hud.context_detail_controller.is_open() and ability_detail_payload.get("title", "") == "Fokusfeld" and ability_detail_body.contains("25 % mehr Schaden"), "Mouseover erklärt Name und Kernwirkung der aktiven Fähigkeit")
+	_check(ability_detail_meta.contains("Abklingzeit: 16 s") and ability_detail_meta.contains("Radius: 6") and not ability_detail_meta.contains("165") and not ability_detail_meta.to_lower().contains("px"), "Fähigkeitsdetails ergänzen ausschließlich strukturierte Fakten und zentrale Radiusstufen")
 	run_ability_button.mouse_exited.emit()
 	await process_frame
 	hud.update_finding_progress(18, 30)

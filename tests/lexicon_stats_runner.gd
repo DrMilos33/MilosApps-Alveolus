@@ -8,6 +8,7 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_test_names_and_level_language()
+	_test_active_damage_type_terms()
 	_test_enemy_and_character_values()
 	_test_default_character_entry()
 	_test_centered_lexicon_sprites()
@@ -31,6 +32,16 @@ func _test_names_and_level_language() -> void:
 	_check(treatment.title == "Behandlung", "Die automatische Behandlung besitzt einen einfachen Namen")
 	_check(TerminologyCatalog.simple(&"automatic_therapy") == "Behandlung", "Terminologiekatalog nutzt denselben Behandlungsnamen")
 	_check(ContentCatalog.level_definitions()[1].title == "lol - name fehlt", "Fall 1 verwendet den gewünschten Platzhalternamen")
+
+func _test_active_damage_type_terms() -> void:
+	var expected_ids: Array[StringName] = [&"fire", &"water", &"earth", &"wind"]
+	_check(DamageTypeCatalog.ALL_IDS == expected_ids, "Das sichtbare Lexikon verwendet ausschließlich Feuer, Wasser, Erde und Wind")
+	for type_id in expected_ids:
+		var terminology_id := StringName("%s_damage" % type_id)
+		var definition := TerminologyCatalog.definition(terminology_id)
+		_check(definition != null and not definition.display_name.is_empty(), "%s besitzt einen ausgeschriebenen Lexikonbegriff" % type_id)
+	for retired_id in [&"blood_damage", &"holy_damage", &"undead_damage"]:
+		_check(TerminologyCatalog.definition(retired_id) == null, "%s erscheint nicht mehr als aktiver Lexikonbegriff" % retired_id)
 
 func _test_enemy_and_character_values() -> void:
 	var discoveries := ContentCatalog.discovery_definitions()

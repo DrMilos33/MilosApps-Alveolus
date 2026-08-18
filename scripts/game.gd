@@ -119,6 +119,7 @@ var pressure_grace_timer: float = 0.0
 var pickup_merge_cursor: int = 0
 var meta_refresh_timer: float = 0.0
 var defeats: int = 0
+var defeat_reward_survival_bucket: int = -1
 var reroll_available: bool = false
 var reroll_used: bool = false
 var intro_lesson: int = 0
@@ -426,6 +427,10 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 	if not state.active:
 		_finalize_fixed_step()
 		return
+	var survival_bucket := mini(floori(state.elapsed / 120.0), 5)
+	if survival_bucket != defeat_reward_survival_bucket:
+		defeat_reward_survival_bucket = survival_bucket
+		_refresh_defeat_research_preview()
 	if selected_level.is_tutorial:
 		_intro_step(delta)
 		hud.update_round_time(state.elapsed)
@@ -1190,8 +1195,14 @@ func start_run(run_context: RunContext = null) -> void:
 	arena.configure(config.arena_rect(), arena_visuals[selected_level.id])
 	stats = PlayerStats.new()
 	var treatment: TreatmentDefinition = treatment_definitions.get(active_loadout.treatment_id) if active_loadout != null else null
-	if not selected_level.is_tutorial and treatment != null:
+	# The tutorial keeps tactical controllers disabled, but still carries the
+	# identity of its demonstrated treatment so generic upgrade presentation can
+	# name the affected component without guessing from content IDs.
+	if selected_level.is_tutorial and treatment == null:
+		treatment = treatment_definitions.get(&"treatment_precision")
+	if treatment != null:
 		stats.configure_prepared_treatment(treatment)
+	if not selected_level.is_tutorial and treatment != null:
 		# Forschung ist dauerhafte Charakterprogression. Sie wirkt unabhängig von
 		# der Einsatzplanung; Passivmodule sind im aktuellen Ausbau deaktiviert.
 		stats.apply_meta_progression(meta.research_ranks)
@@ -1221,6 +1232,7 @@ func start_run(run_context: RunContext = null) -> void:
 	pressure_grace_timer = 0.0
 	pickup_merge_cursor = 0
 	defeats = 0
+	defeat_reward_survival_bucket = -1
 	stress_reported = false
 	stress_hud_timer = 0.0
 	reroll_available = false
@@ -1263,6 +1275,7 @@ func start_run(run_context: RunContext = null) -> void:
 	mastery_tracker.record_stability(state.stability, state.max_stability)
 	hud.update_run_stats(stats, state)
 	hud.update_shield(0.0, 0.0)
+	_refresh_defeat_research_preview()
 	hud.show_running_hud()
 	if ui_sound_service != null:
 		ui_sound_service.play(UISoundService.RUN_START)
@@ -1545,17 +1558,12 @@ func _ability_hud_view(definition: AbilityDefinition) -> Dictionary:
 		var range_value := float(values.get("range", 0.0))
 		if build_state != null:
 			range_value = build_state.value(RunBuildState.ABILITY_RANGE, range_value, definition.tags)
-		rows.append({"label": "Reichweite", "value": _hud_number(range_value)})
+		rows.append({"label": "Reichweite", "value": str(CombatDistanceScale.stage_from_world(range_value))})
 	if values.has("radius"):
 		var radius := float(values.get("radius", 0.0))
 		if build_state != null:
 			radius = build_state.value(RunBuildState.ABILITY_RADIUS, radius, definition.tags)
-		rows.append({"label": "Radius", "value": _hud_number(radius)})
-	if values.has("width"):
-		var width := float(values.get("width", 0.0))
-		if build_state != null:
-			width = build_state.value(RunBuildState.ABILITY_WIDTH, width, definition.tags)
-		rows.append({"label": "Breite", "value": _hud_number(width)})
+		rows.append({"label": "Radius", "value": str(CombatDistanceScale.stage_from_world(radius))})
 	if values.has("projectiles"):
 		rows.append({"label": "Projektile", "value": str(int(values.get("projectiles", 1)))})
 	return {
@@ -2163,6 +2171,7 @@ func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss:
 		return
 	enemies.erase(enemy)
 	defeats += 1
+	_refresh_defeat_research_preview()
 	if enemy.definition != null and enemy.definition.id == &"minor_focus":
 		hidden_nest_timers.erase(enemy)
 		if build_state != null:
@@ -2754,6 +2763,15 @@ func _spawn_hidden_nests(count: int) -> void:
 func _on_analysis_changed(current: int, target: int, level: int) -> void:
 	analysis_changed.emit(current, target, level)
 	hud.update_analysis(current, target, level)
+	_refresh_defeat_research_preview()
+
+func _refresh_defeat_research_preview() -> void:
+	if hud == null or meta == null or state == null or selected_level == null:
+		return
+	var repeated_intro := selected_level.is_tutorial and meta.has_completed_level(selected_level.id)
+	var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
+	var reward := MetaProgressionState.calculate_run_reward(false, state.elapsed, state.level, defeats, multiplier)
+	hud.update_defeat_research_reward(reward)
 
 func _on_level_up_requested(level: int) -> void:
 	if selected_level.is_tutorial:

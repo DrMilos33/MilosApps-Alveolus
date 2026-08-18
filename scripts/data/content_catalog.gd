@@ -266,9 +266,9 @@ static func research_definitions() -> Array[ResearchDefinition]:
 		ResearchDefinition.create(&"experience_gain", "Mehr Erfahrung", "+5 % Erfahrung durch Proben je Rang", PackedInt32Array([25, 55, 95]), &"experience_multiplier", 0.05),
 		ResearchDefinition.create(&"defense_training", "Mehr Verteidigung", "+2 Verteidigung je Rang", PackedInt32Array([30, 60, 100]), &"defense", 2.0),
 		ResearchDefinition.create(&"life_regeneration", "Lebensregeneration", "+0,25 Leben pro Sekunde je Rang", PackedInt32Array([30, 60, 100]), &"life_regeneration", 0.25),
-		ResearchDefinition.create(&"movement_training", "Bewegungstraining", "+3 % Bewegung je Rang", PackedInt32Array([30, 60, 100]), &"movement_speed_multiplier", 0.03),
 		ResearchDefinition.create(&"unlock_spread_treatment", "Streuimpuls", "Schaltet die streuende Grundbehandlung frei", PackedInt32Array([60]), &"unlock", 1.0).configure_unlock(&"treatment_spread", &"treatment"),
 		ResearchDefinition.create(&"unlock_piercing_treatment", "Durchdringender Impuls", "Schaltet die durchdringende Grundbehandlung frei", PackedInt32Array([100]), &"unlock", 1.0).configure_unlock(&"treatment_pierce", &"treatment"),
+		ResearchDefinition.create(&"movement_training", "Bewegungstraining", "+3 % Bewegung je Rang", PackedInt32Array([30, 60, 100]), &"movement_speed_multiplier", 0.03),
 	]
 
 static func loadout_module_definitions() -> Dictionary:
@@ -315,7 +315,7 @@ static func reaction_definitions() -> Dictionary:
 		&"surge_guard": ReactionDefinition.create(&"surge_guard", &"pressure_surges", "Schub abfangen", "25 % weniger Schaden während Belastungsschüben.", [{"stat_id": &"surge_contact", "operation": &"multiply", "value": 0.75}], [&"control"]),
 		&"nest_damage": ReactionDefinition.create(&"nest_damage", &"hidden_nests", "Herde fokussieren", "+25 % Schaden gegen kleine Herde.", [{"stat_id": &"nest_damage", "operation": &"multiply", "value": 1.25}], [&"damage"]),
 		&"nest_range": ReactionDefinition.create(&"nest_range", &"hidden_nests", "Reichweite nutzen", "+20 % Reichweite und +1 Durchdringung.", [{"stat_id": RunBuildState.TREATMENT_RANGE, "operation": &"multiply", "value": 1.20}, {"stat_id": RunBuildState.TREATMENT_MAX_HITS, "operation": &"add", "value": 1.0}], [&"pierce"]),
-		&"nest_samples": ReactionDefinition.create(&"nest_samples", &"hidden_nests", "Nester auswerten", "Kleine Herde geben zusätzliche Proben und verkürzen aktive Restzeiten.", [{"stat_id": &"nest_samples", "operation": &"add", "value": 4.0}], [&"samples"]),
+		&"nest_samples": ReactionDefinition.create(&"nest_samples", &"hidden_nests", "Nester auswerten", "Kleine Herde geben zusätzliche Proben.", [{"stat_id": &"nest_samples", "operation": &"add", "value": 4.0}], [&"samples"]),
 	}
 
 static func choose_upgrades(
