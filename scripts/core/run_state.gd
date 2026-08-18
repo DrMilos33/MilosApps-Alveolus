@@ -90,6 +90,12 @@ func add_analysis(amount: int) -> void:
 func set_analysis_gain_multiplier(value: float) -> void:
 	analysis_gain_multiplier = maxf(value, 0.0)
 
+
+func set_analysis_target(value: int) -> void:
+	analysis_target = maxi(1, value)
+	analysis_changed.emit(analysis, analysis_target, level)
+	_request_level_if_ready()
+
 func resolve_level_up() -> void:
 	level_up_pending = false
 	_request_level_if_ready()

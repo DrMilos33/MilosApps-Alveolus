@@ -20,6 +20,7 @@ $tests = [ordered]@{
     core = @{ script = 'res://tests/test_runner.gd'; args = @() }
     flow = @{ script = 'res://tests/flow_runner.gd'; args = @('--quick-run') }
     intro = @{ script = 'res://tests/intro_runner.gd'; args = @('--quick-run') }
+    intro_runtime_contract = @{ script = 'res://tests/intro_runtime_contract_runner.gd'; args = @('--quick-run') }
     tactical_flow = @{ script = 'res://tests/tactical_flow_runner.gd'; args = @() }
     save_v6_progression = @{ script = 'res://tests/new_save_v6_progression_runner.gd'; args = @() }
     loadout_navigation = @{ script = 'res://tests/ui_navigation_loadout_runner.gd'; args = @() }
@@ -79,7 +80,7 @@ $tests = [ordered]@{
 
 $groups = [ordered]@{
     Quick = @('core')
-    Flow = @('core', 'flow', 'intro', 'tactical_flow', 'save_v6_progression', 'endless_cases', 'loadout_navigation', 'loadout_availability', 'ui_audio_settings')
+    Flow = @('core', 'flow', 'intro', 'intro_runtime_contract', 'tactical_flow', 'save_v6_progression', 'endless_cases', 'loadout_navigation', 'loadout_availability', 'ui_audio_settings')
     UI = @('game_hud_facade_contract', 'ui_screen_dependency', 'style_gallery', 'context_detail', 'ui_screen_host', 'story_screen', 'practice_screen', 'case_archive_screen', 'settings_screen', 'progression_screen', 'pause_overlay', 'confirmation_overlay', 'result_overlay', 'upgrade_overlay', 'finding_overlay', 'run_hud_overlay', 'discovery_modal', 'ui_component_churn', 'ui_polish', 'ui_accessibility', 'campus', 'campus_building_chrome', 'lexicon_catalog', 'lexicon_stats', 'lexicon_view', 'tactical_ui', 'loadout_navigation', 'ui_audio_settings', 'ui_settings_hud')
     Combat = @('core', 'combat', 'upgrades', 'damage_types', 'feedback_architecture', 'lexicon_presentation', 'combat_progression', 'treatment_aim', 'treatment_beam', 'ability_pipeline', 'tactical_flow', 'loadout_availability', 'determinism')
     Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'hidden_nest_spawn', 'spawn_lifecycle', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')

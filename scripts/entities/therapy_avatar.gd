@@ -1,7 +1,7 @@
 class_name TherapyAvatar
 extends CharacterBody2D
 
-const MOVE_SPEED := 250.0
+const MOVE_SPEED := PlayerStats.BASE_MOVEMENT_SPEED
 const BODY_RADIUS := 23.0
 const DAMAGE_FLASH_SECONDS := 0.16
 const WALK_FRAME_SECONDS := 0.12

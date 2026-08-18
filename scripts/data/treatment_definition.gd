@@ -63,7 +63,7 @@ func base_range_stage() -> int:
 static func catalog() -> Dictionary:
 	return {
 		&"treatment_precision": create(
-			&"treatment_precision", "Präziser Impuls", Mode.PRECISE,
+			&"treatment_precision", "Impuls", Mode.PRECISE,
 			16.0, 0.82, 480.0, 1, 1, 0,
 			PackedStringArray(["treatment", "precise", "tracking"]),
 			"Verfolgt automatisch das nächste Ziel.", "Gezielte antibiotische Therapie",

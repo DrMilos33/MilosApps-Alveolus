@@ -58,6 +58,15 @@ func _test_units_and_retired_terms() -> void:
 		_true(TerminologyCatalog.definition(retired_id) == null, "%s erzeugt keine aktive Definition" % String(retired_id))
 	_equal(TerminologyCatalog.definition(&"range").unit, "Stufe", "Reichweite verwendet ausschließlich die zentrale Stufeneinheit")
 	var provider := LexiconViewModelProvider.create_default()
+	var treatment_entry: LexiconEntryDefinition = LexiconCatalog.entries_by_id()[&"automatic_therapy"]
+	var treatment_model := provider.make_view_model(treatment_entry, [&"automatic_therapy"])
+	var range_row: StatRowViewModel
+	for row in treatment_model.stat_rows:
+		if row.id == &"range":
+			range_row = row
+			break
+	_true(range_row != null, "Behandlungslexikon liefert eine zentrale Reichweitenzeile")
+	_equal(range_row.formatted_value() if range_row != null else "", "16", "UI-facing Reichweite enthält nur die Stufenzahl")
 	for entry in LexiconCatalog.entries():
 		var seen := [entry.discovery_id] if not entry.discovery_id.is_empty() else []
 		var model := provider.make_view_model(entry, seen)

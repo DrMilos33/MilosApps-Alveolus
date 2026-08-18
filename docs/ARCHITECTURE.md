@@ -223,6 +223,21 @@ fire, water, earth, wind.
 the only arithmetic used by `award_run()`. A loss preview therefore shares the
 same multiplier, rounding and minimum with the eventual mutation.
 
+The event-driven intro uses `GameFlowState.State.INTRO_CONFIRMATION` for its two
+blocking explanations. That state pauses both `RunSession` and the scene tree;
+only `GameHUD.run_prompt_confirmed`, emitted by the topmost left-click prompt,
+may resume it. The first observation timer begins on `InfectionEnemy.materialized`,
+not on the spawn request. Three ordinary one-point pickup events feed the same
+`RunState` analysis target of three and the three-card treatment-only pool is
+applied through the same bound `RunBuildState` as the rest of the run. Intro
+learning events mark their discovery IDs as seen without entering the discovery
+modal flow.
+
+Save v6 retains `ui_scale` and `glyph_mode`, but the current runtime normalizes
+them to 1.0 and keyboard/mouse. Those legacy fields therefore remain readable
+without allowing an old scale or forced-gamepad value to alter this milestone's
+visible runtime.
+
 ## Case lifecycle and variation
 
 Product cases use `total_seconds <= 0` to mean no run deadline and schedule
@@ -232,7 +247,7 @@ from the saved case seed. That seed advances only after a successful non-intro
 result, so failure and cancellation cannot silently reroll the case.
 
 `minor_focus` participates in the normal centralized enemy movement path with
-base speed 12 before case modifiers. It remains a detailed,
+base speed 24 before case modifiers. It remains a detailed,
 generation-safe spawning objective and releases four bacteria after its
 20-second lifecycle if it survives; mobility does not authorize a per-entity
 process loop or a second renderer.

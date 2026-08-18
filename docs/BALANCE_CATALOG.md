@@ -13,7 +13,7 @@ im Kampf ist dagegen vollständig enthalten.
 
 - Ein Einsatzplan enthält genau eine Behandlung und bis zu zwei aktive
   Fähigkeiten.
-- Es gibt drei Behandlungen. Präziser Impuls ist sofort verfügbar; Streuimpuls
+- Es gibt drei Behandlungen. Impuls ist sofort verfügbar; Streuimpuls
   und Durchdringender Impuls werden durch Forschung freigeschaltet.
 - Abwehrstoß und Behandlungslinie sind auswählbar. Vier weitere aktive
   Fähigkeiten bleiben mit ihren Werten sichtbar, aber gesperrt.
@@ -35,7 +35,7 @@ IDs oder Save-Kompatibilität sie noch erfordern.
 | Wert | Basis |
 |---|---:|
 | Leben | 100 |
-| Bewegungstempo | 250 |
+| Bewegungstempo | 338 |
 | Körpergröße | Mittel (separate Größenklasse) |
 | Probenradius | Stufe 6 |
 | Verteidigung | 0 |
@@ -46,7 +46,7 @@ IDs oder Save-Kompatibilität sie noch erfordern.
 
 Forschung erhöht diese Basis auf höchstens 109 Leben, 6 Verteidigungsrating
 (effektiv 5,6 % Minderung), 0,75 Leben/s Regeneration, 1,15-fache Erfahrung
-und 272,5 Bewegung. Die Behandlung erhält zusätzlich bis zu 6 Prozent Schaden.
+und 368,42 Bewegung. Die Behandlung erhält zusätzlich bis zu 6 Prozent Schaden.
 
 ### Resistenzen
 
@@ -78,7 +78,7 @@ Das Set ist geschlossen und besitzt eine feste technische Reihenfolge:
 | Reihenfolge | Typ | Aktuelle Beispiele |
 |---:|---|---|
 | 1 | Feuer | Streuimpuls |
-| 2 | Wasser | Präziser Impuls |
+| 2 | Wasser | Impuls |
 | 3 | Erde | Abwehrstoß, Teile der Bakteriengruppe |
 | 4 | Wind | Durchdringender Impuls |
 
@@ -92,7 +92,7 @@ normalisiert.
 
 | Platz | Anzahl | Aktueller Inhalt |
 |---|---:|---|
-| Behandlung | genau 1 | Präzise, Streuung oder Durchdringung |
+| Behandlung | genau 1 | Impuls, Streuung oder Durchdringung |
 | Aktive Fähigkeit | 0 bis 2 | Abwehrstoß und/oder Behandlungslinie |
 | Passivmodul | 0 | nicht Teil des aktuellen Spiels |
 | Reserve | 0 | nur altes Schemafeld |
@@ -102,7 +102,7 @@ aktive Fähigkeit kostet 2; ein vollständiger produktiver Plan benötigt daher
 6. Da keine Passivmodule verfügbar sind, ist die verbleibende Kapazität zurzeit
 kein spielerischer Entscheidungswert.
 
-Der Standardplan ist Präziser Impuls, Abwehrstoß und Behandlungslinie. Alte
+Der Standardplan ist Impuls, Abwehrstoß und Behandlungslinie. Alte
 Save-Felder für Passive und Reserve werden bei einem effektiven Plan bereinigt,
 ohne stabile IDs aus älteren Spielständen umzubenennen.
 
@@ -110,13 +110,13 @@ ohne stabile IDs aus älteren Spielständen umzubenennen.
 
 | Behandlung | Verfügbarkeit | Typ | Schaden | Intervall | Reichweite | Projektile | Treffer je Projektil |
 |---|---|---|---:|---:|---:|---:|---:|
-| Präziser Impuls | sofort | Wasser | 16 | 0,82 s | Stufe 16 | 1 | 1 |
+| Impuls | sofort | Wasser | 16 | 0,82 s | Stufe 16 | 1 | 1 |
 | Streuimpuls | Forschung für 60 | Feuer | 7 je Strahl | 1,00 s | Stufe 15 | 3 | 1 |
 | Durchdringender Impuls | Forschung für 100 | Wind | 14 je Treffer | 1,65 s | Stufe 17 | 1 | 4 |
 
 Besonderheiten:
 
-- **Präziser Impuls** verfolgt ohne Talent automatisch das nächste gültige
+- **Impuls** verfolgt ohne Talent automatisch das nächste gültige
   Ziel. Der Run-Ausbau `Zusätzliches Ziel` kann bis zu drei Ziele erzeugen.
 - **Streuimpuls** erzeugt Strahlen bei −14, 0 und +14 Grad. Jeder Strahl wird
   unabhängig aufgelöst und endet am ersten getroffenen Gegner. Das Rangtalent
@@ -198,7 +198,7 @@ Baum kann zurückgesetzt werden.
 | Stärkerer Impuls | 3 | +7 Schaden | +21 Schaden | beliebige Behandlung |
 | Schnellere Impulse | 3 | Intervall ×0,84 | Intervall ×0,5927 | beliebige Behandlung |
 | Mehr Reichweite | 2 | +3 Stufen | +6 Stufen | beliebige Behandlung |
-| Zusätzliches Ziel | 2 | +1 Ziel | +2 Ziele | Präziser Impuls |
+| Zusätzliches Ziel | 2 | +1 Ziel | +2 Ziele | Impuls |
 
 ### Abwehrzellen
 
@@ -213,7 +213,7 @@ Baum kann zurückgesetzt werden.
 
 | Ausbau | Max. Rang | Pro Rang | Voll ausgebaut | Voraussetzung |
 |---|---:|---|---|---|
-| Ruhiger Fokus | 3 | Schaden ×1,18 | Schaden ×1,6430 | Präziser Impuls |
+| Ruhiger Fokus | 3 | Schaden ×1,18 | Schaden ×1,6430 | Impuls |
 | Dichter Streuimpuls | 3 | +1 Projektil | 6 Projektile | Streuimpuls |
 | Kräftigere Streuung | 3 | +3 Schaden | 16 Schaden je Projektil | Streuimpuls |
 | Tieferer Impuls | 2 | +2 maximale Treffer | 8 Treffer | Durchdringender Impuls |
@@ -264,9 +264,9 @@ Cooldown und verwendet einen generationssicheren Gegnerhandle.
 
 | Gegner | Leben | Tempo | Schaden | Schadenstyp | Proben | Größenklasse | Resistenzen (Rating; positiv effektiv) |
 |---|---:|---:|---:|---|---:|---:|---|
-| Bakterium | 22 | 83 | 2,2 | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
+| Bakterium | 22 | 66 | 2,2 | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
 | Bakteriengruppe | 74 | 50 | 5 | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
-| Kleiner Herd | 180 | 12 | 0 | 100 % Wind | 8 | Groß | Wind +25 (+18,8 %), Wasser −20 |
+| Kleiner Herd | 180 | 24 | 0 | 100 % Wind | 8 | Groß | Wind +25 (+18,8 %), Wasser −20 |
 | Infektionsherd | 2.200 | 34 | 9 | 40 % Feuer, 60 % Wind | 30 | Boss | Feuer +15 (+12,5 %), Wind +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
@@ -304,8 +304,11 @@ danach auf ihrem Endwert. Es gibt keine Ablaufzeit.
 | Befundziel | 30 | 42 | 55 |
 
 Das Intro ist ereignisgesteuert, beginnt ebenfalls mit 100 Leben und besitzt
-weder Zeitlimit noch zufällige Fallparameter. Sein Boss folgt nach der dritten
-Lektion statt nach 180 Sekunden.
+weder Zeitlimit noch zufällige Fallparameter. Der erste Erreger bleibt nach
+seiner Materialisierung drei Sekunden ohne Autoangriff beobachtbar. Danach
+bestätigt ein Linksklick den Angriff. Genau drei normale Ein-Punkt-Proben lösen
+eine Auswahl aus drei gültigen Ausbauten für `treatment_precision` aus; nach der
+Auswahl wartet der Boss erneut in einer Linksklick-Pause.
 
 ### Variationsregel
 

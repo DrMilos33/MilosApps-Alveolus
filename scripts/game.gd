@@ -14,6 +14,14 @@ const MAX_PICKUP_POOL := MAX_ACTIVE_PICKUPS
 const MAX_DAMAGE_NUMBER_POOL := 40
 const MAX_VISUAL_BURSTS := 80
 const STRESS_RUN_SECONDS := 1.0e12
+const INTRO_ANALYSIS_TARGET := 3
+const INTRO_OBSERVATION_SECONDS := 3.0
+const INTRO_FOLLOWUP_ENEMY_COUNT := 2
+const INTRO_ROLE_PRIMARY := &"primary"
+const INTRO_ROLE_FOLLOWUP := &"followup"
+const INTRO_ROLE_BOSS := &"boss"
+const INTRO_CONFIRM_ATTACK := &"enable_autoattack"
+const INTRO_CONFIRM_BOSS := &"start_boss"
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := true
@@ -124,10 +132,18 @@ var reroll_available: bool = false
 var reroll_used: bool = false
 var intro_lesson: int = 0
 var intro_phase: StringName = &""
-var intro_start_position: Vector2 = Vector2.ZERO
 var intro_primary_enemy: InfectionEnemy
-var intro_upgrade_id: StringName = &""
-var intro_transition_timer: float = 0.0
+var intro_observation_remaining: float = 0.0
+var intro_autoattack_enabled: bool = false
+var intro_confirmation_kind: StringName = &""
+var intro_prompt_text: String = ""
+var intro_prompt_semantic_mode: StringName = &"normal"
+var intro_prompt_requires_left_click: bool = false
+var intro_prompt_mouse_hint: String = ""
+var intro_enemy_roles: Dictionary = {}
+var intro_pickup_roles: Dictionary = {}
+var intro_followup_defeats: int = 0
+var intro_followup_pickups: int = 0
 var discovery_spawn_reservations: Dictionary = {}
 var _fixed_step_active: bool = false
 var deferred_spawn_requests: Array[EnemySpawnRequest] = []
@@ -332,6 +348,8 @@ func _ready() -> void:
 	hud.settings_reset_bindings_requested.connect(_on_settings_reset_bindings_requested)
 	hud.context_detail_opened.connect(_on_context_detail_opened)
 	hud.context_detail_closed.connect(_on_context_detail_closed)
+	if hud.has_signal(&"run_prompt_confirmed"):
+		hud.connect(&"run_prompt_confirmed", _on_run_prompt_confirmed)
 
 	meta = MetaProgressionState.new()
 	# Loading validates the talent economy. Configure the deliberately temporary
@@ -344,13 +362,14 @@ func _ready() -> void:
 	else:
 		meta.reset_defaults()
 	_sanitize_meta()
+	_force_current_runtime_ui_settings(meta.ui_settings)
 	meta.ui_settings.apply_saved_bindings()
 	meta.ui_settings.apply_audio()
 	meta.ui_settings.apply_window()
 	ui_sound_service.configure(meta.ui_settings)
 	ability_feedback_world.set_reduced_motion(meta.ui_settings.reduce_motion)
 	ui_sound_service.wire_tree(hud.root)
-	input_glyph_service.configure(meta.ui_settings.glyph_mode)
+	input_glyph_service.configure(UISettingsState.GLYPH_KEYBOARD)
 	hud.configure_input_glyphs(input_glyph_service)
 	hud.configure_ui_settings(meta.ui_settings)
 	hud.set_run_stats_visibility(meta.show_run_stats)
@@ -436,6 +455,9 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 		hud.update_round_time(state.elapsed)
 	else:
 		hud.update_timer(state.elapsed, config.run_duration_seconds, config.final_deadline_seconds, state.boss_spawned)
+	if flow_state != GameFlowState.State.RUNNING:
+		_finalize_fixed_step()
+		return
 	pressure_grace_timer = maxf(0.0, pressure_grace_timer - delta)
 	_spawn_step(delta)
 	_profile_phase(&"clock_spawn", phase_started)
@@ -453,7 +475,8 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 		return
 	if not stress_test:
 		if selected_level.is_tutorial:
-			_therapy_step(delta)
+			if intro_autoattack_enabled:
+				_therapy_step(delta)
 		else:
 			treatment_controller.step(delta)
 			if treatment_beam_world != null:
@@ -926,6 +949,7 @@ func _on_run_stats_visibility_changed(enabled: bool) -> void:
 	_save_meta()
 
 func _on_ui_settings_changed(settings: UISettingsState) -> void:
+	_force_current_runtime_ui_settings(settings)
 	meta.set_ui_settings(settings)
 	meta.ui_settings.apply_audio()
 	if ability_feedback_world != null:
@@ -933,10 +957,20 @@ func _on_ui_settings_changed(settings: UISettingsState) -> void:
 	if ui_sound_service != null:
 		ui_sound_service.configure(meta.ui_settings)
 	if input_glyph_service != null:
-		input_glyph_service.configure(meta.ui_settings.glyph_mode)
+		input_glyph_service.configure(UISettingsState.GLYPH_KEYBOARD)
 	if avatar != null:
 		avatar.set_character_name_visible(meta.ui_settings.show_character_name)
 	_save_meta()
+
+
+func _force_current_runtime_ui_settings(settings: UISettingsState) -> void:
+	if settings == null:
+		return
+	# Save v6 keeps both fields for backwards compatibility, but this milestone
+	# has one visible presentation/input contract. Old 200%- or gamepad-forced
+	# saves therefore cannot silently alter the current runtime.
+	settings.ui_scale = 1.0
+	settings.glyph_mode = UISettingsState.GLYPH_KEYBOARD
 
 func _on_settings_reset_bindings_requested() -> void:
 	for action in [&"move_left", &"move_right", &"move_up", &"move_down", &"pause_game", &"active_ability_1", &"active_ability_2", &"upgrade_1", &"upgrade_2", &"upgrade_3", &"reroll_upgrades", &"ui_accept", &"ui_cancel", &"ui_info"]:
@@ -1240,11 +1274,16 @@ func start_run(run_context: RunContext = null) -> void:
 	current_upgrade_options.clear()
 	active_boss = null
 	intro_lesson = 1 if selected_level.is_tutorial else 0
-	intro_phase = &"await_movement" if selected_level.is_tutorial else &""
-	intro_start_position = avatar.global_position
+	intro_phase = &"await_primary_materialization" if selected_level.is_tutorial else &""
 	intro_primary_enemy = null
-	intro_upgrade_id = &""
-	intro_transition_timer = 0.0
+	intro_observation_remaining = 0.0
+	intro_autoattack_enabled = false
+	intro_confirmation_kind = &""
+	intro_enemy_roles.clear()
+	intro_pickup_roles.clear()
+	intro_followup_defeats = 0
+	intro_followup_pickups = 0
+	_set_intro_prompt("", &"normal", false, "")
 	discovery_spawn_reservations.clear()
 	discovery_manager.clear_pending()
 	active_reaction = null
@@ -1266,6 +1305,8 @@ func start_run(run_context: RunContext = null) -> void:
 	state.boss_due.connect(_spawn_boss)
 	state.run_finished.connect(_on_run_finished)
 	state.reset(config, 0, stats.max_stability_bonus)
+	if selected_level.is_tutorial:
+		state.set_analysis_target(INTRO_ANALYSIS_TARGET)
 	state.set_analysis_gain_multiplier(stats.experience_gain_multiplier)
 	if run_session != null:
 		run_session.reset()
@@ -1287,8 +1328,11 @@ func start_run(run_context: RunContext = null) -> void:
 		hud.configure_active_abilities([])
 		hud.hide_finding_progress()
 		hud.update_round_time(0.0)
-		if not meta.tutorial_status.has(&"movement"):
-			hud.show_alert("Bewege dich mit WASD oder den Pfeiltasten", Color("f2bd68"), 3.2)
+		_set_intro_prompt("Beobachte den ersten Erreger.", &"normal", false, "")
+		intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0), 0.55)
+		if is_instance_valid(intro_primary_enemy):
+			intro_enemy_roles[intro_primary_enemy] = INTRO_ROLE_PRIMARY
+			intro_primary_enemy.set_status_modifier(&"intro_guidance", 0.58, 1.0)
 	else:
 		treatment_controller.enabled = true
 		hud.update_timer(0.0, config.run_duration_seconds, config.final_deadline_seconds, false)
@@ -1468,7 +1512,7 @@ func _apply_scalar_modifier(current: float, operation: StringName, value: float)
 
 func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 	build_state = RunBuildState.from_treatment(treatment)
-	if treatment == null or selected_level.is_tutorial:
+	if treatment == null:
 		treatment_controller.enabled = false
 		ability_controller.clear()
 		return
@@ -1481,13 +1525,19 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 	build_state.set_base(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier)
 	build_state.set_base(RunBuildState.SUPPORT_EFFECT, stats.support_effect_multiplier)
 	build_state.set_base(RunBuildState.MOVEMENT_SPEED, stats.movement_speed)
-	if stats.has_method("bind_run_build"):
-		var equipped_abilities: Array[AbilityDefinition] = []
+	var equipped_abilities: Array[AbilityDefinition] = []
+	if not selected_level.is_tutorial:
 		for id in active_loadout.ability_ids:
 			var ability: AbilityDefinition = ability_definitions.get(id)
 			if ability != null:
 				equipped_abilities.append(ability)
+	if stats.has_method("bind_run_build"):
 		stats.call("bind_run_build", build_state, treatment, equipped_abilities)
+	if selected_level.is_tutorial:
+		stats.refresh_resolved_run_build()
+		treatment_controller.enabled = false
+		ability_controller.clear()
+		return
 	var talent_context := active_run_context
 	var damage_rank := talent_context.talent_rank(&"treatment_damage_training") if talent_context != null else 0
 	var spread_rank := talent_context.talent_rank(&"spread_penetration") if talent_context != null else 0
@@ -1640,8 +1690,6 @@ func _drain_deferred_spawns(maximum_per_tick: int) -> void:
 		deferred_spawn_cursor = 0
 
 func _therapy_step(delta: float) -> void:
-	if selected_level.is_tutorial and intro_phase == &"await_immune_defeat":
-		return
 	therapy_timer -= delta
 	if therapy_timer > 0.0:
 		return
@@ -1671,7 +1719,7 @@ func _therapy_step(delta: float) -> void:
 			&"therapy",
 			enemy_world.handle_for(enemy),
 			enemy_world.resolve,
-			360.0 if selected_level.is_tutorial and intro_phase == &"await_first_shot" else TherapyProjectile.DEFAULT_SPEED
+			TherapyProjectile.DEFAULT_SPEED
 		)
 		projectile.global_position = avatar.global_position
 		projectile.reset_physics_interpolation()
@@ -1876,6 +1924,9 @@ func _resolved_treatment_damage(base_damage: float, enemy: InfectionEnemy) -> fl
 	return CombatDamageResolver.resolve(result, profile, enemy.definition.resistance_profile, 0.0)
 
 func _on_projectile_discovery_ready(projectile: TherapyProjectile) -> void:
+	if selected_level != null and selected_level.is_tutorial:
+		discovery_manager.mark_seen(&"automatic_therapy")
+		return
 	if discovery_manager.request(&"automatic_therapy", projectile):
 		_try_present_next_discovery()
 
@@ -1933,27 +1984,66 @@ func _support_step(delta: float) -> void:
 	state.change_stability(recovery)
 	if overflow > 0.0 and stats.overheal_shield_cap > 0.0 and ability_controller != null:
 		ability_controller.grant_shield_capped(overflow, stats.overheal_shield_cap)
-	if selected_level.is_tutorial and intro_phase == &"await_support_tick":
-		intro_phase = &"boss_pending"
-		meta.set_tutorial_step(&"supportive_therapy")
-		discovery_manager.mark_seen(&"patient_stability")
-		state.trigger_event_boss()
 
 func _intro_step(delta: float) -> void:
 	if not selected_level.is_tutorial or state == null or not state.active:
 		return
-	if intro_phase == &"await_movement" and topology.distance(intro_start_position, avatar.global_position) >= 32.0:
-		meta.set_tutorial_step(&"movement")
-		intro_phase = &"enemy_approach"
-		intro_transition_timer = 0.85
-		hud.show_alert("Beobachte den ersten Erreger.", AlveolusVisualTheme.GOLD, 1.4)
-	elif intro_phase == &"enemy_approach":
-		intro_transition_timer = maxf(0.0, intro_transition_timer - delta)
-		if intro_transition_timer <= 0.0:
-			intro_phase = &"await_enemy"
-			intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0), 0.55)
-			if is_instance_valid(intro_primary_enemy):
-				intro_primary_enemy.set_status_modifier(&"intro_guidance", 0.58, 1.0)
+	if intro_phase != &"observe_primary":
+		return
+	intro_observation_remaining = maxf(0.0, intro_observation_remaining - maxf(delta, 0.0))
+	if intro_observation_remaining > 0.0:
+		return
+	intro_phase = &"await_attack_confirmation"
+	intro_confirmation_kind = INTRO_CONFIRM_ATTACK
+	_set_intro_prompt("Du greifst automatisch an.", &"normal", true, "Linksklick zum Fortfahren")
+	_set_flow(GameFlowState.State.INTRO_CONFIRMATION)
+
+
+func intro_prompt_snapshot() -> Dictionary:
+	return {
+		"text": intro_prompt_text,
+		"semantic_mode": intro_prompt_semantic_mode,
+		"requires_left_click": intro_prompt_requires_left_click,
+		"mouse_hint": intro_prompt_mouse_hint,
+	}
+
+
+func _set_intro_prompt(text: String, semantic_mode: StringName, requires_left_click: bool, mouse_hint: String) -> void:
+	intro_prompt_text = text
+	intro_prompt_semantic_mode = &"coral" if semantic_mode == &"coral" else &"normal"
+	intro_prompt_requires_left_click = requires_left_click
+	intro_prompt_mouse_hint = mouse_hint
+	if hud == null:
+		return
+	if text.is_empty():
+		if hud.has_method(&"hide_run_prompt"):
+			hud.call(&"hide_run_prompt")
+		return
+	if hud.has_method(&"show_run_prompt"):
+		hud.call(&"show_run_prompt", text, intro_prompt_semantic_mode, requires_left_click, mouse_hint)
+
+
+func _on_run_prompt_confirmed() -> void:
+	if flow_state != GameFlowState.State.INTRO_CONFIRMATION or not intro_prompt_requires_left_click:
+		return
+	var confirmation := intro_confirmation_kind
+	if confirmation not in [INTRO_CONFIRM_ATTACK, INTRO_CONFIRM_BOSS]:
+		return
+	intro_confirmation_kind = &""
+	_set_intro_prompt("", &"normal", false, "")
+	match confirmation:
+		INTRO_CONFIRM_ATTACK:
+			intro_phase = &"await_primary_defeat"
+			intro_autoattack_enabled = true
+			therapy_timer = 0.12
+			discovery_manager.mark_seen(&"automatic_therapy")
+			meta.set_tutorial_step(&"automatic_therapy")
+		INTRO_CONFIRM_BOSS:
+			intro_phase = &"boss_active"
+			intro_autoattack_enabled = true
+		_:
+			return
+	_set_flow(GameFlowState.State.RUNNING)
 
 func _spawn_enemy(
 	type: StringName,
@@ -2044,11 +2134,18 @@ func _spawn_boss() -> void:
 		return
 	active_boss = _spawn_enemy(&"infection_focus", _spawn_position_around_avatar(600.0))
 	if active_boss != null:
+		if selected_level.is_tutorial:
+			intro_enemy_roles[active_boss] = INTRO_ROLE_BOSS
 		mastery_tracker.record_boss_spawned(state.elapsed)
 		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
-	if selected_level.is_tutorial:
-		intro_phase = &"boss_active"
+	if selected_level.is_tutorial and active_boss != null:
 		intro_lesson = 3
+		intro_phase = &"await_boss_confirmation"
+		intro_autoattack_enabled = false
+		intro_confirmation_kind = INTRO_CONFIRM_BOSS
+		discovery_manager.mark_seen(&"infection_focus")
+		_set_intro_prompt("Infektionsherd erkannt", &"coral", true, "Linksklick zum Fortfahren")
+		_set_flow(GameFlowState.State.INTRO_CONFIRMATION)
 
 func _on_minions_requested(origin: Vector2, count: int) -> void:
 	if _fixed_step_active:
@@ -2072,24 +2169,24 @@ func _on_boss_phase_changed(phase: int) -> void:
 func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
 	if not is_instance_valid(enemy) or enemy.definition == null:
 		return
-	if selected_level.is_tutorial and enemy.definition.id == &"pneumococcus" and intro_phase == &"await_enemy":
-		intro_phase = &"enemy_discovery"
+	if selected_level.is_tutorial:
+		var intro_role := StringName(intro_enemy_roles.get(enemy, &""))
+		if intro_role == INTRO_ROLE_PRIMARY and intro_phase == &"await_primary_materialization":
+			intro_phase = &"observe_primary"
+			intro_observation_remaining = INTRO_OBSERVATION_SECONDS
+			discovery_manager.mark_seen(&"pneumococcus")
+			meta.set_tutorial_step(&"pneumococcus")
+		elif intro_role in [INTRO_ROLE_FOLLOWUP, INTRO_ROLE_BOSS]:
+			discovery_manager.mark_seen(enemy.definition.discovery_id)
+		return
 	var requested := discovery_manager.request(enemy.definition.discovery_id, enemy, {"tutorial_boss": selected_level.is_tutorial and enemy.definition.is_boss})
 	if requested:
 		_try_present_next_discovery()
-	elif selected_level.is_tutorial and enemy.definition.id == &"pneumococcus" and intro_phase == &"enemy_discovery":
-		intro_phase = &"await_first_shot"
 
 func _on_enemy_damage_applied(enemy: InfectionEnemy, _amount: float, source: StringName) -> void:
 	if not selected_level.is_tutorial or source != &"therapy":
 		return
-	if intro_phase == &"await_first_shot":
-		intro_phase = &"await_first_analysis"
-		meta.set_tutorial_step(&"automatic_therapy")
-	elif intro_phase == &"await_potency_hit":
-		intro_phase = &"potency_complete"
-		meta.set_tutorial_step(&"antibiotic_therapy")
-		_present_intro_upgrade(&"neutrophils", 2, enemy)
+	discovery_manager.mark_seen(&"automatic_therapy")
 
 func _try_present_next_discovery() -> void:
 	if discovery_manager == null or not discovery_manager.active.is_empty():
@@ -2113,10 +2210,8 @@ func _try_present_next_discovery() -> void:
 func _on_discovery_dismissed() -> void:
 	if flow_state != GameFlowState.State.DISCOVERY_PAUSE or discovery_manager.active.is_empty():
 		return
-	var completed_id := discovery_manager.complete_active()
+	discovery_manager.complete_active()
 	hud.hide_discovery()
-	if selected_level != null and selected_level.is_tutorial and completed_id == &"pneumococcus" and intro_phase == &"enemy_discovery":
-		intro_phase = &"await_first_shot"
 	_save_meta()
 	if not discovery_manager.queue.is_empty():
 		_try_present_next_discovery()
@@ -2169,6 +2264,8 @@ func _on_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bo
 func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bool) -> void:
 	if not is_instance_valid(enemy) or not enemies.has(enemy):
 		return
+	var death_position := enemy.global_position
+	var intro_role := StringName(intro_enemy_roles.get(enemy, &""))
 	enemies.erase(enemy)
 	defeats += 1
 	_refresh_defeat_research_preview()
@@ -2182,20 +2279,41 @@ func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss:
 					var runtime := ability_controller.runtime(slot)
 					if runtime != null:
 						runtime.reduce(1.0)
-	var guided_intro_pickup := selected_level.is_tutorial and intro_phase == &"await_first_analysis" and enemy.definition.id == &"pneumococcus"
-	var pickup_position := topology.wrap_position(avatar.global_position + Vector2(150.0, -76.0)) if guided_intro_pickup else enemy.global_position
-	_spawn_analysis_pickup(analysis_value, pickup_position, guided_intro_pickup)
-	if selected_level.is_tutorial and intro_phase == &"await_immune_defeat" and enemy.last_damage_source == &"immune":
-		intro_lesson = 3
-		intro_phase = &"boss_pending"
-		meta.set_tutorial_step(&"immune_defense")
-		discovery_manager.mark_seen(&"neutrophil_orbit")
-		state.trigger_event_boss()
+	var spawned_pickup := _spawn_analysis_pickup(analysis_value, death_position, false)
+	if selected_level.is_tutorial:
+		if intro_role in [INTRO_ROLE_PRIMARY, INTRO_ROLE_FOLLOWUP] and spawned_pickup != null:
+			intro_pickup_roles[spawned_pickup] = intro_role
+		if intro_role == INTRO_ROLE_PRIMARY:
+			intro_primary_enemy = null
+			intro_phase = &"await_primary_pickup"
+			intro_autoattack_enabled = false
+			_set_intro_prompt("Geh nah ran, um die EXP einzusammeln.", &"normal", false, "")
+		elif intro_role == INTRO_ROLE_FOLLOWUP:
+			intro_followup_defeats += 1
+		intro_enemy_roles.erase(enemy)
 	if was_boss:
 		active_boss = null
 		mastery_tracker.record_boss_defeated(state.elapsed if state != null else 0.0)
 		state.mark_boss_defeated()
 	_store_enemy(enemy)
+
+
+func _spawn_intro_followups() -> void:
+	intro_phase = &"followup_combat"
+	intro_lesson = 2
+	intro_autoattack_enabled = true
+	therapy_timer = 0.12
+	_set_intro_prompt("", &"normal", false, "")
+	for index in range(INTRO_FOLLOWUP_ENEMY_COUNT):
+		var enemy := _spawn_enemy(
+			&"pneumococcus",
+			_spawn_position_around_avatar(390.0 + float(index) * 36.0),
+			0.55,
+			true,
+			false
+		)
+		if enemy != null:
+			intro_enemy_roles[enemy] = INTRO_ROLE_FOLLOWUP
 
 func _store_enemy(enemy: InfectionEnemy) -> void:
 	if crowd_renderer != null:
@@ -2253,7 +2371,9 @@ func _spawn_analysis_pickup(value: int, spawn_position: Vector2, guided: bool = 
 	pickups.append(pickup)
 	var force_detailed := guided or (discovery_manager != null and not discovery_manager.has_seen(&"analysis_pickup"))
 	crowd_renderer.register_pickup(pickup, force_detailed)
-	if discovery_manager.request(&"analysis_pickup", pickup):
+	if selected_level != null and selected_level.is_tutorial:
+		discovery_manager.mark_seen(&"analysis_pickup")
+	elif discovery_manager.request(&"analysis_pickup", pickup):
 		_try_present_next_discovery()
 	return pickup
 
@@ -2273,16 +2393,21 @@ func _on_pickup_collected(value: int, pickup: AnalysisPickup) -> void:
 func _apply_pickup_collected(value: int, pickup: AnalysisPickup) -> void:
 	if not is_instance_valid(pickup) or not pickups.has(pickup):
 		return
+	var intro_role := StringName(intro_pickup_roles.get(pickup, &""))
+	intro_pickup_roles.erase(pickup)
 	pickups.erase(pickup)
 	_store_pickup(pickup)
 	if selected_level.is_tutorial:
-		if state != null:
-			state.analysis = mini(state.analysis + value, state.analysis_target - 1)
-			state.analysis_changed.emit(state.analysis, state.analysis_target, state.level)
-		if intro_phase == &"await_first_analysis":
+		if intro_role == INTRO_ROLE_PRIMARY:
 			meta.set_tutorial_step(&"analysis")
-			var upgrade_target: InfectionEnemy = intro_primary_enemy if is_instance_valid(intro_primary_enemy) else null
-			_present_intro_upgrade(&"potency", 1, upgrade_target)
+			_spawn_intro_followups()
+		elif intro_role == INTRO_ROLE_FOLLOWUP:
+			intro_followup_pickups += 1
+			if intro_followup_defeats == INTRO_FOLLOWUP_ENEMY_COUNT and intro_followup_pickups == INTRO_FOLLOWUP_ENEMY_COUNT:
+				intro_phase = &"await_intro_upgrade"
+				intro_autoattack_enabled = false
+		if state != null:
+			state.add_analysis(value)
 	elif state != null:
 		state.add_analysis(value)
 		if finding_controller != null and finding_controller.definition != null and not finding_controller.revealed:
@@ -2775,7 +2900,19 @@ func _refresh_defeat_research_preview() -> void:
 
 func _on_level_up_requested(level: int) -> void:
 	if selected_level.is_tutorial:
-		state.resolve_level_up()
+		if intro_phase != &"await_intro_upgrade":
+			state.resolve_level_up()
+			return
+		level_up_requested.emit(level)
+		current_upgrade_options = _choose_intro_treatment_upgrades(3)
+		if current_upgrade_options.size() != 3:
+			push_error("Intro upgrade pool must provide exactly three treatment cards")
+			state.resolve_level_up()
+			return
+		intro_lesson = 2
+		_set_flow(GameFlowState.State.LEVEL_UP)
+		ui_router.open_modal(&"level_up", null, get_viewport().gui_get_focus_owner())
+		hud.show_upgrade_choices(current_upgrade_options, stats, false, false)
 		return
 	level_up_requested.emit(level)
 	# Jede Auswahl enthält mindestens einen Ausbau der ausgerüsteten
@@ -2796,31 +2933,6 @@ func _on_level_up_requested(level: int) -> void:
 	_set_flow(GameFlowState.State.LEVEL_UP)
 	ui_router.open_modal(&"level_up", null, get_viewport().gui_get_focus_owner())
 	hud.show_upgrade_choices(current_upgrade_options, stats, reroll_available and not reroll_used, false)
-
-func _present_intro_upgrade(id: StringName, lesson: int, target_enemy: InfectionEnemy) -> void:
-	var definition: UpgradeDefinition
-	for candidate in ContentCatalog.upgrade_definitions():
-		if candidate.id == id:
-			definition = candidate
-			break
-	if definition == null:
-		return
-	if id == &"potency" and (target_enemy == null or not is_instance_valid(target_enemy) or target_enemy.is_queued_for_deletion() or not target_enemy.is_targetable()):
-		intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(330.0), 0.72)
-		target_enemy = intro_primary_enemy
-	intro_lesson = lesson
-	intro_phase = StringName("upgrade_%s" % String(id))
-	intro_upgrade_id = id
-	current_upgrade_options = [definition]
-	var target: Variant = null
-	if id == &"potency" and target_enemy != null:
-		target = target_enemy
-	elif id == &"neutrophils":
-		target = avatar
-	hud.set_intro_upgrade_target(target)
-	_set_flow(GameFlowState.State.LEVEL_UP)
-	ui_router.open_modal(&"level_up", null, get_viewport().gui_get_focus_owner())
-	hud.show_upgrade_choices(current_upgrade_options, stats, false, false, true)
 
 func _on_reroll_requested() -> void:
 	if flow_state != GameFlowState.State.LEVEL_UP or not reroll_available or reroll_used:
@@ -2846,6 +2958,19 @@ func _choose_tactical_upgrades(excluded: Array[StringName], guarantee_treatment:
 				tags.append(tag)
 	return UpgradePoolBuilder.choose(ContentCatalog.upgrade_definitions(), stats.upgrade_levels, rng, component_ids, tags, count, excluded, guarantee_treatment)
 
+
+func _choose_intro_treatment_upgrades(count: int) -> Array[UpgradeDefinition]:
+	var definitions: Array[UpgradeDefinition] = []
+	for definition in ContentCatalog.upgrade_definitions():
+		if definition.path != UpgradeDefinition.Path.ANTIBIOTIC:
+			continue
+		if not definition.required_component_ids.has(&"treatment_precision"):
+			continue
+		definitions.append(definition)
+	var component_ids: Array[StringName] = [&"treatment_precision"]
+	var tags: Array[StringName] = [&"treatment", &"precise", &"tracking"]
+	return UpgradePoolBuilder.choose(definitions, stats.upgrade_levels, rng, component_ids, tags, count, [], false)
+
 func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	if flow_state != GameFlowState.State.LEVEL_UP or state == null or not state.active:
 		return
@@ -2856,26 +2981,23 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	_sync_legacy_upgrade_to_build(definition)
 	avatar.queue_redraw()
 	hud.update_run_stats(stats, state)
-	hud.configure_active_abilities(_active_ability_hud_views())
+	if not selected_level.is_tutorial:
+		hud.configure_active_abilities(_active_ability_hud_views())
 	hud.show_running_hud()
 	if active_boss != null and is_instance_valid(active_boss):
 		hud.show_boss(active_boss.max_health, config.boss_phase_minions.size())
 		hud.update_boss_health(active_boss.health, active_boss.max_health)
-	var scripted_intro := selected_level.is_tutorial and intro_upgrade_id == definition.id
+	var completes_intro_upgrade := selected_level.is_tutorial \
+		and intro_phase == &"await_intro_upgrade" \
+		and current_upgrade_options.has(definition)
 	ui_router.close_modal(get_viewport().gui_get_focus_owner())
 	_set_flow(GameFlowState.State.RUNNING)
 	state.resolve_level_up()
-	if scripted_intro:
-		intro_upgrade_id = &""
-		match definition.id:
-			&"potency":
-				intro_phase = &"await_potency_hit"
-				therapy_timer = 0.12
-			&"neutrophils":
-				intro_phase = &"await_immune_defeat"
-				immune_timer = 0.20
-				discovery_manager.mark_seen(&"neutrophil_orbit")
-				intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(104.0), 0.68)
+	if completes_intro_upgrade:
+		intro_phase = &"boss_pending"
+		intro_autoattack_enabled = false
+		meta.set_tutorial_step(&"upgrade")
+		state.trigger_event_boss()
 		_save_meta()
 		return
 	if pending_finding_definition != null:
@@ -3230,6 +3352,11 @@ func _cleanup_run_nodes() -> void:
 		pickup_world.clear()
 	current_upgrade_options.clear()
 	active_boss = null
+	intro_enemy_roles.clear()
+	intro_pickup_roles.clear()
+	intro_confirmation_kind = &""
+	intro_autoattack_enabled = false
+	_set_intro_prompt("", &"normal", false, "")
 	active_run_context = null
 	active_loadout = null
 	build_state = null
