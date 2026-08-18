@@ -139,7 +139,14 @@ func _run() -> void:
 	hud.show_end(levels[1], false, "Das Leben ist auf null gefallen.", 95.0, 2, 8, 0, false)
 	await process_frame
 	await process_frame
-	_assert_compact_modal(hud.end_panel, GameHUD.END_PANEL_SIZE.y, "Ergebnis Leben erschöpft")
+	_assert_compact_modal(hud.end_panel, GameHUD.END_PANEL_SIZE.y, "Ergebnis You suck")
+	var failure_title := hud.result_screen.find_child("OutcomeTitle", true, false) as Label
+	_check(failure_title != null and failure_title.text == "You suck", "Niederlage verwendet den verbindlichen Titel exakt")
+	_check(
+		hud.result_screen.find_child("Reason", true, false) == null
+		and hud.result_screen.find_child("Detail", true, false) == null,
+		"Niederlage zeigt weder Untertitel noch Grundtext"
+	)
 	_check(
 		hud.result_screen.find_child("Optional_reward", true, false) == null
 		and hud.result_screen.find_child("Optional_unlock", true, false) == null

@@ -3541,9 +3541,9 @@ func show_end(level: LevelDefinition, success: bool, reason: String, elapsed: fl
 	ability_panel.hide()
 	finding_progress_panel.hide()
 	result_success = success
-	result_title_text = "Herd kontrolliert" if success else "Leben erschöpft"
-	result_reason_text = reason
-	result_detail_text = level.victory_text if success else level.failure_text
+	result_title_text = "Herd kontrolliert" if success else "You suck"
+	result_reason_text = reason if success else ""
+	result_detail_text = level.victory_text if success else ""
 	result_stats_data = [
 		ResultOverlayViewModel.StatViewModel.new(&"time", "Zeit", _clock_text(elapsed), false),
 		ResultOverlayViewModel.StatViewModel.new(&"analysis", "Analyselevel", str(analysis_level), true),
