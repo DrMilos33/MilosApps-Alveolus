@@ -590,6 +590,43 @@ func _refresh_focus_neighbors() -> void:
 		control.focus_neighbor_bottom = control.get_path_to(next)
 		control.focus_previous = control.get_path_to(previous)
 		control.focus_next = control.get_path_to(next)
+	_refresh_binding_grid_neighbors()
+
+
+func _refresh_binding_grid_neighbors() -> void:
+	if _bindings_grid == null or _binding_layout_records.is_empty():
+		return
+	var column_count := maxi(_bindings_grid.columns, 1)
+	var first_buttons: Array = _binding_layout_records[0].get("buttons", []) as Array
+	var preceding_control: Control = null
+	if not first_buttons.is_empty():
+		var first_button := first_buttons[0] as Control
+		var first_index := _focus_order.find(first_button)
+		if first_index > 0:
+			preceding_control = _focus_order[first_index - 1]
+	var following_control := _controls.get(&"bindings.reset") as Control
+	for record_index in range(_binding_layout_records.size()):
+		var buttons: Array = _binding_layout_records[record_index].get("buttons", []) as Array
+		for slot_index in range(buttons.size()):
+			var button := buttons[slot_index] as Control
+			if button == null:
+				continue
+			var above_index := record_index - column_count
+			var below_index := record_index + column_count
+			var above := preceding_control
+			var below := following_control
+			if above_index >= 0:
+				var above_buttons: Array = _binding_layout_records[above_index].get("buttons", []) as Array
+				if slot_index < above_buttons.size():
+					above = above_buttons[slot_index] as Control
+			if below_index < _binding_layout_records.size():
+				var below_buttons: Array = _binding_layout_records[below_index].get("buttons", []) as Array
+				if slot_index < below_buttons.size():
+					below = below_buttons[slot_index] as Control
+			if above != null:
+				button.focus_neighbor_top = button.get_path_to(above)
+			if below != null:
+				button.focus_neighbor_bottom = button.get_path_to(below)
 
 
 func _compact_setting_row(text_value: String, control: Control) -> HBoxContainer:
@@ -886,6 +923,7 @@ func _refresh_responsive_layout() -> void:
 			var binding_button := binding_button_value as Button
 			binding_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			binding_button.custom_minimum_size.x = 104.0
+	_refresh_focus_neighbors()
 
 
 func _focused_setting_id() -> StringName:

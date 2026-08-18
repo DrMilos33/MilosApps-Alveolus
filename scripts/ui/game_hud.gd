@@ -489,6 +489,7 @@ func _ready() -> void:
 	discovery_tooltip = DiscoveryTooltip.new()
 	discovery_tooltip.dismissed.connect(func() -> void: discovery_dismissed.emit())
 	root.add_child(discovery_tooltip)
+	_install_run_prompt()
 	_hide_all()
 	set_process(false)
 
@@ -554,15 +555,6 @@ func _build_gameplay_hud() -> Control:
 	alert_margin.add_child(alert_label)
 	alert_panel.hide()
 
-	run_prompt = PlainRunPrompt.new()
-	run_prompt.name = "RunPrompt"
-	run_prompt.left_click_acknowledged.connect(func() -> void: run_prompt_confirmed.emit())
-	layer.add_child(run_prompt)
-	# Compatibility aliases preserve callers that inspect the former
-	# boss-specific surface while the view itself is now containerless.
-	boss_announcement_panel = run_prompt
-	boss_announcement = run_prompt.message_label()
-
 	finding_progress_panel = Control.new()
 	finding_progress_panel.name = "FindingProgress"
 	finding_progress_panel.set_anchor(SIDE_LEFT, 0.5)
@@ -595,6 +587,20 @@ func _build_gameplay_hud() -> Control:
 	finding_progress_panel.hide()
 
 	return layer
+
+
+func _install_run_prompt() -> void:
+	run_prompt = PlainRunPrompt.new()
+	run_prompt.name = "RunPrompt"
+	run_prompt.left_click_acknowledged.connect(func() -> void: run_prompt_confirmed.emit())
+	# The prompt is intentionally mounted after every screen/modal sibling. A
+	# confirmation therefore remains the actual top GUI input owner instead of
+	# relying on the earlier GameplayHUD child's local draw order.
+	root.add_child(run_prompt)
+	# Compatibility aliases preserve callers that inspect the former
+	# boss-specific surface while the view itself is now containerless.
+	boss_announcement_panel = run_prompt
+	boss_announcement = run_prompt.message_label()
 
 
 func _install_run_hud_overlay(layer: Control) -> void:
@@ -3206,9 +3212,12 @@ func show_boss(maximum: float, phase_count: int) -> void:
 	boss_hud_active = true
 	_apply_run_hud_model()
 	_refresh_run_stats()
-	show_run_prompt("Infektionsherd erkannt", PlainRunPrompt.MODE_CORAL)
-	boss_announcement_time = 1.2
-	set_process(true)
+	# The intro owns a persistent confirmation prompt. A regular timed boss
+	# announcement must never replace that top-layer state based on call order.
+	if not is_run_prompt_awaiting_confirmation():
+		show_run_prompt("Infektionsherd erkannt", PlainRunPrompt.MODE_CORAL)
+		boss_announcement_time = 1.2
+		set_process(true)
 
 
 func show_run_prompt(

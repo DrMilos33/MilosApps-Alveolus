@@ -17,7 +17,7 @@ func _run() -> void:
 	_check(not _contains_text(hud.research_overlay, "Kleine, gedeckelte"), "Forschungsseite enthält den entfernten Untertext nicht")
 	_check(not _contains_text(hud.practice_overlay, "Automatische Forschung und Klinikfälle laufen"), "Praxisseite enthält den entfernten Untertext nicht")
 	_check(not _contains_text(hud.settings_overlay, "Placeholder"), "Einstellungen verwenden keine veraltete Platzhalterseite")
-	_check(hud.settings_master_slider != null and hud.settings_scale_option != null, "Einstellungen bieten funktionsfähige Audio- und Anzeigeoptionen")
+	_check(hud.settings_master_slider != null and hud.settings_scale_option == null and hud.settings_glyph_option == null, "Einstellungen bieten Audio und verbleibende Anzeigeoptionen ohne ausgeblendete Größen- oder Moduscontrols")
 	for shell in hud.page_shells:
 		_check(not shell.has("header_glow"), "Dokumentseiten besitzen keinen dekorativen Balken unter dem Header")
 		var header := shell.get("header") as HBoxContainer

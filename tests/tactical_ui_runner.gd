@@ -426,7 +426,10 @@ func _run() -> void:
 	hud.run_prompt_confirmed.connect(func() -> void: prompt_confirmations.append(true))
 	hud.show_run_prompt("Beobachte den ersten Erreger.", PlainRunPrompt.MODE_NORMAL, true, "Linksklick zum Fortfahren")
 	await process_frame
+	_check(hud.run_prompt.get_parent() == hud.root and hud.run_prompt.get_index() > hud.end_overlay.get_index(), "Der blockierende Run-Prompt ist als oberstes Root-Geschwister über allen Modalen montiert")
 	_check(absf(hud.run_prompt.message_label().get_global_rect().get_center().y - 360.0) <= 32.0, "Normale Introcopy nutzt dieselbe Plain-View zentriert statt die Bossband")
+	hud.show_boss(100.0, 2)
+	_check(hud.run_prompt.message_label().text == "Beobachte den ersten Erreger." and hud.is_run_prompt_awaiting_confirmation(), "Eine normale Bossankündigung überschreibt keinen bereits blockierenden Intro-Prompt")
 	var intro_left_click := InputEventMouseButton.new()
 	intro_left_click.button_index = MOUSE_BUTTON_LEFT
 	intro_left_click.pressed = true
