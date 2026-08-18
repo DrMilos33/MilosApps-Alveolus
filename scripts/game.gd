@@ -187,7 +187,7 @@ func _ready() -> void:
 	loadout_modules = ContentCatalog.loadout_module_definitions()
 	treatment_definitions = TreatmentDefinition.catalog()
 	ability_definitions = AbilityDefinition.catalog()
-	defense_cell_damage_profile = DamageProfile.single(&"defense_cell_damage", &"holy")
+	defense_cell_damage_profile = DamageProfile.single(&"defense_cell_damage", &"water")
 	case_traits = ContentCatalog.case_trait_definitions()
 	finding_definitions = ContentCatalog.finding_definitions()
 	reaction_definitions = ContentCatalog.reaction_definitions()
@@ -229,7 +229,7 @@ func _ready() -> void:
 		_enemy_targetable_for_handle,
 		enemy_world.resolve,
 		CombatSpatialGrid.DEFAULT_CELL_SIZE,
-		96.0
+		BodySizeCatalog.maximum_radius(enemy_definitions)
 	)
 	combat_query.set_prepare_callback(_ensure_combat_query)
 	pickup_query = CombatQuery.new().configure(
@@ -1174,7 +1174,7 @@ func start_run(run_context: RunContext = null) -> void:
 		_enemy_targetable_for_handle,
 		enemy_world.resolve,
 		CombatSpatialGrid.DEFAULT_CELL_SIZE,
-		96.0
+		BodySizeCatalog.maximum_radius(enemy_definitions)
 	)
 	pickup_query.configure(
 		topology,
@@ -1467,6 +1467,7 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 	build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, stats.ability_cooldown_multiplier)
 	build_state.set_base(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier)
 	build_state.set_base(RunBuildState.SUPPORT_EFFECT, stats.support_effect_multiplier)
+	build_state.set_base(RunBuildState.MOVEMENT_SPEED, stats.movement_speed)
 	if stats.has_method("bind_run_build"):
 		var equipped_abilities: Array[AbilityDefinition] = []
 		for id in active_loadout.ability_ids:
@@ -1475,17 +1476,25 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 				equipped_abilities.append(ability)
 		stats.call("bind_run_build", build_state, treatment, equipped_abilities)
 	var talent_context := active_run_context
+	var damage_rank := talent_context.talent_rank(&"treatment_damage_training") if talent_context != null else 0
 	var spread_rank := talent_context.talent_rank(&"spread_penetration") if talent_context != null else 0
 	var persistence_rank := talent_context.talent_rank(&"piercing_persistence") if talent_context != null else 0
-	var return_rank := talent_context.talent_rank(&"piercing_return") if talent_context != null else 0
 	var manual_rank := talent_context.talent_rank(&"manual_treatment_aim") if talent_context != null else 0
+	if damage_rank > 0:
+		build_state.add_modifier_dictionary(&"talent_treatment_damage_training", 0, {
+			"stat_id": RunBuildState.TREATMENT_DAMAGE,
+			"operation": &"multiply",
+			"value": TalentDefinition.magnitude_for(&"treatment_damage_training", 1.10),
+			"required_tags": PackedStringArray(["treatment"]),
+		})
 	if treatment.id == &"treatment_spread" and spread_rank > 0:
 		build_state.set_base(RunBuildState.TREATMENT_MAX_HITS, float(treatment.max_hits + spread_rank))
 	if treatment.id == &"treatment_pierce":
 		build_state.set_base(RunBuildState.TREATMENT_BEAM_DURATION, float(persistence_rank) * 0.5)
 		build_state.set_base(RunBuildState.TREATMENT_BEAM_TICK, 0.25)
-		build_state.set_base(RunBuildState.TREATMENT_BEAM_RETURN, 1.0 if return_rank > 0 else 0.0)
+		build_state.set_base(RunBuildState.TREATMENT_BEAM_RETURN, 0.0)
 	build_state.set_base(RunBuildState.TREATMENT_MANUAL_AIM, 1.0 if manual_rank > 0 else 0.0)
+	stats.refresh_resolved_run_build()
 	treatment_controller.configure(treatment, build_state, topology, avatar, _treatment_candidates, ability_controller)
 	treatment_controller.configure_manual_aim(_treatment_aim_world_position, manual_rank > 0)
 	treatment_controller.enabled = true

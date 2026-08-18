@@ -16,7 +16,7 @@ enum Mode {
 @export var research_cost: int = 0
 @export var base_damage: float = 18.0
 @export var base_interval: float = 0.82
-@export var base_range: float = 470.0
+@export var base_range: float = 480.0
 @export var base_targets: int = 1
 @export var base_projectiles: int = 1
 @export var max_hits: int = 1
@@ -47,7 +47,7 @@ static func create(
 	definition.mode = treatment_mode
 	definition.base_damage = damage
 	definition.base_interval = interval
-	definition.base_range = range_value
+	definition.base_range = CombatDistanceScale.quantize_world(range_value)
 	definition.base_projectiles = projectiles
 	definition.max_hits = hit_limit
 	definition.research_cost = unlock_cost
@@ -56,25 +56,29 @@ static func create(
 	definition.damage_profile = profile
 	return definition
 
+
+func base_range_stage() -> int:
+	return CombatDistanceScale.stage_from_world(base_range)
+
 static func catalog() -> Dictionary:
 	return {
 		&"treatment_precision": create(
 			&"treatment_precision", "Präziser Impuls", Mode.PRECISE,
-			18.0, 0.82, 470.0, 1, 1, 0,
+			16.0, 0.82, 480.0, 1, 1, 0,
 			PackedStringArray(["treatment", "precise", "tracking"]),
 			"Verfolgt automatisch das nächste Ziel.", "Gezielte antibiotische Therapie",
 			DamageProfile.single(&"treatment_precision_damage", &"water")
 		),
 		&"treatment_spread": create(
 			&"treatment_spread", "Streuimpuls", Mode.SPREAD,
-			8.0, 1.0, 440.0, 3, 1, 60,
+			7.0, 1.0, 450.0, 3, 1, 60,
 			PackedStringArray(["treatment", "spread", "area"]),
 			"Drei kurze Impulse decken einen breiten Winkel ab.", "Breit angelegte antibiotische Therapie",
 			DamageProfile.single(&"treatment_spread_damage", &"fire")
 		),
 		&"treatment_pierce": create(
 			&"treatment_pierce", "Durchdringender Impuls", Mode.PIERCING,
-			14.0, 1.10, 520.0, 1, 4, 100,
+			14.0, 1.65, 510.0, 1, 4, 100,
 			PackedStringArray(["treatment", "piercing", "line"]),
 			"Durchdringt bis zu vier Bakterien in einer Linie.", "Gewebegängige antibiotische Therapie",
 			DamageProfile.single(&"treatment_pierce_damage", &"wind")

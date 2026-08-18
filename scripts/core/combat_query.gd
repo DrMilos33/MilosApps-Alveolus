@@ -10,7 +10,7 @@ var position_provider: Callable
 var radius_provider: Callable
 var targetable_provider: Callable
 var resolver: Callable
-var maximum_body_radius: float = 96.0
+var maximum_body_radius: float = 0.0
 var _prepare_callback: Callable
 var _preparing: bool = false
 
@@ -21,7 +21,7 @@ func configure(
 	provide_targetable: Callable = Callable(),
 	resolve_handle: Callable = Callable(),
 	cell_size: float = CombatSpatialGrid.DEFAULT_CELL_SIZE,
-	max_body_radius: float = 96.0
+	max_body_radius: float = 0.0
 ) -> CombatQuery:
 	topology = arena_topology
 	position_provider = provide_position
@@ -50,9 +50,11 @@ func nearest(center: Vector2, max_range: float, count: int = 1) -> PackedInt64Ar
 	for handle in candidates:
 		if not _targetable(handle):
 			continue
-		var distance_squared := topology.distance_squared(center, _position(handle))
-		if distance_squared > max_range * max_range:
+		var center_distance := sqrt(topology.distance_squared(center, _position(handle)))
+		var surface_distance := maxf(0.0, center_distance - _radius(handle))
+		if surface_distance > max_range:
 			continue
+		var distance_squared := surface_distance * surface_distance
 		var insertion_index := 0
 		while insertion_index < result_distances.size() and result_distances[insertion_index] <= distance_squared:
 			insertion_index += 1

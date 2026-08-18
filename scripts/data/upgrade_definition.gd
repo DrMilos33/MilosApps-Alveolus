@@ -87,6 +87,28 @@ func configure_preview(
 	preview_context_tags = context_tags.duplicate()
 	return self
 
+
+func heading_component_id(prepared_treatment_id: StringName = &"") -> StringName:
+	## Upgrade cards render the resolved component name as their heading. General
+	## treatment upgrades follow the currently prepared treatment dynamically.
+	if preview_context_tags.has("treatment") and prepared_treatment_id != &"":
+		return prepared_treatment_id
+	if preview_context_tags.has("defense_cell") or id == &"neutrophils":
+		return &"defense_cells"
+	if id == &"mobility":
+		return &"doctor"
+	return required_component_ids[0] if required_component_ids.size() == 1 else &""
+
+
+func resolved_component_name(prepared_treatment: TreatmentDefinition, component_titles: Dictionary = {}) -> String:
+	var component_id := heading_component_id(prepared_treatment.id if prepared_treatment != null else &"")
+	if prepared_treatment != null and component_id == prepared_treatment.id:
+		return prepared_treatment.display_name
+	match component_id:
+		&"defense_cells": return "Abwehrzellen"
+		&"doctor": return "Doctor Milos"
+	return String(component_titles.get(component_id, title))
+
 func path_name() -> String:
 	match path:
 		Path.ANTIBIOTIC:

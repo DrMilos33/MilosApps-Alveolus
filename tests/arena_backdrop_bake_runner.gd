@@ -29,6 +29,8 @@ func _run() -> void:
 	_assert_equal(StringName(initial.get("level_id", &"")), &"intro", "initial bake publishes the configured palette")
 	_assert_equal(backdrop.get_child_count(), 1, "one reusable SubViewport is allocated")
 	_assert_equal(backdrop.get_child(0).get_child_count(), 1, "one reusable offscreen draw canvas is allocated")
+	_assert_true(int(initial.get("seam_segment_count", 0)) > 0, "torus seam is precomputed into static dash segments")
+	_assert_equal(int(initial.get("corner_segment_count", 0)), 8, "four torus corners have two static markers each")
 
 	var viewport_id := int(initial.get("viewport_instance_id", 0))
 	var canvas_id := int(initial.get("canvas_instance_id", 0))
@@ -53,6 +55,7 @@ func _run() -> void:
 		_assert_equal(int(state.get("viewport_instance_id", 0)), viewport_id, "reconfigure %d reuses the SubViewport" % cycle)
 		_assert_equal(int(state.get("canvas_instance_id", 0)), canvas_id, "reconfigure %d reuses the draw canvas" % cycle)
 		_assert_equal(backdrop.get_child_count(), 1, "reconfigure %d does not leak viewport nodes" % cycle)
+		_assert_equal(int(state.get("corner_segment_count", 0)), 8, "reconfigure %d retains the baked torus markers" % cycle)
 
 	# Two configurations before a render frame must coalesce rather than letting
 	# a stale completion publish the wrong level texture.

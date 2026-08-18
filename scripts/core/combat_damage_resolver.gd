@@ -1,12 +1,10 @@
 class_name CombatDamageResolver
 extends RefCounted
 
-const DEFENSE_SCALE := 100.0
-
 
 ## Resolves type resistance first and general defense second. DamageProfile and
 ## ResistanceProfile contain fixed PackedFloat32Array buffers, so this hot path
-## performs a constant seven iterations without dictionaries or allocations.
+## performs a constant four iterations without dictionaries or allocations.
 static func resolve(
 	base_amount: float,
 	damage_profile: DamageProfile,
@@ -24,10 +22,10 @@ static func resolve(
 			var weight := float(damage_profile.weights[type_index])
 			if weight <= 0.0:
 				continue
-			var resistance := float(resistance_profile.values[type_index]) if resistance_profile != null and resistance_profile.values.size() == DamageTypeCatalog.count() else 0.0
-			after_resistance += base_amount * weight * maxf(0.0, 1.0 - resistance)
+			var resistance_multiplier := resistance_profile.multiplier_at(type_index) if resistance_profile != null else 1.0
+			after_resistance += base_amount * weight * resistance_multiplier
 	return after_resistance * defense_multiplier(defense)
 
 
 static func defense_multiplier(defense: float) -> float:
-	return DEFENSE_SCALE / (DEFENSE_SCALE + maxf(defense, 0.0))
+	return MitigationCurve.defense_multiplier(defense)

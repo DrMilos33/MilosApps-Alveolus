@@ -36,6 +36,7 @@ const MARKED_DAMAGE := &"marked_damage"
 const FINDING_PROGRESS := &"finding_progress"
 const SUPPORT_EFFECT := &"support_effect"
 const PICKUP_RANGE := &"pickup_range"
+const MOVEMENT_SPEED := &"movement_speed"
 
 var _base_values: Dictionary = {}
 var _modifiers: Array[ModifierDefinition] = []
@@ -59,8 +60,8 @@ static func from_treatment(definition: TreatmentDefinition) -> RunBuildState:
 		TREATMENT_BEAM_TICK: 0.25,
 		TREATMENT_BEAM_RETURN: 0.0,
 		TREATMENT_MANUAL_AIM: 0.0,
-		DEFENSE_CELL_DAMAGE: 10.0,
-		DEFENSE_CELL_RADIUS: 15.0,
+		DEFENSE_CELL_DAMAGE: 9.0,
+		DEFENSE_CELL_RADIUS: CombatDistanceScale.world_from_stage(1),
 		DEFENSE_CELL_PROJECTILES: 2.0,
 		DEFENSE_CELL_HIT_INTERVAL: 0.1,
 		ACTIVE_COOLDOWN: 1.0,
@@ -213,7 +214,8 @@ func value(stat: StringName, fallback: float = 0.0, context_tags: PackedStringAr
 	if minimum > maximum:
 		# A minimum is the safety boundary when contradictory modifiers exist.
 		maximum = minimum
-	return clampf(resolved, minimum, maximum)
+	resolved = clampf(resolved, minimum, maximum)
+	return CombatDistanceScale.quantize_world(resolved) if CombatDistanceScale.is_staged_stat(stat) else resolved
 
 func value_with(candidate: ModifierDefinition, fallback: float = 0.0, context_tags: PackedStringArray = PackedStringArray()) -> float:
 	if candidate == null:
@@ -252,6 +254,11 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 	var effect_text := "%s%s %s" % [_sign(delta), _formatted_number(absf(delta), definition.preview_decimals), label]
 	var comparison := "%s %s  >  %s %s" % [before_text, comparison_label, after_text, comparison_label]
 	match definition.preview_style:
+		&"distance_stage":
+			var before_stage := CombatDistanceScale.stage_from_world(before)
+			var after_stage := CombatDistanceScale.stage_from_world(after)
+			effect_text = "%s%d %s" % [_sign(float(after_stage - before_stage)), absi(after_stage - before_stage), label]
+			comparison = "%d  >  %d %s" % [before_stage, after_stage, comparison_label]
 		&"tempo":
 			var percent := roundi((1.0 - after / maxf(before, 0.001)) * 100.0)
 			effect_text = "+%d %% Tempo" % percent

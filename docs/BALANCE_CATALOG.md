@@ -1,7 +1,7 @@
 # ALVEOLUS – aktueller Werte- und Ausbaukatalog
 
 **Stand:** 18. August 2026  
-**Geprüfte Codebasis:** Arbeitsbaum auf Basis von `15cef65`  
+**Geprüfte Codebasis:** Architektur-Arbeitsbaum auf Basis von `eb82d72`
 **Zweck:** Verbindliche Ist-Aufnahme für die nächste Balanceiteration.
 
 Dieses Dokument beschreibt implementierte Werte und Auswahlregeln. Es ist noch
@@ -18,9 +18,9 @@ im Kampf ist dagegen vollständig enthalten.
 - Abwehrstoß und Behandlungslinie sind auswählbar. Vier weitere aktive
   Fähigkeiten bleiben mit ihren Werten sichtbar, aber gesperrt.
 - Es gibt derzeit **keine Passivmodule** im aktiven Produktkatalog.
-- Dauerhafte Progression besteht aus sieben globalen Forschungen und vier
+- Dauerhafte Progression besteht aus acht globalen Forschungen und vier
   Rangtalenten in einem Behandlungsbaum.
-- Ein Run enthält 17 verschiedene Ausbauten mit insgesamt 43 möglichen Rängen.
+- Ein Run enthält 18 verschiedene Ausbauten mit insgesamt 46 möglichen Rängen.
 - Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 180 Sekunden.
 
 Die spielernahen Begriffe sind **Leben**, **Schaden**, **Regeneration**,
@@ -35,38 +35,41 @@ IDs oder Save-Kompatibilität sie noch erfordern.
 | Wert | Basis |
 |---|---:|
 | Leben | 100 |
-| Bewegungstempo | 275 px/s |
-| Körperradius | 23 px |
-| Probenradius | 185 px |
+| Bewegungstempo | 250 |
+| Körpergröße | Mittel (separate Größenklasse) |
+| Probenradius | Stufe 6 |
 | Verteidigung | 0 |
 | Regeneration | 0 Leben/s |
 | Schild | 0 |
 | Erfahrungsmultiplikator | 1,00 |
 | Globale Schutzzeit nach einem Gegnertreffer | 0,68 s |
 
-Forschung erhöht diese Basis auf höchstens 109 Leben, 6 Verteidigung,
-0,75 Leben/s Regeneration und 1,15-fache Erfahrung. Die Behandlung erhält
-zusätzlich bis zu 6 Prozent Schaden.
+Forschung erhöht diese Basis auf höchstens 109 Leben, 6 Verteidigungsrating
+(effektiv 5,6 % Minderung), 0,75 Leben/s Regeneration, 1,15-fache Erfahrung
+und 272,5 Bewegung. Die Behandlung erhält zusätzlich bis zu 6 Prozent Schaden.
 
 ### Resistenzen
 
 Positive Werte reduzieren Schaden dieses Typs. Negative Werte sind
 Verwundbarkeiten.
 
-| Feuer | Wasser | Erde | Wind | Blut | Holy | Undead |
-|---:|---:|---:|---:|---:|---:|---:|
-| +5 % | +10 % | +5 % | 0 % | 0 % | +15 % | −10 % |
+| Typ | Rating | Effektiv |
+|---|---:|---:|
+| Feuer | 0 | 0 % |
+| Wasser | +10 | +8,8 % Minderung |
+| Erde | +5 | +4,7 % Minderung |
+| Wind | −10 | −10 % Verwundbarkeit |
 
 ### Schadensberechnung
 
 1. Ein Angriff verteilt seinen Grundschaden über sein Schadenstyp-Profil.
 2. Für jeden Anteil wird die passende Resistenz angewendet.
-3. Danach wirkt allgemeine Verteidigung mit
-   `100 / (100 + Verteidigung)`.
+3. Danach wirkt allgemeine Verteidigung mit derselben degressiven Kurve und
+   einem Cap von 90 Prozent.
 4. Ein vorhandenes Schild absorbiert den verbleibenden Schaden.
 
-Resistenzen sind auf −100 bis +95 Prozent begrenzt. Ein Profil ohne Eintrag für
-einen Typ behandelt diesen Typ neutral.
+Positive Resistenz nutzt ein Cap von 75 Prozent; negative Resistenz bleibt bis
+−100 Prozent linear. Ein Profil ohne Eintrag für einen Typ ist neutral.
 
 ## 3. Schadenstypen
 
@@ -78,9 +81,9 @@ Das Set ist geschlossen und besitzt eine feste technische Reihenfolge:
 | 2 | Wasser | Präziser Impuls |
 | 3 | Erde | Abwehrstoß, Teile der Bakteriengruppe |
 | 4 | Wind | Durchdringender Impuls |
-| 5 | Blut | Bakterium, Teile von Gruppe und Boss |
-| 6 | Holy | Behandlungslinie, Abwehrzellen |
-| 7 | Undead | Kleiner Herd, Teile des Bosses |
+
+`blood`, `holy` und `undead` sind pensionierte Legacy-Authoring-IDs. Sie sind
+nicht aktiv und werden nicht neu verwendet.
 
 Gemischte Profile werden vor der Trefferberechnung auf zusammen 100 Prozent
 normalisiert.
@@ -107,9 +110,9 @@ ohne stabile IDs aus älteren Spielständen umzubenennen.
 
 | Behandlung | Verfügbarkeit | Typ | Schaden | Intervall | Reichweite | Projektile | Treffer je Projektil |
 |---|---|---|---:|---:|---:|---:|---:|
-| Präziser Impuls | sofort | Wasser | 18 | 0,82 s | 470 | 1 | 1 |
-| Streuimpuls | Forschung für 60 | Feuer | 8 je Strahl | 1,00 s | 440 | 3 | 1 |
-| Durchdringender Impuls | Forschung für 100 | Wind | 14 je Treffer | 1,10 s | 520 | 1 | 4 |
+| Präziser Impuls | sofort | Wasser | 16 | 0,82 s | Stufe 16 | 1 | 1 |
+| Streuimpuls | Forschung für 60 | Feuer | 7 je Strahl | 1,00 s | Stufe 15 | 3 | 1 |
+| Durchdringender Impuls | Forschung für 100 | Wind | 14 je Treffer | 1,65 s | Stufe 17 | 1 | 4 |
 
 Besonderheiten:
 
@@ -130,12 +133,12 @@ Besonderheiten:
 
 | Fähigkeit | Status | Zielart | Abklingzeit | Werte | Schadenstyp |
 |---|---|---|---:|---|---|
-| Abwehrstoß | auswählbar | Zielkreis | 14 s | 42 Schaden, 150 Radius, 75 Rückstoß | Erde |
-| Behandlungslinie | auswählbar | Zielrichtung | 18 s | 55 Schaden, 620 Reichweite, 38 Breite | Holy |
-| Fokusfeld | sichtbar gesperrt | Zielkreis | 16 s | 165 Radius, 7 s, Behandlungsschaden ×1,25 | keiner |
+| Abwehrstoß | auswählbar | Zielkreis | 14 s | 38 Schaden, Radiusstufe 5, 75 Rückstoß | Erde |
+| Behandlungslinie | auswählbar | Zielrichtung | 18 s | 50 Schaden, Reichweitenstufe 21, 38 Breite | Wasser |
+| Fokusfeld | sichtbar gesperrt | Zielkreis | 16 s | Radiusstufe 6, 7 s, Behandlungsschaden ×1,25 | keiner |
 | Notfallhilfe | sichtbar gesperrt | selbst | 28 s | +14 Leben, +8 Schild | keiner |
-| Schildfeld | sichtbar gesperrt | Zielkreis | 20 s | 185 Radius, 6 s, Gegnertempo und -schaden ×0,65 | keiner |
-| Probenzug | sichtbar gesperrt | Zielkreis | 18 s | 230 Radius, +6 Befundfortschritt | keiner |
+| Schildfeld | sichtbar gesperrt | Zielkreis | 20 s | Radiusstufe 6, 6 s, Gegnertempo und -schaden ×0,65 | keiner |
+| Probenzug | sichtbar gesperrt | Zielkreis | 18 s | Radiusstufe 8, +6 Befundfortschritt | keiner |
 
 Nur Ausbauten für tatsächlich ausgerüstete aktive Fähigkeiten gelangen in den
 Run-Pool. Für die vier gesperrten Fähigkeiten existieren derzeit keine
@@ -150,7 +153,7 @@ interpretiert werden.
 
 ## 8. Forschung
 
-Alle sieben Forschungen wirken global und benötigen kein ausgerüstetes Modul.
+Alle acht Forschungen wirken global und benötigen kein ausgerüstetes Modul.
 
 | Forschung | Ränge | Kosten je Rang | Wirkung je Rang | Maximum |
 |---|---:|---|---|---|
@@ -159,10 +162,11 @@ Alle sieben Forschungen wirken global und benötigen kein ausgerüstetes Modul.
 | Mehr Erfahrung | 3 | 25 / 55 / 95 | +5 % Erfahrung aus Proben | +15 % |
 | Mehr Verteidigung | 3 | 30 / 60 / 100 | +2 Verteidigung | +6 |
 | Lebensregeneration | 3 | 30 / 60 / 100 | +0,25 Leben/s | +0,75 Leben/s |
+| Bewegungstraining | 3 | 30 / 60 / 100 | +3 % Bewegung | +9 % |
 | Streuimpuls | 1 | 60 | Behandlung freischalten | freigeschaltet |
 | Durchdringender Impuls | 1 | 100 | Behandlung freischalten | freigeschaltet |
 
-Der reguläre Vollausbau kostet insgesamt **1.035 Forschungspunkte**. Im lokalen
+Der reguläre Vollausbau kostet insgesamt **1.225 Forschungspunkte**. Im lokalen
 Testmodus stehen 1.000.000.000 Punkte zur Verfügung; Forschung lässt sich dort
 vollständig zurücksetzen. Die Einführung verwendet ihre feste Lehrkonfiguration
 und übernimmt diese Metawerte nicht.
@@ -171,16 +175,16 @@ und übernimmt diese Metawerte nicht.
 
 | Talent | Max. Rang | Kosten | Voraussetzung | Wirkung |
 |---|---:|---:|---|---|
-| Manuelle Zielsteuerung | 1 | 1 | keine | Alle Behandlungen schießen zur Maus. |
-| Durchdringende Streuung | 3 | 1 je Rang | Manuelle Zielsteuerung | +1 möglicher Gegner je Streuimpuls-Strahl und Rang. |
-| Anhaltender Laser | 2 | 1 je Rang | Manuelle Zielsteuerung | +0,5 s Strahldauer je Rang; Tick alle 0,25 s. |
-| Rückkehrender Laser | 1 | 1 | Anhaltender Laser | Nach der Vorwärtsphase läuft dieselbe Strahlphase rückwärts. |
+| Behandlungsgrundlage | 1 | 1 | keine | +10 % Schaden aller drei Grundbehandlungen. |
+| Durchdringende Streuung | 3 | 1 je Rang | Behandlungsgrundlage | +1 möglicher Gegner je Streuimpuls-Strahl und Rang. |
+| Manuelle Zielsteuerung | 1 | 1 | Behandlungsgrundlage | Alle Behandlungen schießen zur Maus. |
+| Anhaltender Laser | 2 | 1 je Rang | Behandlungsgrundlage | +0,5 s Strahldauer je Rang; Tick alle 0,25 s. |
 
 Der vollständige Baum kostet **7 Talentpunkte**. Bei 0,5 Sekunden Dauer trifft
 eine Phase zu 0,00 und 0,25 Sekunden; bei 1,0 Sekunde zu 0,00, 0,25, 0,50 und
-0,75 Sekunden. Der Rückweg wiederholt diese Tickfolge. Savegame-Version 6 und
-Talentbaum-Revision 3 erstatten alte, nicht mehr passende Talentbelegungen und
-bewahren Meisterschaft.
+0,75 Sekunden. `piercing_return` bleibt entfernt und reserviert. Savegame-
+Version 6 und Talentbaum-Revision 4 setzen Revision-3-Belegungen atomar zurück
+und bewahren Meisterschaft sowie Forschung.
 
 Im lokalen Testmodus stehen 1.000.000.000 Talentpunkte zur Verfügung und der
 Baum kann zurückgesetzt werden.
@@ -191,9 +195,9 @@ Baum kann zurückgesetzt werden.
 
 | Ausbau | Max. Rang | Pro Rang | Voll ausgebaut | Voraussetzung |
 |---|---:|---|---|---|
-| Stärkerer Impuls | 3 | +8 Schaden | +24 Schaden | beliebige Behandlung |
+| Stärkerer Impuls | 3 | +7 Schaden | +21 Schaden | beliebige Behandlung |
 | Schnellere Impulse | 3 | Intervall ×0,84 | Intervall ×0,5927 | beliebige Behandlung |
-| Mehr Reichweite | 2 | +85 Reichweite | +170 | beliebige Behandlung |
+| Mehr Reichweite | 2 | +3 Stufen | +6 Stufen | beliebige Behandlung |
 | Zusätzliches Ziel | 2 | +1 Ziel | +2 Ziele | Präziser Impuls |
 
 ### Abwehrzellen
@@ -201,8 +205,8 @@ Baum kann zurückgesetzt werden.
 | Ausbau | Max. Rang | Pro Rang | Voll ausgebaut | Voraussetzung |
 |---|---:|---|---|---|
 | Abwehrzellen | 1 | System aktivieren | 2 Zellen | keine |
-| Stärkere Abwehrzellen | 3 | +6 Schaden | 28 Schaden | Abwehrzellen |
-| Größere Abwehrzellen | 3 | +4 Trefferradius | 27 Radius | Abwehrzellen |
+| Stärkere Abwehrzellen | 3 | +6 Schaden | 27 Schaden | Abwehrzellen |
+| Größere Abwehrzellen | 3 | +1 Radiusstufe | Stufe 4 | Abwehrzellen |
 | Mehr Abwehrzellen | 2 | +1 Zelle | 4 Zellen | Abwehrzellen |
 
 ### Behandlungsspezifisch
@@ -211,7 +215,7 @@ Baum kann zurückgesetzt werden.
 |---|---:|---|---|---|
 | Ruhiger Fokus | 3 | Schaden ×1,18 | Schaden ×1,6430 | Präziser Impuls |
 | Dichter Streuimpuls | 3 | +1 Projektil | 6 Projektile | Streuimpuls |
-| Kräftigere Streuung | 3 | +3 Schaden | 17 Schaden je Projektil | Streuimpuls |
+| Kräftigere Streuung | 3 | +3 Schaden | 16 Schaden je Projektil | Streuimpuls |
 | Tieferer Impuls | 2 | +2 maximale Treffer | 8 Treffer | Durchdringender Impuls |
 | Stärkere Linie | 3 | +5 Schaden | 29 Schaden je Treffer | Durchdringender Impuls |
 
@@ -219,10 +223,11 @@ Baum kann zurückgesetzt werden.
 
 | Ausbau | Max. Rang | Pro Rang | Voll ausgebaut | Voraussetzung |
 |---|---:|---|---|---|
-| Kräftiger Abwehrstoß | 3 | +14 Schaden | 84 Schaden | Abwehrstoß ausgerüstet |
-| Breiter Abwehrstoß | 2 | +30 Radius | 210 Radius | Abwehrstoß ausgerüstet |
-| Stärkere Behandlungslinie | 3 | +18 Schaden | 109 Schaden | Behandlungslinie ausgerüstet |
+| Kräftiger Abwehrstoß | 3 | +12 Schaden | 74 Schaden | Abwehrstoß ausgerüstet |
+| Breiter Abwehrstoß | 2 | +1 Radiusstufe | Radiusstufe 7 | Abwehrstoß ausgerüstet |
+| Stärkere Behandlungslinie | 3 | +16 Schaden | 98 Schaden | Behandlungslinie ausgerüstet |
 | Breitere Behandlungslinie | 2 | +16 Breite | 70 Breite | Behandlungslinie ausgerüstet |
+| Beweglichkeit | 3 | Bewegung ×1,05 | Bewegung ×1,1576 | Doctor Milos |
 
 Die Spalte `Voll ausgebaut` zeigt jeden Ausbau isoliert auf seinem jeweiligen
 Grundwert. Kombinierte Additionen, Forschungsmultiplikatoren und weitere
@@ -241,9 +246,9 @@ Nach Wahl des Ausbaus `Abwehrzellen` gelten:
 | Wert | Basis | Voll ausgebaut |
 |---|---:|---:|
 | Zellen | 2 | 4 |
-| Schaden je Treffer | 10 Holy | 28 Holy |
-| Trefferradius je Zelle | 15 | 27 |
-| Orbit-Radius um Doctor Milos | 98 px | 98 px |
+| Schaden je Treffer | 9 Wasser | 27 Wasser |
+| Trefferradius je Zelle | Stufe 1 | Stufe 4 |
+| Orbit-Radius um Doctor Milos | interne feste Geometrie | unverändert |
 | Orbit-Geschwindigkeit | 1,7 rad/s | 1,7 rad/s |
 | Kürzestes Trefferintervall | 0,1 s je Zelle | 0,1 s je Zelle |
 | Ziele je Zelle und Tick | höchstens 1 | höchstens 1 |
@@ -257,15 +262,15 @@ Cooldown und verwendet einen generationssicheren Gegnerhandle.
 
 ### Unskalierte Grundwerte
 
-| Gegner | Leben | Tempo | Schaden | Schadenstyp | Proben | Radius | Resistenzen |
+| Gegner | Leben | Tempo | Schaden | Schadenstyp | Proben | Größenklasse | Resistenzen (Rating; positiv effektiv) |
 |---|---:|---:|---:|---|---:|---:|---|
-| Bakterium | 22 | 92 | 2,2 | 100 % Blut | 1 | 18 | Wasser +10 %, Erde −10 % |
-| Bakteriengruppe | 74 | 55 | 5 | 60 % Erde, 40 % Blut | 4 | 30 | Erde +20 %, Feuer −15 % |
-| Kleiner Herd | 180 | 12 | 0 | 100 % Undead | 8 | 38 | Undead +25 %, Holy −20 % |
-| Infektionsherd | 2.200 | 34 | 9 | 40 % Blut, 60 % Undead | 30 | 72 | Blut +15 %, Undead +25 %, Holy −15 % |
+| Bakterium | 22 | 83 | 2,2 | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
+| Bakteriengruppe | 74 | 50 | 5 | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
+| Kleiner Herd | 180 | 12 | 0 | 100 % Wind | 8 | Groß | Wind +25 (+18,8 %), Wasser −20 |
+| Infektionsherd | 2.200 | 34 | 9 | 40 % Feuer, 60 % Wind | 30 | Boss | Feuer +15 (+12,5 %), Wind +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
-erscheint er mit 180 Leben in 390 beziehungsweise 475 Pixel Abstand, bewegt
+erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
 sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
 Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
 

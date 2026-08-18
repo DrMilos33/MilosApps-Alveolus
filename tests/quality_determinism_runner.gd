@@ -163,7 +163,7 @@ func _apply_input_trace(frame: int) -> Vector2:
 
 func _apply_avatar_input(game: Node, direction: Vector2) -> void:
 	game.avatar.global_position = game.topology.wrap_position(
-		game.avatar.global_position + direction * TherapyAvatar.MOVE_SPEED * FIXED_DELTA
+		game.avatar.global_position + direction * game.stats.movement_speed * FIXED_DELTA
 	)
 	game.avatar.reset_physics_interpolation()
 

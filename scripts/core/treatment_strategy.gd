@@ -29,13 +29,15 @@ func ranked_targets(
 	for enemy in candidates:
 		if not is_instance_valid(enemy) or not enemy.has_method("is_targetable") or not enemy.is_targetable():
 			continue
-		var distance_squared := topology.distance_squared(origin, enemy.global_position)
-		if distance_squared > max_range * max_range:
+		var center_distance := sqrt(topology.distance_squared(origin, enemy.global_position))
+		var body_radius := maxf(float(enemy.definition.radius), 0.0) if enemy.definition != null else 0.0
+		var surface_distance := maxf(0.0, center_distance - body_radius)
+		if surface_distance > max_range:
 			continue
 		var priority_bonus := 0.0
 		if effect_resolver != null and effect_resolver.has_method("treatment_target_priority_bonus"):
 			priority_bonus = float(effect_resolver.treatment_target_priority_bonus(enemy.global_position))
-		var score := distance_squared - priority_bonus
+		var score := surface_distance * surface_distance - priority_bonus
 		var insertion_index := 0
 		while insertion_index < ranked.size() and float(ranked[insertion_index].score) <= score:
 			insertion_index += 1

@@ -2,16 +2,13 @@ class_name DamageTypeCatalog
 extends RefCounted
 
 ## The numeric order is a runtime contract. Profiles compile their authoring
-## dictionaries into this fixed seven-value layout so resolving a hit performs
+## dictionaries into this fixed four-value layout so resolving a hit performs
 ## no dictionary lookups or temporary allocations.
 enum Type {
 	FIRE,
 	WATER,
 	EARTH,
 	WIND,
-	BLOOD,
-	HOLY,
-	UNDEAD,
 	COUNT,
 }
 
@@ -20,10 +17,9 @@ const ALL_IDS: Array[StringName] = [
 	&"water",
 	&"earth",
 	&"wind",
-	&"blood",
-	&"holy",
-	&"undead",
 ]
+
+const RETIRED_LEGACY_IDS: Array[StringName] = [&"blood", &"holy", &"undead"]
 
 
 static func definitions() -> Array[DamageTypeDefinition]:
@@ -32,9 +28,6 @@ static func definitions() -> Array[DamageTypeDefinition]:
 		DamageTypeDefinition.create(&"water", "Wasser", Type.WATER),
 		DamageTypeDefinition.create(&"earth", "Erde", Type.EARTH),
 		DamageTypeDefinition.create(&"wind", "Wind", Type.WIND),
-		DamageTypeDefinition.create(&"blood", "Blut", Type.BLOOD),
-		DamageTypeDefinition.create(&"holy", "Holy", Type.HOLY),
-		DamageTypeDefinition.create(&"undead", "Undead", Type.UNDEAD),
 	]
 
 
@@ -59,9 +52,6 @@ static func index_of(id: StringName) -> int:
 		&"water": return Type.WATER
 		&"earth": return Type.EARTH
 		&"wind": return Type.WIND
-		&"blood": return Type.BLOOD
-		&"holy": return Type.HOLY
-		&"undead": return Type.UNDEAD
 	return -1
 
 
@@ -75,7 +65,18 @@ static func display_name(id: StringName) -> String:
 		&"water": return "Wasser"
 		&"earth": return "Erde"
 		&"wind": return "Wind"
-		&"blood": return "Blut"
-		&"holy": return "Holy"
-		&"undead": return "Undead"
 	return "Unbekannt"
+
+
+static func is_retired_legacy_id(id: StringName) -> bool:
+	return RETIRED_LEGACY_IDS.has(id)
+
+
+static func canonicalize_legacy_authoring_id(id: StringName) -> StringName:
+	## This is deliberately not part of index_of(). New authoring data must use
+	## one of the four active IDs; only explicit legacy import paths may call it.
+	match id:
+		&"blood": return &"fire"
+		&"holy": return &"water"
+		&"undead": return &"wind"
+	return id

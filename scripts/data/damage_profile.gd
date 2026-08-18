@@ -3,9 +3,18 @@ extends Resource
 
 @export var id: StringName
 @export var weights: PackedFloat32Array = PackedFloat32Array()
+@export var validation_errors: PackedStringArray = PackedStringArray()
 
 
 static func from_components(profile_id: StringName, components: Dictionary) -> DamageProfile:
+	return _compile(profile_id, components, false)
+
+
+static func from_legacy_authoring_components(profile_id: StringName, components: Dictionary) -> DamageProfile:
+	return _compile(profile_id, components, true)
+
+
+static func _compile(profile_id: StringName, components: Dictionary, canonicalize_legacy: bool) -> DamageProfile:
 	var profile := DamageProfile.new()
 	profile.id = profile_id
 	profile.weights.resize(DamageTypeCatalog.count())
@@ -13,8 +22,11 @@ static func from_components(profile_id: StringName, components: Dictionary) -> D
 	var total := 0.0
 	for type_id_value in components:
 		var type_id := StringName(str(type_id_value))
+		if canonicalize_legacy:
+			type_id = DamageTypeCatalog.canonicalize_legacy_authoring_id(type_id)
 		var type_index := DamageTypeCatalog.index_of(type_id)
 		if type_index < 0:
+			profile.validation_errors.append("unknown_damage_type:%s" % String(type_id_value))
 			continue
 		var weight := maxf(float(components[type_id_value]), 0.0)
 		profile.weights[type_index] += weight
@@ -30,7 +42,7 @@ static func single(profile_id: StringName, type_id: StringName) -> DamageProfile
 
 
 func is_valid() -> bool:
-	if id == &"" or weights.size() != DamageTypeCatalog.count():
+	if id == &"" or not validation_errors.is_empty() or weights.size() != DamageTypeCatalog.count():
 		return false
 	var total := 0.0
 	for weight in weights:

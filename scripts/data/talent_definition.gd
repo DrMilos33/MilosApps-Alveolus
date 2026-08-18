@@ -79,12 +79,13 @@ func total_rank_cost() -> int:
 static func definitions() -> Array[TalentDefinition]:
 	return [
 		create(
-			&"manual_treatment_aim",
-			"Manuelle Zielsteuerung",
-			"Alle Behandlungen schießen in Richtung der Maus statt automatisch auf das nächste Ziel.",
+			&"treatment_damage_training",
+			"Behandlungsgrundlage",
+			"Erhöht den Schaden aller drei Grundbehandlungen um 10 %.",
 			Category.DEPLOYMENT,
 			1,
-			&"manual_treatment_aim"
+			&"treatment_damage_multiplier",
+			1.10
 		).place_in_tree(0, 1),
 		create(
 			&"spread_penetration",
@@ -94,10 +95,20 @@ static func definitions() -> Array[TalentDefinition]:
 			1,
 			&"spread_max_hits_per_rank",
 			1.0,
-			PackedStringArray(["manual_treatment_aim"]),
+			PackedStringArray(["treatment_damage_training"]),
 			3,
 			PackedInt32Array([1, 1, 1])
 		).place_in_tree(1, 0),
+		create(
+			&"manual_treatment_aim",
+			"Manuelle Zielsteuerung",
+			"Alle Behandlungen schießen in Richtung der Maus statt automatisch auf das nächste Ziel.",
+			Category.DEPLOYMENT,
+			1,
+			&"manual_treatment_aim",
+			1.0,
+			PackedStringArray(["treatment_damage_training"])
+		).place_in_tree(1, 1),
 		create(
 			&"piercing_persistence",
 			"Anhaltender Laser",
@@ -106,20 +117,10 @@ static func definitions() -> Array[TalentDefinition]:
 			1,
 			&"piercing_duration_per_rank",
 			0.5,
-			PackedStringArray(["manual_treatment_aim"]),
+			PackedStringArray(["treatment_damage_training"]),
 			2,
 			PackedInt32Array([1, 1])
 		).place_in_tree(1, 2),
-		create(
-			&"piercing_return",
-			"Rückkehrender Laser",
-			"Der durchdringende Laser kehrt nach seiner Vorwärtsphase zurück.",
-			Category.DEPLOYMENT,
-			1,
-			&"piercing_return",
-			1.0,
-			PackedStringArray(["piercing_persistence"])
-		).place_in_tree(2, 2),
 	]
 
 

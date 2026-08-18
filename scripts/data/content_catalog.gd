@@ -55,10 +55,10 @@ static func tutorial_hint_definitions() -> Dictionary:
 static func enemy_definitions() -> Dictionary:
 	return {
 		&"pneumococcus": EnemyDefinition.create(
-			&"pneumococcus", "Bakterium", 22.0, 92.0, 2.2, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
+			&"pneumococcus", "Bakterium", 22.0, 83.0, 2.2, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
 		),
 		&"bacterial_cluster": EnemyDefinition.create(
-			&"bacterial_cluster", "Bakteriengruppe", 74.0, 55.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"
+			&"bacterial_cluster", "Bakteriengruppe", 74.0, 50.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"
 		),
 		&"minor_focus": EnemyDefinition.create(
 			&"minor_focus", "Kleiner Herd", 180.0, 12.0, 0.0, 8, 38.0, Color("9a5bbb"), false, &"minor_focus", &"infection_focus", "Kleiner Infektionsherd"
@@ -67,6 +67,38 @@ static func enemy_definitions() -> Dictionary:
 			&"infection_focus", "Infektionsherd", 2200.0, 34.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
 		)
 	}
+
+
+static func validate_combat_profiles(
+	enemies: Dictionary = {},
+	treatments: Dictionary = {},
+	abilities: Dictionary = {}
+) -> PackedStringArray:
+	var enemy_catalog := enemy_definitions() if enemies.is_empty() else enemies
+	var treatment_catalog := TreatmentDefinition.catalog() if treatments.is_empty() else treatments
+	var ability_catalog := AbilityDefinition.catalog() if abilities.is_empty() else abilities
+	var errors := PackedStringArray()
+	for id in enemy_catalog:
+		var enemy := enemy_catalog[id] as EnemyDefinition
+		if enemy == null or enemy.damage_profile == null or not enemy.damage_profile.is_valid():
+			errors.append("enemy:%s:damage_profile" % String(id))
+		if enemy == null or enemy.resistance_profile == null or not enemy.resistance_profile.is_valid():
+			errors.append("enemy:%s:resistance_profile" % String(id))
+	for id in treatment_catalog:
+		var treatment := treatment_catalog[id] as TreatmentDefinition
+		if treatment == null or treatment.damage_profile == null or not treatment.damage_profile.is_valid():
+			errors.append("treatment:%s:damage_profile" % String(id))
+	for id in ability_catalog:
+		var ability := ability_catalog[id] as AbilityDefinition
+		if ability == null:
+			errors.append("ability:%s:definition" % String(id))
+			continue
+		var deals_damage := float(ability.parameters.get("damage", 0.0)) > 0.0
+		if deals_damage and (ability.damage_profile == null or not ability.damage_profile.is_valid()):
+			errors.append("ability:%s:damage_profile" % String(id))
+		elif ability.damage_profile != null and not ability.damage_profile.is_valid():
+			errors.append("ability:%s:invalid_optional_damage_profile" % String(id))
+	return errors
 
 static func discovery_definitions() -> Dictionary:
 	var enemies := enemy_definitions()
@@ -103,7 +135,7 @@ static func discovery_definitions() -> Dictionary:
 		&"character_stats": DiscoveryDefinition.create(
 			&"character_stats", &"catalog", "Doctor Milos",
 			"Der beste Doctor mit Bandana.",
-			"GRUNDWERTE\n100 Leben · Bewegung 275 · Schaden 18 · Intervall 0,82 s · Reichweite 470 · 1 Ziel · Probenradius 185. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", ""
+			"GRUNDWERTE\n100 Leben · Bewegung 250 · Schaden 16 · Intervall 0,82 s · Reichweite Stufe 16 · 1 Ziel · Probenradius Stufe 6. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", ""
 		),
 		&"patient_stability": DiscoveryDefinition.create(
 			&"patient_stability", &"run_started", "Leben",
@@ -118,7 +150,7 @@ static func discovery_definitions() -> Dictionary:
 		&"neutrophil_orbit": DiscoveryDefinition.create(
 			&"neutrophil_orbit", &"upgrade_applied", "Abwehrzellen",
 			"Neutrophile Granulozyten gehören zur angeborenen Immunabwehr und reagieren früh auf Bakterien.",
-			"2 Abwehrzellen · 10 Schaden bei Berührung · Treffer höchstens alle 0,1 s je Zelle.", &"avatar", 70, &"therapie", &"immune_cell", "Neutrophile Granulozyten"
+			"2 Abwehrzellen · 9 Schaden bei Berührung · Treffer höchstens alle 0,1 s je Zelle.", &"avatar", 70, &"therapie", &"immune_cell", "Neutrophile Granulozyten"
 		),
 		&"supportive_oxygenation": DiscoveryDefinition.create(
 			&"supportive_oxygenation", &"upgrade_applied", "Regeneration",
@@ -169,28 +201,29 @@ static func arena_visual_definitions() -> Dictionary:
 static func upgrade_definitions() -> Array[UpgradeDefinition]:
 	var treatments: Array[StringName] = [&"treatment_precision", &"treatment_spread", &"treatment_pierce"]
 	return [
-		_run_upgrade(&"potency", "Stärkerer Impuls", "+8 Schaden pro Treffer.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"damage", 8.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 8.0, &"delta", "Schaden", "Schaden", 18.0, 0, &"enemy", PackedStringArray(["treatment"])),
+		_run_upgrade(&"potency", "Stärkerer Impuls", "+7 Schaden pro Treffer.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"damage", 7.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 16.0, 0, &"enemy", PackedStringArray(["treatment"])),
 		_run_upgrade(&"rhythm", "Schnellere Impulse", "16 % häufigere Anwendung.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"cooldown_multiplier", 0.84, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"multiply", 0.84, &"tempo", "Tempo", "Intervall", 0.82, 2, &"", PackedStringArray(["treatment"])),
-		_run_upgrade(&"penetration", "Mehr Reichweite", "+85 Reichweite.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"range", 85.0, "Gewebegängigkeit", treatments, [&"treatment", &"range"], RunBuildState.TREATMENT_RANGE, &"add", 85.0, &"delta", "Reichweite", "Reichweite", 470.0, 0, &"enemy", PackedStringArray(["treatment"])),
+		_run_upgrade(&"penetration", "Mehr Reichweite", "+3 Reichweitenstufen.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"range", 90.0, "Gewebegängigkeit", treatments, [&"treatment", &"range"], RunBuildState.TREATMENT_RANGE, &"add", 90.0, &"distance_stage", "Stufen", "Reichweitenstufen", 480.0, 0, &"enemy", PackedStringArray(["treatment"])),
 		_run_upgrade(&"parallel_sites", "Zusätzliches Ziel", "Ein zusätzliches Ziel je Impuls.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"targets", 1.0, "Parallele Wirkorte", [&"treatment_precision"], [&"precise", &"targets"], RunBuildState.TREATMENT_TARGETS, &"add", 1.0, &"count", "Projektil", "Ziele", 1.0, 0, &"enemy", PackedStringArray(["precise"])),
 		UpgradeDefinition.create(&"neutrophils", "Abwehrzellen", "Zwei Abwehrzellen umkreisen Doctor Milos.", UpgradeDefinition.Path.IMMUNE, 1, &"immune_level", 1.0, "Neutrophile Rekrutierung"),
-		_run_upgrade(&"phagocytosis", "Stärkere Abwehrzellen", "+6 Schaden je Treffer.", UpgradeDefinition.Path.IMMUNE, 3, &"immune_damage", 6.0, "Effiziente Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 6.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]),
-		_run_upgrade(&"defense_cell_radius", "Größere Abwehrzellen", "+4 Trefferradius.", UpgradeDefinition.Path.IMMUNE, 3, &"run_modifier", 4.0, "Erweiterte Zellreichweite", [], [&"defense_cell", &"area"], RunBuildState.DEFENSE_CELL_RADIUS, &"add", 4.0, &"delta", "Radius", "Radius", 15.0, 0, &"avatar", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]),
+		_run_upgrade(&"phagocytosis", "Stärkere Abwehrzellen", "+6 Schaden je Treffer.", UpgradeDefinition.Path.IMMUNE, 3, &"immune_damage", 6.0, "Effiziente Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 6.0, &"delta", "Schaden", "Schaden", 9.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]),
+		_run_upgrade(&"defense_cell_radius", "Größere Abwehrzellen", "+1 Radiusstufe.", UpgradeDefinition.Path.IMMUNE, 3, &"run_modifier", 30.0, "Erweiterte Zellreichweite", [], [&"defense_cell", &"area"], RunBuildState.DEFENSE_CELL_RADIUS, &"add", 30.0, &"distance_stage", "Stufe", "Radiusstufen", 30.0, 0, &"avatar", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]),
 		_run_upgrade(&"defense_cell_projectiles", "Mehr Abwehrzellen", "+1 Projektil.", UpgradeDefinition.Path.IMMUNE, 2, &"run_modifier", 1.0, "Zusätzliche Abwehrzelle", [], [&"defense_cell", &"projectiles"], RunBuildState.DEFENSE_CELL_PROJECTILES, &"add", 1.0, &"count", "Projektil", "Projektile", 2.0, 0, &"avatar", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]),
 
 		# Behandlungsspezifische Angebote. Nur die vorbereitete Grundbehandlung
 		# kann sie ziehen.
-		_run_upgrade(&"precision_refinement", "Ruhiger Fokus", "+18 % Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 1.18, "Präzisionssteigerung", [&"treatment_precision"], [&"precise", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"multiply", 1.18, &"percent", "Schaden", "Schaden", 18.0, 1, &"enemy", PackedStringArray(["precise"])),
+		_run_upgrade(&"precision_refinement", "Ruhiger Fokus", "+18 % Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 1.18, "Präzisionssteigerung", [&"treatment_precision"], [&"precise", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"multiply", 1.18, &"percent", "Schaden", "Schaden", 16.0, 1, &"enemy", PackedStringArray(["precise"])),
 		_run_upgrade(&"spread_density", "Dichter Streuimpuls", "+1 Projektil.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 1.0, "Erweiterte Wirkverteilung", [&"treatment_spread"], [&"spread", &"area"], RunBuildState.TREATMENT_PROJECTILES, &"add", 1.0, &"count", "Projektil", "Projektile", 3.0, 0, &"enemy", PackedStringArray(["spread"])),
-		_run_upgrade(&"spread_effect", "Kräftigere Streuung", "+3 Schaden pro Projektil.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 3.0, "Breitenwirkung", [&"treatment_spread"], [&"spread", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 8.0, 0, &"enemy", PackedStringArray(["spread"])),
+		_run_upgrade(&"spread_effect", "Kräftigere Streuung", "+3 Schaden pro Projektil.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 3.0, "Breitenwirkung", [&"treatment_spread"], [&"spread", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 7.0, 0, &"enemy", PackedStringArray(["spread"])),
 		_run_upgrade(&"pierce_depth", "Tieferer Impuls", "+2 Durchdringungen.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"run_modifier", 2.0, "Erhöhte Gewebegängigkeit", [&"treatment_pierce"], [&"piercing", &"line"], RunBuildState.TREATMENT_MAX_HITS, &"add", 2.0, &"count", "Durchdringungen", "Treffer", 4.0, 0, &"enemy", PackedStringArray(["piercing"])),
 		_run_upgrade(&"pierce_effect", "Stärkere Linie", "+5 Schaden pro Treffer.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 5.0, "Linienwirkung", [&"treatment_pierce"], [&"piercing", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 5.0, &"delta", "Schaden", "Schaden", 14.0, 0, &"enemy", PackedStringArray(["piercing"])),
 
 		# Aktive Eingriffe verbessern nur tatsächlich vorbereitete Q/E-Slots.
-		_run_upgrade(&"burst_effect", "Kräftiger Abwehrstoß", "+14 Schaden.", UpgradeDefinition.Path.IMMUNE, 3, &"run_modifier", 14.0, "Akute Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 14.0, &"delta", "Schaden", "Schaden", 42.0, 0, &"enemy", PackedStringArray(["active", "defense"])),
-		_run_upgrade(&"burst_radius", "Breiter Abwehrstoß", "+30 Radius.", UpgradeDefinition.Path.IMMUNE, 2, &"run_modifier", 30.0, "Ausgedehnte Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"area"], RunBuildState.ABILITY_RADIUS, &"add", 30.0, &"delta", "Radius", "Radius", 150.0, 0, &"ability", PackedStringArray(["active", "defense", "area"])),
-		_run_upgrade(&"line_effect", "Stärkere Behandlungslinie", "+18 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 18.0, "Linienverstärkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 18.0, &"delta", "Schaden", "Schaden", 55.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])),
+		_run_upgrade(&"burst_effect", "Kräftiger Abwehrstoß", "+12 Schaden.", UpgradeDefinition.Path.IMMUNE, 3, &"run_modifier", 12.0, "Akute Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 12.0, &"delta", "Schaden", "Schaden", 38.0, 0, &"enemy", PackedStringArray(["active", "defense"])),
+		_run_upgrade(&"burst_radius", "Breiter Abwehrstoß", "+1 Radiusstufe.", UpgradeDefinition.Path.IMMUNE, 2, &"run_modifier", 30.0, "Ausgedehnte Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"area"], RunBuildState.ABILITY_RADIUS, &"add", 30.0, &"distance_stage", "Stufe", "Radiusstufen", 150.0, 0, &"ability", PackedStringArray(["active", "defense", "area"])),
+		_run_upgrade(&"line_effect", "Stärkere Behandlungslinie", "+16 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 16.0, "Linienverstärkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 16.0, &"delta", "Schaden", "Schaden", 50.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])),
 		_run_upgrade(&"line_width", "Breitere Behandlungslinie", "+16 Breite.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"run_modifier", 16.0, "Erweiterte Behandlungslinie", [&"ability_treatment_line"], [&"active", &"line", &"area"], RunBuildState.ABILITY_WIDTH, &"add", 16.0, &"delta", "Breite", "Breite", 38.0, 0, &"ability", PackedStringArray(["active", "treatment", "line"])),
+		_run_upgrade(&"mobility", "Beweglichkeit", "+5 % Bewegung.", UpgradeDefinition.Path.SUPPORT, 3, &"run_modifier", 1.05, "Mobilitätsreserve", [], [&"movement"], RunBuildState.MOVEMENT_SPEED, &"multiply", 1.05, &"percent", "Bewegung", "Bewegung", 250.0, 0, &"avatar", PackedStringArray()),
 	]
 
 static func _run_upgrade(
@@ -233,6 +266,7 @@ static func research_definitions() -> Array[ResearchDefinition]:
 		ResearchDefinition.create(&"experience_gain", "Mehr Erfahrung", "+5 % Erfahrung durch Proben je Rang", PackedInt32Array([25, 55, 95]), &"experience_multiplier", 0.05),
 		ResearchDefinition.create(&"defense_training", "Mehr Verteidigung", "+2 Verteidigung je Rang", PackedInt32Array([30, 60, 100]), &"defense", 2.0),
 		ResearchDefinition.create(&"life_regeneration", "Lebensregeneration", "+0,25 Leben pro Sekunde je Rang", PackedInt32Array([30, 60, 100]), &"life_regeneration", 0.25),
+		ResearchDefinition.create(&"movement_training", "Bewegungstraining", "+3 % Bewegung je Rang", PackedInt32Array([30, 60, 100]), &"movement_speed_multiplier", 0.03),
 		ResearchDefinition.create(&"unlock_spread_treatment", "Streuimpuls", "Schaltet die streuende Grundbehandlung frei", PackedInt32Array([60]), &"unlock", 1.0).configure_unlock(&"treatment_spread", &"treatment"),
 		ResearchDefinition.create(&"unlock_piercing_treatment", "Durchdringender Impuls", "Schaltet die durchdringende Grundbehandlung frei", PackedInt32Array([100]), &"unlock", 1.0).configure_unlock(&"treatment_pierce", &"treatment"),
 	]
@@ -244,8 +278,8 @@ static func loadout_module_definitions() -> Dictionary:
 		&"treatment_pierce": LoadoutModuleDefinition.create(&"treatment_pierce", "Durchdringender Impuls", "Durchquert mehrere Gegner in einer Linie.", LoadoutModuleDefinition.Kind.TREATMENT, 2, [&"treatment", &"pierce"], &"unlock_piercing_treatment"),
 		&"ability_focus_field": LoadoutModuleDefinition.create(&"ability_focus_field", "Fokusfeld", "Behandlung im Zielgebiet verursacht 25 % mehr Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"focus", &"control"], &"", true),
 		&"ability_emergency_support": LoadoutModuleDefinition.create(&"ability_emergency_support", "Notfallhilfe", "Stellt 14 Leben wieder her und gewährt 8 Schild.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"support"], &"", true),
-		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Abwehrstoß", "42 AoE-Schaden und Rückstoß im Zielbereich.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"control"], &"unlock_defense_burst"),
-		&"ability_treatment_line": LoadoutModuleDefinition.create(&"ability_treatment_line", "Behandlungslinie", "55 Schaden in einer durchdringenden Linie.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"pierce"], &"unlock_treatment_line"),
+		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Abwehrstoß", "38 AoE-Schaden und Rückstoß im Zielbereich.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"control"], &"unlock_defense_burst"),
+		&"ability_treatment_line": LoadoutModuleDefinition.create(&"ability_treatment_line", "Behandlungslinie", "50 Schaden in einer durchdringenden Linie.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"pierce"], &"unlock_treatment_line"),
 		&"ability_protection_field": LoadoutModuleDefinition.create(&"ability_protection_field", "Schildfeld", "Gegner im Feld: −35 % Tempo und Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control", &"support"], &"unlock_protection_field"),
 		&"ability_sample_pull": LoadoutModuleDefinition.create(&"ability_sample_pull", "Probenzug", "Zieht Proben an und beschleunigt kurz den Befund.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"samples", &"diagnosis"], &"unlock_sample_pull"),
 	}

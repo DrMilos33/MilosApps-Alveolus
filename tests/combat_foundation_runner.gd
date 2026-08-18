@@ -54,6 +54,7 @@ func _run() -> void:
 	_test_catalogs()
 	_test_build_state()
 	_test_runtime()
+	_test_surface_range_contract()
 	await _test_abilities()
 	await _test_treatments()
 	_test_enemy_status_contract()
@@ -79,14 +80,14 @@ func _test_build_state() -> void:
 	var build := RunBuildState.from_treatment(treatment)
 	build.add_modifier(ModifierDefinition.create(&"flat", RunBuildState.TREATMENT_DAMAGE, ModifierDefinition.Operation.ADD, 8.0))
 	build.add_modifier(ModifierDefinition.create(&"scale", RunBuildState.TREATMENT_DAMAGE, ModifierDefinition.Operation.MULTIPLY, 1.5))
-	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE), 39.0, "Adds are resolved before multipliers")
+	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE), 36.0, "Adds are resolved before multipliers")
 	build.add_modifier(ModifierDefinition.create(&"cap", RunBuildState.TREATMENT_DAMAGE, ModifierDefinition.Operation.CLAMP_MAX, 35.0))
 	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE), 35.0, "Upper clamp is deterministic")
 	var precise_only := ModifierDefinition.create(&"tagged", RunBuildState.TREATMENT_DAMAGE, ModifierDefinition.Operation.ADD, 10.0, &"tag_source", PackedStringArray(["precise"]))
 	build.add_modifier(precise_only)
 	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, PackedStringArray(["spread"])), 35.0, "Missing tags exclude a modifier")
 	build.remove_modifier(&"cap")
-	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, treatment.tags), 54.0, "Matching tags apply a modifier")
+	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, treatment.tags), 51.0, "Matching tags apply a modifier")
 	_assert_equal(build.remove_source(&"tag_source"), 1, "Modifiers can be cleared by source")
 	var preview := ModifierDefinition.create(&"preview", RunBuildState.TREATMENT_INTERVAL, ModifierDefinition.Operation.MULTIPLY, 0.8)
 	_assert_near(build.value_with(preview, treatment.base_interval), 0.656, "Preview uses the same resolver without mutating state")
@@ -113,6 +114,29 @@ func _test_runtime() -> void:
 	_assert_near(runtime.cooldown_remaining, 1.5, "Finding readiness can halve remaining cooldown")
 	runtime.reset()
 	_assert_true(runtime.is_ready(), "Cooldown reset makes ability ready")
+
+
+func _test_surface_range_contract() -> void:
+	var enemy := FakeEnemy.new()
+	enemy.definition.radius = 20.0
+	enemy.global_position = Vector2(118.0, 0.0)
+	get_root().add_child(enemy)
+	var strategy := TreatmentStrategy.new()
+	var ranked := strategy.ranked_targets(Vector2.ZERO, [enemy], topology, 100.0)
+	_assert_equal(ranked.size(), 1, "Treatment range includes a body edge inside range when its center is outside")
+	var handle := EntityHandle.make(0, 1)
+	var query := CombatQuery.new().configure(
+		topology,
+		func(_handle: int) -> Vector2: return enemy.global_position,
+		func(_handle: int) -> float: return enemy.definition.radius,
+		func(_handle: int) -> bool: return true,
+		Callable(),
+		64.0,
+		20.0
+	)
+	query.rebuild(PackedInt64Array([handle]))
+	_assert_equal(query.nearest(Vector2.ZERO, 100.0, 1), PackedInt64Array([handle]), "Nearest query ranks and filters by body-surface distance")
+	enemy.free()
 
 func _test_abilities() -> void:
 	var avatar := FakeAvatar.new()
@@ -149,7 +173,7 @@ func _test_abilities() -> void:
 	enemies = [close_enemy]
 	controller.equip(AbilityController.SLOT_Q, abilities[&"ability_defense_burst"])
 	controller.use_slot(AbilityController.SLOT_Q, Vector2(-480.0, 0.0))
-	_assert_near(close_enemy.health, 158.0, "Defense burst deals 42 area damage")
+	_assert_near(close_enemy.health, 162.0, "Defense burst deals 38 area damage")
 	_assert_true(close_enemy.displacement.length() > 70.0, "Defense burst applies short knockback")
 
 	close_enemy.position = Vector2(-450.0, 0.0)
@@ -176,7 +200,26 @@ func _test_abilities() -> void:
 	close_enemy.position = Vector2(-470.0, 0.0)
 	controller.equip(AbilityController.SLOT_Q, abilities[&"ability_treatment_line"])
 	controller.use_slot(AbilityController.SLOT_Q, Vector2(-450.0, 0.0))
-	_assert_near(close_enemy.health, 145.0, "Treatment line deals 55 damage through the torus seam")
+	_assert_near(close_enemy.health, 150.0, "Treatment line deals 50 damage through the torus seam")
+
+	close_enemy.health = 200.0
+	var fallback_burst := AbilityDefinition.create(
+		&"fallback_burst", "Fallback burst", AbilityDefinition.TargetMode.CURSOR_AREA,
+		0.0, &"defense_burst", {}, 0, PackedStringArray(["active", "defense"])
+	)
+	controller.equip(AbilityController.SLOT_Q, fallback_burst)
+	var burst_result := controller.execute_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2(-480.0, 0.0), 1001))
+	_assert_near(float(burst_result.values.damage), 38.0, "Defense-burst fallback uses the current 38 damage contract")
+	_assert_near(burst_result.radius, CombatDistanceScale.world_from_stage(5), "Defense-burst fallback radius comes from central distance stage five")
+
+	close_enemy.health = 200.0
+	var fallback_line := AbilityDefinition.create(
+		&"fallback_line", "Fallback line", AbilityDefinition.TargetMode.CURSOR_DIRECTION,
+		0.0, &"treatment_line", {}, 0, PackedStringArray(["active", "treatment", "line"])
+	)
+	controller.equip(AbilityController.SLOT_Q, fallback_line)
+	var line_result := controller.execute_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2(-450.0, 0.0), 1002))
+	_assert_near(float(line_result.values.damage), 50.0, "Treatment-line fallback uses the current 50 damage contract")
 
 	controller.queue_free()
 	avatar.queue_free()

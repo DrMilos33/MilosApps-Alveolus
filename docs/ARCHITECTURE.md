@@ -154,17 +154,21 @@ active abilities. Focus Field, Emergency Aid, Protection Field and Sample Pull
 remain visible but unavailable. The UI may explain a locked definition, but it
 must never infer availability from the mere existence of a stable content ID.
 
-There are seven global research definitions. Five are applied directly through
+There are eight global research definitions. Six are applied directly through
 `PlayerStats.apply_meta_progression()` to maximum life, treatment damage,
-sample experience, defense and life regeneration. Two unlock the additional
-treatments. None of these effects depends on an equipped passive module.
+sample experience, defense, life regeneration and movement speed. Two unlock
+the additional treatments. None of these effects depends on an equipped
+passive module. `RunBuildState.MOVEMENT_SPEED` is the common research/run-build
+surface; `TherapyAvatar` reads its resolved fixed-step value from `PlayerStats`.
 
-Savegame version 6 and `talent_tree_revision` 3 are the current outer formats.
-The treatment tree contains exactly four ranked definitions: manual treatment
-aim, Spread penetration, Piercing persistence and Piercing return. Loading an
-older tree revision discards or refunds the obsolete selection atomically while
-preserving mastery and earned points. The inner loadout adapter can retain its
-older schema version independently; it is not the savegame version.
+Savegame version 6 and `talent_tree_revision` 4 are the current outer formats.
+The treatment tree contains exactly four ranked definitions: the root
+Treatment Damage Training plus Spread Penetration, Manual Treatment Aim and
+Piercing Persistence. `piercing_return` is absent from the active catalog and
+its ID remains retired. Loading revision 3 discards/refunds that whole
+selection atomically while preserving mastery, research and earned points. The
+inner loadout adapter can retain its older schema version independently; it is
+not the savegame version.
 
 The temporary unlimited progression mode is runtime configuration rather than
 save data and must be set on `MetaProgressionState` before deserialization. In
@@ -174,17 +178,50 @@ stable IDs, rank limits, prerequisites and the active economy mode.
 
 ## Typed damage and player durability
 
-`DamageProfile` stores a normalized composition over the closed set `fire`,
-`water`, `earth`, `wind`, `blood`, `holy` and `undead`. Treatments, damaging
+`DamageProfile` stores a normalized composition over the fixed order `fire`,
+`water`, `earth`, `wind`. Treatments, damaging
 active abilities, defense cells and enemy contact attacks own explicit damage
-profiles. `ResistanceProfile` stores the matching per-type modifiers; missing
-entries are neutral and unknown types must not silently enter gameplay.
+profiles. New authoring calls reject unknown IDs. Only the explicit
+`from_legacy_authoring_components()` boundary may canonicalize retired
+`blood -> fire`, `holy -> water` and `undead -> wind`; retired IDs are never
+accepted by the active catalog or reused.
 
-`CombatDamageResolver` first resolves the weighted type resistances and then
-applies general defense using `100 / (100 + max(defense, 0))`. Game-owned shield
-absorption runs after that resolved damage. The player-facing names for these
-layers are Leben, Schaden, Regeneration, Schild and Verteidigung even where
-legacy internal properties still use older stable names.
+`ResistanceProfile` stores authoring ratings but compiles fixed four-value
+effective-percent and multiplier buffers once. Positive resistance uses
+`75 * rating / (75 + rating)` percent; negative ratings are linear
+vulnerability down to -100 percent. `CombatDamageResolver` reads only those
+packed buffers, then applies defense using the same curve with cap 90. Shield
+and life run after resistance and defense. The hit hotpath performs four fixed
+iterations without dictionaries or temporary profile allocations. UI and
+lexicon presentation receive effective percentages only, never raw ratings or
+the formula.
+
+## Combat distance, body size and presentation DTOs
+
+`CombatDistanceScale` is the sole conversion boundary for effect radius and
+range: one stage equals 30 world units. Definitions normalize through it,
+`RunBuildState.value()` applies all modifiers first and quantizes staged stats
+once, and previews call the identical resolver. UI/VM data contains stages,
+never render units. Body radii remain exact query geometry and are classified
+separately by `BodySizeCatalog`; `Game` supplies
+`BodySizeCatalog.maximum_radius(enemy_definitions)` to `CombatQuery` instead of
+a magic maximum. Range checks and ordering use distance to the body surface,
+while `CombatSpatialGrid` and `CombatQuery` keep exact radii.
+
+`PlayerStats.stat_sections()` returns defensive-copy `StatSectionViewModel`
+data with stable IDs `general`, `treatment:<content-id>`,
+`ability:0:<content-id>` and `ability:1:<content-id>`. Expansion state remains
+UI-owned. `PlayerStats.stat_rows()` remains a read-only compatibility adapter
+for the current GameHUD group keys until that facade consumes the section API;
+it exposes stages rather than render units. `LexiconEntryViewModel.type_presentations()`
+likewise returns a defensive array of immutable four-type DTOs. Each item
+contains type/icon ID, expanded name, semantic role, effective percent/share,
+ready-formatted value, meaning and indicator; the order within each role is
+fire, water, earth, wind.
+
+`MetaProgressionState.calculate_run_reward()` is the pure reward preview and is
+the only arithmetic used by `award_run()`. A loss preview therefore shares the
+same multiplier, rounding and minimum with the eventual mutation.
 
 ## Case lifecycle and variation
 
@@ -195,10 +232,15 @@ from the saved case seed. That seed advances only after a successful non-intro
 result, so failure and cancellation cannot silently reroll the case.
 
 `minor_focus` participates in the normal centralized enemy movement path with
-a 12 px/s base speed before case modifiers. It remains a detailed,
+base speed 12 before case modifiers. It remains a detailed,
 generation-safe spawning objective and releases four bacteria after its
 20-second lifecycle if it survives; mobility does not authorize a per-entity
 process loop or a second renderer.
+
+`ArenaBackdrop` precomputes the coral dashed torus seam and its eight corner
+segments during `configure()`. They are part of the existing one-shot static
+SubViewport bake. The viewport returns to `UPDATE_DISABLED`, the short bake
+callback stops, and reconfiguration reuses the same viewport/canvas nodes.
 
 ## Defense-cell hit contract
 

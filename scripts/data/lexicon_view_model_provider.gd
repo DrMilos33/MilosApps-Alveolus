@@ -56,14 +56,17 @@ func _apply_enemy_source(view_model: LexiconEntryViewModel, enemy_id: StringName
 	var discovery := discovery_definitions.get(definition.discovery_id) as DiscoveryDefinition
 	if discovery != null:
 		view_model.medical_text = discovery.medical_text
+	var presentations := _damage_type_presentations(definition.damage_profile)
+	presentations.append_array(_resistance_type_presentations(definition.resistance_profile))
+	view_model.set_type_presentations(presentations)
 	view_model.stat_rows = [
 		StatRowViewModel.number(&"health", "Leben", definition.max_health, "", 0, definition.id, &"max_health"),
-		StatRowViewModel.number(&"speed", "Tempo", definition.speed, "px/s", 0, definition.id, &"speed"),
+		StatRowViewModel.number(&"speed", "Tempo", definition.speed, "", 0, definition.id, &"speed"),
 		StatRowViewModel.number(&"damage", "Schaden", definition.base_damage, "", 1, definition.id, &"base_damage"),
 		StatRowViewModel.text(&"damage_types", "Schadenstyp", _damage_profile_text(definition.damage_profile), definition.id, &"damage_profile"),
 		StatRowViewModel.text(&"resistances", "Resistenzen", _resistance_profile_text(definition.resistance_profile), definition.id, &"resistance_profile"),
 		StatRowViewModel.integer(&"sample_value", "Probenwert", definition.analysis_value, "", definition.id, &"analysis_value"),
-		StatRowViewModel.number(&"body_radius", "Körperradius", definition.radius, "px", 0, definition.id, &"radius"),
+		StatRowViewModel.text(&"body_size", "Körpergröße", BodySizeCatalog.display_name(definition.body_size_class), definition.id, &"body_size_class"),
 		StatRowViewModel.boolean(&"boss", "Boss", definition.is_boss, definition.id, &"is_boss"),
 	]
 
@@ -71,18 +74,24 @@ func _apply_player_source(view_model: LexiconEntryViewModel) -> void:
 	var treatment := player_stats.prepared_treatment
 	if treatment == null:
 		treatment = treatment_definitions.get(&"treatment_precision") as TreatmentDefinition
+	var presentations := _resistance_type_presentations(player_stats.resistances)
+	if treatment != null:
+		var damage_presentations := _damage_type_presentations(treatment.damage_profile)
+		damage_presentations.append_array(presentations)
+		presentations = damage_presentations
+	view_model.set_type_presentations(presentations)
 	var rows: Array[StatRowViewModel] = [
-		StatRowViewModel.number(&"movement_speed", "Bewegung", TherapyAvatar.MOVE_SPEED, "px/s", 0, &"therapy_avatar", &"MOVE_SPEED"),
+		StatRowViewModel.number(&"movement_speed", "Bewegung", player_stats.movement_speed, "", 1, &"player_stats", &"movement_speed"),
 		StatRowViewModel.number(&"max_life", "Leben", PlayerStats.BASE_MAX_HEALTH + player_stats.max_stability_bonus, "", 0, &"player_stats", &"max_stability_bonus"),
-		StatRowViewModel.number(&"defense", "Verteidigung", player_stats.defense, "", 1, &"player_stats", &"defense"),
+		StatRowViewModel.number(&"defense", "Verteidigung", MitigationCurve.defense_effective_percent(player_stats.defense), "%", 1, &"player_stats", &"defense"),
 		StatRowViewModel.number(&"life_regeneration", "Lebensregeneration", player_stats.life_regeneration_per_second, "/s", 2, &"player_stats", &"life_regeneration_per_second"),
 		StatRowViewModel.text(&"resistances", "Resistenzen", _resistance_profile_text(player_stats.resistances), &"player_stats", &"resistances"),
 		StatRowViewModel.number(&"treatment_damage", "Schaden", player_stats.therapy_damage, "", 0, &"player_stats", &"therapy_damage"),
 		StatRowViewModel.number(&"treatment_interval", "Intervall", player_stats.therapy_cooldown, "s", 2, &"player_stats", &"therapy_cooldown"),
-		StatRowViewModel.number(&"treatment_range", "Reichweite", player_stats.therapy_range, "px", 0, &"player_stats", &"therapy_range"),
+		StatRowViewModel.integer(&"treatment_range", "Reichweite", CombatDistanceScale.stage_from_world(player_stats.therapy_range), "Stufe", &"player_stats", &"therapy_range_stage"),
 		StatRowViewModel.integer(&"treatment_targets", "Ziele", player_stats.therapy_targets, "", &"player_stats", &"therapy_targets"),
 		StatRowViewModel.integer(&"treatment_projectiles", "Projektile", player_stats.therapy_projectiles, "", &"player_stats", &"therapy_projectiles"),
-		StatRowViewModel.number(&"pickup_range", "Probenradius", player_stats.pickup_range, "px", 0, &"player_stats", &"pickup_range"),
+		StatRowViewModel.integer(&"pickup_range", "Probenradius", CombatDistanceScale.stage_from_world(player_stats.pickup_range), "Stufe", &"player_stats", &"pickup_range_stage"),
 	]
 	if treatment != null:
 		rows.insert(6, StatRowViewModel.text(
@@ -107,6 +116,7 @@ func _apply_discovery_source(view_model: LexiconEntryViewModel, discovery_id: St
 		&"automatic_therapy":
 			var treatment := treatment_definitions.get(&"treatment_precision") as TreatmentDefinition
 			if treatment != null:
+				view_model.set_type_presentations(_damage_type_presentations(treatment.damage_profile))
 				view_model.stat_rows = _treatment_rows(treatment)
 		&"neutrophil_orbit":
 			var immune_stats := PlayerStats.new()
@@ -115,7 +125,7 @@ func _apply_discovery_source(view_model: LexiconEntryViewModel, discovery_id: St
 				StatRowViewModel.integer(&"cells", "Abwehrzellen", immune_stats.immune_cell_count(), "", &"player_stats", &"immune_cell_count"),
 				StatRowViewModel.number(&"immune_damage", "Schaden", immune_stats.immune_damage, "", 0, &"player_stats", &"immune_damage"),
 				StatRowViewModel.number(&"immune_interval", "Intervall", immune_stats.immune_interval(), "s", 2, &"player_stats", &"immune_interval"),
-				StatRowViewModel.number(&"immune_radius", "Radius", immune_stats.immune_radius(), "px", 0, &"player_stats", &"immune_radius"),
+				StatRowViewModel.integer(&"immune_radius", "Radius", CombatDistanceScale.stage_from_world(immune_stats.immune_radius()), "Stufe", &"player_stats", &"immune_radius_stage"),
 			]
 		&"supportive_oxygenation":
 			view_model.stat_rows = [
@@ -144,7 +154,7 @@ func _treatment_rows(definition: TreatmentDefinition) -> Array[StatRowViewModel]
 		StatRowViewModel.number(&"damage", "Schaden", definition.base_damage, "", 0, definition.id, &"base_damage"),
 		StatRowViewModel.text(&"damage_type", "Schadenstyp", _damage_profile_text(definition.damage_profile), definition.id, &"damage_profile"),
 		StatRowViewModel.number(&"interval", "Intervall", definition.base_interval, "s", 2, definition.id, &"base_interval"),
-		StatRowViewModel.number(&"range", "Reichweite", definition.base_range, "px", 0, definition.id, &"base_range"),
+		StatRowViewModel.integer(&"range", "Reichweite", definition.base_range_stage(), "Stufe", definition.id, &"base_range_stage"),
 		StatRowViewModel.integer(&"projectiles", "Projektile", definition.base_projectiles, "", definition.id, &"base_projectiles"),
 		StatRowViewModel.integer(&"max_hits", "Maximale Treffer", definition.max_hits, "", definition.id, &"max_hits"),
 	]
@@ -161,29 +171,58 @@ func _damage_profile_text(profile: DamageProfile) -> String:
 	if profile == null or not profile.is_valid():
 		return "Keiner"
 	var parts := PackedStringArray()
-	for type_index in range(DamageTypeCatalog.count()):
-		var weight := profile.weight_at(type_index)
-		if weight <= 0.0:
+	for presentation in _damage_type_presentations(profile):
+		if presentation.percent <= 0.0:
 			continue
-		var name := DamageTypeCatalog.display_name(DamageTypeCatalog.id_at(type_index))
-		if is_equal_approx(weight, 1.0):
-			parts.append(name)
+		if is_equal_approx(presentation.percent, 100.0):
+			parts.append(presentation.display_name)
 		else:
-			parts.append("%d %% %s" % [roundi(weight * 100.0), name])
+			parts.append("%d %% %s" % [roundi(presentation.percent), presentation.display_name])
 	return " · ".join(parts) if not parts.is_empty() else "Keiner"
 
 func _resistance_profile_text(profile: ResistanceProfile) -> String:
 	if profile == null or not profile.is_valid() or profile.is_neutral():
 		return "Keine"
 	var parts := PackedStringArray()
-	for type_index in range(DamageTypeCatalog.count()):
-		var value := profile.resistance_at(type_index)
-		if is_zero_approx(value):
+	for presentation in _resistance_type_presentations(profile):
+		if is_zero_approx(presentation.percent):
 			continue
-		var name := DamageTypeCatalog.display_name(DamageTypeCatalog.id_at(type_index))
-		var percentage := roundi(value * 100.0)
-		parts.append("%s %s%d %%" % [name, "+" if percentage > 0 else "", percentage])
+		var percentage := roundi(presentation.percent)
+		parts.append("%s %s%d %%" % [presentation.display_name, "+" if percentage > 0 else "", percentage])
 	return " · ".join(parts) if not parts.is_empty() else "Keine"
+
+
+func _damage_type_presentations(profile: DamageProfile) -> Array[LexiconEntryViewModel.TypePresentation]:
+	var result: Array[LexiconEntryViewModel.TypePresentation] = []
+	for type_index in range(DamageTypeCatalog.count()):
+		var type_id := DamageTypeCatalog.id_at(type_index)
+		var percentage := profile.weight_at(type_index) * 100.0 if profile != null and profile.is_valid() else 0.0
+		result.append(LexiconEntryViewModel.TypePresentation.create(
+			type_id,
+			StringName("damage_%s" % String(type_id)),
+			&"damage_share",
+			DamageTypeCatalog.display_name(type_id),
+			percentage,
+			&"share"
+		))
+	return result
+
+
+func _resistance_type_presentations(profile: ResistanceProfile) -> Array[LexiconEntryViewModel.TypePresentation]:
+	var result: Array[LexiconEntryViewModel.TypePresentation] = []
+	for type_index in range(DamageTypeCatalog.count()):
+		var type_id := DamageTypeCatalog.id_at(type_index)
+		var percentage := profile.effective_percent_at(type_index) if profile != null and profile.is_valid() else 0.0
+		var value_role := &"mitigation" if percentage > 0.0 else (&"vulnerability" if percentage < 0.0 else &"neutral")
+		result.append(LexiconEntryViewModel.TypePresentation.create(
+			type_id,
+			StringName("damage_%s" % String(type_id)),
+			&"resistance_effective",
+			DamageTypeCatalog.display_name(type_id),
+			percentage,
+			value_role
+		))
+	return result
 
 func _is_unlocked(entry: LexiconEntryDefinition, seen_discovery_ids: Variant) -> bool:
 	if entry.unlocked_by_default or entry.discovery_id.is_empty():

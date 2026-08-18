@@ -12,6 +12,11 @@ extends Node2D
 ## configure() calls and is disabled immediately after its one requested frame.
 
 const MAX_BAKE_DIMENSION := 4096
+const TORUS_SEAM_COLOR := Color(0.94, 0.31, 0.34, 0.72)
+const TORUS_SEAM_INSET := 6.0
+const TORUS_DASH_LENGTH := 22.0
+const TORUS_DASH_GAP := 18.0
+const TORUS_CORNER_LENGTH := 44.0
 
 class BackdropBakeCanvas:
 	extends Node2D
@@ -29,6 +34,8 @@ var base_texture: Texture2D
 var alveoli: Array[Dictionary] = []
 var capillaries: Array[PackedVector2Array] = []
 var inflammation_spots: Array[Dictionary] = []
+var torus_seam_segments: Array[PackedVector2Array] = []
+var torus_corner_segments: Array[PackedVector2Array] = []
 
 var _bake_viewport: SubViewport
 var _bake_canvas: BackdropBakeCanvas
@@ -63,6 +70,8 @@ func configure(bounds: Rect2, definition: ArenaVisualDefinition) -> void:
 	alveoli.clear()
 	capillaries.clear()
 	inflammation_spots.clear()
+	torus_seam_segments.clear()
+	torus_corner_segments.clear()
 	if visual != null and ResourceLoader.exists(visual.texture_path):
 		base_texture = load(visual.texture_path) as Texture2D
 	var rng := RandomNumberGenerator.new()
@@ -94,6 +103,7 @@ func configure(bounds: Rect2, definition: ArenaVisualDefinition) -> void:
 			"position": Vector2(rng.randf_range(bounds.position.x, bounds.end.x), rng.randf_range(bounds.position.y, bounds.end.y)),
 			"radius": rng.randf_range(150.0, 310.0)
 		})
+	_build_torus_seam()
 
 	_bake_generation += 1
 	_bake_pending = false
@@ -221,6 +231,8 @@ func bake_state_snapshot() -> Dictionary:
 		"viewport_updates": _bake_viewport.render_target_update_mode if is_instance_valid(_bake_viewport) else SubViewport.UPDATE_DISABLED,
 		"viewport_instance_id": _bake_viewport.get_instance_id() if is_instance_valid(_bake_viewport) else 0,
 		"canvas_instance_id": _bake_canvas.get_instance_id() if is_instance_valid(_bake_canvas) else 0,
+		"seam_segment_count": torus_seam_segments.size(),
+		"corner_segment_count": torus_corner_segments.size(),
 	}
 
 
@@ -250,6 +262,39 @@ func _draw_backdrop(target: CanvasItem) -> void:
 			target.draw_circle(spot["position"] + offset, spot["radius"] * 0.56, Color(inflammation, 0.018 + strength * 0.028))
 	# A soft playable center without a rectangular arena frame.
 	target.draw_circle(Vector2.ZERO, 520.0, Color(0.28, 0.50, 0.50, 0.018))
+	for segment in torus_seam_segments:
+		target.draw_polyline(segment, TORUS_SEAM_COLOR, 1.5, true)
+	for segment in torus_corner_segments:
+		target.draw_polyline(segment, Color(TORUS_SEAM_COLOR, 0.92), 2.5, true)
+
+
+func _build_torus_seam() -> void:
+	var left := arena_bounds.position.x + TORUS_SEAM_INSET
+	var right := arena_bounds.end.x - TORUS_SEAM_INSET
+	var top := arena_bounds.position.y + TORUS_SEAM_INSET
+	var bottom := arena_bounds.end.y - TORUS_SEAM_INSET
+	_append_dashed_edge(Vector2(left, top), Vector2(right, top))
+	_append_dashed_edge(Vector2(left, bottom), Vector2(right, bottom))
+	_append_dashed_edge(Vector2(left, top), Vector2(left, bottom))
+	_append_dashed_edge(Vector2(right, top), Vector2(right, bottom))
+	for corner in [Vector2(left, top), Vector2(right, top), Vector2(right, bottom), Vector2(left, bottom)]:
+		var horizontal_sign := 1.0 if is_equal_approx(corner.x, left) else -1.0
+		var vertical_sign := 1.0 if is_equal_approx(corner.y, top) else -1.0
+		torus_corner_segments.append(PackedVector2Array([corner, corner + Vector2(horizontal_sign * TORUS_CORNER_LENGTH, 0.0)]))
+		torus_corner_segments.append(PackedVector2Array([corner, corner + Vector2(0.0, vertical_sign * TORUS_CORNER_LENGTH)]))
+
+
+func _append_dashed_edge(from: Vector2, to: Vector2) -> void:
+	var length := from.distance_to(to)
+	if length <= 0.0:
+		return
+	var direction := from.direction_to(to)
+	var cursor := TORUS_CORNER_LENGTH + TORUS_DASH_GAP
+	var limit := length - TORUS_CORNER_LENGTH - TORUS_DASH_GAP
+	while cursor < limit:
+		var dash_end := minf(cursor + TORUS_DASH_LENGTH, limit)
+		torus_seam_segments.append(PackedVector2Array([from + direction * cursor, from + direction * dash_end]))
+		cursor += TORUS_DASH_LENGTH + TORUS_DASH_GAP
 
 
 func _closed(points: PackedVector2Array) -> PackedVector2Array:

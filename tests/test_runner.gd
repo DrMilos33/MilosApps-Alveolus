@@ -175,7 +175,7 @@ func _test_upgrade_application_and_caps() -> void:
 	var potency: UpgradeDefinition = _find_upgrade(definitions, &"potency")
 	var rhythm: UpgradeDefinition = _find_upgrade(definitions, &"rhythm")
 	_assert_true(stats.apply_upgrade(potency), "Wirksamkeitsupgrade kann angewendet werden")
-	_assert_equal(stats.therapy_damage, 26.0, "Wirksamkeitsupgrade verändert den Schaden")
+	_assert_equal(stats.therapy_damage, 23.0, "Wirksamkeitsupgrade verändert den Schaden")
 	stats.apply_upgrade(potency)
 	stats.apply_upgrade(potency)
 	_assert_true(not stats.apply_upgrade(potency), "Upgrade respektiert die Maximalstufe")
@@ -194,7 +194,7 @@ func _test_upgrade_selection() -> void:
 		ids[definition.id] = true
 		paths[definition.path] = true
 	_assert_equal(ids.size(), 3, "Upgrade-Karten sind eindeutig")
-	_assert_equal(paths.size(), 2, "Erste Auswahl nutzt die aktiven Behandlungs- und Abwehrpfade")
+	_assert_equal(paths.size(), 3, "Erste Auswahl nutzt alle drei aktiven Ausbaupfade")
 
 func _test_medical_boundaries() -> void:
 	var treatments := TreatmentDefinition.catalog()
@@ -233,7 +233,7 @@ func _test_upgrade_previews() -> void:
 	_assert_equal(rhythm_preview.before_after_text, "0,82 s  >  0,69 s Intervall", "Intervallupgrade zeigt den konkreten Vorher-/Nachher-Wert")
 	var immune_preview := stats.preview_upgrade(immune_damage)
 	_assert_equal(immune_preview.effect_text, "+6 Schaden", "Abwehrupgrade verwendet die kompakte Effektzeile")
-	_assert_equal(immune_preview.before_after_text, "10 Schaden  >  16 Schaden", "Abwehrupgrade zeigt nur den Wertvergleich")
+	_assert_equal(immune_preview.before_after_text, "9 Schaden  >  15 Schaden", "Abwehrupgrade zeigt nur den Wertvergleich")
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 77
@@ -254,15 +254,16 @@ func _test_character_stat_rows() -> void:
 	var rows := stats.stat_rows(80.0, 90.0, 275.0)
 	_assert_equal(rows.size(), 16, "Charakterwertemenü enthält alle relevanten dynamischen Werte")
 	_assert_equal(_row_value(rows, "ALLGEMEIN", "Leben"), "80 / 90", "Aktuelles und maximales Leben werden gemeinsam angezeigt")
-	_assert_equal(_row_value(rows, "BEHANDLUNG", "Schaden"), "18", "Behandlungsschaden entspricht dem echten Basiswert")
-	_assert_equal(_row_value(rows, "ABWEHR", "Zellen"), "0", "Nicht freigeschaltete Abwehr zeigt keine erfundenen Zellen")
+	var sections := stats.stat_sections(80.0, 90.0)
+	_assert_equal(sections[0].id(), &"general", "Allgemeine Werte besitzen eine stabile Section-ID")
+	_assert_equal(sections[1].id(), &"treatment:treatment_precision", "Behandlungswerte besitzen eine content-stabile Section-ID")
+	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "16", "Behandlungsschaden entspricht dem echten Basiswert")
+	var copied_rows := sections[1].rows()
+	copied_rows[0]["value"] = "verändert"
+	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "16", "Section-Zeilen werden defensiv kopiert")
 	stats.immune_level = 1
-	stats.support_level = 1
-	rows = stats.stat_rows(80.0, 90.0, 275.0)
-	_assert_equal(_row_value(rows, "ABWEHR", "Zellen"), "2", "Freigeschaltete Abwehr zeigt die echte Zellenzahl")
-	_assert_equal(_row_value(rows, "REGENERATION", "Heilung"), "+4", "Regeneration zeigt den echten Lebensgewinn")
 	var compact := stats.compact_stat_text(80.0, 90.0)
-	_assert_true(compact.contains("Schaden  18"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
+	_assert_true(compact.contains("Schaden  16"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
 	_assert_true(compact.contains("Abwehrzellen  2"), "Kompakte Anzeige aktualisiert Ausbauwerte")
 
 func _test_level_catalog_and_run_config() -> void:
@@ -515,6 +516,12 @@ func _find_research(definitions: Array[ResearchDefinition], id: StringName) -> R
 func _row_value(rows: Array[Dictionary], group: String, label: String) -> String:
 	for row in rows:
 		if String(row.get("group", "")) == group and String(row.get("label", "")) == label:
+			return String(row.get("value", ""))
+	return ""
+
+func _row_value_by_id(rows: Array[Dictionary], id: StringName) -> String:
+	for row in rows:
+		if StringName(str(row.get("id", ""))) == id:
 			return String(row.get("value", ""))
 	return ""
 

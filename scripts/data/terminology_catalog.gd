@@ -42,9 +42,6 @@ const ENTRIES := {
 	&"water_damage": {"simple": "Wasser", "medical": "Wasserschaden"},
 	&"earth_damage": {"simple": "Erde", "medical": "Erdschaden"},
 	&"wind_damage": {"simple": "Wind", "medical": "Windschaden"},
-	&"blood_damage": {"simple": "Blut", "medical": "Blutschaden"},
-	&"holy_damage": {"simple": "Holy", "medical": "Heiliger Schaden"},
-	&"undead_damage": {"simple": "Undead", "medical": "Untotenschaden"},
 	&"cooldown": {"simple": "Abklingzeit", "medical": "Erholungszeit"},
 	&"boss_phase": {"simple": "Bossphase", "medical": "Belastungsphase des Infektionsherds"},
 	&"pneumococcus": {"simple": "Bakterium", "medical": "Pneumokokke"},
@@ -93,7 +90,7 @@ static func _build_definitions() -> Dictionary:
 	_add(result, &"effect", "Die Stärke eines offensiven Treffers.", "Mehr Schaden zieht einem getroffenen Gegner mehr Leben ab. Schadenstyp und Resistenz bestimmen, wie viel davon tatsächlich ankommt.", [&"basic_treatment", &"resistance"], "Punkte", &"automatic_therapy")
 	_add(result, &"treatment_speed", "Wie häufig die automatische Behandlung ausgelöst wird.", "Mehr Behandlungstempo verkürzt das Intervall. Dadurch entstehen in derselben Zeit mehr Impulse.", [&"interval", &"cooldown"], "Prozent", &"automatic_therapy")
 	_add(result, &"interval", "Der Zeitabstand zwischen zwei automatischen Impulsen.", "Ein kleineres Intervall bedeutet eine häufigere Behandlung.", [&"treatment_speed", &"basic_treatment"], "Sekunden", &"automatic_therapy")
-	_add(result, &"range", "Die maximale Entfernung, in der ein Effekt ein Ziel erreicht.", "Ziele außerhalb der Reichweite werden von der jeweiligen Behandlung oder Fähigkeit nicht erfasst.", [&"targets", &"basic_treatment"], "Pixel", &"automatic_therapy")
+	_add(result, &"range", "Die maximale Distanzstufe, in der ein Effekt ein Ziel erreicht.", "Ziele außerhalb der Reichweitenstufe werden von der jeweiligen Behandlung oder Fähigkeit nicht erfasst.", [&"targets", &"basic_treatment"], "Stufe", &"automatic_therapy")
 	_add(result, &"targets", "Die Zahl gleichzeitig ausgewählter Gegner.", "Zusätzliche Ziele verteilen einen Behandlungsimpuls auf mehrere Gegner, sofern genug gültige Ziele vorhanden sind.", [&"projectiles", &"range"], "Anzahl", &"automatic_therapy")
 	_add(result, &"projectiles", "Die Zahl sichtbarer Impulse pro Auslösung.", "Mehrere Projektile können verschiedene Richtungen oder Ziele abdecken. Die Behandlung legt ihr genaues Verhalten fest.", [&"targets", &"penetration"], "Anzahl", &"automatic_therapy")
 	_add(result, &"penetration", "Wie viele Gegner ein Impuls nacheinander treffen kann.", "Ein durchdringender Impuls endet erst nach seiner maximalen Trefferzahl oder am Ende seiner Reichweite.", [&"projectiles", &"range"], "Treffer", &"automatic_therapy")
@@ -113,16 +110,13 @@ static func _build_definitions() -> Dictionary:
 	_add(result, &"talent_points", "Begrenzt verteilbare Punkte für die Vorbereitung.", "Talentpunkte werden vor einem Fall verteilt. Eine andere Verteilung ermöglicht neue Spezialisierungen.", [&"research", &"capacity"], "Punkte", &"research_reward")
 	_add(result, &"mastery", "Dauerhafte Erfahrung mit einzelnen Fällen.", "Meisterschaft dokumentiert besondere Leistungen und kann zusätzliche Talentpunkte freischalten.", [&"talent_points", &"case_trait"], "Stufe", &"research_reward")
 	_add(result, &"enemy_damage", "Der Grundschaden eines Gegners.", "Wenn ein Gegner Doctor Milos trifft, werden Schadenstyp, Resistenz und Verteidigung verrechnet. Danach fängt ein vorhandenes Schild Schaden ab.", [&"patient_stability", &"resistance", &"defense", &"shield"], "Punkte", &"patient_stability")
-	_add(result, &"defense", "Eine allgemeine Minderung eingehenden Schadens.", "Verteidigung reduziert den Schaden nach der Typresistenz. Sie kann einen Treffer abschwächen, aber nicht heilen.", [&"enemy_damage", &"resistance", &"shield"], "Punkte", &"patient_stability")
+	_add(result, &"defense", "Die effektive allgemeine Minderung eingehenden Schadens.", "Verteidigung reduziert den Schaden nach der Typresistenz. Sie kann einen Treffer abschwächen, aber nicht heilen.", [&"enemy_damage", &"resistance", &"shield"], "Prozent", &"patient_stability")
 	_add(result, &"life_regeneration", "Automatische Heilung über Zeit.", "Lebensregeneration stellt fortlaufend Leben wieder her, solange Doctor Milos nicht bereits sein maximales Leben besitzt.", [&"patient_stability", &"support_path"], "Leben pro Sekunde", &"supportive_oxygenation")
-	_add(result, &"resistance", "Minderung oder Verwundbarkeit gegenüber einem Schadenstyp.", "Ein positiver Wert verringert diesen Schadenstyp. Ein negativer Wert bedeutet Verwundbarkeit und erhöht den erlittenen Schaden.", [&"enemy_damage", &"defense", &"fire_damage", &"water_damage", &"earth_damage", &"wind_damage", &"blood_damage", &"holy_damage", &"undead_damage"], "Prozent", &"patient_stability")
+	_add(result, &"resistance", "Minderung oder Verwundbarkeit gegenüber einem Schadenstyp.", "Ein positiver effektiver Wert verringert diesen Schadenstyp. Ein negativer Wert bedeutet Verwundbarkeit und erhöht den erlittenen Schaden.", [&"enemy_damage", &"defense", &"fire_damage", &"water_damage", &"earth_damage", &"wind_damage"], "Prozent", &"patient_stability")
 	_add(result, &"fire_damage", "Ein offensiver Schadenstyp.", "Feuerschaden wird mit der Feuerresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"water_damage", "Ein offensiver Schadenstyp.", "Wasserschaden wird mit der Wasserresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"earth_damage", "Ein offensiver Schadenstyp.", "Erdschaden wird mit der Erdresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"wind_damage", "Ein offensiver Schadenstyp.", "Windschaden wird mit der Windresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
-	_add(result, &"blood_damage", "Ein offensiver Schadenstyp.", "Blutschaden wird mit der Blutresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
-	_add(result, &"holy_damage", "Ein offensiver Schadenstyp.", "Holy-Schaden wird mit der Holy-Resistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
-	_add(result, &"undead_damage", "Ein offensiver Schadenstyp.", "Undead-Schaden wird mit der Undead-Resistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"cooldown", "Die Wartezeit nach einer aktiven Fähigkeit.", "Erst nach Ablauf der Abklingzeit kann die Fähigkeit erneut ausgelöst werden.", [&"active_ability", &"treatment_speed"], "Sekunden", &"automatic_therapy")
 	_add(result, &"boss_phase", "Ein Belastungsschub des Infektionsherds.", "Beim Erreichen einer Phasengrenze verändert der Boss den Kampf und kann zusätzliche Bakterien freisetzen.", [&"infection_focus", &"case_trait"], "", &"boss_phases")
 	return result

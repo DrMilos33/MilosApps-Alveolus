@@ -14,7 +14,7 @@ const SAVE_VERSION := 6
 const PASSIVE_INTERVAL_SECONDS := 600.0
 const PASSIVE_CAP_SECONDS := 28800.0
 const UNLIMITED_TEST_POINT_POOL := 1_000_000_000
-const TALENT_TREE_REVISION := 3
+const TALENT_TREE_REVISION := 4
 
 var research_points: int = 0
 var passive_seconds: float = 0.0
@@ -187,17 +187,21 @@ func clear_research_ranks() -> void:
 	upgrades_changed.emit()
 
 func award_run(success: bool, elapsed: float, level: int, defeats: int, multiplier: float = 1.0) -> int:
+	var reward := calculate_run_reward(success, elapsed, level, defeats, multiplier)
+	research_points += reward
+	lifetime_runs += 1
+	research_changed.emit(research_points, claimable_research())
+	return reward
+
+
+static func calculate_run_reward(success: bool, elapsed: float, level: int, defeats: int, multiplier: float = 1.0) -> int:
 	var survival_bonus := mini(floori(elapsed / 120.0), 5)
 	var analysis_bonus := mini(maxi(level, 0), 10)
 	var enemy_bonus := mini(maxi(defeats, 0) / 20, 8)
 	var reward := 2 + survival_bonus + analysis_bonus + enemy_bonus
 	if success:
 		reward += 12
-	reward = maxi(1, roundi(float(reward) * maxf(multiplier, 0.0)))
-	research_points += reward
-	lifetime_runs += 1
-	research_changed.emit(research_points, claimable_research())
-	return reward
+	return maxi(1, roundi(float(reward) * maxf(multiplier, 0.0)))
 
 func is_level_unlocked(order: int) -> bool:
 	return order <= highest_unlocked_level

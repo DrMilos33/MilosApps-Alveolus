@@ -1,7 +1,7 @@
 class_name TherapyAvatar
 extends CharacterBody2D
 
-const MOVE_SPEED := 275.0
+const MOVE_SPEED := 250.0
 const BODY_RADIUS := 23.0
 const DAMAGE_FLASH_SECONDS := 0.16
 const WALK_FRAME_SECONDS := 0.12
@@ -59,7 +59,8 @@ func _physics_process(delta: float) -> void:
 func step_fixed(_delta: float) -> void:
 	if input_enabled:
 		var direction := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
-		velocity = direction * MOVE_SPEED
+		var resolved_speed := stats.movement_speed if stats != null else MOVE_SPEED
+		velocity = direction * resolved_speed
 		move_and_slide()
 		if topology != null:
 			var wrapped := topology.wrap_position(global_position)

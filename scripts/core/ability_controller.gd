@@ -270,8 +270,8 @@ func _execute_effect(command: AbilityCommand, definition: AbilityDefinition, tar
 			result.duration = 0.48
 			result.values = {"recovery": recovery, "shield": shield_amount}
 		&"defense_burst":
-			var burst_radius := build.value(RunBuildState.ABILITY_RADIUS, float(values.get("radius", 150.0)), definition.tags)
-			var burst_damage := build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 42.0)), definition.tags)
+			var burst_radius := build.value(RunBuildState.ABILITY_RADIUS, float(values.get("radius", CombatDistanceScale.world_from_stage(5))), definition.tags)
+			var burst_damage := build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 38.0)), definition.tags)
 			var knockback := build.value(RunBuildState.ABILITY_KNOCKBACK, float(values.get("knockback", 75.0)), definition.tags)
 			result.affected_handles = _damage_circle(target, burst_radius, burst_damage, definition.id, knockback, definition.damage_profile)
 			result.radius = burst_radius
@@ -359,7 +359,7 @@ func _damage_line(target: Vector2, values: Dictionary, source: StringName, damag
 	var shot := TreatmentShot.line(
 		avatar.global_position,
 		direction,
-		build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 55.0)), tags),
+		build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 50.0)), tags),
 		build.value(RunBuildState.ABILITY_RANGE, float(values.get("range", 620.0)), tags),
 		2147483647,
 		source

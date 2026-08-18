@@ -29,11 +29,12 @@ func _test_research_catalog_contract() -> void:
 		&"experience_gain",
 		&"defense_training",
 		&"life_regeneration",
+		&"movement_training",
 		&"unlock_spread_treatment",
 		&"unlock_piercing_treatment",
 	]
 	var definitions := ContentCatalog.research_definitions()
-	_equal(definitions.size(), expected_ids.size(), "Es gibt exakt sieben aktive Forschungen")
+	_equal(definitions.size(), expected_ids.size(), "Es gibt exakt acht aktive Forschungen")
 	var seen_ids: Dictionary = {}
 	for index in range(definitions.size()):
 		var definition: ResearchDefinition = definitions[index]
@@ -48,6 +49,7 @@ func _test_research_catalog_contract() -> void:
 		&"experience_gain": [&"experience_multiplier", 0.05, 3],
 		&"defense_training": [&"defense", 2.0, 3],
 		&"life_regeneration": [&"life_regeneration", 0.25, 3],
+		&"movement_training": [&"movement_speed_multiplier", 0.03, 3],
 		&"unlock_spread_treatment": [&"unlock", 1.0, 1],
 		&"unlock_piercing_treatment": [&"unlock", 1.0, 1],
 	}
@@ -73,6 +75,7 @@ func _test_global_research_is_idempotent() -> void:
 		&"experience_gain": 3,
 		&"defense_training": 3,
 		&"life_regeneration": 3,
+		&"movement_training": 3,
 	}
 	var treatments := TreatmentDefinition.catalog()
 	for treatment_id in [&"treatment_precision", &"treatment_spread", &"treatment_pierce"]:
@@ -86,6 +89,7 @@ func _test_global_research_is_idempotent() -> void:
 		_near(stats.experience_gain_multiplier, 1.15, "Erfahrungsforschung gilt global")
 		_near(stats.defense, 6.0, "Defensivforschung gilt global")
 		_near(stats.life_regeneration_per_second, 0.75, "Regenerationsforschung gilt global")
+		_near(stats.movement_speed, 272.5, "Bewegungsforschung gilt global")
 
 		stats.apply_meta_progression(ranks)
 		_near(stats.therapy_damage, expected_damage, "Wiederholtes Anwenden vervielfacht den Grundschaden nicht")
@@ -93,6 +97,7 @@ func _test_global_research_is_idempotent() -> void:
 		_near(stats.experience_gain_multiplier, 1.15, "Wiederholtes Anwenden vervielfacht Erfahrung nicht")
 		_near(stats.defense, 6.0, "Wiederholtes Anwenden vervielfacht Defensive nicht")
 		_near(stats.life_regeneration_per_second, 0.75, "Wiederholtes Anwenden vervielfacht Regeneration nicht")
+		_near(stats.movement_speed, 272.5, "Wiederholtes Anwenden vervielfacht Bewegung nicht")
 
 		stats.apply_meta_progression({})
 		_near(stats.therapy_damage, treatment.base_damage, "Ein Forschungsreset stellt den Behandlungsschaden wieder her")
@@ -100,6 +105,7 @@ func _test_global_research_is_idempotent() -> void:
 		_near(stats.experience_gain_multiplier, 1.0, "Ein Forschungsreset stellt den Erfahrungsfaktor wieder her")
 		_near(stats.defense, PlayerStats.BASE_DEFENSE, "Ein Forschungsreset stellt die Basisdefensive wieder her")
 		_near(stats.life_regeneration_per_second, PlayerStats.BASE_LIFE_REGENERATION, "Ein Forschungsreset stellt die Basisregeneration wieder her")
+		_near(stats.movement_speed, PlayerStats.BASE_MOVEMENT_SPEED, "Ein Forschungsreset stellt die Basisbewegung wieder her")
 
 	var default_stats := PlayerStats.new()
 	default_stats.apply_meta_progression(ranks)
@@ -126,10 +132,10 @@ func _test_experience_fraction_is_carried() -> void:
 
 func _test_ranked_talent_contract_and_reset() -> void:
 	var expected_max_ranks := {
+		&"treatment_damage_training": 1,
 		&"manual_treatment_aim": 1,
 		&"spread_penetration": 3,
 		&"piercing_persistence": 2,
-		&"piercing_return": 1,
 	}
 	var definitions := TalentDefinition.definitions()
 	_equal(definitions.size(), expected_max_ranks.size(), "Der Behandlungstalentbaum enthält exakt vier Talente")
@@ -144,15 +150,15 @@ func _test_ranked_talent_contract_and_reset() -> void:
 	meta.reset_defaults(0)
 	meta.set_unlimited_test_progression(true)
 	_true(not meta.purchase_talent_rank(&"spread_penetration"), "Ein Rangtalent kann seine Voraussetzung nicht überspringen")
-	_true(meta.purchase_talent_rank(&"manual_treatment_aim"), "Die manuelle Zielsteuerung kann gekauft werden")
+	_true(meta.purchase_talent_rank(&"treatment_damage_training"), "Die Behandlungsgrundlage kann gekauft werden")
+	_true(meta.purchase_talent_rank(&"manual_treatment_aim"), "Die manuelle Zielsteuerung kann unter der Grundlage gekauft werden")
 	for _rank in range(3):
 		_true(meta.purchase_talent_rank(&"spread_penetration"), "Alle drei Streuimpulsränge können gekauft werden")
 	_true(not meta.purchase_talent_rank(&"spread_penetration"), "Der Streuimpuls bleibt bei drei Rängen gedeckelt")
 	for _rank in range(2):
 		_true(meta.purchase_talent_rank(&"piercing_persistence"), "Beide Laserdauerränge können gekauft werden")
 	_true(not meta.purchase_talent_rank(&"piercing_persistence"), "Die Laserdauer bleibt bei zwei Rängen gedeckelt")
-	_true(meta.purchase_talent_rank(&"piercing_return"), "Der rückkehrende Laser kann gekauft werden")
-	_true(not meta.purchase_talent_rank(&"piercing_return"), "Der rückkehrende Laser bleibt ein Einzelrang")
+	_true(not TalentDefinition.catalog().has(&"piercing_return"), "Der rückkehrende Laser bleibt aus dem aktiven Katalog entfernt")
 	_equal(meta.talent_points_spent(), 7, "Alle Talentränge werden einzeln berechnet")
 
 	meta.clear_talents()
