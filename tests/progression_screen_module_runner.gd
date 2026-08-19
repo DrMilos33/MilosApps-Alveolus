@@ -90,12 +90,14 @@ func _run() -> void:
 		"tab": StringName(),
 		"research": StringName(),
 		"talent": StringName(),
+		"talent_remove": StringName(),
 		"reset": 0,
 		"back": 0,
 	}
 	screen.tab_changed.connect(func(tab: StringName) -> void: intents["tab"] = tab)
 	screen.research_purchase.connect(func(id: StringName) -> void: intents["research"] = id)
 	screen.talent_toggle.connect(func(id: StringName) -> void: intents["talent"] = id)
+	screen.talent_rank_remove.connect(func(id: StringName) -> void: intents["talent_remove"] = id)
 	screen.talent_reset.connect(func() -> void: intents["reset"] = int(intents["reset"]) + 1)
 	screen.back.connect(func() -> void: intents["back"] = int(intents["back"]) + 1)
 	locked_research.pressed.emit()
@@ -107,6 +109,12 @@ func _run() -> void:
 	var available_talent := screen.talent_action(&"manual_treatment_aim")
 	available_talent.pressed.emit()
 	_check(intents["talent"] == &"manual_treatment_aim", "Verfügbares Talent emittiert seine stabile ID")
+	var root_talent_for_removal := screen.talent_action(&"treatment_damage_training")
+	var right_click := InputEventMouseButton.new()
+	right_click.button_index = MOUSE_BUTTON_RIGHT
+	right_click.pressed = true
+	root_talent_for_removal.gui_input.emit(right_click)
+	_check(intents["talent_remove"] == &"treatment_damage_training", "Rechtsklick emittiert die stabile ID zum Entfernen eines Talentrangs")
 	screen.talent_reset_action().pressed.emit()
 	screen.back_action().pressed.emit()
 	_check(int(intents["reset"]) == 1, "Neu verteilen emittiert genau eine Absicht")

@@ -12,6 +12,7 @@ extends Node2D
 ## MultiMesh interpolation in Godot's Compatibility renderer.
 
 const DEFAULT_TEXTURE: Texture2D = preload("res://assets/art/visual_restart/therapy_projectile.svg")
+const HOSTILE_TEXTURE: Texture2D = preload("res://assets/art/visual_restart/enemy_projectile.svg")
 const INVALID_SLOT := -1
 const MULTIMESH_STRIDE_2D := 8
 const PROJECTILE_EXTENT := Vector2(48.0, 24.0)
@@ -34,10 +35,12 @@ var _snap_interpolation := PackedByteArray()
 var _highest_active_slot: int = -1
 var _debug_snapshots_enabled: bool = false
 var _debug_states: Dictionary = {}
+var _texture_rotation: float = QUAD_TEXTURE_ROTATION
 
 
-func configure(projectile_capacity: int, texture: Texture2D = DEFAULT_TEXTURE) -> ProjectileRenderer:
+func configure(projectile_capacity: int, texture: Texture2D = DEFAULT_TEXTURE, texture_rotation: float = QUAD_TEXTURE_ROTATION) -> ProjectileRenderer:
 	_capacity = maxi(projectile_capacity, 1)
+	_texture_rotation = texture_rotation
 	_projectiles.resize(_capacity)
 	_projectiles.fill(null)
 	_handles.resize(_capacity)
@@ -217,7 +220,7 @@ func _upload_interpolated_buffer(fraction: float) -> void:
 				continue
 			position = projectile.visual_previous_position.lerp(projectile.visual_current_position, fraction)
 			angle = lerp_angle(projectile.visual_previous_angle, projectile.visual_current_angle, fraction)
-		_write_instance(_render_buffer, slot, position, angle + QUAD_TEXTURE_ROTATION)
+		_write_instance(_render_buffer, slot, position, angle + _texture_rotation)
 	_batch.multimesh.set_buffer(_render_buffer)
 
 

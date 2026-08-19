@@ -246,11 +246,11 @@ Nach Wahl des Ausbaus `Abwehrzellen` gelten:
 | Wert | Basis | Voll ausgebaut |
 |---|---:|---:|
 | Zellen | 2 | 4 |
-| Schaden je Treffer | 9 Wasser | 27 Wasser |
-| Trefferradius je Zelle | Stufe 1 | Stufe 4 |
-| Orbit-Radius um Doctor Milos | interne feste Geometrie | unverändert |
+| Schaden je Treffer | 5,4 Wasser | 16,2 Wasser |
+| Trefferkörper je Zelle | feste sichtbare Zellgröße | unverändert |
+| Orbit-Radius um Doctor Milos | Radius 4 | Radius 7 |
 | Orbit-Geschwindigkeit | 1,7 rad/s | 1,7 rad/s |
-| Kürzestes Trefferintervall | 0,1 s je Zelle | 0,1 s je Zelle |
+| Trefferintervall | 0,2 s je Zelle (5/s) | 0,2 s je Zelle (5/s) |
 | Ziele je Zelle und Tick | höchstens 1 | höchstens 1 |
 
 Schaden entsteht ausschließlich, wenn der tatsächliche Kreis einer einzelnen
@@ -258,24 +258,29 @@ Zelle einen Gegner geometrisch berührt. Ein gemeinsamer unsichtbarer
 Avatar-Radius verursacht keinen Schaden. Jede Zelle besitzt ihren eigenen
 Cooldown und verwendet einen generationssicheren Gegnerhandle.
 
+Die technische Untergrenze bleibt 0,1 Sekunden je Zelle und ist für spätere
+Attack-Speed-Ausbaupfade reserviert.
+
 ## 12. Gegner
 
 ### Unskalierte Grundwerte
 
-| Gegner | Leben | Tempo | Schaden | Schadenstyp | Proben | Größenklasse | Resistenzen (Rating; positiv effektiv) |
-|---|---:|---:|---:|---|---:|---:|---|
-| Bakterium | 22 | 66 | 2,2 | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
-| Bakteriengruppe | 74 | 50 | 5 | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
-| Kleiner Herd | 180 | 24 | 0 | 100 % Wind | 8 | Groß | Wind +25 (+18,8 %), Wasser −20 |
-| Infektionsherd | 2.200 | 34 | 9 | 40 % Feuer, 60 % Wind | 30 | Boss | Feuer +15 (+12,5 %), Wind +25 (+18,8 %), Wasser −15 |
+| Gegner | Leben | Tempo | Berührungsschaden | Projektil | Schadenstyp | Erfahrung | Größenklasse | Resistenzen (Rating; positiv effektiv) |
+|---|---:|---:|---:|---:|---|---:|---:|---|
+| Bakterium | 22 | 45 | 2,2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
+| Bakteriengruppe | 74 | 45 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
+| Kleiner Herd | 180 | 20 | 0 | 2 alle 2,6 s | 100 % Wind | 8 | Groß | Wind +25 (+18,8 %), Wasser −20 |
+| Infektionsherd | 2.200 | 30 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Wind | 30 | Boss | Feuer +15 (+12,5 %), Wind +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
 erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
 sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
 Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
 
-Der Boss löst bei 70 und 40 Prozent Leben je einen fallabhängigen
-Bakterienschub aus. Gegnerschaden wird mit dem Fallfaktor multipliziert und
+Der Boss von Fall 1 bewegt sich zusätzlich mit Faktor 1,35 und feuert fortlaufend
+zwei Projektile auf gespiegelten Rautenbahnen. Bei 70 und 40 Prozent Leben
+erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
+Sekunden weitere vier. Gegnerschaden wird mit dem Fallfaktor multipliziert und
 anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
 aufgelöst. Nach einem gültigen Treffer schützt die globale 0,68-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.
@@ -292,14 +297,14 @@ danach auf ihrem Endwert. Es gibt keine Ablaufzeit.
 | Titel | lol - name fehlt | Die Ausbreitung | Schwerer Verlauf |
 | Startleben | 100 | 100 | 100 |
 | Boss erscheint | 180 s | 180 s | 180 s |
-| Normales Spawnintervall | 0,62 → 0,14 s | 0,52 → 0,11 s | 0,44 → 0,09 s |
+| Normales Spawnintervall | 0,744 → 0,168 s | 0,624 → 0,132 s | 0,528 → 0,108 s |
 | Gegnerleben-Faktor | 1,15 → 1,70 | 1,35 → 2,05 | 1,55 → 2,40 |
 | Gegnertempo-Faktor | 1,08 | 1,16 | 1,24 |
 | Gegnerschaden-Faktor | 1,25 | 1,45 | 1,65 |
 | Gruppenwahrscheinlichkeit | 10 → 28 % | 18 → 38 % | 25 → 48 % |
 | Bossleben-Faktor | 0,75 | 1,05 | 1,35 |
 | Effektives Bossleben | 1.650 | 2.310 | 2.970 |
-| Minions bei 70 / 40 % | 3 / 4 | 4 / 6 | 6 / 8 |
+| Minions bei 70 / 40 % | 4 / 4 | 4 / 6 | 6 / 8 |
 | Forschungsbelohnung-Faktor | 1,00 | 1,35 | 1,70 |
 | Befundziel | 30 | 42 | 55 |
 

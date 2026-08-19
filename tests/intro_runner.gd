@@ -72,12 +72,17 @@ func _run_intro() -> void:
 	_check(game.flow_state == GameFlowState.State.LEVEL_UP, "Der dritte normale EXP-Drop öffnet Level Up")
 	_check(game.current_upgrade_options.size() == 3, "Das Intro zeigt exakt drei normale Upgradeoptionen")
 	_check(game.hud.upgrade_screen.cards().size() == 3, "Das sichtbare Level-Up enthält drei Karten")
-	_check(game.hud.upgrade_screen.selection_helper().visible and game.hud.upgrade_screen.selection_helper().text == "Du kannst 1 Upgrade auswählen.", "Das Level-Up nennt die exakte Auswahlregel")
+	_check(not game.hud.upgrade_screen.selection_helper().visible and game.hud.upgrade_screen.selection_helper().text.is_empty(), "Das Level-Up verzichtet auf den redundanten Auswahlhinweis")
 	for card in game.hud.upgrade_screen.cards():
 		var title := card.find_child("UpgradeTitle", true, false) as Label
 		var comparison := card.find_child("UpgradeComparison", true, false) as RichTextLabel
+		var value_row := card.find_child("UpgradeValue_*", true, false) as RichTextLabel
 		_check(title != null and title.text == "Impuls", "Jede Introkartenüberschrift nennt ausschließlich die betroffene Komponente Impuls")
-		_check(comparison != null and not str(comparison.get_meta(&"semantic_after", "")).is_empty(), "Jede Introkarte behält ihren normalen Vorher-Nachher-Vergleich")
+		_check(
+			(comparison != null and not str(comparison.get_meta(&"semantic_after", "")).is_empty())
+			or (value_row != null and not str(value_row.get_meta(&"semantic_value", "")).is_empty()),
+			"Jede Introkarte behält ihren normalen datengetriebenen Vorher-Nachher-Vergleich"
+		)
 
 	game._on_upgrade_chosen(game.current_upgrade_options[0])
 	await process_frame

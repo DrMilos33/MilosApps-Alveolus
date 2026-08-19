@@ -3,8 +3,12 @@ extends Node2D
 
 signal finished(projectile: TherapyProjectile)
 signal discovery_ready(projectile: TherapyProjectile)
+signal hostile_hit(projectile: TherapyProjectile, amount: float, profile: DamageProfile)
 
 const DEFAULT_SPEED := 576.0
+const HOSTILE_NORMAL := 0
+const HOSTILE_DIAMOND := 1
+const HOSTILE_HIT_RADIUS := 10.0
 
 var target: InfectionEnemy
 var topology: ArenaTopology
@@ -27,6 +31,16 @@ var visual_motion_initialized: bool = false
 var directional_mode: bool = false
 var maximum_distance: float = INF
 var impact_distance: float = -1.0
+var hostile_mode: bool = false
+var hostile_target: TherapyAvatar
+var hostile_damage_profile: DamageProfile
+var hostile_pattern: int = HOSTILE_NORMAL
+var hostile_pattern_phase: float = 0.0
+var hostile_origin: Vector2 = Vector2.ZERO
+var hostile_forward: Vector2 = Vector2.RIGHT
+var hostile_right: Vector2 = Vector2.DOWN
+var hostile_wave_amplitude: float = 0.0
+var hostile_wave_length: float = 180.0
 var _arena_min: Vector2 = Vector2.ZERO
 var _arena_max: Vector2 = Vector2.ZERO
 var _arena_size: Vector2 = Vector2.ZERO
@@ -64,6 +78,7 @@ func configure(
 	target_resolver = resolve_target
 	direction = Vector2.RIGHT
 	directional_mode = false
+	hostile_mode = false
 	maximum_distance = INF
 	impact_distance = -1.0
 	if _target_is_current():
@@ -104,9 +119,55 @@ func configure_directional(
 	target_resolver = resolve_target
 	direction = heading.normalized() if heading.length_squared() > 0.0001 else Vector2.RIGHT
 	directional_mode = true
+	hostile_mode = false
 	maximum_distance = maxf(max_distance, 0.0)
 	impact_distance = clampf(resolved_impact_distance, 0.0, maximum_distance) if resolved_impact_distance >= 0.0 else -1.0
 	lifetime = maximum_distance / maxf(speed, 1.0) + 0.25
+	rotation = direction.angle()
+	reset_visual_motion()
+	hide()
+	set_physics_process(false)
+
+
+func configure_hostile(
+	heading: Vector2,
+	amount: float,
+	arena_topology: ArenaTopology,
+	player: TherapyAvatar,
+	profile: DamageProfile,
+	pattern: int = HOSTILE_NORMAL,
+	pattern_phase: float = 0.0,
+	move_speed: float = 230.0,
+	max_distance: float = 1050.0,
+	wave_amplitude: float = 44.0,
+	wave_length: float = 180.0
+) -> void:
+	target = null
+	damage = maxf(0.0, amount)
+	topology = arena_topology
+	_cache_topology_bounds()
+	speed = maxf(move_speed, 1.0)
+	travelled_distance = 0.0
+	discovery_pending = false
+	damage_source = &"enemy_projectile"
+	target_generation = -1
+	target_handle = EntityHandle.INVALID
+	target_resolver = Callable()
+	direction = heading.normalized() if heading.length_squared() > 0.0001 else Vector2.RIGHT
+	directional_mode = false
+	maximum_distance = maxf(max_distance, 1.0)
+	impact_distance = -1.0
+	lifetime = maximum_distance / speed + 0.35
+	hostile_mode = true
+	hostile_target = player
+	hostile_damage_profile = profile
+	hostile_pattern = pattern
+	hostile_pattern_phase = fposmod(pattern_phase, 1.0)
+	hostile_origin = global_position
+	hostile_forward = direction
+	hostile_right = Vector2(-direction.y, direction.x)
+	hostile_wave_amplitude = maxf(0.0, wave_amplitude) if pattern == HOSTILE_DIAMOND else 0.0
+	hostile_wave_length = maxf(32.0, wave_length)
 	rotation = direction.angle()
 	reset_visual_motion()
 	hide()
@@ -120,6 +181,9 @@ func step_fixed(delta: float) -> void:
 	lifetime -= delta
 	if lifetime <= 0.0:
 		_finish()
+		return
+	if hostile_mode:
+		_step_hostile(delta)
 		return
 	if directional_mode:
 		var step_distance := speed * delta
@@ -180,6 +244,37 @@ func step_fixed(delta: float) -> void:
 	if travelled_distance >= 52.0:
 		_emit_discovery()
 
+
+func _step_hostile(delta: float) -> void:
+	var previous_position := global_position
+	travelled_distance = minf(maximum_distance, travelled_distance + speed * delta)
+	var lateral_offset := 0.0
+	if hostile_pattern == HOSTILE_DIAMOND:
+		var wave_position := fposmod(travelled_distance / hostile_wave_length + hostile_pattern_phase, 1.0)
+		var triangle := 1.0 - 4.0 * absf(wave_position - 0.5)
+		lateral_offset = triangle * hostile_wave_amplitude
+	var unwrapped := hostile_origin + hostile_forward * travelled_distance + hostile_right * lateral_offset
+	global_position = topology.wrap_position(unwrapped) if topology != null else unwrapped
+	var motion := topology.shortest_delta(previous_position, global_position) if topology != null else global_position - previous_position
+	if motion.length_squared() > 0.0001:
+		direction = motion.normalized()
+		rotation = direction.angle()
+	var crossed_torus := not (global_position - previous_position).is_equal_approx(motion)
+	if crossed_torus:
+		reset_visual_motion()
+	else:
+		visual_current_position = global_position
+		visual_current_angle = rotation
+	if is_instance_valid(hostile_target):
+		var hit_radius := TherapyAvatar.BODY_RADIUS + HOSTILE_HIT_RADIUS
+		var distance_squared := topology.distance_squared(global_position, hostile_target.global_position) if topology != null else global_position.distance_squared_to(hostile_target.global_position)
+		if distance_squared <= hit_radius * hit_radius:
+			hostile_hit.emit(self, damage, hostile_damage_profile)
+			_finish()
+			return
+	if travelled_distance >= maximum_distance:
+		_finish()
+
 func _draw() -> void:
 	draw_line(Vector2(-15.0, 2.0), Vector2(5.0, 2.0), Color(AlveolusVisualTheme.PETROL, 0.16), 7.0, true)
 	draw_line(Vector2(-15.0, 0.0), Vector2(4.0, 0.0), Color(AlveolusVisualTheme.TURQUOISE, 0.36), 6.0, true)
@@ -211,6 +306,16 @@ func recycle() -> void:
 	directional_mode = false
 	maximum_distance = INF
 	impact_distance = -1.0
+	hostile_mode = false
+	hostile_target = null
+	hostile_damage_profile = null
+	hostile_pattern = HOSTILE_NORMAL
+	hostile_pattern_phase = 0.0
+	hostile_origin = Vector2.ZERO
+	hostile_forward = Vector2.RIGHT
+	hostile_right = Vector2.DOWN
+	hostile_wave_amplitude = 0.0
+	hostile_wave_length = 180.0
 
 
 func reset_visual_motion() -> void:

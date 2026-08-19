@@ -16,6 +16,7 @@ extends Resource
 @export var cluster_chance_start: float = 0.0
 @export var cluster_chance_end: float = 0.05
 @export var boss_health_multiplier: float = 0.18
+@export var boss_speed_multiplier: float = 1.0
 @export var boss_phase_minions: PackedInt32Array = PackedInt32Array()
 @export var reward_multiplier: float = 1.0
 @export var event_driven_intro: bool = false
@@ -46,6 +47,7 @@ static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunCo
 	config.cluster_chance_start = level.cluster_chance_start
 	config.cluster_chance_end = level.cluster_chance_end
 	config.boss_health_multiplier = level.boss_health_multiplier
+	config.boss_speed_multiplier = level.boss_speed_multiplier
 	config.boss_phase_minions = level.boss_phase_minions
 	config.reward_multiplier = level.reward_multiplier
 	config.random_seed += level.order * 101

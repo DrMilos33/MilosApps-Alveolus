@@ -400,7 +400,7 @@ func _run() -> void:
 	_check(toggle.custom_minimum_size.y >= 44.0 and toggle.button_pressed, "ToggleRow ist konsistent groß und zustandsbehaftet")
 	_check((option_parts["control"] as OptionButton).custom_minimum_size.y >= 44.0, "OptionRow erfüllt das Mindestziel")
 	_check((slider_parts["control"] as HSlider).custom_minimum_size.y >= 44.0, "SliderRow erfüllt das Mindestziel")
-	_check(choice_row.custom_minimum_size.y == 64.0 and choice_card.custom_minimum_size.y == 88.0, "ChoiceRow und ChoiceCard besitzen getrennte feste Dichten")
+	_check(choice_row.custom_minimum_size.y == 64.0 and choice_card.custom_minimum_size.y == float(AlveolusVisualTheme.SELECTION_CARD_HEIGHT), "ChoiceRow und ChoiceCard besitzen getrennte feste Dichten")
 	_check(choice_row.theme_type_variation == AlveolusVisualTheme.TYPE_CHOICE_ROW, "ChoiceRow nutzt die kompakte zentrale Kartenrolle")
 	_check(choice_card.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTION_CARD, "ChoiceCard behält die ausführliche zentrale Kartenrolle")
 	_check(compact_research.custom_minimum_size.y == AlveolusVisualTheme.COMPACT_RESEARCH_HEIGHT and compact_research.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_COMPACT_RESEARCH, "CompactResearch bündelt 68-px-Dichte und Selected-Zustand")

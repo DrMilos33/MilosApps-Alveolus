@@ -18,6 +18,10 @@ var contact_damage: float
 @export var medical_name: String
 @export var damage_profile: DamageProfile
 @export var resistance_profile: ResistanceProfile
+@export var projectile_damage: float = 0.0
+@export var projectile_interval: float = 0.0
+@export var projectile_pattern: StringName = &""
+@export var contact_enabled: bool = true
 
 static func create(
 	definition_id: StringName,
@@ -53,6 +57,19 @@ static func create(
 	definition.damage_profile = profile if profile != null else _default_damage_profile(definition_id)
 	definition.resistance_profile = resistances if resistances != null else _default_resistance_profile(definition_id)
 	return definition
+
+
+func configure_projectile_attack(
+	attack_damage: float,
+	attack_interval: float,
+	pattern: StringName = &"normal",
+	allow_contact_damage: bool = true
+) -> EnemyDefinition:
+	projectile_damage = maxf(0.0, attack_damage)
+	projectile_interval = maxf(0.0, attack_interval)
+	projectile_pattern = pattern if projectile_damage > 0.0 and projectile_interval > 0.0 else &""
+	contact_enabled = allow_contact_damage
+	return self
 
 
 static func _default_damage_profile(definition_id: StringName) -> DamageProfile:

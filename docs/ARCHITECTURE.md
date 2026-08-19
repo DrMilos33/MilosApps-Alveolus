@@ -247,10 +247,19 @@ from the saved case seed. That seed advances only after a successful non-intro
 result, so failure and cancellation cannot silently reroll the case.
 
 `minor_focus` participates in the normal centralized enemy movement path with
-base speed 24 before case modifiers. It remains a detailed,
+base speed 20 before case modifiers. It remains a detailed,
 generation-safe spawning objective and releases four bacteria after its
 20-second lifecycle if it survives; mobility does not authorize a per-entity
 process loop or a second renderer.
+
+Enemy ranged attacks are scheduled by the fixed-capacity `EnemyAttackDirector`.
+It stores only generation-safe `EnemyWorld` handles and timers. Hostile shots
+reuse `TherapyProjectile` simulation records and `ProjectileWorld`, but occupy
+a separate stable `ProjectileRenderer` batch with a distinct texture. Release
+clears both possible render owners before a projectile node returns to its
+pool. Boss phase adds preserve their shooter role through deferred spawn
+metadata; the first boss starts its repeating four-add schedule only after its
+second phase.
 
 `ArenaBackdrop` precomputes the coral dashed torus seam and its eight corner
 segments during `configure()`. They are part of the existing one-shot static
@@ -263,8 +272,9 @@ callback stops, and reconfiguration reuses the same viewport/canvas nodes.
 avatar may render the orbit snapshot but must not apply damage. Every cell
 queries `CombatQuery.circle()` at its actual topology-wrapped world position,
 selects at most one generation-safe enemy handle and starts its own cooldown
-only after a valid geometric hit. The minimum trigger interval is 0.1 seconds
-per cell. Cell count, hit radius and damage come from `RunBuildState`; a single
+only after a valid geometric hit. The current base trigger interval is 0.2
+seconds per cell. The 0.1-second minimum remains the hard lower bound for later
+attack-speed upgrades. Cell count, hit radius and damage come from `RunBuildState`; a single
 shared avatar-centered area may not substitute for these geometric contacts.
 
 ## Feature contribution rule

@@ -261,7 +261,7 @@ func step_fixed(delta: float) -> void:
 		else:
 			visual_current_position = global_position
 	var contact_radius := definition.radius + TherapyAvatar.BODY_RADIUS
-	if distance_squared <= contact_radius * contact_radius and contact_cooldown <= 0.0:
+	if definition.contact_enabled and distance_squared <= contact_radius * contact_radius and contact_cooldown <= 0.0:
 		pressure_applied.emit(definition.contact_damage * damage_multiplier * _cached_status_contact_multiplier)
 		contact_cooldown = 0.82 if not definition.is_boss else 0.58
 

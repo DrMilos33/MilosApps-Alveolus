@@ -17,7 +17,7 @@ const SINGLE_EDUCATION_WIDTH := 520.0
 const DOUBLE_WIDTH := 680.0
 const TRIPLE_WIDTH := 940.0
 const MINIMUM_CARD_WIDTH := 240.0
-const CARD_HEIGHT := 112.0
+const CARD_HEIGHT := 120.0
 const EXTRA_VALUE_ROW_HEIGHT := 20.0
 const UPGRADE_ICON_SIZE := 34.0
 const MODAL_PADDING := 20
@@ -80,7 +80,7 @@ func apply_view_model(view_model: UpgradeOverlayViewModel) -> bool:
 		_rebuild_cards()
 		_education_body.text = view_model.education_text()
 		_education_panel.visible = view_model.shows_education()
-		_selection_helper.visible = view_model.option_count() == 3
+		_selection_helper.hide()
 		_reroll_button.visible = view_model.can_reroll()
 		_cancel_button.visible = view_model.allow_cancel()
 		_footer_actions.visible = view_model.can_reroll() or view_model.allow_cancel()
@@ -243,7 +243,7 @@ func _build() -> void:
 	_body_stack.add_child(_education_panel)
 
 	_selection_helper = AlveolusUIComponents.label(
-		"Du kannst 1 Upgrade auswählen.",
+		"",
 		AlveolusVisualTheme.TYPE_BODY_LABEL
 	)
 	_selection_helper.name = "SelectionHelper"
@@ -366,6 +366,8 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if option.compact_title():
+		title.add_theme_font_size_override("font_size", AlveolusVisualTheme.TEXT_CAPTION)
 	heading.add_child(title)
 
 	var effect := _build_effect_copy(option.effect())
@@ -377,6 +379,19 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	elif not option.comparison_text().is_empty():
 		var comparison := _build_comparison_copy(option.before_value(), option.after_value())
 		content.add_child(comparison)
+
+	var pick_index := AlveolusUIComponents.label(option.pick_index_text(), AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
+	pick_index.name = "PickIndex"
+	pick_index.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	pick_index.offset_left = -58.0
+	pick_index.offset_top = -27.0
+	pick_index.offset_right = -11.0
+	pick_index.offset_bottom = -7.0
+	pick_index.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	pick_index.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pick_index.set_meta(&"pick_count", option.pick_count())
+	pick_index.set_meta(&"maximum_picks", option.maximum_picks())
+	card.add_child(pick_index)
 
 	var focus_ring := _build_focus_ring()
 	card.add_child(focus_ring)
@@ -403,6 +418,7 @@ func _card_accessible_name(option: UpgradeOverlayViewModel.UpgradeOptionViewMode
 			parts.append("%s%s" % [row_prefix, row.value()])
 		else:
 			parts.append("%s%s zu %s" % [row_prefix, row.before_value(), row.value()])
+	parts.append("In dieser Runde %d von %d Mal gewählt" % [option.pick_count(), option.maximum_picks()])
 	return ". ".join(parts)
 
 

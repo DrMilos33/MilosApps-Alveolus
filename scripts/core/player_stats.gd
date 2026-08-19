@@ -141,7 +141,7 @@ func preview_upgrade(definition: UpgradeDefinition) -> UpgradePreview:
 			var after := maxf(0.22, therapy_cooldown * definition.magnitude)
 			var percent := roundi((1.0 - after / maxf(therapy_cooldown, 0.001)) * 100.0)
 			return UpgradePreview.create(
-				"+%d %% Rate" % percent,
+				"+%d %% Attack Speed" % percent,
 				"%s s  >  %s s Intervall" % [_decimal(therapy_cooldown, 2), _decimal(after, 2)],
 				level_text
 			)
@@ -265,7 +265,7 @@ func _sync_build_bases_from_fields() -> void:
 	run_build_state.set_base(RunBuildState.DEFENSE_CELL_DAMAGE, immune_damage)
 	run_build_state.set_base(RunBuildState.DEFENSE_CELL_RADIUS, CombatDistanceScale.world_from_stage(RunBuildState.BASE_DEFENSE_CELL_RADIUS_STAGE))
 	run_build_state.set_base(RunBuildState.DEFENSE_CELL_PROJECTILES, 2.0)
-	run_build_state.set_base(RunBuildState.DEFENSE_CELL_HIT_INTERVAL, 0.1)
+	run_build_state.set_base(RunBuildState.DEFENSE_CELL_HIT_INTERVAL, 0.2)
 	run_build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, ability_cooldown_multiplier)
 	run_build_state.set_base(RunBuildState.FINDING_PROGRESS, finding_progress_multiplier)
 	run_build_state.set_base(RunBuildState.SUPPORT_EFFECT, support_effect_multiplier)
@@ -299,10 +299,10 @@ func immune_cell_count() -> int:
 
 func immune_interval() -> float:
 	if run_build_state == null:
-		return 0.1
+		return 0.2
 	return maxf(0.1, run_build_state.value(
 		RunBuildState.DEFENSE_CELL_HIT_INTERVAL,
-		0.1,
+		0.2,
 		PackedStringArray(["defense_cell"])
 	))
 
@@ -359,7 +359,7 @@ func stat_sections(
 	var treatment_title := prepared_treatment.display_name if prepared_treatment != null else "Behandlung"
 	var treatment_rows: Array[Dictionary] = [
 		_stat_row(&"damage", "Schaden", _number(therapy_damage)),
-		_stat_row(&"rate", "Rate", CombatRateScale.formatted_per_second(therapy_cooldown)),
+		_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(therapy_cooldown)),
 		_stat_row(&"targets", "Ziele", str(therapy_targets)),
 		_stat_row(&"range_stage", "Reichweite", str(CombatDistanceScale.stage_from_world(therapy_range))),
 		_stat_row(&"projectiles", "Projektile", str(therapy_projectiles)),
@@ -383,6 +383,18 @@ func stat_sections(
 			var world_value := run_build_state.value(stat_id, float(ability.parameters[parameter_id]), ability.tags) if run_build_state != null else float(ability.parameters[parameter_id])
 			ability_rows.append(_stat_row(StringName("%s_stage" % String(parameter_id)), "Radius" if parameter_id == &"radius" else "Reichweite", str(CombatDistanceScale.stage_from_world(world_value))))
 		sections.append(StatSectionViewModel.create(StringName("ability:%d:%s" % [slot, String(ability.id)]), ability.display_name, ability_rows))
+	if immune_level > 0:
+		sections.append(StatSectionViewModel.create(&"ability:run:defense_cells", "Abwehrzellen", [
+			_stat_row(&"damage", "Schaden", _number(immune_damage)),
+			_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(immune_interval())),
+			_stat_row(&"projectiles", "Projektile", str(immune_cell_count())),
+			_stat_row(&"radius_stage", "Radius", str(CombatDistanceScale.stage_from_world(immune_radius()))),
+		]))
+	if support_level > 0:
+		sections.append(StatSectionViewModel.create(&"ability:run:regeneration", "Regeneration", [
+			_stat_row(&"recovery", "Heilung", "+%s" % _number(support_recovery())),
+			_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(support_interval())),
+		]))
 	return sections
 
 
@@ -400,12 +412,12 @@ func stat_rows(current_stability: float = -1.0, maximum_stability: float = -1.0,
 		{"group": "ALLGEMEIN", "label": "Regeneration", "value": "%s/s" % _number(life_regeneration_per_second)},
 		{"group": "ALLGEMEIN", "label": "Erfahrung", "value": "+%d %%" % roundi((experience_gain_multiplier - 1.0) * 100.0)},
 		{"group": "BEHANDLUNG", "label": "Schaden", "value": _number(therapy_damage)},
-		{"group": "BEHANDLUNG", "label": "Rate", "value": CombatRateScale.formatted_per_second(therapy_cooldown)},
+		{"group": "BEHANDLUNG", "label": "Attack Speed", "value": CombatRateScale.formatted_per_second(therapy_cooldown)},
 		{"group": "BEHANDLUNG", "label": "Ziele", "value": str(therapy_targets)},
 		{"group": "BEHANDLUNG", "label": "Reichweite", "value": str(CombatDistanceScale.stage_from_world(therapy_range))},
 		{"group": "ABWEHR", "label": "Zellen", "value": str(immune_cell_count())},
 		{"group": "ABWEHR", "label": "Schaden", "value": _number(immune_damage) if immune_level > 0 else "–"},
-		{"group": "ABWEHR", "label": "Rate", "value": CombatRateScale.formatted_per_second(immune_interval()) if immune_level > 0 else "–"},
+		{"group": "ABWEHR", "label": "Attack Speed", "value": CombatRateScale.formatted_per_second(immune_interval()) if immune_level > 0 else "–"},
 		{"group": "ABWEHR", "label": "Radius", "value": str(CombatDistanceScale.stage_from_world(immune_radius())) if immune_level > 0 else "–"},
 		{"group": "REGENERATION", "label": "Heilung", "value": "+%s" % _number(support_recovery()) if support_level > 0 else "–"},
 		{"group": "REGENERATION", "label": "Intervall", "value": "%s s" % _decimal(support_interval(), 2) if support_level > 0 else "–"},
@@ -425,7 +437,7 @@ func stat_rows(current_stability: float = -1.0, maximum_stability: float = -1.0,
 
 func compact_stat_text(current_stability: float = -1.0, maximum_stability: float = -1.0) -> String:
 	var state_text := "%s/%s" % [_number(current_stability), _number(maximum_stability)] if current_stability >= 0.0 and maximum_stability >= 0.0 else "–"
-	return "Leben  %s\nSchaden  %s   ·   Rate  %s\nZiele  %d   ·   Reichweite %d\nVerteidigung  %s %%   ·   Regeneration  %s/s\nAbwehrzellen  %d   ·   Abwehrschaden  %s\nErfahrungsradius %d" % [
+	return "Leben  %s\nSchaden  %s   ·   Attack Speed  %s\nZiele  %d   ·   Reichweite %d\nVerteidigung  %s %%   ·   Regeneration  %s/s\nAbwehrzellen  %d   ·   Abwehrschaden  %s\nErfahrungsradius %d" % [
 		state_text,
 		_number(therapy_damage),
 		CombatRateScale.formatted_per_second(therapy_cooldown),

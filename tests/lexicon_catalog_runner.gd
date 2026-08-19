@@ -135,7 +135,7 @@ func _test_gameplay_values_are_sourced() -> void:
 	var immune_model := provider.make_view_model(entries[&"neutrophil_orbit"], [&"neutrophil_orbit"])
 	_assert_numeric_row(immune_model, &"cells", immune_stats.immune_cell_count(), &"player_stats", &"immune_cell_count")
 	_assert_text_row(immune_model, &"immune_interval", &"player_stats", &"immune_interval")
-	_check(String(_row(immune_model, &"immune_interval").value) == "10/s", "Abwehrzellen liefern ihre fertig formatierte Rate")
+	_check(String(_row(immune_model, &"immune_interval").value) == "5/s", "Abwehrzellen liefern ihren halbierten fertig formatierten Attack Speed")
 
 	var regeneration_stats := PlayerStats.new()
 	regeneration_stats.life_regeneration_per_second = 2.75

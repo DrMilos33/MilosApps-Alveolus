@@ -84,9 +84,11 @@ func _test_immutable_view_model() -> UpgradeOverlayViewModel:
 		"title": "Abwehrzellen",
 		"effect": "Größeres Schutzgebiet.",
 		"icon_id": &"neutrophil_orbit",
+		"pick_count": 2,
+		"maximum_picks": 3,
 		"value_rows": [
 			{"id": &"radius", "label": "Radius", "value": "4", "accent_role": &"gold"},
-			{"id": &"rate", "label": "Rate", "before": "1,4/s", "value": "1,7/s", "accent_role": &"turquoise"},
+			{"id": &"rate", "label": "Attack Speed", "before": "1,4/s", "value": "1,7/s", "accent_role": &"turquoise"},
 		],
 	}]
 	var values_model: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(value_source, 8)
@@ -97,7 +99,8 @@ func _test_immutable_view_model() -> UpgradeOverlayViewModel:
 	returned_value_rows.clear()
 	_check(values_model.option_at(0).value_rows().size() == 2, "Darstellungsfertige Wertzeilen werden defensiv kopiert")
 	_check(values_model.option_at(0).value_rows()[0].label() == "Radius" and values_model.option_at(0).value_rows()[0].value() == "4", "Radius liegt als fertige Label-Wert-Zeile ohne UI-Umrechnung vor")
-	_check(values_model.option_at(0).value_rows()[1].label() == "Rate" and values_model.option_at(0).value_rows()[1].value() == "1,7/s", "Rate liegt mit sichtbarer /s-Einheit statt Intervallcopy vor")
+	_check(values_model.option_at(0).value_rows()[1].label() == "Attack Speed" and values_model.option_at(0).value_rows()[1].value() == "1,7/s", "Attack Speed liegt mit sichtbarer /s-Einheit statt Intervallcopy vor")
+	_check(values_model.option_at(0).pick_index_text() == "2/3", "Jede Ausbauoption transportiert ihren aktuellen Rundenzähler")
 
 	var equivalent: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create([
 		{
@@ -225,7 +228,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 		"accent_role": &"cobalt",
 		"value_rows": [
 			{"id": &"radius", "label": "Radius", "value": "4", "accent_role": &"gold"},
-			{"id": &"rate", "label": "Rate", "before": "1,4/s", "value": "1,7/s", "accent_role": &"turquoise"},
+			{"id": &"rate", "label": "Attack Speed", "before": "1,4/s", "value": "1,7/s", "accent_role": &"turquoise"},
 		],
 	}], 9)
 	_check(overlay.present(data_driven_values, false), "Datengetriebene Icon- und Wertzeilen werden präsentiert")
@@ -239,11 +242,11 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(value_icon != null and value_icon.kind == &"neutrophil_orbit" and value_icon.custom_minimum_size == Vector2(34.0, 34.0), "Ausbaukarte rendert das Presenter-Icon deutlich größer ohne lokale ID-Zuordnung")
 	_check(value_title != null and value_title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Komponentenname verwendet die kleinere zentrale Body-Typografie")
 	_check(radius_row != null and radius_row.get_parsed_text().replace("  ", " ") == "Radius 4", "Abwehrzellen zeigen die fertige Copy Radius 4")
-	_check(rate_row != null and rate_row.get_parsed_text().contains("Rate") and rate_row.get_parsed_text().contains("1,7/s"), "Rate bleibt als /s-Wert sichtbar")
+	_check(rate_row != null and rate_row.get_parsed_text().contains("Attack Speed") and rate_row.get_parsed_text().contains("1,7/s"), "Attack Speed bleibt als /s-Wert sichtbar")
 	_check(radius_row != null and not radius_row.get_parsed_text().contains("px") and not radius_row.get_parsed_text().contains("Stufe"), "Wertzeilen zeigen weder Pixel- noch Stufencopy")
 	_check(value_card.custom_minimum_size.y == UpgradeOverlay.CARD_HEIGHT + UpgradeOverlay.EXTRA_VALUE_ROW_HEIGHT, "Eine zweite Wertzeile vergrößert die Karte exakt um ihren zentralen Zeilenbedarf")
 	_check(rate_row != null and value_card.get_global_rect().encloses(rate_row.get_global_rect()), "Die zweite darstellungsfertige Wertzeile bleibt vollständig innerhalb der Karte sichtbar")
-	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Radius 4") and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Rate 1,4/s zu 1,7/s"), "Fokusname enthält dieselben darstellungsfertigen Wertfakten")
+	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Radius 4") and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Attack Speed 1,4/s zu 1,7/s"), "Fokusname enthält dieselben darstellungsfertigen Wertfakten")
 
 	var scripted: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
 		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Änderung."
@@ -260,14 +263,14 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.present(three, false), "Drei Ausbauoptionen werden gemeinsam präsentiert")
 	await _settle()
 	_check(overlay.cards().size() == 3 and overlay.cards_grid().columns == 3, "Breiter Viewport zeigt drei kompakte Karten ohne Browse-Churn")
-	_check(overlay.selection_helper().visible and overlay.selection_helper().text == "Du kannst 1 Upgrade auswählen.", "Normale Drei-Karten-Auswahl zeigt exakt den knappen Auswahlhinweis")
+	_check(not overlay.selection_helper().visible and overlay.selection_helper().text.is_empty(), "Normale Drei-Karten-Auswahl benötigt keinen zusätzlichen Auswahlhinweis")
 	_check(overlay.selection_helper().get_index() < overlay.cards_grid().get_index(), "Auswahlhinweis steht direkt vor den Karten in der Leserichtung")
 	var legacy_flagged_three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
 		_three_option_rows(), 12, true, "Veralteter Einführungstext"
 	)
 	_check(overlay.present(legacy_flagged_three, false), "Der alte Kompatibilitätsmarker darf drei normale Karten weiterhin präsentieren")
 	await _settle()
-	_check(overlay.cards().size() == 3 and overlay.selection_helper().visible, "Der Drei-Karten-Hinweis hängt ausschließlich von den sichtbaren Karten ab")
+	_check(overlay.cards().size() == 3 and not overlay.selection_helper().visible, "Drei Karten bleiben auch ohne redundanten Auswahlhinweis vollständig sichtbar")
 	var legacy_comparison := overlay.cards()[0].find_child("UpgradeComparison", true, false) as RichTextLabel
 	_check(legacy_comparison != null and not String(legacy_comparison.get_meta(&"semantic_before", "")).is_empty() and not String(legacy_comparison.get_meta(&"semantic_after", "")).is_empty(), "Auch markierte Legacy-Aufrufe bewahren normale Vergleichswerte")
 	var restored_three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_three_option_rows(), 13, false, "", true, true)
@@ -330,7 +333,7 @@ func _assert_card_contract(card: Button, option_id: StringName) -> void:
 	_check(card.get_meta(&"upgrade_id", &"") == option_id, "Ausbaukarte trägt ausschließlich ihre stabile ID")
 	_check(card.focus_mode == Control.FOCUS_NONE, "Mauskarten übernehmen keinen Keyboardfokus")
 	_check(card.scale.is_equal_approx(Vector2.ONE), "Ausbaukarte bleibt ohne Scale-Transform")
-	_check(card.custom_minimum_size.y <= 112.0, "Ausbaukarte bleibt trotz größerem Icon typografisch kompakt")
+	_check(card.custom_minimum_size.y <= 120.0, "Ausbaukarte bleibt trotz leicht erhöhter Lesefläche kompakt")
 	var title := card.find_child("UpgradeTitle", true, false) as Label
 	var icon := card.find_child("UpgradeIcon", true, false) as SimpleIcon
 	var effect := card.find_child("UpgradeEffect", true, false) as RichTextLabel

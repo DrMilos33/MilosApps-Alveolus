@@ -31,11 +31,11 @@ static func level_definitions() -> Array[LevelDefinition]:
 		LevelDefinition.create(
 			&"localized_focus", 1, "lol - name fehlt", "Fall 01 · lokalisierter Pneumokokkenherd", false,
 			-1.0, 180.0, 100.0, 0.744, 0.168, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
-			0.75, PackedInt32Array([3, 4]), 1.0,
+			0.75, PackedInt32Array([4, 4]), 1.0,
 			"Ein lokaler Bakterienherd belastet Doctor Milos. Stoppe ihn, bevor das Leben auf null fällt.",
 			"Der lokalisierte Infektionsherd wurde kontrolliert.",
 			"Die Infektionslast konnte in diesem Versuch nicht ausreichend kontrolliert werden."
-		).configure_case_variation(all_traits, all_findings, 30),
+		).configure_case_variation(all_traits, all_findings, 30).configure_boss_behavior(1.35),
 		LevelDefinition.create(
 			&"spreading_infection", 2, "Die Ausbreitung", "Fall 02 · bakterielle Pneumonie", false,
 			-1.0, 180.0, 100.0, 0.624, 0.132, 1.35, 2.05, 1.16, 1.45, 0.18, 0.38,
@@ -64,7 +64,7 @@ static func tutorial_hint_definitions() -> Dictionary:
 	}
 
 static func enemy_definitions() -> Dictionary:
-	return {
+	var result := {
 		&"pneumococcus": EnemyDefinition.create(
 			&"pneumococcus", "Bakterium", 22.0, 45.0, 2.2, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
 		),
@@ -73,11 +73,12 @@ static func enemy_definitions() -> Dictionary:
 		),
 		&"minor_focus": EnemyDefinition.create(
 			&"minor_focus", "Kleiner Herd", 180.0, 20.0, 0.0, 8, 38.0, Color("9a5bbb"), false, &"minor_focus", &"infection_focus", "Kleiner Infektionsherd"
-		),
+		).configure_projectile_attack(2.0, 2.6, &"normal", false),
 		&"infection_focus": EnemyDefinition.create(
 			&"infection_focus", "Infektionsherd", 2200.0, 30.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
-		)
+		).configure_projectile_attack(4.0, 1.6, &"diamond", true)
 	}
+	return result
 
 
 static func validate_combat_profiles(
@@ -131,12 +132,12 @@ static func discovery_definitions() -> Dictionary:
 		&"infection_focus": DiscoveryDefinition.create(
 			&"infection_focus", &"enemy_materialized", "Infektionsherd",
 			"Der Infektionsherd ist eine spielerische Darstellung der konzentrierten bakteriellen Belastung.",
-			"%s\nBoss · löst bei 70 %% und 40 %% Leben neue Bakterienschübe aus. Leben, Geschwindigkeit und Schaden werden je Fall skaliert." % _enemy_values_text(focus, "Bossgegner", false), &"enemy", 110, &"erreger", &"infection_focus", "Lokaler Infektionsherd"
+			"%s\nBoss · feuert fortlaufend zwei rautenförmig fliegende Projektile. Bei 70 %% und 40 %% Leben erscheinen je vier schießende Bakterien; nach der zweiten Phase folgen alle 20 Sekunden vier weitere." % _enemy_values_text(focus, "Bossgegner", false), &"enemy", 110, &"erreger", &"infection_focus", "Lokaler Infektionsherd"
 		),
 		&"minor_focus": DiscoveryDefinition.create(
 			&"minor_focus", &"enemy_materialized", "Kleiner Herd",
 			"Ein kleiner Herd steht vereinfacht für eine zusätzliche lokale Bakterienquelle.",
-			"%s\nBewegt sich langsam auf Doctor Milos zu · setzt nach 20 Sekunden vier Bakterien frei, falls er nicht kontrolliert wird." % _enemy_values_text(minor_focus, "Mobiles Nebenziel", false), &"enemy", 95, &"erreger", &"infection_focus", "Kleiner Infektionsherd"
+			"%s\nBewegt sich langsam auf Doctor Milos zu, feuert Projektile und setzt nach 20 Sekunden vier Bakterien frei, falls er nicht kontrolliert wird." % _enemy_values_text(minor_focus, "Mobiles Nebenziel", false), &"enemy", 95, &"erreger", &"infection_focus", "Kleiner Infektionsherd"
 		),
 		&"analysis_pickup": DiscoveryDefinition.create(
 			&"analysis_pickup", &"pickup_spawned", "Erfahrung",
@@ -146,7 +147,7 @@ static func discovery_definitions() -> Dictionary:
 		&"character_stats": DiscoveryDefinition.create(
 			&"character_stats", &"catalog", "Doctor Milos",
 			"Der beste Doctor mit Bandana.",
-			"GRUNDWERTE\n100 Leben · Geschwindigkeit 180 · Schaden 12,8 · Rate 1,22/s · Reichweite 16 · 1 Ziel · Erfahrungsradius 6. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", ""
+			"GRUNDWERTE\n100 Leben · Geschwindigkeit 180 · Schaden 12,8 · Attack Speed 1,22/s · Reichweite 16 · 1 Ziel · Erfahrungsradius 6. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", ""
 		),
 		&"patient_stability": DiscoveryDefinition.create(
 			&"patient_stability", &"run_started", "Leben",
@@ -161,7 +162,7 @@ static func discovery_definitions() -> Dictionary:
 		&"neutrophil_orbit": DiscoveryDefinition.create(
 			&"neutrophil_orbit", &"upgrade_applied", "Abwehrzellen",
 			"Neutrophile Granulozyten gehören zur angeborenen Immunabwehr und reagieren früh auf Bakterien.",
-			"2 Abwehrzellen · 5,4 Schaden · 10/s · Radius 4.", &"avatar", 70, &"therapie", &"immune_cell", "Neutrophile Granulozyten"
+			"2 Abwehrzellen · 5,4 Schaden · 5/s · Radius 4.", &"avatar", 70, &"therapie", &"immune_cell", "Neutrophile Granulozyten"
 		),
 		&"supportive_oxygenation": DiscoveryDefinition.create(
 			&"supportive_oxygenation", &"upgrade_applied", "Regeneration",
@@ -171,7 +172,7 @@ static func discovery_definitions() -> Dictionary:
 		&"boss_phases": DiscoveryDefinition.create(
 			&"boss_phases", &"boss_phase", "Bossphase",
 			"Die Phasen stehen für eine sprunghaft zunehmende lokale bakterielle Belastung.",
-			"Bei 70 % und 40 % Bossleben erscheint je ein Minion-Schub.", &"boss_bar", 60, &"erreger"
+			"Bei 70 % und 40 % Bossleben erscheinen je vier schießende Bakterien. Nach Phase zwei folgen alle 20 Sekunden weitere vier.", &"boss_bar", 60, &"erreger"
 		),
 		&"research_reward": DiscoveryDefinition.create(
 			&"research_reward", &"run_result", "Forschungsbelohnung",
@@ -213,7 +214,7 @@ static func upgrade_definitions() -> Array[UpgradeDefinition]:
 	var treatments: Array[StringName] = [&"treatment_precision", &"treatment_spread", &"treatment_pierce"]
 	return [
 		_run_upgrade(&"potency", "Stärkerer Impuls", "+7 Schaden pro Treffer.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"damage", 7.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 12.8, 1, &"enemy", PackedStringArray(["treatment"])),
-		_run_upgrade(&"rhythm", "Schnellere Impulse", "16 % häufigere Anwendung.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"cooldown_multiplier", 0.84, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"multiply", 0.84, &"tempo", "Rate", "Rate", 0.82, 2, &"", PackedStringArray(["treatment"])),
+		_run_upgrade(&"rhythm", "Schnellere Impulse", "16 % häufigere Anwendung.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"cooldown_multiplier", 0.84, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"multiply", 0.84, &"tempo", "Attack Speed", "Attack Speed", 0.82, 2, &"", PackedStringArray(["treatment"])),
 		_run_upgrade(&"penetration", "Mehr Reichweite", "+3 Reichweitenstufen.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"range", 90.0, "Gewebegängigkeit", treatments, [&"treatment", &"range"], RunBuildState.TREATMENT_RANGE, &"add", 90.0, &"distance_stage", "Stufen", "Reichweitenstufen", 480.0, 0, &"enemy", PackedStringArray(["treatment"])),
 		_run_upgrade(&"parallel_sites", "Zusätzliches Ziel", "Ein zusätzliches Ziel je Impuls.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"targets", 1.0, "Parallele Wirkorte", [&"treatment_precision"], [&"precise", &"targets"], RunBuildState.TREATMENT_TARGETS, &"add", 1.0, &"count", "Projektil", "Ziele", 1.0, 0, &"enemy", PackedStringArray(["precise"])),
 		UpgradeDefinition.create(&"neutrophils", "Abwehrzellen", "Zwei Abwehrzellen umkreisen Doctor Milos.", UpgradeDefinition.Path.IMMUNE, 1, &"immune_level", 1.0, "Neutrophile Rekrutierung"),
@@ -273,7 +274,7 @@ static func clinic_job_definitions() -> Dictionary:
 static func research_definitions() -> Array[ResearchDefinition]:
 	return [
 		ResearchDefinition.create(&"stability_reserve", "Mehr Leben", "+3 maximales Leben je Rang", PackedInt32Array([20, 45, 80]), &"max_health", 3.0),
-		ResearchDefinition.create(&"therapy_precision", "Stärkere Behandlung", "+2 % Schaden der Grundbehandlung je Rang", PackedInt32Array([25, 55, 95]), &"damage_multiplier", 0.02),
+		ResearchDefinition.create(&"therapy_precision", "Stärkere Behandlung", "+2 % Schaden der Behandlungen", PackedInt32Array([25, 55, 95]), &"damage_multiplier", 0.02),
 		ResearchDefinition.create(&"experience_gain", "Mehr Erfahrung", "+5 % Erfahrung je Rang", PackedInt32Array([25, 55, 95]), &"experience_multiplier", 0.05),
 		ResearchDefinition.create(&"defense_training", "Mehr Verteidigung", "+2 Verteidigung je Rang", PackedInt32Array([30, 60, 100]), &"defense", 2.0),
 		ResearchDefinition.create(&"life_regeneration", "Lebensregeneration", "+0,25 Leben pro Sekunde je Rang", PackedInt32Array([30, 60, 100]), &"life_regeneration", 0.25),

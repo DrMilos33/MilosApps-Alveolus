@@ -55,6 +55,7 @@ var simulation_root: Node2D
 var arena: ArenaBackdrop
 var crowd_renderer: CrowdRenderer
 var projectile_renderer: ProjectileRenderer
+var hostile_projectile_renderer: ProjectileRenderer
 var feedback_renderer: FeedbackRenderer
 var ability_feedback_world: AbilityFeedbackWorld
 var ability_target_preview: AbilityTargetPreview
@@ -68,6 +69,7 @@ var combat_query: CombatQuery
 var pickup_query: CombatQuery
 var defense_cell_world: DefenseCellWorld
 var treatment_beam_world: TreatmentBeamWorld
+var enemy_attack_director: EnemyAttackDirector
 var defense_cell_damage_profile: DamageProfile
 var avatar: TherapyAvatar
 var hud: GameHUD
@@ -235,6 +237,15 @@ func _ready() -> void:
 	projectile_renderer = ProjectileRenderer.new()
 	projectile_renderer.configure(combat_capacity.max_projectile_visuals)
 	simulation_root.add_child(projectile_renderer)
+	hostile_projectile_renderer = ProjectileRenderer.new()
+	hostile_projectile_renderer.name = "HostileProjectileRenderer"
+	hostile_projectile_renderer.configure(
+		combat_capacity.max_projectile_visuals,
+		preload("res://assets/art/visual_restart/enemy_projectile.svg"),
+		0.0
+	)
+	hostile_projectile_renderer.z_index = 7
+	simulation_root.add_child(hostile_projectile_renderer)
 	feedback_renderer = FeedbackRenderer.new()
 	feedback_renderer.configure(combat_capacity.max_feedback_visuals)
 	feedback_renderer.burst_finished.connect(_on_visual_burst_finished)
@@ -250,6 +261,9 @@ func _ready() -> void:
 	enemy_world = EnemyWorld.new().configure_enemy_world(combat_capacity)
 	projectile_world = ProjectileWorld.new().configure_projectile_world(combat_capacity)
 	pickup_world = PickupWorld.new().configure_pickup_world(combat_capacity)
+	enemy_attack_director = EnemyAttackDirector.new().configure(combat_capacity.max_enemies, enemy_world.resolve)
+	enemy_attack_director.projectile_requested.connect(_on_enemy_projectile_requested)
+	enemy_attack_director.reinforcements_requested.connect(_on_enemy_reinforcements_requested)
 	combat_query = CombatQuery.new().configure(
 		topology,
 		_enemy_position_for_handle,
@@ -345,6 +359,7 @@ func _ready() -> void:
 	hud.research_reset_requested.connect(_on_research_reset_requested)
 	hud.research_tab_changed.connect(_on_research_tab_changed)
 	hud.talent_toggle_requested.connect(_on_talent_toggle_requested)
+	hud.talent_rank_remove_requested.connect(_on_talent_rank_remove_requested)
 	hud.talent_reset_requested.connect(_on_talent_reset_requested)
 	hud.finding_confirmed.connect(_on_finding_confirmed)
 	hud.finding_reserve_swap_requested.connect(_on_finding_reserve_swap_requested)
@@ -474,6 +489,8 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 	_profile_phase(&"clock_spawn", phase_started)
 	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
 	enemy_world.step_fixed(delta, run_session)
+	if enemy_attack_director != null and not stress_test:
+		enemy_attack_director.step_fixed(delta, run_session)
 	_profile_phase(&"enemy_world", phase_started)
 	_combat_query_dirty = true
 	_pickup_query_dirty = true
@@ -1906,6 +1923,79 @@ func _spawn_directional_treatment_projectile(shot: TreatmentShot) -> void:
 		return
 	projectiles.append(projectile)
 
+
+func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: float, role: int) -> void:
+	if enemy_world == null or projectile_world == null or hostile_projectile_renderer == null:
+		return
+	var source := enemy_world.resolve(source_handle) as InfectionEnemy
+	if not is_instance_valid(source) or not source.is_targetable() or source.definition == null or not is_instance_valid(avatar):
+		return
+	if projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+		return
+	var heading := topology.shortest_delta(source.global_position, avatar.global_position).normalized()
+	if heading.length_squared() <= 0.0001:
+		heading = Vector2.RIGHT
+	var amount := source.definition.projectile_damage * source.damage_multiplier
+	var move_speed := 230.0
+	if role == EnemyAttackDirector.Role.PHASE_ADD:
+		amount = source.definition.base_damage * source.damage_multiplier * 0.75
+		move_speed = 215.0
+	elif role == EnemyAttackDirector.Role.MINOR_FOCUS:
+		move_speed = 205.0
+	elif role == EnemyAttackDirector.Role.BOSS:
+		move_speed = 250.0
+	if amount <= 0.0:
+		return
+	var projectile: TherapyProjectile
+	if not projectile_pool.is_empty():
+		projectile = projectile_pool.pop_back()
+	else:
+		projectile = TherapyProjectile.new()
+		projectile.z_index = 7
+		projectile.finished.connect(_on_projectile_finished)
+		projectile.discovery_ready.connect(_on_projectile_discovery_ready)
+		simulation_root.add_child(projectile)
+	if not projectile.hostile_hit.is_connected(_on_hostile_projectile_hit):
+		projectile.hostile_hit.connect(_on_hostile_projectile_hit)
+	projectile.global_position = source.global_position
+	projectile.configure_hostile(
+		heading,
+		amount,
+		topology,
+		avatar,
+		source.definition.damage_profile,
+		TherapyProjectile.HOSTILE_DIAMOND if pattern == EnemyAttackDirector.Pattern.DIAMOND else TherapyProjectile.HOSTILE_NORMAL,
+		phase,
+		move_speed
+	)
+	projectile.global_position = source.global_position
+	projectile.reset_visual_motion()
+	var projectile_handle := projectile_world.register_projectile(projectile)
+	if not EntityHandle.is_valid(projectile_handle):
+		_store_projectile(projectile)
+		return
+	if not hostile_projectile_renderer.register_projectile(projectile, projectile_handle, false):
+		projectile_world.release(projectile_handle, false)
+		_store_projectile(projectile)
+		return
+	projectiles.append(projectile)
+
+
+func _on_hostile_projectile_hit(_projectile: TherapyProjectile, amount: float, profile: DamageProfile) -> void:
+	_apply_incoming_damage(amount, profile)
+
+
+func _on_enemy_reinforcements_requested(source_handle: int, count: int) -> void:
+	if not EntityHandle.is_valid(source_handle) or count <= 0 or enemy_world == null:
+		return
+	var source := enemy_world.resolve(source_handle) as InfectionEnemy
+	if not is_instance_valid(source) or not source.is_targetable():
+		return
+	if _fixed_step_active:
+		run_session.event_queue.push(&"minions_requested", source_handle, EntityHandle.INVALID, float(count), source.global_position)
+		return
+	_apply_minions_requested(source.global_position, count, source_handle)
+
 func _spawn_treatment_beam(shot: TreatmentShot, duration: float) -> void:
 	if treatment_beam_world == null:
 		return
@@ -1985,7 +2075,7 @@ func _immune_step(delta: float) -> void:
 	var orbit_radius := stats.immune_orbit_radius()
 	var collision_radius := DefenseCellWorld.DEFAULT_HIT_RADIUS
 	var damage := stats.immune_damage
-	var hit_interval := 0.1
+	var hit_interval := stats.immune_interval()
 	if build_state != null:
 		count = maxi(1, roundi(build_state.value(RunBuildState.DEFENSE_CELL_PROJECTILES, float(count), PackedStringArray(["defense_cell"]))))
 		orbit_radius = build_state.value(RunBuildState.DEFENSE_CELL_RADIUS, orbit_radius, PackedStringArray(["defense_cell"]))
@@ -2143,7 +2233,7 @@ func _spawn_enemy(
 		enemy.z_index = 2
 		enemy.defeated.connect(_on_enemy_defeated)
 		enemy.pressure_applied.connect(_on_pressure_applied.bind(enemy))
-		enemy.minions_requested.connect(_on_minions_requested)
+		enemy.minions_requested.connect(_on_minions_requested.bind(enemy))
 		enemy.damage_feedback.connect(_on_enemy_damage_feedback)
 		enemy.health_changed.connect(_on_enemy_health_changed.bind(enemy))
 		enemy.boss_phase_changed.connect(_on_boss_phase_changed.bind(enemy))
@@ -2175,6 +2265,8 @@ func _spawn_enemy(
 	_combat_query_dirty = true
 	enemies.append(enemy)
 	crowd_renderer.register_enemy(enemy, force_detailed_discovery)
+	if enemy_attack_director != null and definition.id == &"minor_focus":
+		enemy_attack_director.register_enemy(world_handle, EnemyAttackDirector.Role.MINOR_FOCUS)
 	_apply_enemy_spawn_metadata(enemy, spawn_request)
 	return enemy
 
@@ -2183,6 +2275,10 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 		return
 	if request.source_id == &"hidden_nest":
 		hidden_nest_timers[enemy] = maxf(0.1, float(request.metadata.get("release_after_seconds", 20.0)))
+	if bool(request.metadata.get("ranged_shooter", false)) and enemy_attack_director != null and enemy_world != null:
+		var handle := enemy_world.handle_for(enemy)
+		if EntityHandle.is_valid(handle):
+			enemy_attack_director.register_enemy(handle, EnemyAttackDirector.Role.PHASE_ADD)
 
 func _spawn_boss() -> void:
 	if state == null or not state.active:
@@ -2194,12 +2290,24 @@ func _spawn_boss() -> void:
 	boss_aggregate_maximum = 0.0
 	boss_aggregate_phase = 0
 	for boss_index in range(maxi(1, config.boss_count)):
-		var boss := _spawn_enemy(
+		var request := EnemySpawnRequest.create(
 			&"infection_focus",
 			_spawn_position_around_avatar(600.0 + float(boss_index) * 36.0),
+			&"infection_focus",
+			config.boss_health_multiplier,
+			config.enemy_speed_multiplier * config.boss_speed_multiplier,
+			config.contact_damage_multiplier,
+			config.boss_phase_minions,
+			EnemySpawnRequest.Priority.CRITICAL,
+			&"boss"
+		)
+		var boss := _spawn_enemy(
+			&"infection_focus",
+			request.position,
 			-1.0,
 			true,
-			false
+			false,
+			request
 		)
 		if boss == null:
 			continue
@@ -2229,6 +2337,8 @@ func _register_active_boss(enemy: InfectionEnemy) -> void:
 	active_boss_handle_by_instance[enemy.get_instance_id()] = handle
 	active_boss_phase_by_handle[handle] = 0
 	boss_aggregate_maximum += maxf(enemy.max_health, 0.0)
+	if enemy_attack_director != null:
+		enemy_attack_director.register_enemy(handle, EnemyAttackDirector.Role.BOSS)
 	if active_boss == null:
 		active_boss = enemy
 
@@ -2288,19 +2398,34 @@ func _show_active_boss_hud() -> void:
 	if boss_aggregate_phase > 0:
 		hud.show_boss_phase(boss_aggregate_phase)
 
-func _on_minions_requested(origin: Vector2, count: int) -> void:
+func _on_minions_requested(origin: Vector2, count: int, source_enemy: InfectionEnemy = null) -> void:
+	var source_handle := enemy_world.handle_for(source_enemy) if enemy_world != null and is_instance_valid(source_enemy) else EntityHandle.INVALID
 	if _fixed_step_active:
-		run_session.event_queue.push(&"minions_requested", EntityHandle.INVALID, EntityHandle.INVALID, float(count), origin)
+		run_session.event_queue.push(&"minions_requested", source_handle, EntityHandle.INVALID, float(count), origin)
 		return
-	_apply_minions_requested(origin, count)
+	_apply_minions_requested(origin, count, source_handle)
 
-func _apply_minions_requested(origin: Vector2, count: int) -> void:
+func _apply_minions_requested(origin: Vector2, count: int, source_handle: int = EntityHandle.INVALID) -> void:
 	if state == null or not state.active:
 		return
+	var progress := 0.0 if config.event_driven_intro else clampf(state.elapsed / maxf(config.run_duration_seconds, 0.001), 0.0, 1.0)
+	var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, progress)
 	for index in range(count):
 		var angle := TAU * float(index) / float(maxi(count, 1)) + rng.randf_range(-0.22, 0.22)
 		var position := topology.wrap_position(origin + Vector2.from_angle(angle) * rng.randf_range(88.0, 130.0))
-		_spawn_enemy(&"pneumococcus", position, -1.0, true)
+		var request := EnemySpawnRequest.create(
+			&"pneumococcus",
+			position,
+			&"pneumococcus",
+			health_scale,
+			config.enemy_speed_multiplier,
+			config.contact_damage_multiplier,
+			PackedInt32Array(),
+			EnemySpawnRequest.Priority.CRITICAL,
+			&"boss_phase_add"
+		)
+		request.metadata["ranged_shooter"] = EntityHandle.is_valid(source_handle)
+		_spawn_enemy(&"pneumococcus", position, health_scale, true, true, request)
 
 func _on_boss_phase_changed(phase: int, enemy: InfectionEnemy) -> void:
 	if not is_instance_valid(enemy) or enemy_world == null:
@@ -2312,6 +2437,8 @@ func _on_boss_phase_changed(phase: int, enemy: InfectionEnemy) -> void:
 	if phase <= previous_phase:
 		return
 	active_boss_phase_by_handle[handle] = phase
+	if enemy_attack_director != null:
+		enemy_attack_director.set_boss_phase(handle, phase)
 	if phase > boss_aggregate_phase:
 		boss_aggregate_phase = phase
 		hud.show_boss_phase(boss_aggregate_phase)
@@ -2400,6 +2527,8 @@ func _store_damage_number(number: DamageNumber) -> void:
 
 func _on_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bool) -> void:
 	var handle := enemy_world.handle_for(enemy) if enemy_world != null and is_instance_valid(enemy) else EntityHandle.INVALID
+	if enemy_attack_director != null and EntityHandle.is_valid(handle):
+		enemy_attack_director.release(handle)
 	if crowd_renderer != null and is_instance_valid(enemy):
 		crowd_renderer.release_enemy(enemy, enemy.activation_generation)
 	if enemy_world != null and is_instance_valid(enemy):
@@ -2571,8 +2700,7 @@ func _apply_pickup_collected(value: int, pickup: AnalysisPickup) -> void:
 
 func _on_projectile_finished(projectile: TherapyProjectile) -> void:
 	var handle := projectile_world.handle_for(projectile) if projectile_world != null and is_instance_valid(projectile) else EntityHandle.INVALID
-	if projectile_renderer != null and EntityHandle.is_valid(handle):
-		projectile_renderer.release_projectile(projectile, handle)
+	_release_projectile_visual(projectile, handle)
 	if projectile_world != null and is_instance_valid(projectile):
 		if EntityHandle.is_valid(handle):
 			projectile_world.release(handle, _fixed_step_active)
@@ -2603,7 +2731,7 @@ func _apply_combat_event(event: CombatEventQueue.CombatEvent) -> void:
 		&"projectile_finished":
 			_apply_projectile_finished(event.payload as TherapyProjectile)
 		&"minions_requested":
-			_apply_minions_requested(event.position, roundi(event.amount))
+			_apply_minions_requested(event.position, roundi(event.amount), event.subject_handle)
 
 func _finalize_fixed_step() -> void:
 	_fixed_step_active = false
@@ -2623,6 +2751,8 @@ func _finalize_fixed_step() -> void:
 	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
 	if projectile_renderer != null:
 		projectile_renderer.publish_snapshot()
+	if hostile_projectile_renderer != null:
+		hostile_projectile_renderer.publish_snapshot()
 	_profile_phase(&"projectile_snapshot", phase_started)
 	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
 	if ability_feedback_world != null:
@@ -2631,8 +2761,7 @@ func _finalize_fixed_step() -> void:
 
 func _store_projectile(projectile: TherapyProjectile) -> void:
 	var allocated_handle := projectile_world.allocated_handle_for(projectile) if projectile_world != null else EntityHandle.INVALID
-	if projectile_renderer != null and EntityHandle.is_valid(allocated_handle):
-		projectile_renderer.release_projectile(projectile, allocated_handle)
+	_release_projectile_visual(projectile, allocated_handle)
 	if not _release_registry_entity_for_pool(projectile_world, projectile, &"projectile"):
 		return
 	projectile.recycle()
@@ -2641,6 +2770,15 @@ func _store_projectile(projectile: TherapyProjectile) -> void:
 			projectile_pool.append(projectile)
 	else:
 		projectile.queue_free()
+
+
+func _release_projectile_visual(projectile: TherapyProjectile, handle: int) -> void:
+	if not EntityHandle.is_valid(handle):
+		return
+	if projectile_renderer != null:
+		projectile_renderer.release_projectile(projectile, handle)
+	if hostile_projectile_renderer != null:
+		hostile_projectile_renderer.release_projectile(projectile, handle)
 
 func _store_pickup(pickup: AnalysisPickup) -> void:
 	if crowd_renderer != null:
@@ -2725,6 +2863,11 @@ func _store_visual_burst(burst: VisualBurst) -> void:
 			visual_burst_pool.append(burst)
 
 func _on_pressure_applied(amount: float, source_enemy: InfectionEnemy = null) -> void:
+	var incoming_profile := source_enemy.definition.damage_profile if source_enemy != null and source_enemy.definition != null else null
+	_apply_incoming_damage(amount, incoming_profile, source_enemy)
+
+
+func _apply_incoming_damage(amount: float, incoming_profile: DamageProfile, source_enemy: InfectionEnemy = null) -> void:
 	if state == null or not state.active or state.level_up_pending or pressure_grace_timer > 0.0:
 		return
 	if build_state != null and source_enemy != null and source_enemy.definition != null and source_enemy.definition.id == &"bacterial_cluster":
@@ -2735,7 +2878,6 @@ func _on_pressure_applied(amount: float, source_enemy: InfectionEnemy = null) ->
 			amount *= 1.0 + finding.magnitude
 		if build_state != null:
 			amount *= build_state.value(&"surge_contact", 1.0)
-	var incoming_profile := source_enemy.definition.damage_profile if source_enemy != null and source_enemy.definition != null else null
 	amount = CombatDamageResolver.resolve(amount, incoming_profile, stats.resistances if stats != null else null, stats.defense if stats != null else 0.0)
 	if ability_controller != null:
 		amount = ability_controller.absorb_pressure(amount)
@@ -3330,6 +3472,16 @@ func _on_talent_toggle_requested(id: StringName) -> void:
 		_save_meta()
 	hud.refresh_talents(_talent_view_model())
 
+func _on_talent_rank_remove_requested(id: StringName) -> void:
+	if flow_state != GameFlowState.State.RESEARCH:
+		return
+	var current_rank := meta.talent_rank(id)
+	if current_rank > 0 and meta.set_talent_rank(id, current_rank - 1):
+		_save_meta()
+	elif ui_sound_service != null:
+		ui_sound_service.play(UISoundService.ERROR)
+	hud.refresh_talents(_talent_view_model())
+
 func _on_talent_reset_requested() -> void:
 	if flow_state != GameFlowState.State.RESEARCH:
 		return
@@ -3499,6 +3651,10 @@ func _cleanup_run_nodes() -> void:
 		crowd_renderer.clear()
 	if projectile_renderer != null:
 		projectile_renderer.clear()
+	if hostile_projectile_renderer != null:
+		hostile_projectile_renderer.clear()
+	if enemy_attack_director != null:
+		enemy_attack_director.clear()
 	if feedback_renderer != null:
 		feedback_renderer.clear()
 	for enemy in enemies:

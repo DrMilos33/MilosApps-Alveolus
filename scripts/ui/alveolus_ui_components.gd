@@ -507,7 +507,15 @@ static func choice_card(
 	selected: bool = false,
 	disabled: bool = false
 ) -> Button:
-	return _choice_control(title, description, meta, selected, disabled, 88.0, &"choice_card")
+	return _choice_control(
+		title,
+		description,
+		meta,
+		selected,
+		disabled,
+		float(AlveolusVisualTheme.SELECTION_CARD_HEIGHT),
+		&"choice_card"
+	)
 
 static func selection_card(
 	title: String,

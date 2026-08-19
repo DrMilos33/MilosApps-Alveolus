@@ -231,7 +231,7 @@ func _test_upgrade_previews() -> void:
 	_assert_equal(target_preview.effect_text, "+1 Projektil", "Zielupgrade benennt den exakten Projektilzuwachs")
 	_assert_equal(target_preview.before_after_text, "1 Ziel  >  2 Ziele", "Zielupgrade zeigt Vorher und Nachher")
 	var rhythm_preview := stats.preview_upgrade(rhythm)
-	_assert_equal(rhythm_preview.effect_text, "+16 % Rate", "Rhythmusupgrade priorisiert den verständlichen Prozentzuwachs")
+	_assert_equal(rhythm_preview.effect_text, "+16 % Attack Speed", "Rhythmusupgrade priorisiert den verständlichen Prozentzuwachs")
 	_assert_equal(rhythm_preview.before_after_text, "1,22/s  >  1,45/s", "Intervallupgrade zeigt die zentral umgerechnete Vorher-/Nachher-Rate")
 	var immune_preview := stats.preview_upgrade(immune_damage)
 	_assert_equal(immune_preview.effect_text, "+3,6 Schaden", "Abwehrupgrade verwendet die kompakte Effektzeile")

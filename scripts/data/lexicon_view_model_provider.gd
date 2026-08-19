@@ -69,6 +69,16 @@ func _apply_enemy_source(view_model: LexiconEntryViewModel, enemy_id: StringName
 		StatRowViewModel.text(&"body_size", "Körpergröße", BodySizeCatalog.display_name(definition.body_size_class), definition.id, &"body_size_class"),
 		StatRowViewModel.boolean(&"boss", "Boss", definition.is_boss, definition.id, &"is_boss"),
 	]
+	if definition.projectile_damage > 0.0:
+		view_model.stat_rows.insert(3, StatRowViewModel.number(
+			&"projectile_damage",
+			"Projektilschaden",
+			definition.projectile_damage,
+			"",
+			1,
+			definition.id,
+			&"projectile_damage"
+		))
 
 func _apply_player_source(view_model: LexiconEntryViewModel) -> void:
 	var treatment := player_stats.prepared_treatment
@@ -87,7 +97,7 @@ func _apply_player_source(view_model: LexiconEntryViewModel) -> void:
 		StatRowViewModel.number(&"life_regeneration", "Lebensregeneration", player_stats.life_regeneration_per_second, "/s", 2, &"player_stats", &"life_regeneration_per_second"),
 		StatRowViewModel.text(&"resistances", "Resistenzen", _resistance_profile_text(player_stats.resistances), &"player_stats", &"resistances"),
 		StatRowViewModel.number(&"treatment_damage", "Schaden", player_stats.therapy_damage, "", 0, &"player_stats", &"therapy_damage"),
-		StatRowViewModel.text(&"treatment_interval", "Rate", CombatRateScale.formatted_per_second(player_stats.therapy_cooldown), &"player_stats", &"therapy_cooldown"),
+		StatRowViewModel.text(&"treatment_interval", "Attack Speed", CombatRateScale.formatted_per_second(player_stats.therapy_cooldown), &"player_stats", &"therapy_cooldown"),
 		StatRowViewModel.integer(&"treatment_range", "Reichweite", CombatDistanceScale.stage_from_world(player_stats.therapy_range), "", &"player_stats", &"therapy_range_stage"),
 		StatRowViewModel.integer(&"treatment_targets", "Ziele", player_stats.therapy_targets, "", &"player_stats", &"therapy_targets"),
 		StatRowViewModel.integer(&"treatment_projectiles", "Projektile", player_stats.therapy_projectiles, "", &"player_stats", &"therapy_projectiles"),
@@ -124,7 +134,7 @@ func _apply_discovery_source(view_model: LexiconEntryViewModel, discovery_id: St
 			view_model.stat_rows = [
 				StatRowViewModel.integer(&"cells", "Abwehrzellen", immune_stats.immune_cell_count(), "", &"player_stats", &"immune_cell_count"),
 				StatRowViewModel.number(&"immune_damage", "Schaden", immune_stats.immune_damage, "", 0, &"player_stats", &"immune_damage"),
-				StatRowViewModel.text(&"immune_interval", "Rate", CombatRateScale.formatted_per_second(immune_stats.immune_interval()), &"player_stats", &"immune_interval"),
+				StatRowViewModel.text(&"immune_interval", "Attack Speed", CombatRateScale.formatted_per_second(immune_stats.immune_interval()), &"player_stats", &"immune_interval"),
 				StatRowViewModel.integer(&"immune_radius", "Radius", CombatDistanceScale.stage_from_world(immune_stats.immune_radius()), "", &"player_stats", &"immune_radius_stage"),
 			]
 		&"supportive_oxygenation":
@@ -153,7 +163,7 @@ func _treatment_rows(definition: TreatmentDefinition) -> Array[StatRowViewModel]
 	return [
 		StatRowViewModel.number(&"damage", "Schaden", definition.base_damage, "", 0, definition.id, &"base_damage"),
 		StatRowViewModel.text(&"damage_type", "Schadenstyp", _damage_profile_text(definition.damage_profile), definition.id, &"damage_profile"),
-		StatRowViewModel.text(&"interval", "Rate", CombatRateScale.formatted_per_second(definition.base_interval), definition.id, &"base_interval"),
+		StatRowViewModel.text(&"interval", "Attack Speed", CombatRateScale.formatted_per_second(definition.base_interval), definition.id, &"base_interval"),
 		StatRowViewModel.integer(&"range", "Reichweite", definition.base_range_stage(), "", definition.id, &"base_range_stage"),
 		StatRowViewModel.integer(&"projectiles", "Projektile", definition.base_projectiles, "", definition.id, &"base_projectiles"),
 		StatRowViewModel.integer(&"max_hits", "Maximale Treffer", definition.max_hits, "", definition.id, &"max_hits"),

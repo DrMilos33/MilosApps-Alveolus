@@ -79,7 +79,11 @@ const TEXT_DISPLAY := 36
 const BUTTON_HEIGHT_PRIMARY := 48
 const BUTTON_HEIGHT_SECONDARY := 44
 const TOUCH_TARGET_MINIMUM := 44
-# Progression carriers need their own density tokens: the 88-px SelectionCard
+# Detailed selection tiles are deliberately a little taller than before. The
+# compact progression carriers keep their own density tokens because this safe
+# area is intentionally too large for the research board and talent tree.
+const SELECTION_CARD_HEIGHT := 92
+# Progression carriers need their own density tokens: the SelectionCard
 # safe area is intentionally too large for the research board and talent tree.
 const COMPACT_RESEARCH_HEIGHT := 68
 const TALENT_NODE_SIZE := 68
@@ -240,8 +244,8 @@ static func _configure_variations(theme: Theme) -> void:
 	_register_navigation_button_variation(theme, TYPE_NAVIGATION_BUTTON)
 	theme.set_font("font", TYPE_NAVIGATION_BUTTON, body_font())
 	theme.set_font_size("font_size", TYPE_NAVIGATION_BUTTON, TEXT_CAPTION)
-	_register_button_variation(theme, TYPE_SELECTION_CARD, COBALT, false, false, 88, false, true)
-	_register_button_variation(theme, TYPE_SELECTED_CARD, TEAL, false, false, 88, true, true)
+	_register_button_variation(theme, TYPE_SELECTION_CARD, COBALT, false, false, SELECTION_CARD_HEIGHT, false, true)
+	_register_button_variation(theme, TYPE_SELECTED_CARD, TEAL, false, false, SELECTION_CARD_HEIGHT, true, true)
 	_register_button_variation(theme, TYPE_COMPACT_RESEARCH, COBALT, false, false, COMPACT_RESEARCH_HEIGHT, false, true)
 	_register_button_variation(theme, TYPE_SELECTED_COMPACT_RESEARCH, TEAL, false, false, COMPACT_RESEARCH_HEIGHT, true, true)
 	_register_button_variation(theme, TYPE_TALENT_NODE, COBALT, false, false, TALENT_NODE_SIZE, false, true)

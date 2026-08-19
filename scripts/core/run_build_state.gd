@@ -65,7 +65,7 @@ static func from_treatment(definition: TreatmentDefinition) -> RunBuildState:
 		DEFENSE_CELL_DAMAGE: BASE_DEFENSE_CELL_DAMAGE,
 		DEFENSE_CELL_RADIUS: CombatDistanceScale.world_from_stage(BASE_DEFENSE_CELL_RADIUS_STAGE),
 		DEFENSE_CELL_PROJECTILES: 2.0,
-		DEFENSE_CELL_HIT_INTERVAL: 0.1,
+		DEFENSE_CELL_HIT_INTERVAL: 0.2,
 		ACTIVE_COOLDOWN: 1.0,
 		FINDING_PROGRESS: 1.0,
 		SUPPORT_EFFECT: 1.0,
@@ -265,7 +265,7 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 			formatted_after = str(after_stage)
 		&"tempo":
 			var percent := roundi((1.0 - after / maxf(before, 0.001)) * 100.0)
-			effect_text = "+%d %% Rate" % percent
+			effect_text = "+%d %% Attack Speed" % percent
 			formatted_before = CombatRateScale.formatted_per_second(before)
 			formatted_after = CombatRateScale.formatted_per_second(after)
 		&"cooldown":

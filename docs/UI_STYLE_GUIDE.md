@@ -115,9 +115,9 @@ Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht 
 
 - Eine Run-Ausbaukarte verwendet als Überschrift ausschließlich den betroffenen Komponentennamen. Allgemeine Behandlungsverbesserungen tragen den Namen der aktuell ausgerüsteten Behandlung; andere Karten heißen entsprechend `Abwehrzellen`, `idk name stoß`, `Fetter lazer` oder `Geschwindigkeit`. Wirkung und Vorher-Nachher-Änderung stehen nur darunter.
 - Das Level-Up-Modal zentriert den Titel `Level Up!` innerhalb seiner eigenen Fläche, unabhängig von umgebenden HUD-Ankern.
-- Ein Level-up zeigt drei normale Ausbaukarten mit ihren regulären Vergleichswerten. Der ergänzende Hinweis lautet exakt `Du kannst 1 Upgrade auswählen.` und gilt unabhängig vom Intro; ein historischer scripted-Intro-Ein-Kartenmodus darf die Zahl der Karten oder deren Vergleichsdaten nicht verändern.
+- Ein Level-up zeigt drei normale Ausbaukarten mit ihren regulären Vergleichswerten. Ein zusätzlicher Satz zur Einzelauswahl wird nicht angezeigt. Ein historischer scripted-Intro-Ein-Kartenmodus darf die Zahl der Karten oder deren Vergleichsdaten nicht verändern.
 - Upgradeicons werden über die betroffene Komponente datengetrieben aufgelöst und erscheinen mit ungefähr 32 Pixeln sichtbar größer als bisher; die danebenstehende Komponentenüberschrift bleibt kompakt. Die UI besitzt keine ID-Mappingtabelle für zukünftige Ausbauten.
-- Sichtbare Behandlungstempi und Abwehrzelltempi erscheinen als zentral fertig berechnete Rate mit `/s`, beispielsweise `1,22/s` statt `0,82 s Intervall`. Abklingzeiten bleiben Sekunden. Radius- und Reichweitenwerte bleiben nackte zentrale Zahlen ohne Pixel- oder `Stufe`-Copy.
+- Ausbaukarten sind geringfügig höher als der bisherige Kompaktwert und zeigen unten rechts den aktuellen Rundenzähler als `gewählt/maximal`. Sichtbare Behandlungstempi und Abwehrzelltempi heißen `Attack Speed` und erscheinen als zentral fertig berechneter Wert mit `/s`, beispielsweise `1,22/s` statt `0,82 s Intervall`. Abklingzeiten bleiben Sekunden. Radius- und Reichweitenwerte bleiben nackte zentrale Zahlen ohne Pixel- oder `Stufe`-Copy.
 - Das Ergebnis besitzt keine Überschrift `Belohnung`. Sein Rewardstrip zeigt in vier gleichwertigen Spalten zuerst Forschungsicon und reine Zahl, danach vorläufig exakt `+ irgendwas`, `+ maybe nochwas` und `+ idk`.
 - Eine Niederlage zeigt exakt den Titel `You suck`. Ein Untertitel, Grundtext oder eine wiederholte Niederlagenursache wird nicht reserviert oder dargestellt.
 
@@ -202,7 +202,7 @@ Die UI- und Binding-Runner, darunter `tests/style_gallery_runner.gd`, prüfen:
 - nackte Radius-/Reichweitenstufenwerte ohne `Stufe`, Pixel oder Weltwerte;
 - differenziellen Kontextquellen-Sync mit stabilen IDs, flackerfreier Aktualisierung und viewportgebundener diagonaler Befundplatzierung;
 - stabile Charakterwert-Sektionen samt `SimpleIcon`-Zustand, Accessible Name und erhaltenem Aufklappzustand sowie das Grundwerte-only-HUD mit zentral berechneter Niederlagen-Forschungsprognose;
-- Komponentenüberschriften und drei normale Vergleichskarten auf Ausbaukarten, den Hinweis `Du kannst 1 Upgrade auswählen.`, lokal zentriertes `Level Up!` und die untertitellose Niederlage `You suck`;
+- Komponentenüberschriften, Rundenzähler und drei normale Vergleichskarten ohne redundanten Auswahlsatz, lokal zentriertes `Level Up!` und die untertitellose Niederlage `You suck`;
 - `Dauer ∞` für die Introplanung sowie die persistent und cleanup-sicher ein-/ausblendbare containerlose `PlainRunPrompt`-Darstellung mit einmalig konsumierter Linksklickbestätigung;
 - das kachellose Run-HUD mit verstrichener Rundenzeit, Viererreihen optionaler Werte sowie Abklingzeitspuren für ausschließlich belegte Fähigkeiten;
 - Mindestschrift und Kontrast;

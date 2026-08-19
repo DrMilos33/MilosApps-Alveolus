@@ -262,6 +262,8 @@ func _run() -> void:
 		&"treatment:treatment_precision",
 		&"ability:0:ability_focus_field",
 		&"ability:1:ability_emergency_support",
+		&"ability:run:defense_cells",
+		&"ability:run:regeneration",
 	]
 	var actual_section_ids: Array[StringName] = []
 	for section_panel in pause_stat_sections:
@@ -270,7 +272,7 @@ func _run() -> void:
 		_check(section_panel.get_meta(&"alveolus_component", &"") == &"stat_accordion_section", "Jede Charakterwertegruppe verwendet die gemeinsame Accordion-Sektion")
 		_check(hud.pause_screen.section_header(stable_section_id) != null, "Jede Charakterwertegruppe besitzt eine fokussierbare Abschnittsüberschrift")
 		_check(hud.pause_screen.section_body(stable_section_id).columns == 2, "Geöffnete Abschnittswerte nutzen bei 1280 × 720 zwei kompakte Spalten")
-	_check(actual_section_ids == expected_section_ids and pause_stats_grid.get_child_count() == expected_section_ids.size(), "Grundwerte, Behandlung und beide belegten Aktivslots erscheinen als vier stabile Abschnitte")
+	_check(actual_section_ids == expected_section_ids and pause_stats_grid.get_child_count() == expected_section_ids.size(), "Grundwerte, Behandlung, aktive Slots und im Run erworbene Systeme erscheinen als stabile Abschnitte")
 	_check(hud.pause_screen.is_section_expanded(&"general"), "Grundwerte sind beim ersten Öffnen sichtbar")
 	_check(not hud.pause_screen.is_section_expanded(&"treatment:treatment_precision") and not hud.pause_screen.is_section_expanded(&"ability:0:ability_focus_field") and not hud.pause_screen.is_section_expanded(&"ability:1:ability_emergency_support"), "Behandlung und Aktivslots beginnen platzsparend eingeklappt")
 	var expected_stat_rows := 0
@@ -312,8 +314,8 @@ func _run() -> void:
 		else:
 			value_right_edges[value_column_key] = value_rect.end.x
 	_check(
-		pause_stats_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and not pause_stats_scroll.get_v_scroll_bar().visible,
-		"Charakterwerte benötigen bei 1280 × 720 keinen Scrollbalken (Inhalt %.1f, Fläche %.1f, Modus %d)" % [pause_stats_grid.get_combined_minimum_size().y, pause_stats_scroll.size.y, pause_stats_scroll.vertical_scroll_mode]
+		pause_stats_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and pause_stats_scroll.get_v_scroll_bar().visible,
+		"Dicht belegte Charakterwerte bleiben über einen gezielten inneren Scrollbereich vollständig erreichbar (Inhalt %.1f, Fläche %.1f, Modus %d)" % [pause_stats_grid.get_combined_minimum_size().y, pause_stats_scroll.size.y, pause_stats_scroll.vertical_scroll_mode]
 	)
 	hud.return_to_pause_menu()
 	_check(hud.pause_screen.visible and hud.pause_screen.current_mode() == PauseOverlay.Mode.MENU, "Zurück führt in den Menümodus der Pause statt in den Run")
@@ -368,7 +370,7 @@ func _run() -> void:
 	var defense_cell_copy := defense_cell_comparison.get_parsed_text() if defense_cell_comparison != null else "<fehlend>"
 	_check(
 		defense_cell_comparison != null \
-			and defense_cell_copy.contains("10/s") \
+			and defense_cell_copy.contains("5/s") \
 			and defense_cell_copy.contains("Radius 4") \
 			and not defense_cell_copy.contains("Intervall") \
 			and not defense_cell_copy.contains("Stufe") \

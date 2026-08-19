@@ -200,6 +200,14 @@ func _test_runtime_config_and_double_boss() -> void:
 	first.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	second.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	_true(first.is_targetable() and second.is_targetable(), "Beide Bosse materialisieren regulär")
+	_near(first.speed_multiplier, game.selected_level.enemy_speed_multiplier * 1.35, "Der Fall-1-Boss erhält den zusätzlichen Geschwindigkeitsfaktor")
+	game.enemy_attack_director.step_fixed(0.65, game.run_session)
+	var hostile_count := 0
+	for projectile in game.projectiles:
+		if projectile is TherapyProjectile and (projectile as TherapyProjectile).hostile_mode:
+			hostile_count += 1
+	_equal(hostile_count, 4, "Zwei Bosse erzeugen beim ersten Angriff je exakt zwei Gegnerprojektile")
+	_equal(game.hostile_projectile_renderer.active_count(), 4, "Alle Gegnerprojektile besitzen genau einen stabilen feindlichen Renderslot")
 	var initial_snapshot: Dictionary = game.active_boss_health_snapshot()
 	_near(float(initial_snapshot.get("current", 0.0)), first.max_health + second.max_health, "Boss-HUD aggregiert das aktuelle Leben beider Bosse")
 	_near(float(initial_snapshot.get("maximum", 0.0)), first.max_health + second.max_health, "Boss-HUD aggregiert das Maximalleben beider Bosse")

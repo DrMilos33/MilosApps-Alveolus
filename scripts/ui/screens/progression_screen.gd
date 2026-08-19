@@ -12,6 +12,7 @@ signal tab_changed(tab: StringName)
 signal research_purchase(id: StringName)
 signal research_reset
 signal talent_toggle(id: StringName)
+signal talent_rank_remove(id: StringName)
 signal talent_reset
 signal back
 
@@ -509,6 +510,7 @@ func _rebuild_talents(branches: Array) -> void:
 			button.set_meta(&"alveolus_accessible_name", _talent_accessible_name(node_model, state))
 			button.set_meta(&"ui_sound_cue", &"confirm" if node_model.interactive() else &"error")
 			button.pressed.connect(_on_talent_pressed.bind(node_model.id()))
+			button.gui_input.connect(_on_talent_gui_input.bind(node_model.id()))
 			_build_talent_symbol_content(
 				button,
 				symbol_kind,
@@ -760,6 +762,19 @@ func _on_research_pressed(id: StringName) -> void:
 func _on_talent_pressed(id: StringName) -> void:
 	if bool(_talent_interactive.get(id, false)):
 		talent_toggle.emit(id)
+
+
+func _on_talent_gui_input(event: InputEvent, id: StringName) -> void:
+	if not event is InputEventMouseButton:
+		return
+	var mouse_event := event as InputEventMouseButton
+	if not mouse_event.pressed or mouse_event.button_index != MOUSE_BUTTON_RIGHT:
+		return
+	var button := _talent_buttons.get(id) as Button
+	if button == null or int(button.get_meta(&"talent_rank_current", 0)) <= 0:
+		return
+	talent_rank_remove.emit(id)
+	button.accept_event()
 
 
 func _set_selected_tab(tab: StringName) -> void:

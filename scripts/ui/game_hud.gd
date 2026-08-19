@@ -42,6 +42,7 @@ signal ability_slot_requested(slot: int)
 signal pause_requested
 signal research_tab_changed(tab: StringName)
 signal talent_toggle_requested(id: StringName)
+signal talent_rank_remove_requested(id: StringName)
 signal talent_reset_requested
 signal finding_reaction_selected(id: StringName)
 signal finding_reserve_swap_requested(incoming_id: StringName, outgoing_id: StringName)
@@ -760,6 +761,7 @@ func _build_research() -> Control:
 	progression_screen.research_purchase.connect(func(id: StringName) -> void: research_purchase_requested.emit(id))
 	progression_screen.research_reset.connect(func() -> void: research_reset_requested.emit())
 	progression_screen.talent_toggle.connect(func(id: StringName) -> void: talent_toggle_requested.emit(id))
+	progression_screen.talent_rank_remove.connect(func(id: StringName) -> void: talent_rank_remove_requested.emit(id))
 	progression_screen.talent_reset.connect(func() -> void: talent_reset_requested.emit())
 	progression_screen.back.connect(func() -> void: back_requested.emit())
 	_map_progression_compatibility_controls()
@@ -3295,6 +3297,9 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 			"value_rows": _upgrade_value_rows(definition, before_value, after_value),
 			"icon_id": icon_id,
 			"accent_role": _upgrade_accent_role(definition),
+			"pick_count": int(stats.upgrade_levels.get(definition.id, 0)),
+			"maximum_picks": definition.max_level,
+			"compact_title": definition.heading_component_id(stats.prepared_treatment.id if stats.prepared_treatment != null else &"") == &"movement",
 		})
 	var model := UpgradeOverlayViewModel.create(
 		rows,
@@ -3335,7 +3340,7 @@ func _upgrade_value_rows(definition: UpgradeDefinition, before_value: String, af
 		&"distance_stage":
 			label = "Reichweite" if definition.preview_stat == RunBuildState.TREATMENT_RANGE else "Radius"
 		&"tempo":
-			label = "Rate"
+			label = "Attack Speed"
 		&"cooldown":
 			label = "Abklingzeit"
 		_:

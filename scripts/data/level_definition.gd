@@ -18,6 +18,7 @@ extends Resource
 @export var cluster_chance_start: float
 @export var cluster_chance_end: float
 @export var boss_health_multiplier: float
+@export var boss_speed_multiplier: float = 1.0
 @export var boss_phase_minions: PackedInt32Array
 @export var reward_multiplier: float
 @export_multiline var briefing_text: String
@@ -84,6 +85,11 @@ func configure_case_variation(
 	visible_trait_ids = traits.duplicate()
 	hidden_finding_ids = findings.duplicate()
 	finding_progress_target = maxi(0, finding_target)
+	return self
+
+
+func configure_boss_behavior(speed_multiplier: float) -> LevelDefinition:
+	boss_speed_multiplier = maxf(speed_multiplier, 0.0)
 	return self
 
 func duration_text() -> String:

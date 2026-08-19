@@ -103,6 +103,11 @@ func _test_stat_sections_and_headings() -> void:
 	_equal(potency.resolved_component_name(treatment), "Impuls", "UI erhält nur den aufgelösten Komponentennamen")
 	var mobility := _upgrade(&"mobility")
 	_equal(mobility.resolved_component_name(treatment), "Geschwindigkeit", "Allgemeiner Geschwindigkeitsausbau benennt seine Komponente stabil")
+	_true(stats.apply_upgrade(_upgrade(&"neutrophils")), "Abwehrzellen können im Run erworben werden")
+	var acquired_sections := stats.stat_sections(82.0, 100.0, 7.0, 12.0)
+	_equal(acquired_sections.size(), 5, "Eine im Run erworbene Fähigkeit erscheint sofort als eigene Charakterwertsektion")
+	_equal(acquired_sections[4].id(), &"ability:run:defense_cells", "Erworbene Abwehrzellen besitzen eine stabile dynamische Sektions-ID")
+	_true(str(acquired_sections[4].rows()).contains("5/s"), "Abwehrzellen zeigen den halbierten Attack Speed")
 
 
 func _test_presentation_apis() -> void:
@@ -130,7 +135,7 @@ func _test_presentation_apis() -> void:
 	_equal(_upgrade(&"phagocytosis").resolved_icon_id(treatment), &"neutrophil_orbit", "Abwehrzellenupgrade liefert das zentrale Neutrophilen-Icon")
 	_equal(_upgrade(&"mobility").resolved_icon_id(treatment), &"movement_training", "Geschwindigkeitsupgrade liefert das zentrale Forschungs-Icon")
 	_equal(CombatRateScale.formatted_per_second(0.82), "1,22/s", "Interne Behandlung 0,82 s wird zentral als sichtbare Rate formatiert")
-	_equal(CombatRateScale.formatted_per_second(0.1), "10/s", "Abwehrzellen-Hitlimit wird als Rate statt Intervall präsentiert")
+	_equal(CombatRateScale.formatted_per_second(0.2), "5/s", "Abwehrzellen-Basisfrequenz wird als halbierter Attack Speed präsentiert")
 	var defense_stats := PlayerStats.new()
 	var defense_preview := defense_stats.preview_upgrade(_upgrade(&"neutrophils"))
 	_true(defense_preview.after_value.contains("Radius 4"), "Abwehrzellen-Vorschau liefert den zentralen Radius 4")
