@@ -73,7 +73,7 @@ func _run() -> void:
 	for _tick in range(180):
 		world.step_fixed(1.0 / 60.0)
 		smallest_cluster_spacing = minf(smallest_cluster_spacing, topology.shortest_delta(first.global_position, second.global_position).length())
-	_true(cluster_minimum > cluster_definition.radius * 2.6, "Rote Gruppen erhalten eine deutlich größere modellbezogene Abstandshülle")
+	_true(cluster_minimum > cluster_definition.radius * 2.4, "Rote Gruppen erhalten eine modellbezogen größere Abstandshülle")
 	_true(smallest_cluster_spacing >= cluster_minimum - 0.75, "Rote Gruppen unterschreiten ihre Modellhülle nicht (%.2f / %.2f)" % [smallest_cluster_spacing, cluster_minimum])
 
 	first.global_position = Vector2(1.0, 0.0)

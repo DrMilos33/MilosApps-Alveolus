@@ -19,11 +19,12 @@ const DEATH_SECONDS := 0.0
 const HIT_REACTION_SECONDS := 0.09
 const DEFAULT_KNOCKBACK_SECONDS := 0.28
 const DEFAULT_STUN_SECONDS := 1.0
-const SMALL_CROWD_RADIUS_FACTOR := 1.14
-const CLUSTER_CROWD_RADIUS_FACTOR := 1.35
+const SMALL_CROWD_RADIUS_FACTOR := 1.10
+const CLUSTER_CROWD_RADIUS_FACTOR := 1.25
 const NEST_CROWD_RADIUS_FACTOR := 1.18
 const BOSS_CROWD_RADIUS_FACTOR := 1.12
 const DEFAULT_CROWD_RADIUS_FACTOR := 1.18
+const CROWD_STEERING_SMOOTHING := 0.24
 
 var definition: EnemyDefinition
 var target: TherapyAvatar
@@ -73,6 +74,8 @@ var _knockback_applied_distance: float = 0.0
 var _knockback_direction: Vector2 = Vector2.ZERO
 var _crowd_steering := Vector2.ZERO
 var _crowd_speed_multiplier: float = 1.0
+var _crowd_steering_target := Vector2.ZERO
+var _crowd_speed_target: float = 1.0
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -121,6 +124,8 @@ func configure(
 	_reset_knockback()
 	_crowd_steering = Vector2.ZERO
 	_crowd_speed_multiplier = 1.0
+	_crowd_steering_target = Vector2.ZERO
+	_crowd_speed_target = 1.0
 	detailed_visual_required = definition.is_boss or definition.id == &"minor_focus"
 	_configure_visual()
 	reset_visual_snapshot()
@@ -152,6 +157,8 @@ func recycle() -> void:
 	_reset_knockback()
 	_crowd_steering = Vector2.ZERO
 	_crowd_speed_multiplier = 1.0
+	_crowd_steering_target = Vector2.ZERO
+	_crowd_speed_target = 1.0
 	visual_motion_initialized = false
 
 func is_targetable() -> bool:
@@ -277,6 +284,7 @@ func step_fixed(delta: float) -> void:
 	if definition == null or not is_instance_valid(target):
 		return
 	contact_cooldown = maxf(0.0, contact_cooldown - delta)
+	_step_crowd_steering()
 	var stunned_before := _stun_remaining > 0.0
 	_stun_remaining = maxf(0.0, _stun_remaining - delta)
 	if stunned_before and _stun_remaining <= 0.0:
@@ -373,10 +381,15 @@ func apply_knockback(
 
 
 func set_crowd_steering(steering: Vector2, movement_scale: float = 1.0) -> void:
-	# The steering target is updated at a lower frequency than locomotion. Smooth
-	# both values so dense groups flow instead of alternating between hard turns.
-	_crowd_steering = _crowd_steering.lerp(steering.limit_length(2.8), 0.55)
-	_crowd_speed_multiplier = lerpf(_crowd_speed_multiplier, clampf(movement_scale, 0.35, 1.0), 0.55)
+	# EnemyWorld updates this bounded target at 20 Hz. The entity approaches it on
+	# every 60-Hz movement tick, preventing a visible three-frame steering step.
+	_crowd_steering_target = steering.limit_length(2.8)
+	_crowd_speed_target = clampf(movement_scale, 0.35, 1.0)
+
+
+func _step_crowd_steering() -> void:
+	_crowd_steering = _crowd_steering.lerp(_crowd_steering_target, CROWD_STEERING_SMOOTHING)
+	_crowd_speed_multiplier = lerpf(_crowd_speed_multiplier, _crowd_speed_target, CROWD_STEERING_SMOOTHING)
 
 
 func _step_knockback(delta: float) -> void:
