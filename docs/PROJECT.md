@@ -64,9 +64,9 @@ konkretes Feedback zu Bedienung, Verständlichkeit, Fähigkeiten und Spielfluss
 sammeln. Bestätigte Fehler werden zuerst reproduziert und gezielt behoben.
 
 Der aktuelle Test verwendet die echte Forschungsökonomie. Nach dem ersten
-Introabschluss stehen 30 Forschung und ein Talentpunkt bereit. Forschung,
-Talente und der vollständige lokale Spielstand lassen sich für neue Testläufe
-gezielt zurücksetzen.
+Introabschluss stehen 30 Forschung bereit; der erste Talentpunkt folgt erst
+mit Fall 2. Forschungs- und Talentreset geben investierte Punkte zurück, und
+der vollständige lokale Spielstand lässt sich für neue Testläufe zurücksetzen.
 
 Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 älterer Vergleichsstand und wird nur nach ausdrücklicher Freigabe aktualisiert.
@@ -181,6 +181,7 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-073 | Ersetzt D-063 für `ability_defense_burst`: Die Fähigkeit heißt sichtbar `Stoß`, besitzt 0 Basisschaden und erhält Schaden ausschließlich durch Run-Ausbauränge. Ihr Rückstoß wird über mehrere Fixed Ticks bewegt, betäubt getroffene Gegner eine Sekunde und unterbindet in dieser Zeit Bewegung, Kontaktangriffe und neue Projektilangriffe. Ein kleines dokumentiertes Sternsymbol zeigt die Betäubung. |
 | D-074 | Ersetzt den absoluten Attack-Speed-Anteil aus D-067: Jeder Rang addiert einen Prozentpunktbonus auf den unveränderten Basis-Attack-Speed, niemals auf den bereits erhöhten Wert. Die Karte zeigt ausschließlich den Rangbonus und die akkumulierte Summe, beispielsweise `+6 % Attack Speed` und `6 % → 12 %`; exakte Angriffe pro Sekunde bleiben Charakterwerten und Fähigkeitsdetails vorbehalten. |
 | D-075 | Gegnerkörper verwenden einen zentralen, rastergestützten weichen Trennpass nach dem EnemyWorld-Schritt. Leichte visuelle Überlappung bleibt erlaubt, unendliches Stapeln nicht. Normale Gegner weichen dem Doctor stärker aus als umgekehrt; Bosse sind deutlich schwerer. Dadurch kann der Spieler Gegner nicht frei durchqueren, bleibt aber in dichten Gruppen beweglich. |
+| D-076 | Ersetzt D-075: `EnemyWorld` berechnet vor der Bewegung eine begrenzte lokale Separation aus dem bestehenden Raumraster und mischt sie in die Bewegungsrichtung; nachträgliche Positionskorrekturen sind verboten. Doctor Milos kann ausschließlich kleine Bakterien durch Annäherung verdrängen. Größere Gegner entfernen nur die auf sie gerichtete Bewegungskomponente, während tangentiales Entkommen erhalten bleibt. Nach dem Intro gibt es keinen Talentpunkt; Meisterschaften vor Fall 2 tragen null Punkte. Forschungsreset erstattet bezahlte Rangkosten, Talentreset macht alle verdienten Punkte wieder frei. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

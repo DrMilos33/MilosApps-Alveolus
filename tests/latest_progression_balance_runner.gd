@@ -68,13 +68,15 @@ func _test_research_and_intro_rewards() -> void:
 	meta.reset_defaults(1_700_000_000)
 	_true(meta.grant_intro_completion_rewards(), "Der erste Introabschluss vergibt die Startressourcen")
 	_equal(meta.research_points, 30, "Intro vergibt exakt 30 Forschung")
-	_equal(meta.talent_points_earned(), 1, "Intro vergibt exakt einen Talentpunkt")
+	_equal(meta.talent_points_earned(), 0, "Nach dem Intro steht noch kein Talentpunkt bereit")
 	_true(bool(meta.tutorial_status.get(&"research_guidance_pending", false)), "Intro aktiviert den einmaligen Forschungshinweis")
 	_true(not meta.grant_intro_completion_rewards(), "Introbelohnung ist idempotent")
 	_equal(meta.research_points, 30, "Wiederholtes Gewähren verdoppelt Forschung nicht")
 	var restored := MetaProgressionState.new(func() -> int: return 1_700_000_001)
 	_true(restored.load_dict(meta.to_dict()), "Introressourcen überstehen den Save-Roundtrip")
-	_equal(restored.talent_points_earned(), 1, "Bonus-Talentpunkt übersteht den Save-Roundtrip")
+	_equal(restored.talent_points_earned(), 0, "Der Save-Roundtrip erzeugt keinen alten Intro-Talentpunkt")
+	_true(restored.complete_mastery(&"fall_2_first_victory"), "Der erste Abschluss von Fall 2 vergibt seine Meisterschaft")
+	_equal(restored.talent_points_earned(), 1, "Der erste Talentpunkt entsteht erst durch den Abschluss von Fall 2")
 
 
 func _test_boss_and_finding_contract() -> void:

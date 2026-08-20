@@ -261,11 +261,12 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase.
 
-`EnemyWorld` owns a single soft body-separation pass after all enemy movement.
-It rebuilds one `CombatSpatialGrid`, resolves each nearby enemy pair once in
-stable slot order and then resolves avatar overlap from the same grid. Regular
-enemies yield more than the avatar, bosses yield less, and a bounded correction
-per fixed tick preserves crowd flow without hard-locking the player. Entities
+`EnemyWorld` owns one predictive body-separation pass before enemy movement. It
+rebuilds one `CombatSpatialGrid`, samples a bounded local neighborhood and
+mixes separation into the next locomotion direction. It never repairs enemy
+positions after movement. Only `pneumococcus` yields to avatar pressure;
+larger bodies publish one blocking normal to `TherapyAvatar`, which removes
+only movement into that body and keeps tangential escape available. Entities
 must not add independent collision polling or pairwise O(n²) scans.
 
 Knockback state lives on `InfectionEnemy` and advances inside the existing

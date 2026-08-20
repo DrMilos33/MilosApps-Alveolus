@@ -165,13 +165,14 @@ Zehn Forschungen wirken global oder schalten eine Komponente frei.
 | Mehr Galopp | 3 | 150 / 300 / 500 | +3 % Galopp, ganzzahlig | Galopp 196 |
 | Streuimpuls | 1 | 300 | Behandlung freischalten | freigeschaltet |
 | Durchdringender Impuls | 1 | 500 | Behandlung freischalten | freigeschaltet |
-| idk name stoß | 1 | 30 | aktive Fähigkeit freischalten | freigeschaltet |
+| Stoß | 1 | 30 | aktive Fähigkeit freischalten | freigeschaltet |
 | Fetter lazer | 1 | 1000 | aktive Fähigkeit freischalten | freigeschaltet |
 
 Der reguläre Vollausbau kostet insgesamt **7.155 Forschungspunkte**. Der erste
-Introabschluss vergibt genau 30 Forschung und einen Talentpunkt. Forschung,
-Talente und der vollständige lokale Spielstand lassen sich in den Einstellungen
-zurücksetzen. Die Einführung verwendet ihre feste Lehrkonfiguration.
+Introabschluss vergibt genau 30 Forschung und keinen Talentpunkt. Der erste
+Talentpunkt wird mit dem Abschluss von Fall 2 verdient. Forschungs- und
+Talentreset erstatten beziehungsweise befreien alle investierten Punkte. Die
+Einführung verwendet ihre feste Lehrkonfiguration.
 
 ## 9. Behandlungs-Talentbaum
 

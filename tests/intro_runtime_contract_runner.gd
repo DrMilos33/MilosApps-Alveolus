@@ -107,7 +107,7 @@ func _run() -> void:
 	_check(game.flow_state == GameFlowState.State.RESULT and game.hud.end_overlay.visible, "Der erste Introabschluss zeigt den normalen Rundenergebnis-Screen")
 	_check(game.hud.result_detail_text.contains("Nutze die Forschung für Upgrades im Forschungsgebäude."), "Intro-Ergebnis erklärt den nächsten Forschungsschritt")
 	_check(game.meta.research_points == MetaProgressionState.INTRO_RESEARCH_REWARD, "Intro-Ergebnis vergibt exakt %d Forschung (aktuell %d)" % [MetaProgressionState.INTRO_RESEARCH_REWARD, game.meta.research_points])
-	_check(game.meta.bonus_talent_points == 1, "Intro-Ergebnis vergibt exakt einen direkten Talentpunkt")
+	_check(game.meta.talent_points_earned() == 0, "Intro-Ergebnis vergibt noch keinen Talentpunkt")
 
 	game.queue_free()
 	await process_frame

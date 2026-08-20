@@ -278,12 +278,12 @@ func _run() -> void:
 	var validation := LoadoutValidator.validate(prepared, module_catalog, {}, 8)
 	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"monster_health_15"], "validation": validation}, module_catalog.values(), prepared)
 	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Impuls"), "PreparedLoadout wird ohne UI-Adapter gelesen")
-	_check(hud.preparation_capacity_label.text.contains("6 / 8"), "Validator liefert die Kapazität direkt")
+	_check(hud.preparation_capacity_label.text.contains("2 / 8"), "Validator liefert die Kapazität direkt")
 	_check(hud.current_preparation_snapshot.get("treatment_id") == "treatment_precision", "PreparedLoadout erzeugt den Start-Snapshot")
 	prepared.treatment_id = &""
 	validation = LoadoutValidator.validate(prepared, module_catalog, {}, 8)
 	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"monster_health_15"], "validation": validation}, module_catalog.values(), prepared)
-	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Wählen") and _named_label_text(hud.preparation_slots.get_child(1) as Control, "Title").contains("idk name stoß"), "Leere Grundbehandlung verschiebt aktive Slots nicht")
+	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Wählen") and _named_label_text(hud.preparation_slots.get_child(1) as Control, "Title").contains("Wählen"), "Leere Grundbehandlung verschiebt aktive Slots nicht")
 
 	var intro_view := prep_view.duplicate(true)
 	intro_view["tutorial_locked"] = true
@@ -316,7 +316,7 @@ func _run() -> void:
 	var research_events: Array[StringName] = []
 	hud.research_purchase_requested.connect(func(id: StringName) -> void: research_events.append(id))
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
-	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 8, "Die acht Forschungen nutzen bei 1280 Pixeln ein kompaktes Vierspaltenbrett")
+	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 10, "Die zehn Forschungen nutzen bei 1280 Pixeln ein kompaktes Vierspaltenbrett")
 	_check(hud.research_buy_buttons.has(&"movement_training") and SimpleIcon.supports(&"movement_training"), "Bewegungstraining ist als achte Forschung mit zentral registrierter Bewegungsglyphe verfügbar")
 	var movement_training_card := hud.research_buy_buttons[&"movement_training"] as Button
 	var movement_training_glyph_found := false

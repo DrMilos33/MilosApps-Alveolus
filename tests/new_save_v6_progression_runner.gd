@@ -47,7 +47,6 @@ func _test_v6_roundtrip() -> void:
 	var source := _fully_funded_meta(2000)
 	_true(source.set_talent_rank(&"treatment_damage_training", 1), "Wurzeltalent wird gesetzt")
 	_true(source.set_talent_rank(&"spread_penetration", 3), "Mehrere Ränge werden atomar gesetzt")
-	_true(source.set_talent_rank(&"manual_treatment_aim", 1), "Manuelle Zielsteuerung wird gesetzt")
 	_true(source.set_talent_rank(&"piercing_persistence", 2), "Laserbestand wird vollständig gesetzt")
 	source.research_points = 77
 	source.research_ranks = {&"stability_reserve": 3, &"therapy_precision": 2}
@@ -70,7 +69,7 @@ func _test_v6_roundtrip() -> void:
 
 	var context := restored.create_run_context(&"localized_focus")
 	_equal(context.talent_rank(&"spread_penetration"), 3, "RunContext übernimmt den exakten Talentrang")
-	_true(context.has_talent(&"manual_treatment_aim"), "RunContext hält die boolesche Kompatibilitätsabfrage")
+	_true(context.has_talent(&"piercing_persistence"), "RunContext hält die boolesche Kompatibilitätsabfrage")
 
 
 func _test_v6_revision3_refunds_retired_tree() -> void:
@@ -86,7 +85,7 @@ func _test_v6_revision3_refunds_retired_tree() -> void:
 	_true(migrated.load_dict(revision3), "Ein V6-Spielstand mit Revisionsbaum 3 wird geladen")
 	_true(migrated.talent_ranks.is_empty(), "Revision-3-Auswahl wird atomar zurückgesetzt")
 	_true(migrated.talent_tree_refund_pending, "Revision-3-Auswahl markiert die Rückerstattung")
-	_equal(migrated.talent_points_earned(), 2, "Meisterschaft bleibt bei Revision-3-Migration erhalten")
+	_equal(migrated.talent_points_earned(), 0, "Intro und Fall 1 geben nach der Migration keine Talentpunkte")
 	_equal(migrated.research_points, 91, "Forschungspunkte bleiben bei Revision-3-Migration erhalten")
 	_equal(migrated.rank(&"movement_training"), 2, "Forschungsränge bleiben bei Revision-3-Migration erhalten")
 
@@ -106,8 +105,8 @@ func _test_v5_migration_refunds_retired_tree() -> void:
 	_true(migrated.load_dict(legacy_v5), "Ein V5-Spielstand wird nach V6 migriert")
 	_true(migrated.talent_ranks.is_empty(), "IDs des entfernten Talentbaums werden nicht neu interpretiert")
 	_true(migrated.talent_tree_refund_pending, "Die Migration kennzeichnet zurückgegebene Altverteilung")
-	_equal(migrated.talent_points_earned(), 2, "Meisterschaft und verdiente Punkte bleiben erhalten")
-	_equal(migrated.available_talent_points(), 2, "Alle verdienten Punkte sind nach der Migration frei")
+	_equal(migrated.talent_points_earned(), 0, "Alte Intro- und Fall-1-Abschlüsse geben keine Talentpunkte")
+	_equal(migrated.available_talent_points(), 0, "Vor Fall 2 sind nach der Migration keine Talentpunkte frei")
 	_equal(migrated.research_points, 123, "V5-Migration bewahrt Forschungspunkte")
 	_equal(migrated.rank(&"stability_reserve"), 2, "V5-Migration bewahrt Forschungsränge")
 	_equal(migrated.get_or_create_case_seed(&"localized_focus"), 8080, "V5-Migration bewahrt den Fallseed")
@@ -121,9 +120,10 @@ func _test_independent_resets_and_seed_advance() -> void:
 	meta.research_ranks = {&"stability_reserve": 2, &"therapy_precision": 1}
 	meta.research_changed.connect(func(_points: int, _claimable: int) -> void: research_signal_count[0] += 1)
 	meta.upgrades_changed.connect(func() -> void: upgrade_signal_count[0] += 1)
-	meta.clear_research_ranks()
+	var refunded := meta.clear_research_ranks(ContentCatalog.research_definitions())
 	_true(meta.research_ranks.is_empty(), "Forschungsreset löscht ausschließlich die Ränge")
-	_equal(meta.research_points, 55, "Forschungsreset verändert das Punktekonto nicht")
+	_equal(refunded, 450, "Forschungsreset summiert die tatsächlich bezahlten Rangkosten")
+	_equal(meta.research_points, 505, "Forschungsreset gibt alle bezahlten Forschungspunkte zurück")
 	_equal(research_signal_count[0], 1, "Forschungsreset aktualisiert den Kontostand sichtbar")
 	_equal(upgrade_signal_count[0], 1, "Forschungsreset aktualisiert abhängige Werte")
 

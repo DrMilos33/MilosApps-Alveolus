@@ -66,6 +66,7 @@ var _knockback_duration: float = 0.0
 var _knockback_distance: float = 0.0
 var _knockback_applied_distance: float = 0.0
 var _knockback_direction: Vector2 = Vector2.ZERO
+var _crowd_steering := Vector2.ZERO
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -112,6 +113,7 @@ func configure(
 	_cached_status_contact_multiplier = 1.0
 	_stun_remaining = 0.0
 	_reset_knockback()
+	_crowd_steering = Vector2.ZERO
 	detailed_visual_required = definition.is_boss or definition.id == &"minor_focus"
 	_configure_visual()
 	reset_visual_snapshot()
@@ -141,6 +143,7 @@ func recycle() -> void:
 	_cached_status_contact_multiplier = 1.0
 	_stun_remaining = 0.0
 	_reset_knockback()
+	_crowd_steering = Vector2.ZERO
 	visual_motion_initialized = false
 
 func is_targetable() -> bool:
@@ -270,7 +273,10 @@ func step_fixed(delta: float) -> void:
 	var distance_squared := to_target.length_squared()
 	if distance_squared > 0.1:
 		var distance := sqrt(distance_squared)
-		global_position += to_target * (definition.speed * speed_multiplier * _cached_status_speed_multiplier * delta / distance)
+		var movement_direction := to_target / distance
+		if _crowd_steering.length_squared() > 0.0001:
+			movement_direction = (movement_direction + _crowd_steering).normalized()
+		global_position += movement_direction * definition.speed * speed_multiplier * _cached_status_speed_multiplier * delta
 		var wrapped := global_position
 		if _arena_size.x > 0.0 and _arena_size.y > 0.0:
 			if wrapped.x < _arena_min.x:
@@ -339,17 +345,8 @@ func apply_knockback(
 		stun_changed.emit(self, true)
 
 
-func apply_crowd_correction(offset: Vector2) -> void:
-	if offset.length_squared() <= 0.000001 or dying or spawn_timer > 0.0:
-		return
-	global_position += offset
-	if topology != null:
-		var wrapped := topology.wrap_position(global_position)
-		if not wrapped.is_equal_approx(global_position):
-			global_position = wrapped
-			reset_visual_motion()
-			return
-	visual_current_position = global_position
+func set_crowd_steering(steering: Vector2) -> void:
+	_crowd_steering = steering.limit_length(1.8)
 
 
 func _step_knockback(delta: float) -> void:

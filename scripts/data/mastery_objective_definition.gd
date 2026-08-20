@@ -15,7 +15,8 @@ static func create(
 	display_title: String,
 	text: String,
 	condition_id: StringName,
-	value: float = 0.0
+	value: float = 0.0,
+	points: int = 1
 ) -> MasteryObjectiveDefinition:
 	var definition := MasteryObjectiveDefinition.new()
 	definition.id = definition_id
@@ -24,14 +25,15 @@ static func create(
 	definition.description = text
 	definition.condition = condition_id
 	definition.threshold = value
+	definition.reward_points = maxi(points, 0)
 	return definition
 
 static func definitions() -> Array[MasteryObjectiveDefinition]:
 	return [
-		create(&"intro_complete", &"intro", "Grundlagen abgeschlossen", "Das Intro regulär abschließen.", &"victory"),
-		create(&"fall_1_first_victory", &"localized_focus", "Erster Erfolg", "Fall 1 gewinnen.", &"victory"),
-		create(&"fall_1_early_finding", &"localized_focus", "Früher Befund", "Den Befund vor dem Boss abschließen und gewinnen.", &"finding_before_boss"),
-		create(&"fall_1_healthy_win", &"localized_focus", "Stabiler Abschluss", "Mit mindestens 50 % Leben gewinnen.", &"final_stability_ratio", 0.5),
+		create(&"intro_complete", &"intro", "Grundlagen abgeschlossen", "Das Intro regulär abschließen.", &"victory", 0.0, 0),
+		create(&"fall_1_first_victory", &"localized_focus", "Erster Erfolg", "Fall 1 gewinnen.", &"victory", 0.0, 0),
+		create(&"fall_1_early_finding", &"localized_focus", "Früher Befund", "Den Befund vor dem Boss abschließen und gewinnen.", &"finding_before_boss", 0.0, 0),
+		create(&"fall_1_healthy_win", &"localized_focus", "Stabiler Abschluss", "Mit mindestens 50 % Leben gewinnen.", &"final_stability_ratio", 0.5, 0),
 		create(&"fall_2_first_victory", &"spreading_infection", "Erster Erfolg", "Fall 2 gewinnen.", &"victory"),
 		# Stable ID retained while the Reserve feature is dormant. The mastery stays
 		# achievable and existing completed saves keep their earned point.

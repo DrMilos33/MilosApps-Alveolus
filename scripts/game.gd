@@ -3392,7 +3392,9 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 		_present_finding(pending_finding_definition)
 		return
 	if definition.effect == &"immune_level":
-		discovery_manager.request(&"neutrophil_orbit", avatar)
+		# Abwehrzellen sind im Ausbau und am Avatar unmittelbar sichtbar. Ein
+		# zweites Discovery-Popup würde die Auswahl nur erneut unterbrechen.
+		discovery_manager.mark_seen(&"neutrophil_orbit")
 	_try_present_next_discovery()
 
 func _on_run_finished(success: bool, reason: String) -> void:
@@ -3555,7 +3557,7 @@ func _on_research_purchase_requested(id: StringName) -> void:
 func _on_research_reset_requested() -> void:
 	if flow_state != GameFlowState.State.RESEARCH:
 		return
-	meta.clear_research_ranks()
+	meta.clear_research_ranks(research_definitions)
 	_save_meta()
 	hud.refresh_research(meta, research_definitions)
 

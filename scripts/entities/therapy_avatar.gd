@@ -28,6 +28,7 @@ var character_name_label: Label
 var _character_name_visible := false
 var _defense_cell_count: int = 0
 var _defense_cell_radius: float = 0.0
+var _crowd_blocking := Vector2.ZERO
 
 func configure(bounds: Rect2, player_stats: PlayerStats, arena_topology: ArenaTopology) -> void:
 	arena_bounds = bounds
@@ -59,6 +60,13 @@ func _physics_process(delta: float) -> void:
 func step_fixed(_delta: float) -> void:
 	if input_enabled:
 		var direction := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
+		if direction.length_squared() > 0.0001 and _crowd_blocking.length_squared() > 0.0001:
+			var blocking_normal := _crowd_blocking.normalized()
+			var blocked_component := direction.dot(blocking_normal)
+			if blocked_component > 0.0:
+				# Remove only movement into the larger body. Tangential movement stays
+				# available, so the player can slide out instead of being trapped.
+				direction -= blocking_normal * blocked_component * clampf(_crowd_blocking.length(), 0.0, 1.0)
 		var resolved_speed := stats.movement_speed if stats != null else MOVE_SPEED
 		velocity = direction * resolved_speed
 		move_and_slide()
@@ -72,17 +80,12 @@ func step_fixed(_delta: float) -> void:
 		velocity = Vector2.ZERO
 
 
-func apply_crowd_correction(offset: Vector2) -> void:
-	if offset.length_squared() <= 0.000001:
-		return
-	global_position += offset
-	if topology != null:
-		var wrapped := topology.wrap_position(global_position)
-		if not wrapped.is_equal_approx(global_position):
-			global_position = wrapped
-			reset_physics_interpolation()
-			if camera != null:
-				camera.reset_smoothing()
+func set_crowd_blocking(blocking: Vector2) -> void:
+	_crowd_blocking = blocking.limit_length(1.0)
+
+
+func crowd_blocking() -> Vector2:
+	return _crowd_blocking
 
 func _process(delta: float) -> void:
 	var needs_redraw := false

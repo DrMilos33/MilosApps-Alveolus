@@ -183,12 +183,27 @@ func rank(id: StringName) -> int:
 func has_research(id: StringName) -> bool:
 	return rank(id) > 0
 
-func clear_research_ranks() -> void:
+func clear_research_ranks(definitions: Array[ResearchDefinition] = []) -> int:
 	if research_ranks.is_empty():
-		return
+		return 0
+	var refunded := 0
+	if not unlimited_test_progression:
+		var definitions_by_id: Dictionary = {}
+		for definition in definitions:
+			if definition != null:
+				definitions_by_id[definition.id] = definition
+		for id in research_ranks:
+			var definition := definitions_by_id.get(StringName(id)) as ResearchDefinition
+			if definition == null:
+				continue
+			var purchased_rank := clampi(int(research_ranks[id]), 0, definition.max_level)
+			for rank_index in range(purchased_rank):
+				refunded += definition.cost_for_rank(rank_index)
+		research_points += refunded
 	research_ranks = {}
 	research_changed.emit(research_points, claimable_research())
 	upgrades_changed.emit()
+	return refunded
 
 func award_run(success: bool, elapsed: float, level: int, defeats: int, multiplier: float = 1.0) -> int:
 	var reward := calculate_run_reward(success, elapsed, level, defeats, multiplier)
@@ -250,11 +265,9 @@ func grant_intro_completion_rewards() -> bool:
 	if bool(tutorial_status.get(&"intro_completion_rewards", false)):
 		return false
 	research_points += INTRO_RESEARCH_REWARD
-	bonus_talent_points += 1
 	tutorial_status[&"intro_completion_rewards"] = true
 	tutorial_status[&"research_guidance_pending"] = true
 	research_changed.emit(research_points, claimable_research())
-	talents_changed.emit()
 	return true
 
 func talent_points_earned() -> int:
@@ -552,7 +565,9 @@ func load_dict(data: Dictionary) -> bool:
 		tutorial_status = {}
 	show_run_stats = bool(data.get("show_run_stats", false))
 	talent_ranks = {}
-	bonus_talent_points = maxi(0, int(data.get("bonus_talent_points", 0)))
+	# The earlier prototype granted this field at the end of the intro. Talent
+	# points now begin with Fall 2 mastery, so old intro bonuses are normalized.
+	bonus_talent_points = 0
 	talent_tree_refund_pending = false
 	completed_mastery_ids = {}
 	prepared_loadouts = {}

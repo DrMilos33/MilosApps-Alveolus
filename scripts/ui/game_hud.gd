@@ -746,8 +746,6 @@ func _build_campus() -> Control:
 	campus_research_prompt.name = "ResearchGuidance"
 	campus_research_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	campus_research_prompt.alignment = BoxContainer.ALIGNMENT_CENTER
-	var research_anchor := CampusScene.building_anchor(&"research")
-	campus_research_prompt.position = research_anchor + Vector2(-210.0, -238.0)
 	campus_research_prompt.size = Vector2(420.0, 84.0)
 	var guidance_text := _label("Hier kannst du deine Fähigkeiten verbessern", 18, AlveolusVisualTheme.GOLD)
 	guidance_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -758,6 +756,7 @@ func _build_campus() -> Control:
 	campus_research_prompt.add_child(guidance_arrow)
 	campus_research_prompt.hide()
 	overlay.add_child(campus_research_prompt)
+	_position_campus_research_guidance()
 	return overlay
 
 func _build_practice() -> Control:
@@ -1983,11 +1982,31 @@ func show_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
 
 func show_campus_research_guidance() -> void:
 	if campus_research_prompt != null:
+		_position_campus_research_guidance()
 		campus_research_prompt.show()
+		_position_campus_research_guidance.call_deferred()
 
 func hide_campus_research_guidance() -> void:
 	if campus_research_prompt != null:
 		campus_research_prompt.hide()
+
+
+func _position_campus_research_guidance() -> void:
+	if campus_research_prompt == null or not campus_buttons.has(&"research"):
+		return
+	var research_button := campus_buttons[&"research"] as CampusBuildingCard
+	if research_button == null:
+		return
+	var target_rect := Rect2(research_button.position, research_button.size)
+	if research_button.building_sprite != null:
+		target_rect = Rect2(
+			research_button.position + research_button.building_sprite.position,
+			research_button.building_sprite.size
+		)
+	var prompt_size := campus_research_prompt.size
+	var prompt_x := target_rect.get_center().x - prompt_size.x * 0.5
+	var prompt_y := target_rect.position.y - prompt_size.y - 10.0
+	campus_research_prompt.position = Vector2(prompt_x, maxf(98.0, prompt_y))
 
 func refresh_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
 	var job_status := "Kein Klinikfall aktiv"
