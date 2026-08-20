@@ -24,7 +24,7 @@ const CLUSTER_CROWD_RADIUS_FACTOR := 1.05
 const NEST_CROWD_RADIUS_FACTOR := 1.18
 const BOSS_CROWD_RADIUS_FACTOR := 1.12
 const DEFAULT_CROWD_RADIUS_FACTOR := 1.18
-const CROWD_STEERING_SMOOTHING := 1.0
+const CROWD_STEERING_SMOOTHING := 0.75
 const CROWD_SPEED_SMOOTHING := 1.0
 const CROWD_STEERING_WEIGHT := 1.0
 
@@ -341,6 +341,21 @@ func step_fixed(delta: float) -> void:
 			reset_visual_motion()
 		else:
 			visual_current_position = global_position
+	# Movement may cross the contact shell during this fixed step. Resolve the
+	# post-movement distance so an enemy that just arrived deals contact damage
+	# instead of waiting for (or missing) its next crowd-steering refresh.
+	var contact_delta := target.global_position - global_position
+	if _arena_size.x > 0.0:
+		if contact_delta.x > _arena_half_size.x:
+			contact_delta.x -= _arena_size.x
+		elif contact_delta.x < -_arena_half_size.x:
+			contact_delta.x += _arena_size.x
+	if _arena_size.y > 0.0:
+		if contact_delta.y > _arena_half_size.y:
+			contact_delta.y -= _arena_size.y
+		elif contact_delta.y < -_arena_half_size.y:
+			contact_delta.y += _arena_size.y
+	distance_squared = contact_delta.length_squared()
 	var contact_radius := definition.radius + TherapyAvatar.BODY_RADIUS
 	if definition.contact_enabled and distance_squared <= contact_radius * contact_radius and contact_cooldown <= 0.0:
 		pressure_applied.emit(definition.contact_damage * damage_multiplier * _cached_status_contact_multiplier)

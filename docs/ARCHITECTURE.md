@@ -211,16 +211,18 @@ while `CombatSpatialGrid` and `CombatQuery` keep exact radii.
 Enemy crowd spacing is a separate presentation/locomotion envelope exposed by
 `InfectionEnemy.crowd_radius()`. `EnemyWorld` rebuilds a dedicated 64-unit grid,
 examines a bounded local broad-phase window, keeps the six nearest bodies and
-refreshes each steering slot at 10 Hz while movement stays at 60 Hz. The solver
-tests a small fixed set of chase, tangent and escape velocities against all six
-body constraints at once. A free tangent retains full authored speed; only a
-body with no geometrically valid route waits instead of entering another body.
-Bodies behind a pursuer never steer its front line, and no position repair or
-reciprocal displacement is allowed. Model factors approximate the visible body
-core, not its decorative outer pixels. Standard waves retain the deterministic
-golden-angle stream as a tie-breaker while the actual spawn direction fills the
-least occupied of twelve sectors. Materializing enemies count immediately, so
-one batch cannot collapse into a single off-screen corner.
+refreshes each steering slot at 10 Hz while movement stays at 60 Hz. The body
+closer to the avatar owns the lane. Its follower selects one passing side, keeps
+that side through a short hysteresis window and follows a continuous unit-speed
+boundary relative to the leader's resolved velocity. Bodies behind a pursuer
+never steer its front line; no reciprocal displacement or position repair is
+allowed. Contact is a separate latched state: the unblocked front body reaches
+the true contact shell and attacks, while followers continue around it. Model
+factors approximate the visible body core, not its decorative outer pixels.
+Standard waves retain the deterministic golden-angle stream as a tie-breaker
+while the actual spawn direction fills the least occupied of twelve sectors.
+Materializing enemies count immediately, so one batch cannot collapse into a
+single off-screen corner.
 
 `PlayerStats.stat_sections()` returns defensive-copy `StatSectionViewModel`
 data with stable IDs `general`, `treatment:<content-id>`,

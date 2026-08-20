@@ -15,6 +15,11 @@ var _crowd_nearest_candidates := PackedInt64Array()
 var _crowd_nearest_distances := PackedFloat32Array()
 var _crowd_constraint_normals := PackedVector2Array()
 var _crowd_constraint_limits := PackedFloat32Array()
+var _crowd_lane_signs := PackedInt32Array()
+var _crowd_lane_holds := PackedInt32Array()
+var _crowd_contact_latched := PackedByteArray()
+var _crowd_resolved_directions := PackedVector2Array()
+var _crowd_resolved_speeds := PackedFloat32Array()
 var _maximum_body_radius: float = 72.0
 var _maximum_crowd_radius: float = 97.2
 var _crowd_phase: int = 0
@@ -24,10 +29,16 @@ const MAX_CROWD_NEIGHBORS := 6
 const MAX_CROWD_QUERY_CANDIDATES := 13
 const MAX_AVATAR_NEIGHBORS := 12
 const SMALL_ENEMY_ID := &"pneumococcus"
-const CROWD_NEIGHBOR_MARGIN := 12.0
+const CROWD_NEIGHBOR_MARGIN := 18.0
 const MAX_CROWD_RADIUS_FACTOR := 1.25
-const APPROACH_LANE_DISTANCE := 420.0
-const MAX_APPROACH_BIAS := 0.62
+const FRONT_PRIORITY_EPSILON := 0.5
+const FRONT_ALIGNMENT_MINIMUM := -0.1
+const BYPASS_HOLD_UPDATES := 6
+const BYPASS_BIAS_MINIMUM := 0.9
+const BYPASS_BIAS_MAXIMUM := 1.35
+const CONTACT_ENTRY_DEPTH := 1.0
+const CONTACT_RELEASE_MARGIN := 4.0
+const SMALL_AVATAR_YIELD_DEPTH := 2.0
 const CROWD_UPDATE_PHASES := 6
 const CROWD_GRID_CELL_SIZE := 64.0
 
@@ -38,6 +49,16 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_critical_by_slot.fill(0)
 	_typed_enemies.resize(combat_capacity.max_enemies)
 	_typed_enemies.fill(null)
+	_crowd_lane_signs.resize(combat_capacity.max_enemies)
+	_crowd_lane_signs.fill(0)
+	_crowd_lane_holds.resize(combat_capacity.max_enemies)
+	_crowd_lane_holds.fill(0)
+	_crowd_contact_latched.resize(combat_capacity.max_enemies)
+	_crowd_contact_latched.fill(0)
+	_crowd_resolved_directions.resize(combat_capacity.max_enemies)
+	_crowd_resolved_directions.fill(Vector2.ZERO)
+	_crowd_resolved_speeds.resize(combat_capacity.max_enemies)
+	_crowd_resolved_speeds.fill(1.0)
 	_typed_runtime_only = true
 	regular_count = 0
 	critical_count = 0
@@ -80,6 +101,13 @@ func register_enemy(enemy: Node, critical: bool = false, disable_automatic_physi
 		# Generic test/dynamic entities retain the defensive Callable path.
 		_typed_runtime_only = false
 	_critical_by_slot[slot] = 1 if critical else 0
+	# Lane state is reset only at a new physical lease. The first real blocker
+	# selects a side and hysteresis keeps it stable through the complete pass.
+	_crowd_lane_signs[slot] = 0
+	_crowd_lane_holds[slot] = 0
+	_crowd_contact_latched[slot] = 0
+	_crowd_resolved_directions[slot] = Vector2.ZERO
+	_crowd_resolved_speeds[slot] = 1.0
 	if critical:
 		critical_count += 1
 	else:
@@ -132,10 +160,10 @@ func _prepare_crowd_steering() -> void:
 	var strongest_avatar_block := Vector2.ZERO
 	var strongest_avatar_overlap := 0.0
 	# Resolve a bounded local safe direction rather than applying displacement.
-	# Each enemy refreshes at 10 Hz while locomotion remains at 60 Hz. A body
-	# behind another ignores it completely; side-by-side bodies split avoidance
-	# reciprocally. This keeps the front line stable and lets the rear flow around
-	# it at normal movement speed instead of producing a braking queue.
+	# Each enemy refreshes at 10 Hz while locomotion remains at 60 Hz. The body
+	# closer to the avatar owns the lane; only its follower curves around it. A
+	# persistent circulation side and short release hysteresis prevent the
+	# left/right replanning that otherwise reads as visible shaking.
 	for slot_value in _active_slots:
 		var slot := int(slot_value)
 		if _retiring[slot] != 0:
@@ -155,12 +183,32 @@ func _prepare_crowd_steering() -> void:
 		var chase_direction := avatar_delta.normalized() if avatar_distance_squared > 0.000001 else Vector2.RIGHT
 		var lateral_axis := chase_direction.orthogonal()
 		var avatar_distance := sqrt(maxf(avatar_distance_squared, 0.000001))
-		var lane_strength := clampf(1.0 - avatar_distance / APPROACH_LANE_DISTANCE, 0.0, 1.0)
-		var safe_direction := (
-			chase_direction
-			+ lateral_axis * _approach_lane_bias(slot) * lane_strength
-		).normalized()
+		var contact_radius := TherapyAvatar.BODY_RADIUS + enemy.definition.radius
+		if _crowd_contact_latched[slot] != 0:
+			if avatar_distance > contact_radius + CONTACT_RELEASE_MARGIN:
+				_crowd_contact_latched[slot] = 0
+			elif enemy.definition.id == SMALL_ENEMY_ID and avatar_distance < contact_radius - SMALL_AVATAR_YIELD_DEPTH:
+				# Doctor Milos may still push through the smallest bacterium. This is
+				# deliberately separate from enemy/enemy avoidance and never changes
+				# the lane chosen by the crowd solver.
+				var yield_direction := -chase_direction
+				_crowd_resolved_directions[slot] = yield_direction
+				_crowd_resolved_speeds[slot] = 1.0
+				enemy.set_crowd_steering(yield_direction - chase_direction, 1.0)
+				continue
+			else:
+				_crowd_resolved_directions[slot] = chase_direction
+				_crowd_resolved_speeds[slot] = 0.0
+				enemy.set_crowd_steering(Vector2.ZERO, 0.0)
+				continue
+		var safe_direction := chase_direction
 		var neighbor_avoidance_active := false
+		var strongest_bypass_proximity := 0.0
+		var strongest_bypass_lateral_offset := 0.0
+		var current_movement_speed := maxf(
+			enemy.definition.speed * enemy.speed_multiplier * enemy.status_speed_multiplier(),
+			0.001
+		)
 		_crowd_constraint_normals.clear()
 		_crowd_constraint_limits.clear()
 		for other_handle in _crowd_nearest_candidates:
@@ -178,55 +226,92 @@ func _prepare_crowd_steering() -> void:
 				continue
 			var distance := sqrt(maxf(distance_squared, 0.000001))
 			var toward_other := delta / distance if distance_squared > 0.000001 else -_overlap_axis(slot, other_slot)
+			var clearance := distance - preferred_distance
+			var forward_alignment := toward_other.dot(chase_direction)
+			var other_avatar_delta := _crowd_topology.shortest_delta(other.global_position, _crowd_avatar.global_position)
+			var other_avatar_distance := other_avatar_delta.length()
+			var other_has_priority := _crowd_contact_latched[other_slot] != 0
+			if not other_has_priority:
+				other_has_priority = other_avatar_distance < avatar_distance - FRONT_PRIORITY_EPSILON
+			if not other_has_priority and absf(other_avatar_distance - avatar_distance) <= FRONT_PRIORITY_EPSILON:
+				other_has_priority = other_slot < slot
+			if not other_has_priority or (forward_alignment < FRONT_ALIGNMENT_MINIMUM and clearance >= 0.0):
+				# A follower never steers the front line. Equal-depth bodies resolve
+				# ownership through their stable slot, so the correction is one-sided.
+				continue
+			if enemy.definition.is_boss and not other.definition.is_boss:
+				continue
+			neighbor_avoidance_active = true
 			var proximity := clampf(
 				(influence_distance - distance) / CROWD_NEIGHBOR_MARGIN,
 				0.0,
 				1.0
 			)
-			proximity = proximity * proximity * (3.0 - 2.0 * proximity)
-			var clearance := distance - preferred_distance
-			var forward_alignment := toward_other.dot(chase_direction)
-			if forward_alignment < -0.15:
-				# A body already behind this enemy must not steer the front line.
-				continue
-			if enemy.definition.is_boss and not other.definition.is_boss:
-				continue
-			neighbor_avoidance_active = true
-			var remaining_clearance := 1.0 - proximity
-			var allowed_inward_speed := remaining_clearance * remaining_clearance * remaining_clearance * remaining_clearance
-			if clearance <= 0.0:
-				allowed_inward_speed = 0.0
+			if proximity > strongest_bypass_proximity:
+				strongest_bypass_proximity = proximity
+				strongest_bypass_lateral_offset = toward_other.dot(lateral_axis)
+			# Resolve relative velocity, not motion against a fictional stationary
+			# blocker. Matching the leader's normal component keeps the shell stable;
+			# existing overlap adds a small separating component. This lets both bodies
+			# continue moving instead of the follower slowly closing the gap.
+			var other_normalized_projection := 0.0
+			if _crowd_contact_latched[other_slot] == 0 and not other.is_stunned():
+				var other_chase_direction := other_avatar_delta.normalized() if other_avatar_distance > 0.0001 else Vector2.RIGHT
+				var other_resolved_direction := _crowd_resolved_directions[other_slot]
+				if other_resolved_direction.length_squared() <= 0.0001:
+					other_resolved_direction = other_chase_direction
+				var other_movement_speed := other.definition.speed * other.speed_multiplier * other.status_speed_multiplier()
+				other_normalized_projection = (
+					other_resolved_direction.dot(toward_other)
+					* other_movement_speed * float(_crowd_resolved_speeds[other_slot])
+					/ current_movement_speed
+				)
+			var clearance_fraction := clampf(clearance / CROWD_NEIGHBOR_MARGIN, 0.0, 1.0)
+			var allowed_inward_speed := lerpf(other_normalized_projection, 1.0, clearance_fraction)
+			if clearance < 0.0:
+				allowed_inward_speed -= clampf(-clearance / CROWD_NEIGHBOR_MARGIN, 0.0, 0.45)
+			allowed_inward_speed = clampf(allowed_inward_speed, -0.95, 1.0)
 			_crowd_constraint_normals.append(toward_other)
 			_crowd_constraint_limits.append(allowed_inward_speed)
 
-		var avatar_minimum := (TherapyAvatar.BODY_RADIUS + enemy.definition.radius) * AVATAR_SPACING_FACTOR
-		var arrival_speed := clampf(
-			(avatar_distance - avatar_minimum) / CROWD_NEIGHBOR_MARGIN,
-			0.0,
-			1.0
-		)
-		if avatar_distance_squared < avatar_minimum * avatar_minimum:
-			var toward_avatar := avatar_delta / avatar_distance if avatar_distance_squared > 0.000001 else Vector2.RIGHT
-			if enemy.definition.id == SMALL_ENEMY_ID:
-				# Only the smallest bacterium yields when Doctor Milos pushes into it.
-				safe_direction = -toward_avatar
-		var avatar_constraint_active := arrival_speed < 0.9999
-		if avatar_constraint_active:
-			_crowd_constraint_normals.append(chase_direction)
-			_crowd_constraint_limits.append(arrival_speed)
-		if neighbor_avoidance_active or avatar_constraint_active:
-			# Project the final intent, including a small bacterium yielding to the
-			# avatar, against both body and avatar-boundary velocity constraints.
-			var crowd_velocity := _project_crowd_velocity(safe_direction, lateral_axis)
-			var crowd_speed := clampf(crowd_velocity.length(), 0.0, 1.0)
-			if crowd_speed > 0.0001:
-				safe_direction = crowd_velocity / crowd_speed
-			# Full speed is retained whenever any safe tangent exists. Only a body
-			# with no geometrically valid route waits behind the ring.
-			arrival_speed = crowd_speed
+		# Only the actual front body owns a contact position. A follower already
+		# inside the shell must finish its bypass instead of latching into the same
+		# space and freezing a visible pile.
+		if not neighbor_avoidance_active and avatar_distance <= contact_radius - CONTACT_ENTRY_DEPTH:
+			_crowd_contact_latched[slot] = 1
+			_crowd_resolved_directions[slot] = chase_direction
+			_crowd_resolved_speeds[slot] = 0.0
+			enemy.set_crowd_steering(Vector2.ZERO, 0.0)
+			continue
+
+		if neighbor_avoidance_active:
+			if _crowd_lane_holds[slot] <= 0:
+				# Choose the side away from the first actual blocker, then keep it
+				# through the complete pass. A perfectly frontal tie uses the shared
+				# circulation direction so followers do not meet head-on.
+				_crowd_lane_signs[slot] = -1 if strongest_bypass_lateral_offset > 0.02 else 1
+			_crowd_lane_holds[slot] = BYPASS_HOLD_UPDATES
+		elif _crowd_lane_holds[slot] > 0:
+			_crowd_lane_holds[slot] -= 1
+			if _crowd_lane_holds[slot] <= 0:
+				_crowd_lane_signs[slot] = 0
+		var lane_active := neighbor_avoidance_active or _crowd_lane_holds[slot] > 0
+		var lane_sign := _crowd_lane_signs[slot] if _crowd_lane_signs[slot] != 0 else 1
+		var preferred_lateral := lateral_axis * float(lane_sign)
+		if lane_active:
+			var bypass_bias := lerpf(
+				BYPASS_BIAS_MINIMUM,
+				BYPASS_BIAS_MAXIMUM,
+				strongest_bypass_proximity
+			)
+			safe_direction = (chase_direction + preferred_lateral * bypass_bias).normalized()
+		if neighbor_avoidance_active:
+			safe_direction = _project_crowd_velocity(safe_direction, preferred_lateral)
+		_crowd_resolved_directions[slot] = safe_direction
+		_crowd_resolved_speeds[slot] = 1.0
 		enemy.set_crowd_steering(
 			safe_direction - chase_direction,
-			arrival_speed
+			1.0
 		)
 
 	_crowd_phase = (_crowd_phase + 1) % CROWD_UPDATE_PHASES
@@ -290,49 +375,31 @@ func _query_nearest_crowd_candidates(slot: int, enemy: InfectionEnemy, search_ra
 			_crowd_nearest_distances[farthest_index] = distance_squared
 
 
-func _project_crowd_velocity(desired_direction: Vector2, lateral_axis: Vector2) -> Vector2:
-	var best_direction := desired_direction.normalized()
-	var best_speed := -1.0
-	var best_preference := -INF
-	var urgent_constraint_index := 0
-	for index in range(1, _crowd_constraint_limits.size()):
-		if _crowd_constraint_limits[index] < _crowd_constraint_limits[urgent_constraint_index]:
-			urgent_constraint_index = index
-	var urgent_normal := _crowd_constraint_normals[urgent_constraint_index]
-	const CANDIDATE_COUNT := 6
-	for candidate_index in range(CANDIDATE_COUNT):
-		var candidate := desired_direction
-		match candidate_index:
-			1:
-				candidate = lateral_axis
-			2:
-				candidate = -lateral_axis
-			3:
-				candidate = urgent_normal.orthogonal()
-			4:
-				candidate = -urgent_normal.orthogonal()
-			5:
-				candidate = -urgent_normal
-		if candidate.length_squared() <= 0.0001:
-			continue
-		candidate = candidate.normalized()
-		var allowed_speed := 1.0
-		for constraint_index in range(_crowd_constraint_normals.size()):
-			var inward_component := candidate.dot(_crowd_constraint_normals[constraint_index])
-			var inward_limit := float(_crowd_constraint_limits[constraint_index])
-			if inward_component > inward_limit + 0.0001:
-				allowed_speed = minf(
-					allowed_speed,
-					inward_limit / maxf(inward_component, 0.0001)
-				)
-		var preference := candidate.dot(desired_direction) + candidate.dot(lateral_axis) * 0.04
-		if allowed_speed > best_speed + 0.0001 or (
-			is_equal_approx(allowed_speed, best_speed) and preference > best_preference
-		):
-			best_direction = candidate
-			best_speed = allowed_speed
-			best_preference = preference
-	return best_direction * clampf(best_speed, 0.0, 1.0)
+func _project_crowd_velocity(desired_direction: Vector2, preferred_lateral: Vector2) -> Vector2:
+	var resolved := desired_direction.normalized()
+	# Project once against the constraint that the desired velocity violates the
+	# most. Sequentially projecting against several neighbours made the last one
+	# win and could reintroduce penetration into the first. The nearest front
+	# blocker is the useful navigation boundary; the persistent lateral vector
+	# chooses its stable passing side.
+	var urgent_index := -1
+	var urgent_violation := 0.0
+	for constraint_index in range(_crowd_constraint_normals.size()):
+		var normal := _crowd_constraint_normals[constraint_index]
+		var inward_limit := clampf(float(_crowd_constraint_limits[constraint_index]), -0.95, 1.0)
+		var violation := resolved.dot(normal) - inward_limit
+		if violation > urgent_violation:
+			urgent_violation = violation
+			urgent_index = constraint_index
+	if urgent_index >= 0:
+		var normal := _crowd_constraint_normals[urgent_index]
+		var inward_limit := clampf(float(_crowd_constraint_limits[urgent_index]), -0.95, 1.0)
+		var tangent := normal.orthogonal()
+		if tangent.dot(preferred_lateral) < 0.0:
+			tangent = -tangent
+		var tangent_length := sqrt(maxf(0.0, 1.0 - inward_limit * inward_limit))
+		resolved = (normal * inward_limit + tangent * tangent_length).normalized()
+	return resolved
 
 
 func _overlap_axis(first_slot: int, second_slot: int) -> Vector2:
@@ -343,16 +410,13 @@ func _overlap_axis(first_slot: int, second_slot: int) -> Vector2:
 	return axis if first_slot < second_slot else -axis
 
 
-func _approach_lane_bias(slot: int) -> float:
-	var normalized := float(posmod(slot * 47 + 19, 101)) / 100.0
-	# All lanes flow around the avatar in the same direction. Varying only their
-	# curvature prevents counter-flow collisions while the spawn sectors still
-	# distribute bodies around the full circle.
-	return lerpf(0.18, MAX_APPROACH_BIAS, normalized)
-
-
 func _before_slot_released(slot: int, _entity: Node, _handle: int) -> void:
 	_typed_enemies[slot] = null
+	_crowd_lane_signs[slot] = 0
+	_crowd_lane_holds[slot] = 0
+	_crowd_contact_latched[slot] = 0
+	_crowd_resolved_directions[slot] = Vector2.ZERO
+	_crowd_resolved_speeds[slot] = 1.0
 	if _critical_by_slot[slot] != 0:
 		critical_count = maxi(0, critical_count - 1)
 	else:
