@@ -18,6 +18,7 @@ var _crowd_constraint_limits := PackedFloat32Array()
 var _crowd_lane_signs := PackedInt32Array()
 var _crowd_lane_holds := PackedInt32Array()
 var _crowd_contact_latched := PackedByteArray()
+var _crowd_queue_recovering := PackedByteArray()
 var _crowd_resolved_directions := PackedVector2Array()
 var _crowd_resolved_speeds := PackedFloat32Array()
 var _maximum_body_radius: float = 72.0
@@ -36,6 +37,11 @@ const FRONT_ALIGNMENT_MINIMUM := -0.1
 const BYPASS_HOLD_UPDATES := 6
 const BYPASS_BIAS_MINIMUM := 0.84
 const BYPASS_BIAS_MAXIMUM := 1.26
+const STATIONARY_AVATAR_SPEED_THRESHOLD := 12.0
+const STATIONARY_CONTACT_QUEUE_SPEED := 0.15
+const QUEUE_RECOVERY_ENTRY_DEPTH := 0.75
+const QUEUE_RECOVERY_RELEASE_CLEARANCE := 0.0
+const QUEUE_NON_ANCHOR_RECOVERY_CLEARANCE := 3.0
 const CONTACT_ENTRY_DEPTH := 1.0
 const CONTACT_RELEASE_MARGIN := 4.0
 const SMALL_AVATAR_YIELD_DEPTH := 2.0
@@ -55,6 +61,8 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_crowd_lane_holds.fill(0)
 	_crowd_contact_latched.resize(combat_capacity.max_enemies)
 	_crowd_contact_latched.fill(0)
+	_crowd_queue_recovering.resize(combat_capacity.max_enemies)
+	_crowd_queue_recovering.fill(0)
 	_crowd_resolved_directions.resize(combat_capacity.max_enemies)
 	_crowd_resolved_directions.fill(Vector2.ZERO)
 	_crowd_resolved_speeds.resize(combat_capacity.max_enemies)
@@ -106,6 +114,7 @@ func register_enemy(enemy: Node, critical: bool = false, disable_automatic_physi
 	_crowd_lane_signs[slot] = 0
 	_crowd_lane_holds[slot] = 0
 	_crowd_contact_latched[slot] = 0
+	_crowd_queue_recovering[slot] = 0
 	_crowd_resolved_directions[slot] = Vector2.ZERO
 	_crowd_resolved_speeds[slot] = 1.0
 	if critical:
@@ -159,6 +168,10 @@ func _prepare_crowd_steering() -> void:
 
 	var strongest_avatar_block := Vector2.ZERO
 	var strongest_avatar_overlap := 0.0
+	var avatar_stationary := (
+		_crowd_avatar.velocity.length_squared()
+		<= STATIONARY_AVATAR_SPEED_THRESHOLD * STATIONARY_AVATAR_SPEED_THRESHOLD
+	)
 	# Resolve a bounded local safe direction rather than applying displacement.
 	# Each enemy refreshes at 10 Hz while locomotion remains at 60 Hz. The body
 	# closer to the avatar owns the lane; only its follower curves around it. A
@@ -203,6 +216,9 @@ func _prepare_crowd_steering() -> void:
 				continue
 		var safe_direction := chase_direction
 		var neighbor_avoidance_active := false
+		var stationary_queue_blocker_active := false
+		var minimum_constraint_clearance := INF
+		var minimum_non_anchor_clearance := INF
 		var strongest_bypass_proximity := 0.0
 		var strongest_bypass_lateral_offset := 0.0
 		var current_movement_speed := maxf(
@@ -242,6 +258,15 @@ func _prepare_crowd_steering() -> void:
 			if enemy.definition.is_boss and not other.definition.is_boss:
 				continue
 			neighbor_avoidance_active = true
+			minimum_constraint_clearance = minf(minimum_constraint_clearance, clearance)
+			var other_anchors_stationary_queue := (
+				_crowd_contact_latched[other_slot] != 0
+				or _crowd_resolved_speeds[other_slot] < 0.99
+			)
+			if other_anchors_stationary_queue:
+				stationary_queue_blocker_active = true
+			else:
+				minimum_non_anchor_clearance = minf(minimum_non_anchor_clearance, clearance)
 			var proximity := clampf(
 				(influence_distance - distance) / CROWD_NEIGHBOR_MARGIN,
 				0.0,
@@ -307,11 +332,36 @@ func _prepare_crowd_steering() -> void:
 			safe_direction = (chase_direction + preferred_lateral * bypass_bias).normalized()
 		if neighbor_avoidance_active:
 			safe_direction = _project_crowd_velocity(safe_direction, preferred_lateral)
+		# A stationary Doctor no longer causes every rear row to orbit at full
+		# authored speed. The reduced, non-zero speed propagates through the local
+		# queue behind a contact-latched attacker, so the next row cannot run into a
+		# slowed row. Ordinary avoidance and every moving-Doctor situation retain
+		# full speed.
+		var resolved_speed := 1.0
+		if avatar_stationary and stationary_queue_blocker_active:
+			if (
+				minimum_constraint_clearance < -QUEUE_RECOVERY_ENTRY_DEPTH
+				or minimum_non_anchor_clearance < QUEUE_NON_ANCHOR_RECOVERY_CLEARANCE
+			):
+				_crowd_queue_recovering[slot] = 1
+			elif (
+				_crowd_queue_recovering[slot] != 0
+				and minimum_constraint_clearance >= QUEUE_RECOVERY_RELEASE_CLEARANCE
+				and minimum_non_anchor_clearance >= QUEUE_NON_ANCHOR_RECOVERY_CLEARANCE
+			):
+				_crowd_queue_recovering[slot] = 0
+			resolved_speed = (
+				1.0
+				if _crowd_queue_recovering[slot] != 0
+				else STATIONARY_CONTACT_QUEUE_SPEED
+			)
+		else:
+			_crowd_queue_recovering[slot] = 0
 		_crowd_resolved_directions[slot] = safe_direction
-		_crowd_resolved_speeds[slot] = 1.0
+		_crowd_resolved_speeds[slot] = resolved_speed
 		enemy.set_crowd_steering(
 			safe_direction - chase_direction,
-			1.0
+			resolved_speed
 		)
 
 	_crowd_phase = (_crowd_phase + 1) % CROWD_UPDATE_PHASES
@@ -415,6 +465,7 @@ func _before_slot_released(slot: int, _entity: Node, _handle: int) -> void:
 	_crowd_lane_signs[slot] = 0
 	_crowd_lane_holds[slot] = 0
 	_crowd_contact_latched[slot] = 0
+	_crowd_queue_recovering[slot] = 0
 	_crowd_resolved_directions[slot] = Vector2.ZERO
 	_crowd_resolved_speeds[slot] = 1.0
 	if _critical_by_slot[slot] != 0:

@@ -217,8 +217,10 @@ that side through a short hysteresis window and follows a continuous unit-speed
 boundary relative to the leader's resolved velocity. Bodies behind a pursuer
 never steer its front line; no reciprocal displacement or position repair is
 allowed. Contact is a separate latched state: the unblocked front body reaches
-the true contact shell and attacks, while followers continue around it. Model
-factors approximate the visible body core, not its decorative outer pixels.
+the true contact shell and attacks. If the avatar stands still, a reduced,
+non-zero passing speed propagates through the local queue behind that latched
+front; normal avoidance and movement around a moving avatar retain authored
+speed. Model factors approximate the visible body core, not its decorative outer pixels.
 Standard waves retain the deterministic golden-angle stream as a tie-breaker
 while the actual spawn direction fills the least occupied of twelve sectors.
 Materializing enemies count immediately, so one batch cannot collapse into a

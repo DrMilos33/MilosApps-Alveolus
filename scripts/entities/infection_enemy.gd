@@ -321,9 +321,9 @@ func step_fixed(delta: float) -> void:
 			var steered_direction := movement_direction + _crowd_steering * CROWD_STEERING_WEIGHT
 			if steered_direction.length_squared() > 0.0001:
 				safe_direction = steered_direction.normalized()
-		# Neighbor avoidance changes only direction. It never reduces the movement
-		# magnitude, so a dense pack flows around its front line instead of forming
-		# a slow queue. The scale is reserved for arrival at the avatar itself.
+		# Normal neighbor avoidance changes only direction. EnemyWorld may reduce
+		# the magnitude solely for a follower queued behind a contact-latched attacker
+		# while the Doctor stands still; contact arrival itself may stop movement.
 		var safe_velocity := safe_direction * movement_speed * _crowd_speed_multiplier
 		global_position += safe_velocity * delta
 		var wrapped := global_position

@@ -105,6 +105,42 @@ func _run() -> void:
 	_true(follower_lateral_travel >= 12.0, "Der hintere Gegner läuft sichtbar seitlich an der Vorderreihe vorbei (%.2f)" % follower_lateral_travel)
 	_true(follower_lateral_flips <= 1, "Eine aktive Umgehung wechselt nicht wiederholt ihre Seite (%d Wechsel)" % follower_lateral_flips)
 
+	# When the Doctor stands still, a follower queued directly behind an attacker
+	# still passes, but it must not orbit the complete contact ring at full speed.
+	var queue_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	queue_world.configure_crowd_collision(topology, avatar, 18.0)
+	var queue_front := InfectionEnemy.new()
+	var queue_follower := InfectionEnemy.new()
+	queue_front.configure(small_definition, avatar, topology)
+	queue_follower.configure(small_definition, avatar, topology)
+	queue_front.spawn_timer = 0.0
+	queue_follower.spawn_timer = 0.0
+	queue_front.global_position = Vector2(40.0, 0.0)
+	queue_follower.global_position = Vector2(76.0, 0.0)
+	queue_front.reset_visual_motion()
+	queue_follower.reset_visual_motion()
+	avatar.velocity = Vector2.ZERO
+	_true(EntityHandle.is_valid(queue_world.register_enemy(queue_front)), "Stillstands-Front erhält einen stabilen Handle")
+	_true(EntityHandle.is_valid(queue_world.register_enemy(queue_follower)), "Stillstands-Folgegegner erhält einen stabilen Handle")
+	var queued_travel := 0.0
+	for _tick in range(60):
+		var follower_before := queue_follower.global_position
+		queue_world.step_fixed(1.0 / 60.0)
+		queued_travel += topology.shortest_delta(follower_before, queue_follower.global_position).length()
+	_true(queued_travel >= 4.0, "Die Stillstandsreihe bleibt beweglich statt vollständig einzufrieren (%.2f)" % queued_travel)
+	_true(queued_travel <= 24.0, "Die Stillstandsreihe umkreist den Doctor nicht länger mit voller Geschwindigkeit (%.2f)" % queued_travel)
+	avatar.velocity = Vector2.RIGHT * 100.0
+	var moving_queue_travel := 0.0
+	for _tick in range(30):
+		var follower_before := queue_follower.global_position
+		queue_world.step_fixed(1.0 / 60.0)
+		moving_queue_travel += topology.shortest_delta(follower_before, queue_follower.global_position).length()
+	_true(moving_queue_travel >= 20.0, "Bei Bewegung des Doctors nimmt die Reihe wieder ihr normales Tempo auf (%.2f)" % moving_queue_travel)
+	avatar.velocity = Vector2.ZERO
+	queue_world.clear()
+	queue_front.free()
+	queue_follower.free()
+
 	# A rear body that starts too close must yield. The leading body may continue
 	# toward the avatar but must never be pushed back out by its follower.
 	first.global_position = Vector2(60.0, 0.0)
