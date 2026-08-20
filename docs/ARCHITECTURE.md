@@ -263,8 +263,12 @@ second phase.
 
 `EnemyWorld` owns one predictive body-separation pass before enemy movement. It
 rebuilds one `CombatSpatialGrid`, samples a bounded local neighborhood and
-mixes separation into the next locomotion direction. It never repairs enemy
-positions after movement. Only `pneumococcus` yields to avatar pressure;
+mixes separation into the next locomotion direction. Preferred envelopes cover
+roughly the visible body width. A stable per-slot approach-lane bias prevents
+all pursuers from choosing the same center line, while local overlap pressure
+reduces forward speed before a rear body can push through the front row. The
+steering snapshot refreshes at 30 Hz and locomotion remains at 60 Hz. It never
+repairs enemy positions after movement. Only `pneumococcus` yields to avatar pressure;
 larger bodies publish one blocking normal to `TherapyAvatar`, which removes
 only movement into that body and keeps tangential escape available. Entities
 must not add independent collision polling or pairwise O(n²) scans.

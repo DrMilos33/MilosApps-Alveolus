@@ -14,11 +14,14 @@ var _crowd_candidates := PackedInt64Array()
 var _maximum_body_radius: float = 72.0
 var _crowd_phase: int = 0
 
-const ENEMY_SPACING_FACTOR := 0.86
+const ENEMY_SPACING_FACTOR := 1.18
 const AVATAR_SPACING_FACTOR := 0.84
 const MAX_CROWD_NEIGHBORS := 6
 const MAX_AVATAR_NEIGHBORS := 12
 const SMALL_ENEMY_ID := &"pneumococcus"
+const APPROACH_LANE_DISTANCE := 300.0
+const MAX_APPROACH_BIAS := 0.38
+const MIN_CROWDED_SPEED := 0.42
 
 func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorld:
 	combat_capacity = runtime_capacity if runtime_capacity != null else CombatCapacity.defaults()
@@ -134,11 +137,12 @@ func _prepare_crowd_steering() -> void:
 			continue
 		_crowd_candidates = _crowd_grid.query_circle_candidates_limited(
 			enemy.global_position,
-			enemy.definition.radius + _maximum_body_radius,
+			(enemy.definition.radius + _maximum_body_radius) * ENEMY_SPACING_FACTOR,
 			MAX_CROWD_NEIGHBORS,
 			_crowd_candidates
 		)
 		var separation := Vector2.ZERO
+		var strongest_overlap := 0.0
 		for other_handle in _crowd_candidates:
 			var other_slot := EntityHandle.slot(other_handle)
 			if other_slot < 0 or other_slot == slot or other_slot >= _typed_enemies.size() or _retiring[other_slot] != 0:
@@ -154,8 +158,12 @@ func _prepare_crowd_steering() -> void:
 			var distance := sqrt(maxf(distance_squared, 0.000001))
 			var away := -delta / distance if distance_squared > 0.000001 else _overlap_axis(slot, other_slot)
 			var overlap := 1.0 - distance / maxf(minimum_distance, 0.001)
+			strongest_overlap = maxf(strongest_overlap, overlap)
 			var weight := 0.25 if enemy.definition.is_boss and not other.definition.is_boss else 1.0
-			separation += away * overlap * weight
+			# Once the preferred envelopes touch, separation must be strong enough
+			# to beat the common center-seeking direction. Smoothing happens on the
+			# entity, so this creates spacing without a positional correction pop.
+			separation += away * (0.9 + overlap * 1.8) * weight
 
 		var avatar_delta := _crowd_topology.shortest_delta(enemy.global_position, _crowd_avatar.global_position)
 		var avatar_minimum := (TherapyAvatar.BODY_RADIUS + enemy.definition.radius) * AVATAR_SPACING_FACTOR
@@ -167,7 +175,16 @@ func _prepare_crowd_steering() -> void:
 			if enemy.definition.id == SMALL_ENEMY_ID:
 				# Only the smallest bacterium yields when Doctor Milos pushes into it.
 				separation -= toward_avatar * (0.75 + avatar_overlap * 1.25)
-		enemy.set_crowd_steering(separation)
+		if avatar_distance_squared > 0.000001 and avatar_distance_squared < APPROACH_LANE_DISTANCE * APPROACH_LANE_DISTANCE:
+			var avatar_distance := sqrt(avatar_distance_squared)
+			var toward_avatar := avatar_delta / avatar_distance
+			var lane_strength := 1.0 - avatar_distance / APPROACH_LANE_DISTANCE
+			# A stable per-slot lane bias prevents every pursuer from aiming at the
+			# exact same center line. It remains subordinate to the chase direction,
+			# so enemies still reach contact instead of orbiting indefinitely.
+			separation += toward_avatar.orthogonal() * _approach_lane_bias(slot) * lane_strength
+		var crowded_speed := lerpf(1.0, MIN_CROWDED_SPEED, clampf(strongest_overlap * 1.6, 0.0, 1.0))
+		enemy.set_crowd_steering(separation, crowded_speed)
 
 	_crowd_phase = 1 - _crowd_phase
 	_crowd_candidates = _crowd_grid.query_circle_candidates_limited(
@@ -201,6 +218,11 @@ func _overlap_axis(first_slot: int, second_slot: int) -> Vector2:
 	var angle := float((lower * 37 + upper * 17 + 23) % 360) * PI / 180.0
 	var axis := Vector2.from_angle(angle)
 	return axis if first_slot < second_slot else -axis
+
+
+func _approach_lane_bias(slot: int) -> float:
+	var normalized := float(posmod(slot * 47 + 19, 101)) / 100.0
+	return (normalized * 2.0 - 1.0) * MAX_APPROACH_BIAS
 
 func _before_slot_released(slot: int, _entity: Node, _handle: int) -> void:
 	_typed_enemies[slot] = null

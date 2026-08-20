@@ -32,6 +32,10 @@ func _run() -> void:
 	_true(EntityHandle.is_valid(world.register_enemy(second)), "Zweiter Gegner erhält einen stabilen World-Handle")
 	world.step_fixed(1.0 / 60.0)
 	_true(first.global_position.distance_to(second.global_position) > 0.1, "Zwei überlagerte Gegner lenken vor der Bewegung auseinander")
+	for _tick in range(90):
+		world.step_fixed(1.0 / 60.0)
+	var sustained_spacing := topology.shortest_delta(first.global_position, second.global_position).length()
+	_true(sustained_spacing >= definition.radius * 2.3, "Lokale Spuren halten gleich große Gegner dauerhaft sichtbar auseinander (%.2f)" % sustained_spacing)
 
 	first.global_position = Vector2(1.0, 0.0)
 	second.global_position = Vector2(-300.0, 0.0)
