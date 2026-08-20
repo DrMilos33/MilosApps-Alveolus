@@ -112,20 +112,25 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 	if _cells.is_empty() or topology == null:
 		return output
 	_begin_query()
-	var wrapped_center := topology.wrap_position(center)
-	var local_center := wrapped_center - topology.bounds.position
+	var resolved_center := topology.resolve_position(center)
+	var local_center := resolved_center - topology.bounds.position
 	var minimum := local_center - half_extent
 	var maximum := local_center + half_extent
 	var minimum_x := floori(minimum.x / _cell_width)
 	var maximum_x := floori(maximum.x / _cell_width)
 	var minimum_y := floori(minimum.y / _cell_height)
 	var maximum_y := floori(maximum.y / _cell_height)
+	if topology.is_bounded():
+		minimum_x = clampi(minimum_x, 0, columns - 1)
+		maximum_x = clampi(maximum_x, 0, columns - 1)
+		minimum_y = clampi(minimum_y, 0, rows - 1)
+		maximum_y = clampi(maximum_y, 0, rows - 1)
 	if maximum_candidates > 0:
 		# Limited broad-phase queries are used by crowd steering. Visit the source
 		# cell first and expand in square rings, otherwise a top-left scan can fill
 		# the budget with farther bodies while omitting a touching neighbor.
-		var center_x := floori(local_center.x / _cell_width)
-		var center_y := floori(local_center.y / _cell_height)
+		var center_x := clampi(floori(local_center.x / _cell_width), 0, columns - 1)
+		var center_y := clampi(floori(local_center.y / _cell_height), 0, rows - 1)
 		var maximum_ring := maxi(
 			maxi(absi(minimum_x - center_x), absi(maximum_x - center_x)),
 			maxi(absi(minimum_y - center_y), absi(maximum_y - center_y))
@@ -139,8 +144,10 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 					var raw_y := center_y + y_offset
 					if raw_x < minimum_x or raw_x > maximum_x or raw_y < minimum_y or raw_y > maximum_y:
 						continue
-					var x := posmod(raw_x, columns)
-					var y := posmod(raw_y, rows)
+					if topology.is_bounded() and (raw_x < 0 or raw_x >= columns or raw_y < 0 or raw_y >= rows):
+						continue
+					var x := raw_x if topology.is_bounded() else posmod(raw_x, columns)
+					var y := raw_y if topology.is_bounded() else posmod(raw_y, rows)
 					var index := y * columns + x
 					if _visit_stamps[index] == _query_stamp:
 						continue
@@ -154,12 +161,19 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 	var y_count := mini(rows, maximum_y - minimum_y + 1)
 	var x_start := 0 if x_count == columns else minimum_x
 	var y_start := 0 if y_count == rows else minimum_y
+	if topology.is_bounded():
+		x_start = clampi(minimum_x, 0, columns - 1)
+		y_start = clampi(minimum_y, 0, rows - 1)
+		var x_end := clampi(maximum_x, 0, columns - 1)
+		var y_end := clampi(maximum_y, 0, rows - 1)
+		x_count = maxi(0, x_end - x_start + 1)
+		y_count = maxi(0, y_end - y_start + 1)
 	for y_offset in range(y_count):
 		var raw_y := y_start + y_offset
 		for x_offset in range(x_count):
 			var raw_x := x_start + x_offset
-			var x := posmod(raw_x, columns)
-			var y := posmod(raw_y, rows)
+			var x := raw_x if topology.is_bounded() else posmod(raw_x, columns)
+			var y := raw_y if topology.is_bounded() else posmod(raw_y, rows)
 			var index := y * columns + x
 			if _visit_stamps[index] == _query_stamp:
 				continue
@@ -174,10 +188,14 @@ func _cell_index(position: Vector2) -> int:
 	if topology == null:
 		return 0
 	var local := position - _bounds_position
-	if local.x < 0.0 or local.x >= _bounds_size.x:
-		local.x = fposmod(local.x, _bounds_size.x)
-	if local.y < 0.0 or local.y >= _bounds_size.y:
-		local.y = fposmod(local.y, _bounds_size.y)
+	if topology.is_bounded():
+		local.x = clampf(local.x, 0.0, _bounds_size.x)
+		local.y = clampf(local.y, 0.0, _bounds_size.y)
+	else:
+		if local.x < 0.0 or local.x >= _bounds_size.x:
+			local.x = fposmod(local.x, _bounds_size.x)
+		if local.y < 0.0 or local.y >= _bounds_size.y:
+			local.y = fposmod(local.y, _bounds_size.y)
 	var x := clampi(floori(local.x / _cell_width), 0, columns - 1)
 	var y := clampi(floori(local.y / _cell_height), 0, rows - 1)
 	return y * columns + x

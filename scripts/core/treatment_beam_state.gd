@@ -8,6 +8,7 @@ var handle: int = EntityHandle.INVALID
 var origin: Vector2 = Vector2.ZERO
 var direction: Vector2 = Vector2.RIGHT
 var length: float = 0.0
+var requested_length: float = 0.0
 var width: float = 0.0
 var damage: float = 0.0
 var duration: float = 0.0
@@ -17,6 +18,7 @@ var source_id: StringName = &""
 var phase_elapsed: float = 0.0
 var next_tick_at: float = 0.0
 var is_return: bool = false
+var _topology_resolved: bool = false
 
 
 func configure(
@@ -34,7 +36,8 @@ func configure(
 	handle = beam_handle
 	origin = beam_origin
 	direction = beam_direction.normalized() if beam_direction.length_squared() > 0.0001 else Vector2.RIGHT
-	length = maxf(beam_length, 0.0)
+	requested_length = maxf(beam_length, 0.0)
+	length = requested_length
 	width = maxf(beam_width, 0.0)
 	damage = maxf(beam_damage, 0.0)
 	duration = maxf(phase_duration, 0.0)
@@ -44,7 +47,18 @@ func configure(
 	phase_elapsed = 0.0
 	next_tick_at = 0.0
 	is_return = false
+	_topology_resolved = false
 	return self
+
+
+func resolve_topology(topology: ArenaTopology) -> void:
+	if _topology_resolved or topology == null:
+		return
+	_topology_resolved = true
+	length = requested_length
+	if topology.is_bounded():
+		origin = topology.clamp_position(origin)
+	length = topology.limit_ray_length(origin, direction, requested_length)
 
 
 func begin_return() -> bool:

@@ -9,6 +9,7 @@ const DEFAULT_SPEED := 576.0
 const HOSTILE_NORMAL := 0
 const HOSTILE_DIAMOND := 1
 const HOSTILE_HIT_RADIUS := 10.0
+const BOUNDARY_RADIUS := 14.0
 
 var target: InfectionEnemy
 var topology: ArenaTopology
@@ -41,10 +42,6 @@ var hostile_forward: Vector2 = Vector2.RIGHT
 var hostile_right: Vector2 = Vector2.DOWN
 var hostile_wave_amplitude: float = 0.0
 var hostile_wave_length: float = 180.0
-var _arena_min: Vector2 = Vector2.ZERO
-var _arena_max: Vector2 = Vector2.ZERO
-var _arena_size: Vector2 = Vector2.ZERO
-var _arena_half_size: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -67,7 +64,6 @@ func configure(
 	target = target_enemy
 	damage = amount
 	topology = arena_topology
-	_cache_topology_bounds()
 	lifetime = 1.65
 	speed = maxf(move_speed, 0.0)
 	travelled_distance = 0.0
@@ -109,7 +105,6 @@ func configure_directional(
 	target = resolved_target
 	damage = amount
 	topology = arena_topology
-	_cache_topology_bounds()
 	speed = DEFAULT_SPEED
 	travelled_distance = 0.0
 	discovery_pending = false
@@ -145,7 +140,6 @@ func configure_hostile(
 	target = null
 	damage = maxf(0.0, amount)
 	topology = arena_topology
-	_cache_topology_bounds()
 	speed = maxf(move_speed, 1.0)
 	travelled_distance = 0.0
 	discovery_pending = false
@@ -178,6 +172,8 @@ func _physics_process(delta: float) -> void:
 
 func step_fixed(delta: float) -> void:
 	_begin_visual_step()
+	if _finish_if_outside_bounded_arena(global_position):
+		return
 	lifetime -= delta
 	if lifetime <= 0.0:
 		_finish()
@@ -188,29 +184,25 @@ func step_fixed(delta: float) -> void:
 	if directional_mode:
 		var step_distance := speed * delta
 		if impact_distance >= 0.0 and travelled_distance + step_distance >= impact_distance:
-			global_position += direction * maxf(0.0, impact_distance - travelled_distance)
+			var impact_position := global_position + direction * maxf(0.0, impact_distance - travelled_distance)
+			if _finish_if_outside_bounded_arena(impact_position):
+				return
+			global_position = impact_position
 			travelled_distance = impact_distance
 			if _target_is_current():
 				target.take_damage(damage, damage_source)
 			_finish()
 			return
 		if travelled_distance + step_distance >= maximum_distance:
-			global_position += direction * maxf(0.0, maximum_distance - travelled_distance)
+			var final_position := global_position + direction * maxf(0.0, maximum_distance - travelled_distance)
+			if _finish_if_outside_bounded_arena(final_position):
+				return
+			global_position = final_position
 			travelled_distance = maximum_distance
 			_finish()
 			return
 	elif _target_is_current():
-		var target_delta := target.global_position - global_position
-		if _arena_size.x > 0.0:
-			if target_delta.x > _arena_half_size.x:
-				target_delta.x -= _arena_size.x
-			elif target_delta.x < -_arena_half_size.x:
-				target_delta.x += _arena_size.x
-		if _arena_size.y > 0.0:
-			if target_delta.y > _arena_half_size.y:
-				target_delta.y -= _arena_size.y
-			elif target_delta.y < -_arena_half_size.y:
-				target_delta.y += _arena_size.y
+		var target_delta := topology.shortest_delta(global_position, target.global_position) if topology != null else target.global_position - global_position
 		var desired := target_delta.normalized()
 		direction = direction.lerp(desired, clampf(delta * 7.0, 0.0, 1.0)).normalized()
 		var hit_radius := target.definition.radius + 10.0
@@ -220,23 +212,17 @@ func step_fixed(delta: float) -> void:
 			target.take_damage(damage, damage_source)
 			_finish()
 			return
-	global_position += direction * speed * delta
+	var next_position := global_position + direction * speed * delta
+	if _finish_if_outside_bounded_arena(next_position):
+		return
+	global_position = next_position
 	travelled_distance += speed * delta
-	var wrapped := global_position
-	if _arena_size.x > 0.0 and _arena_size.y > 0.0:
-		if wrapped.x < _arena_min.x:
-			wrapped.x += _arena_size.x
-		elif wrapped.x >= _arena_max.x:
-			wrapped.x -= _arena_size.x
-		if wrapped.y < _arena_min.y:
-			wrapped.y += _arena_size.y
-		elif wrapped.y >= _arena_max.y:
-			wrapped.y -= _arena_size.y
-	var crossed_torus := wrapped != global_position
-	if crossed_torus:
-		global_position = wrapped
+	var resolved := topology.resolve_position(global_position) if topology != null else global_position
+	var crossed_boundary := not resolved.is_equal_approx(global_position)
+	if crossed_boundary:
+		global_position = resolved
 	rotation = direction.angle()
-	if crossed_torus:
+	if crossed_boundary:
 		reset_visual_motion()
 	else:
 		visual_current_position = global_position
@@ -254,7 +240,9 @@ func _step_hostile(delta: float) -> void:
 		var triangle := 1.0 - 4.0 * absf(wave_position - 0.5)
 		lateral_offset = triangle * hostile_wave_amplitude
 	var unwrapped := hostile_origin + hostile_forward * travelled_distance + hostile_right * lateral_offset
-	global_position = topology.wrap_position(unwrapped) if topology != null else unwrapped
+	if _finish_if_outside_bounded_arena(unwrapped):
+		return
+	global_position = topology.resolve_position(unwrapped) if topology != null else unwrapped
 	var motion := topology.shortest_delta(previous_position, global_position) if topology != null else global_position - previous_position
 	if motion.length_squared() > 0.0001:
 		direction = motion.normalized()
@@ -286,6 +274,13 @@ func _finish() -> void:
 	hide()
 	finished.emit(self)
 
+
+func _finish_if_outside_bounded_arena(position: Vector2) -> bool:
+	if topology == null or not topology.is_bounded() or topology.contains_position(position, BOUNDARY_RADIUS):
+		return false
+	_finish()
+	return true
+
 func recycle() -> void:
 	set_physics_process(false)
 	hide()
@@ -294,8 +289,6 @@ func recycle() -> void:
 	target_handle = EntityHandle.INVALID
 	target_resolver = Callable()
 	topology = null
-	_arena_size = Vector2.ZERO
-	_arena_half_size = Vector2.ZERO
 	direction = Vector2.ZERO
 	lifetime = 1.65
 	speed = DEFAULT_SPEED
@@ -348,18 +341,6 @@ func _begin_visual_step() -> void:
 	visual_previous_angle = visual_current_angle
 	visual_current_angle = rotation
 
-
-func _cache_topology_bounds() -> void:
-	if topology == null:
-		_arena_min = Vector2.ZERO
-		_arena_max = Vector2.ZERO
-		_arena_size = Vector2.ZERO
-		_arena_half_size = Vector2.ZERO
-		return
-	_arena_min = topology.bounds.position
-	_arena_max = topology.bounds.end
-	_arena_size = topology.bounds.size
-	_arena_half_size = _arena_size * 0.5
 
 func _emit_discovery() -> bool:
 	if not discovery_pending:

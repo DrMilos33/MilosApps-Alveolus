@@ -4,6 +4,7 @@ extends Node2D
 signal collected(value: int)
 
 const DEFAULT_GUIDED_SPEED := 680.0
+const BODY_RADIUS := 12.0
 
 var target: TherapyAvatar
 var topology: ArenaTopology
@@ -20,10 +21,6 @@ var visual_current_position: Vector2 = Vector2.ZERO
 var visual_previous_size: Vector2 = Vector2.ZERO
 var visual_current_size: Vector2 = Vector2.ZERO
 var visual_motion_initialized: bool = false
-var _arena_min: Vector2 = Vector2.ZERO
-var _arena_max: Vector2 = Vector2.ZERO
-var _arena_size: Vector2 = Vector2.ZERO
-var _arena_half_size: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	visual_texture = VisualAssetCatalog.gameplay_sprite(&"analysis_pickup")
@@ -45,7 +42,8 @@ func configure(
 	target = target_node
 	analysis_value = value
 	topology = arena_topology
-	_cache_topology_bounds()
+	if topology != null:
+		global_position = topology.resolve_position(global_position, BODY_RADIUS)
 	phase = start_phase
 	trail_vector = Vector2.ZERO
 	guided_to_target = guided
@@ -66,8 +64,6 @@ func recycle() -> void:
 	hide()
 	target = null
 	topology = null
-	_arena_size = Vector2.ZERO
-	_arena_half_size = Vector2.ZERO
 	trail_vector = Vector2.ZERO
 	guided_to_target = false
 	guided_speed = DEFAULT_GUIDED_SPEED
@@ -78,19 +74,17 @@ func _physics_process(delta: float) -> void:
 
 func step_fixed(delta: float) -> void:
 	_begin_visual_step()
+	if topology != null:
+		var bounded_position := topology.resolve_position(global_position, BODY_RADIUS)
+		if not bounded_position.is_equal_approx(global_position):
+			global_position = bounded_position
+			if topology.is_wrapping():
+				reset_visual_motion()
+			else:
+				visual_current_position = global_position
 	if not is_instance_valid(target) or target.stats == null:
 		return
-	var target_delta := target.global_position - global_position
-	if _arena_size.x > 0.0:
-		if target_delta.x > _arena_half_size.x:
-			target_delta.x -= _arena_size.x
-		elif target_delta.x < -_arena_half_size.x:
-			target_delta.x += _arena_size.x
-	if _arena_size.y > 0.0:
-		if target_delta.y > _arena_half_size.y:
-			target_delta.y -= _arena_size.y
-		elif target_delta.y < -_arena_half_size.y:
-			target_delta.y += _arena_size.y
+	var target_delta := topology.shortest_delta(global_position, target.global_position) if topology != null else target.global_position - global_position
 	var distance_squared := target_delta.length_squared()
 	var pickup_range := target.stats.pickup_range
 	if not guided_to_target and distance_squared > pickup_range * pickup_range:
@@ -105,19 +99,13 @@ func step_fixed(delta: float) -> void:
 	if distance > 0.001:
 		global_position += target_delta * (minf(speed * delta, distance) / distance)
 	trail_vector = (before - global_position).limit_length(22.0)
-	var wrapped := global_position
-	if _arena_size.x > 0.0 and _arena_size.y > 0.0:
-		if wrapped.x < _arena_min.x:
-			wrapped.x += _arena_size.x
-		elif wrapped.x >= _arena_max.x:
-			wrapped.x -= _arena_size.x
-		if wrapped.y < _arena_min.y:
-			wrapped.y += _arena_size.y
-		elif wrapped.y >= _arena_max.y:
-			wrapped.y -= _arena_size.y
-	if wrapped != global_position:
-		global_position = wrapped
-		reset_visual_motion()
+	var resolved := topology.resolve_position(global_position, BODY_RADIUS) if topology != null else global_position
+	if not resolved.is_equal_approx(global_position):
+		global_position = resolved
+		if topology != null and topology.is_wrapping():
+			reset_visual_motion()
+		else:
+			visual_current_position = global_position
 	else:
 		visual_current_position = global_position
 	visual_current_size = _visual_size()
@@ -167,18 +155,6 @@ func _visual_size() -> Vector2:
 	var pulse := 1.0 + sin(phase) * 0.06
 	return Vector2.ONE * 28.0 * stack_scale * pulse
 
-
-func _cache_topology_bounds() -> void:
-	if topology == null:
-		_arena_min = Vector2.ZERO
-		_arena_max = Vector2.ZERO
-		_arena_size = Vector2.ZERO
-		_arena_half_size = Vector2.ZERO
-		return
-	_arena_min = topology.bounds.position
-	_arena_max = topology.bounds.end
-	_arena_size = topology.bounds.size
-	_arena_half_size = _arena_size * 0.5
 
 func _draw() -> void:
 	var pulse := 1.0 + sin(phase) * 0.12

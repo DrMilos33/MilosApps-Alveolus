@@ -42,7 +42,7 @@ IDs oder Save-Kompatibilität sie noch erfordern.
 | Regeneration | 0 Leben/s |
 | Schild | 0 |
 | Erfahrungsmultiplikator | 1,00 |
-| Globale Schutzzeit nach einem Gegnertreffer | 0,68 s |
+| Globale Schutzzeit nach einem Gegnertreffer | 0,5 s |
 
 Forschung erhöht diese Basis auf höchstens 59 Leben, 6 Verteidigungsrating
 (effektiv 5,6 % Minderung), 0,75 Leben/s Regeneration, 1,15-fache Erfahrung
@@ -285,7 +285,7 @@ zwei Projektile auf gespiegelten Rautenbahnen. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
 Sekunden weitere vier. Gegnerschaden wird mit dem Fallfaktor multipliziert und
 anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
-aufgelöst. Nach einem gültigen Treffer schützt die globale 0,68-Sekunden-Frist
+aufgelöst. Nach einem gültigen Treffer schützt die globale 0,5-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.
 
 ## 13. Fälle und Fortschrittskurven

@@ -91,6 +91,7 @@ func _draw_direction_preview(primary: Color, secondary: Color) -> void:
 	if direction.length_squared() < 0.0001:
 		direction = Vector2.RIGHT
 	var length := _resolved_value(RunBuildState.ABILITY_RANGE, "range", 620.0)
+	length = _visible_line_length(origin, direction, length)
 	var width := _resolved_value(RunBuildState.ABILITY_WIDTH, "width", 38.0)
 	var endpoint := origin + direction * length
 	var perpendicular := Vector2(-direction.y, direction.x) * width * 0.5
@@ -116,7 +117,7 @@ func _shortest_delta(from: Vector2, to: Vector2) -> Vector2:
 
 func _wrapped_points(position: Vector2, extent: float) -> PackedVector2Array:
 	var result := PackedVector2Array([position])
-	if topology == null or topology.bounds.size.x <= 0.0 or topology.bounds.size.y <= 0.0:
+	if topology == null or topology.is_bounded() or topology.bounds.size.x <= 0.0 or topology.bounds.size.y <= 0.0:
 		return result
 	var x_offsets := PackedFloat32Array([0.0])
 	var y_offsets := PackedFloat32Array([0.0])
@@ -133,3 +134,7 @@ func _wrapped_points(position: Vector2, extent: float) -> PackedVector2Array:
 		for y in y_offsets:
 			result.append(position + Vector2(x, y))
 	return result
+
+
+func _visible_line_length(start: Vector2, direction: Vector2, requested_length: float) -> float:
+	return topology.limit_ray_length(start, direction, requested_length) if topology != null else maxf(requested_length, 0.0)

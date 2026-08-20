@@ -78,8 +78,8 @@ and required status feedback are never degraded.
 - Status products are cached when their sources change.
 - Range, circle, and line mechanics use `CombatQuery` rather than independent
   scans.
-- Render interpolation uses previous/current physics positions; a torus jump
-  explicitly resets the previous position.
+- Render interpolation uses previous/current physics positions; any explicit
+  topology relocation resets the previous position.
 - Dynamic 2D MultiMeshes use CPU snapshot interpolation and ordinary packed
   `set_buffer()` uploads. Engine-side MultiMesh physics interpolation and
   `set_buffer_interpolated()` are prohibited on the supported Godot 4.7.1 GL

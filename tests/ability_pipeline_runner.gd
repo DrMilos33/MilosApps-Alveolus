@@ -306,6 +306,23 @@ func _test_feedback_world() -> void:
 	_equal(fan_handles.size(), 3, "Spread creates one visible tracer for every gameplay ray")
 	_true(world.resolve(fan_handles[0]).direction != world.resolve(fan_handles[2]).direction, "Fan tracers preserve distinct directions")
 
+	var bounded_topology := ArenaTopology.new(
+		Rect2(-500.0, -500.0, 1000.0, 1000.0),
+		ArenaTopology.BoundaryMode.BOUNDED
+	)
+	var preview := AbilityTargetPreview.new()
+	preview.topology = bounded_topology
+	_equal(preview._wrapped_points(Vector2(490.0, 0.0), 40.0).size(), 1, "Bounded target previews create no copy at the opposite edge")
+	_near(preview._visible_line_length(Vector2(480.0, 0.0), Vector2.RIGHT, 80.0), 20.0, "Bounded direction previews stop at the hard edge")
+	world.topology = bounded_topology
+	_equal(world._wrapped_points(Vector2(490.0, 0.0), 40.0).size(), 1, "Bounded feedback fields create no opposite-edge copy")
+	_equal(world._line_offsets().size(), 1, "Bounded feedback lines render only in their own arena position")
+	_near(world._visible_line_length(Vector2(480.0, 0.0), Vector2.RIGHT, 80.0), 20.0, "Bounded feedback lines end at the hard edge")
+	world.topology = topology
+	_true(world._wrapped_points(Vector2(490.0, 0.0), 40.0).size() > 1, "The legacy wrapping preview contract remains available")
+	_equal(world._line_offsets().size(), 9, "The legacy wrapping line copies remain available")
+	preview.free()
+
 	var paused_remaining := world.resolve(line_handle).remaining
 	paused = true
 	await process_frame

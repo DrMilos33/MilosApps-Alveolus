@@ -12,6 +12,7 @@ func _run() -> void:
 	_test_capacity_and_generations()
 	_test_forward_tick_schedule()
 	_test_torus_return_phase()
+	_test_bounded_return_phase()
 	_test_run_session_pause_contract()
 	_finish()
 
@@ -136,6 +137,38 @@ func _test_run_session_pause_contract() -> void:
 	_equal(events[0], 1, "Der aufgeschobene t=0-Tick erscheint erst nach Fortsetzen")
 	session.cancel()
 	session.free()
+	world.clear()
+
+
+func _test_bounded_return_phase() -> void:
+	var topology := ArenaTopology.new(
+		Rect2(-500.0, -500.0, 1000.0, 1000.0),
+		ArenaTopology.BoundaryMode.BOUNDED
+	)
+	var inside_segment := EntityHandle.make(5, 1)
+	var behind_origin := EntityHandle.make(6, 1)
+	var query := _query(topology, {
+		inside_segment: Vector2(490.0, 0.0),
+		behind_origin: Vector2(450.0, 0.0),
+	})
+	var world := TreatmentBeamWorld.new().configure(1, topology)
+	var hit_sets: Array[PackedInt64Array] = []
+	world.tick_resolved.connect(func(_handle: int, handles: PackedInt64Array, _is_return: bool) -> void:
+		hit_sets.append(handles.duplicate())
+	)
+	var beam := world.spawn(Vector2(480.0, 0.0), Vector2.RIGHT, 80.0, 16.0, 30.0, 0.5, 0.25, true, &"bounded_return")
+	var state := world.resolve(beam)
+	_near(state.requested_length, 80.0, "Die angeforderte Strahllänge bleibt für Diagnose und UI erhalten")
+	_near(state.length, 20.0, "Der harte Rand kürzt die wirksame Strahllänge genau einmal")
+	world.step_fixed(0.5, query)
+	_equal(hit_sets.size(), 3, "Vorwärtsphase und Rücklauf behalten ihren festen Tickplan am Rand")
+	state = world.resolve(beam)
+	_true(state != null and state.is_return, "Der gekürzte Strahl wechselt weiterhin in den Rücklauf")
+	_near(state.phase_origin(topology).x, 500.0, "Der Rücklauf beginnt exakt am harten Rand")
+	_near(state.length, 20.0, "Der Rücklauf verwendet dieselbe tatsächlich verfügbare Strecke")
+	for handles in hit_sets:
+		_true(handles.has(inside_segment), "Beide Phasen treffen ein Ziel auf der tatsächlich sichtbaren Strecke")
+		_false(handles.has(behind_origin), "Der gekürzte Rücklauf trifft kein Ziel hinter dem ursprünglichen Startpunkt")
 	world.clear()
 
 

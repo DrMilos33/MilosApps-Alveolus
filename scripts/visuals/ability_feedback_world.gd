@@ -317,6 +317,7 @@ func _draw_line_feedback(state: AbilityFeedbackState, alpha: float, broad: bool)
 	var actual_length := state.length
 	if actual_length <= 0.0:
 		actual_length = topology.shortest_delta(state.origin, state.target).length() if topology != null else state.origin.distance_to(state.target)
+	actual_length = _visible_line_length(state.origin, state.direction, actual_length)
 	var endpoint := state.origin + state.direction * actual_length
 	var offsets := _line_offsets()
 	for offset in offsets:
@@ -330,7 +331,7 @@ func _draw_line_feedback(state: AbilityFeedbackState, alpha: float, broad: bool)
 
 func _wrapped_points(position: Vector2, extent: float) -> PackedVector2Array:
 	var result := PackedVector2Array([position])
-	if topology == null or topology.bounds.size.x <= 0.0 or topology.bounds.size.y <= 0.0:
+	if topology == null or topology.is_bounded() or topology.bounds.size.x <= 0.0 or topology.bounds.size.y <= 0.0:
 		return result
 	var x_offsets := PackedFloat32Array([0.0])
 	var y_offsets := PackedFloat32Array([0.0])
@@ -350,13 +351,17 @@ func _wrapped_points(position: Vector2, extent: float) -> PackedVector2Array:
 
 
 func _line_offsets() -> PackedVector2Array:
-	if topology == null or topology.bounds.size.x <= 0.0 or topology.bounds.size.y <= 0.0:
+	if topology == null or topology.is_bounded() or topology.bounds.size.x <= 0.0 or topology.bounds.size.y <= 0.0:
 		return PackedVector2Array([Vector2.ZERO])
 	var result := PackedVector2Array()
 	for x in [-topology.bounds.size.x, 0.0, topology.bounds.size.x]:
 		for y in [-topology.bounds.size.y, 0.0, topology.bounds.size.y]:
 			result.append(Vector2(x, y))
 	return result
+
+
+func _visible_line_length(start: Vector2, direction: Vector2, requested_length: float) -> float:
+	return topology.limit_ray_length(start, direction, requested_length) if topology != null else maxf(requested_length, 0.0)
 
 
 func _slot_for(handle: int) -> int:

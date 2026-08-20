@@ -70,14 +70,16 @@ func step_fixed(_delta: float) -> void:
 		var resolved_speed := stats.movement_speed if stats != null else MOVE_SPEED
 		velocity = direction * resolved_speed
 		move_and_slide()
-		if topology != null:
-			var wrapped := topology.wrap_position(global_position)
-			if not wrapped.is_equal_approx(global_position):
-				global_position = wrapped
-				reset_physics_interpolation()
-				camera.reset_smoothing()
 	else:
 		velocity = Vector2.ZERO
+	if topology != null:
+		var resolved := topology.resolve_position(global_position, BODY_RADIUS)
+		if not resolved.is_equal_approx(global_position):
+			global_position = resolved
+			if topology.is_wrapping():
+				reset_physics_interpolation()
+				if camera != null:
+					camera.reset_smoothing()
 
 
 func set_crowd_blocking(blocking: Vector2) -> void:

@@ -13,6 +13,7 @@ const DEFAULT_CAPACITY := 16
 const TIME_EPSILON := 0.00001
 
 var capacity: int = DEFAULT_CAPACITY
+var topology: ArenaTopology
 
 var _states: Array[TreatmentBeamState] = []
 var _generations := PackedInt32Array()
@@ -21,9 +22,10 @@ var _active_slots := PackedInt32Array()
 var _free_slots := PackedInt32Array()
 
 
-func configure(maximum_beams: int = DEFAULT_CAPACITY) -> TreatmentBeamWorld:
+func configure(maximum_beams: int = DEFAULT_CAPACITY, arena_topology: ArenaTopology = null) -> TreatmentBeamWorld:
 	var previous_generations := _generations.duplicate()
 	capacity = maxi(1, maximum_beams)
+	topology = arena_topology
 	_states.resize(capacity)
 	_states.fill(null)
 	_generations.resize(capacity)
@@ -50,7 +52,7 @@ func spawn(
 	source_id: StringName
 ) -> int:
 	if _states.is_empty():
-		configure(capacity)
+		configure(capacity, topology)
 	if length <= 0.0 or width < 0.0 or damage < 0.0 or duration <= 0.0 or tick_interval <= 0.0 or source_id.is_empty() or _free_slots.is_empty():
 		return EntityHandle.INVALID
 	var slot := int(_free_slots[-1])
@@ -68,6 +70,7 @@ func spawn(
 		return_enabled,
 		source_id
 	)
+	state.resolve_topology(topology)
 	_states[slot] = state
 	_dense_index_by_slot[slot] = _active_slots.size()
 	_active_slots.append(slot)
@@ -125,6 +128,7 @@ func step_fixed(delta: float, query: CombatQuery) -> void:
 		var state := resolve(handle)
 		if state == null:
 			continue
+		state.resolve_topology(query.topology)
 		var still_active := _advance_state(state, delta, query)
 		changed = true
 		if not still_active and resolve(handle) == state:

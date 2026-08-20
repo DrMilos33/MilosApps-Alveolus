@@ -40,8 +40,10 @@ content definitions do not depend on scene nodes.
   current system iteration. A system never removes from a collection that it
   is currently iterating.
 - `CombatSpatialGrid` and `CombatQuery` are the sole broad-phase query path.
-  Both use `ArenaTopology`, so seam-crossing range, circle, and line queries
-  stay consistent with movement. Queries are invalidated after movement and
+  Both use `ArenaTopology`. `WRAP` remains the explicit compatibility mode;
+  playable runs select `BOUNDED`, whose direct distances, clamped cell ranges
+  and ray limits prevent movement, targeting or feedback across an opposite
+  edge. Queries are invalidated after movement and
   entity lifecycle changes, then rebuilt exactly once by the first real
   nearest, circle, or line consumer of that fixed tick. An idle system never
   rebuilds a world-sized grid speculatively.
@@ -66,8 +68,8 @@ Ordinary enemies, pickups, and projectiles keep one stable render slot for an
 entire activation. Fixed ticks publish previous/current position, size, angle,
 and tint snapshots. The renderers interpolate those immutable snapshots using
 `Engine.get_physics_interpolation_fraction()` and submit one packed buffer per
-visual archetype. A torus crossing or newly reserved generation snaps both CPU
-snapshots to the same position; release clears the visible slot synchronously
+visual archetype. A topology relocation or newly reserved generation snaps both
+CPU snapshots to the same position; release clears the visible slot synchronously
 before a node may return to a pool.
 
 Godot 4.7.1's Windows GL Compatibility path must not own physics interpolation
@@ -209,18 +211,17 @@ a magic maximum. Range checks and ordering use distance to the body surface,
 while `CombatSpatialGrid` and `CombatQuery` keep exact radii.
 
 Enemy crowd spacing is a separate presentation/locomotion envelope exposed by
-`InfectionEnemy.crowd_radius()`. `EnemyWorld` rebuilds a dedicated 64-unit grid,
-examines a bounded local broad-phase window, keeps the six nearest bodies and
-refreshes each steering slot at 10 Hz while movement stays at 60 Hz. The body
-closer to the avatar owns the lane. Its follower selects one passing side, keeps
-that side through a short hysteresis window and follows a continuous unit-speed
-boundary relative to the leader's resolved velocity. Bodies behind a pursuer
-never steer its front line; no reciprocal displacement or position repair is
-allowed. Contact is a separate latched state: the unblocked front body reaches
-the true contact shell and attacks. If the avatar stands still, a reduced,
-non-zero passing speed propagates through the local queue behind that latched
-front; normal avoidance and movement around a moving avatar retain authored
-speed. Model factors approximate the visible body core, not its decorative outer pixels.
+`InfectionEnemy.crowd_radius()`. While Doctor Milos is stationary, `EnemyWorld`
+owns a fixed ring of twelve generation-safe contact micro-slots. A small
+bacterium reserves two contiguous slots, a bacterial cluster three; no more
+than two large bodies may own the ring at once. Owners approach one stable
+contact point and attack there. Further enemies keep a stable radial queue
+behind an owner instead of orbiting or propagating a global slow chain. Death,
+knockback, stun or leaving the contact envelope releases the claim, and the
+first valid waiter advances deterministically. Movement-state hysteresis hands
+control back to local flowing avoidance when the Doctor moves and restores the
+ring only after he has settled. Model factors approximate the visible body core,
+not its decorative outer pixels.
 Standard waves retain the deterministic golden-angle stream as a tie-breaker
 while the actual spawn direction fills the least occupied of twelve sectors.
 Materializing enemies count immediately, so one batch cannot collapse into a
@@ -281,13 +282,12 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase.
 
-`EnemyWorld` owns one predictive body-avoidance pass before enemy movement. It
-rebuilds one `CombatSpatialGrid`, samples only the local neighborhood and
-constrains the next preferred velocity. Preferred envelopes cover the visible
-body core. A stable per-slot approach-lane bias prevents all pursuers from
-choosing the same center line, while a short time horizon slows converging
-bodies before a rear body can enter the front row. Steering refreshes at 10 Hz
-and locomotion remains at 60 Hz. It never repairs positions after movement.
+Outside the stationary contact ring, `EnemyWorld` owns one predictive
+body-avoidance pass before enemy movement. It rebuilds one `CombatSpatialGrid`,
+samples only the local neighborhood and constrains the next preferred velocity.
+Preferred envelopes cover the visible body core. Steering refreshes at a
+bounded cadence while locomotion remains at 60 Hz. It never repairs positions
+after movement.
 Only `pneumococcus` yields to avatar pressure;
 larger bodies publish one blocking normal to `TherapyAvatar`, which removes
 only movement into that body and keeps tangential escape available. Entities
@@ -300,7 +300,7 @@ and one-second stun. While stunned, chase/contact handling and
 tracks only the generation-bound stunned subset and draws the tiny shared CC0
 status icon; it does not introduce per-enemy process owners.
 
-`ArenaBackdrop` precomputes the coral dashed torus seam and its eight corner
+`ArenaBackdrop` precomputes the coral dashed hard boundary and its eight corner
 segments during `configure()`. They are part of the existing one-shot static
 SubViewport bake. The viewport returns to `UPDATE_DISABLED`, the short bake
 callback stops, and reconfiguration reuses the same viewport/canvas nodes.
@@ -309,7 +309,7 @@ callback stops, and reconfiguration reuses the same viewport/canvas nodes.
 
 `DefenseCellWorld` owns defense-cell gameplay in the fixed `COMBAT` phase. The
 avatar may render the orbit snapshot but must not apply damage. Every cell
-queries `CombatQuery.circle()` at its actual topology-wrapped world position,
+queries `CombatQuery.circle()` at its actual topology-resolved world position,
 selects at most one generation-safe enemy handle and starts its own cooldown
 only after a valid geometric hit. The current base trigger interval is 0.2
 seconds per cell. The 0.1-second minimum remains the hard lower bound for later

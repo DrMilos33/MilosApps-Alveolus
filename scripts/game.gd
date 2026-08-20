@@ -22,6 +22,7 @@ const INTRO_ROLE_FOLLOWUP := &"followup"
 const INTRO_ROLE_BOSS := &"boss"
 const INTRO_CONFIRM_ATTACK := &"enable_autoattack"
 const INTRO_CONFIRM_BOSS := &"start_boss"
+const PRESSURE_GRACE_SECONDS := 0.5
 const SPAWN_GOLDEN_ANGLE := 2.399963229728653
 const SPAWN_ANGLE_JITTER := 0.18
 const WAVE_SPAWN_SECTOR_COUNT := 12
@@ -224,7 +225,7 @@ func _ready() -> void:
 	finding_definitions = ContentCatalog.finding_definitions()
 	reaction_definitions = ContentCatalog.reaction_definitions()
 	rng.seed = config.random_seed
-	topology = ArenaTopology.new(config.arena_rect())
+	topology = ArenaTopology.new(config.arena_rect(), ArenaTopology.BoundaryMode.BOUNDED)
 
 	simulation_root = Node2D.new()
 	simulation_root.name = "Simulation"
@@ -299,7 +300,7 @@ func _ready() -> void:
 	enemy_world.configure_crowd_collision(topology, avatar, BodySizeCatalog.maximum_radius(enemy_definitions))
 	defense_cell_world = DefenseCellWorld.new().configure(topology, avatar, combat_query)
 	defense_cell_world.enemy_hit.connect(_on_defense_cell_hit)
-	treatment_beam_world = TreatmentBeamWorld.new().configure()
+	treatment_beam_world = TreatmentBeamWorld.new().configure(TreatmentBeamWorld.DEFAULT_CAPACITY, topology)
 	treatment_beam_world.tick_resolved.connect(_on_treatment_beam_tick)
 	treatment_beam_world.beam_finished.connect(_on_treatment_beam_finished)
 	ability_feedback_world.set_shield_anchor(avatar)
@@ -1386,7 +1387,7 @@ func start_run(run_context: RunContext = null) -> void:
 		hud.hide_finding_progress()
 		hud.update_round_time(0.0)
 		_set_intro_prompt("Beobachte den ersten Erreger.", &"normal", false, "")
-		intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0), 0.55)
+		intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0, _enemy_body_radius(&"pneumococcus")), 0.55)
 		if is_instance_valid(intro_primary_enemy):
 			intro_enemy_roles[intro_primary_enemy] = INTRO_ROLE_PRIMARY
 			intro_primary_enemy.set_status_modifier(&"intro_guidance", 0.58, 1.0)
@@ -1394,7 +1395,7 @@ func start_run(run_context: RunContext = null) -> void:
 		treatment_controller.enabled = true
 		hud.update_timer(0.0, config.run_duration_seconds, config.final_deadline_seconds, false)
 		for index in range(3):
-			_spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0 + index * 34.0))
+			_spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0 + index * 34.0, _enemy_body_radius(&"pneumococcus")))
 		if discovery_manager.request(&"patient_stability", null):
 			_try_present_next_discovery()
 	if stress_test:
@@ -1757,7 +1758,7 @@ func _spawn_step(delta: float) -> void:
 			cluster_chance = clampf(cluster_chance + finding.magnitude, 0.0, 0.85)
 		if discovery_manager.has_seen(&"pneumococcus") and rng.randf() < cluster_chance:
 			type = &"bacterial_cluster"
-		_spawn_enemy(type, _wave_spawn_position_around_avatar(rng.randf_range(500.0, 620.0)))
+		_spawn_enemy(type, _wave_spawn_position_around_avatar(rng.randf_range(500.0, 620.0), _enemy_body_radius(type)))
 
 func _drain_deferred_spawns(maximum_per_tick: int) -> void:
 	var emitted := 0
@@ -2046,11 +2047,14 @@ func _spawn_treatment_beam(shot: TreatmentShot, duration: float) -> void:
 			if is_instance_valid(fallback_enemy) and fallback_enemy.is_targetable():
 				fallback_enemy.take_damage(_resolved_treatment_damage(shot.damage, fallback_enemy), shot.source_id)
 		return
+	var beam := treatment_beam_world.resolve(handle)
+	if beam == null:
+		return
 	treatment_beam_return_visualized[handle] = false
 	if ability_feedback_world != null:
 		ability_feedback_world.spawn(
-			shot.source_id, shot.origin, shot.origin + shot.direction * shot.requested_range_value,
-			shot.direction, 0.0, shot.requested_range_value, shot.hit_radius * 2.0, duration
+			shot.source_id, shot.origin, shot.origin + shot.direction * beam.length,
+			shot.direction, 0.0, beam.length, shot.hit_radius * 2.0, duration
 		)
 
 func _on_treatment_beam_tick(handle: int, enemy_handles: PackedInt64Array, is_return: bool) -> void:
@@ -2258,7 +2262,7 @@ func _spawn_enemy(
 	if force_detailed_discovery:
 		resolved_spawn_position = _visible_discovery_spawn_position(definition.radius)
 		discovery_spawn_reservations[definition.discovery_id] = true
-	var wrapped_position := topology.wrap_position(resolved_spawn_position)
+	var bounded_position := topology.resolve_position(resolved_spawn_position, definition.radius)
 	var enemy: InfectionEnemy
 	if not enemy_pool.is_empty():
 		enemy = enemy_pool.pop_back()
@@ -2274,7 +2278,7 @@ func _spawn_enemy(
 		enemy.materialized.connect(_on_enemy_materialized)
 		enemy.damage_applied.connect(_on_enemy_damage_applied)
 		simulation_root.add_child(enemy)
-	enemy.global_position = wrapped_position
+	enemy.global_position = bounded_position
 	enemy.configure(
 		definition,
 		avatar,
@@ -2287,7 +2291,7 @@ func _spawn_enemy(
 		config.enemy_defense
 	)
 	_apply_group_control_to_enemy(enemy)
-	enemy.global_position = wrapped_position
+	enemy.global_position = bounded_position
 	enemy.reset_physics_interpolation()
 	enemy.set_physics_process(false)
 	var world_handle := enemy_world.register_enemy(enemy, critical)
@@ -2326,7 +2330,7 @@ func _spawn_boss() -> void:
 	for boss_index in range(maxi(1, config.boss_count)):
 		var request := EnemySpawnRequest.create(
 			config.boss_enemy_id,
-			_spawn_position_around_avatar(600.0 + float(boss_index) * 36.0),
+			_spawn_position_around_avatar(600.0 + float(boss_index) * 36.0, _enemy_body_radius(config.boss_enemy_id)),
 			&"infection_focus",
 			config.boss_health_multiplier,
 			config.enemy_speed_multiplier * config.boss_speed_multiplier,
@@ -2679,7 +2683,7 @@ func _spawn_intro_followups() -> void:
 	for index in range(INTRO_FOLLOWUP_ENEMY_COUNT):
 		var enemy := _spawn_enemy(
 			&"pneumococcus",
-			_spawn_position_around_avatar(390.0 + float(index) * 36.0),
+			_spawn_position_around_avatar(390.0 + float(index) * 36.0, _enemy_body_radius(&"pneumococcus")),
 			0.55,
 			true,
 			false
@@ -2973,7 +2977,7 @@ func _apply_incoming_damage(amount: float, incoming_profile: DamageProfile, sour
 	if selected_level.is_tutorial and not state.boss_spawned:
 		amount = minf(amount, maxf(0.0, state.stability - 1.0))
 	state.change_stability(-amount)
-	pressure_grace_timer = 0.68
+	pressure_grace_timer = PRESSURE_GRACE_SECONDS
 	avatar.show_damage_flash()
 
 func _on_stability_changed(current: float, maximum: float) -> void:
@@ -3253,7 +3257,7 @@ func _case_mechanics_step(delta: float) -> void:
 
 func _spawn_hidden_nests(count: int) -> void:
 	for index in range(count):
-		var spawn_position := _spawn_position_around_avatar(390.0 + float(index) * 85.0)
+		var spawn_position := _spawn_position_around_avatar(390.0 + float(index) * 85.0, _enemy_body_radius(&"minor_focus"))
 		var request := EnemySpawnRequest.create(
 			&"minor_focus",
 			spawn_position,
@@ -3688,7 +3692,12 @@ func _pickup_position_for_handle(handle: int) -> Vector2:
 func _pickup_targetable_for_handle(handle: int) -> bool:
 	return is_instance_valid(pickup_world.resolve(handle))
 
-func _spawn_position_around_avatar(distance: float) -> Vector2:
+func _enemy_body_radius(type: StringName) -> float:
+	var definition := enemy_definitions.get(type) as EnemyDefinition
+	return definition.radius if definition != null else 0.0
+
+
+func _spawn_position_around_avatar(distance: float, body_radius: float = 0.0) -> Vector2:
 	var safe_distance := minf(distance, minf(config.arena_size.x, config.arena_size.y) * 0.5 - 70.0)
 	# Preserve the established content-RNG sequence. Spawn geometry uses its own
 	# stream, but this draw keeps later enemy types and upgrade rolls unchanged.
@@ -3698,15 +3707,29 @@ func _spawn_position_around_avatar(distance: float) -> Vector2:
 		TAU
 	)
 	spawn_angle_cursor = fposmod(spawn_angle_cursor + SPAWN_GOLDEN_ANGLE, TAU)
-	return topology.wrap_position(avatar.global_position + Vector2.from_angle(angle) * safe_distance)
+	return _safe_spawn_position_for_angle(angle, safe_distance, body_radius)
+
+
+func _safe_spawn_position_for_angle(angle: float, distance: float, body_radius: float) -> Vector2:
+	var desired := avatar.global_position + Vector2.from_angle(angle) * distance
+	if not topology.is_bounded() or topology.contains_position(desired, body_radius):
+		return topology.resolve_position(desired, body_radius)
+	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
+	for alternative_index in range(1, WAVE_SPAWN_SECTOR_COUNT):
+		var step := ceili(float(alternative_index) * 0.5)
+		var direction := 1.0 if alternative_index % 2 == 1 else -1.0
+		var alternative := avatar.global_position + Vector2.from_angle(angle + float(step) * sector_width * direction) * distance
+		if topology.contains_position(alternative, body_radius):
+			return alternative
+	return topology.resolve_position(desired, body_radius)
 
 
 ## Standard waves keep the deterministic golden-angle sequence as their
 ## tie-breaker, but place each new body in the least occupied of twelve sectors.
 ## Materializing enemies count as occupied immediately, so a batch cannot fold
 ## into one corner before its first member becomes targetable.
-func _wave_spawn_position_around_avatar(distance: float) -> Vector2:
-	var candidate := _spawn_position_around_avatar(distance)
+func _wave_spawn_position_around_avatar(distance: float, body_radius: float = 0.0) -> Vector2:
+	var candidate := _spawn_position_around_avatar(distance, body_radius)
 	if not is_instance_valid(avatar) or topology == null:
 		return candidate
 	var sector_counts := PackedInt32Array()
@@ -3734,11 +3757,15 @@ func _wave_spawn_position_around_avatar(distance: float) -> Vector2:
 		-sector_width * 0.32,
 		sector_width * 0.32
 	)
-	var selected_sector := 0
-	var selected_count := sector_counts[0]
+	var selected_sector := -1
+	var selected_count := 2147483647
 	var selected_angle_distance := INF
 	for sector in range(WAVE_SPAWN_SECTOR_COUNT):
 		var sector_center := (float(sector) + 0.5) * sector_width
+		var sector_angle := sector_center + intra_sector_offset
+		var sector_position := avatar.global_position + Vector2.from_angle(sector_angle) * candidate_delta.length()
+		if topology.is_bounded() and not topology.contains_position(sector_position, body_radius):
+			continue
 		var angle_distance := absf(_shortest_signed_angle(candidate_angle, sector_center))
 		if sector_counts[sector] < selected_count or (
 			sector_counts[sector] == selected_count and angle_distance < selected_angle_distance
@@ -3746,9 +3773,12 @@ func _wave_spawn_position_around_avatar(distance: float) -> Vector2:
 			selected_sector = sector
 			selected_count = sector_counts[sector]
 			selected_angle_distance = angle_distance
+	if selected_sector < 0:
+		return candidate
 	var resolved_angle := (float(selected_sector) + 0.5) * sector_width + intra_sector_offset
-	return topology.wrap_position(
-		avatar.global_position + Vector2.from_angle(resolved_angle) * candidate_delta.length()
+	return topology.resolve_position(
+		avatar.global_position + Vector2.from_angle(resolved_angle) * candidate_delta.length(),
+		body_radius
 	)
 
 

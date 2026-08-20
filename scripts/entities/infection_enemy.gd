@@ -64,10 +64,6 @@ var visual_previous_color: Color = Color.TRANSPARENT
 var visual_current_color: Color = Color.TRANSPARENT
 var visual_motion_initialized: bool = false
 var detailed_visual_required: bool = false
-var _arena_min: Vector2 = Vector2.ZERO
-var _arena_max: Vector2 = Vector2.ZERO
-var _arena_size: Vector2 = Vector2.ZERO
-var _arena_half_size: Vector2 = Vector2.ZERO
 var _stun_remaining: float = 0.0
 var _knockback_elapsed: float = 0.0
 var _knockback_duration: float = 0.0
@@ -100,7 +96,8 @@ func configure(
 	definition = enemy_definition
 	target = target_node
 	topology = arena_topology
-	_cache_topology_bounds()
+	if topology != null and definition != null:
+		global_position = topology.resolve_position(global_position, definition.radius)
 	max_health = definition.max_health * health_scale
 	health = max_health
 	speed_multiplier = movement_scale
@@ -148,8 +145,6 @@ func recycle() -> void:
 	topology = null
 	runtime_resistance_profile = null
 	runtime_defense = 0.0
-	_arena_size = Vector2.ZERO
-	_arena_half_size = Vector2.ZERO
 	phase_minions = PackedInt32Array()
 	status_speed_multipliers.clear()
 	status_contact_multipliers.clear()
@@ -270,6 +265,14 @@ func step_fixed(delta: float) -> void:
 	if not activation_active:
 		return
 	_begin_visual_step()
+	if topology != null and definition != null:
+		var bounded_position := topology.resolve_position(global_position, definition.radius)
+		if not bounded_position.is_equal_approx(global_position):
+			global_position = bounded_position
+			if topology.is_wrapping():
+				reset_visual_motion()
+			else:
+				visual_current_position = global_position
 	if hit_flash > 0.0:
 		hit_flash = maxf(0.0, hit_flash - delta)
 		_sync_visual_appearance()
@@ -300,17 +303,7 @@ func step_fixed(delta: float) -> void:
 		return
 	if _stun_remaining > 0.0:
 		return
-	var to_target := target.global_position - global_position
-	if _arena_size.x > 0.0:
-		if to_target.x > _arena_half_size.x:
-			to_target.x -= _arena_size.x
-		elif to_target.x < -_arena_half_size.x:
-			to_target.x += _arena_size.x
-	if _arena_size.y > 0.0:
-		if to_target.y > _arena_half_size.y:
-			to_target.y -= _arena_size.y
-		elif to_target.y < -_arena_half_size.y:
-			to_target.y += _arena_size.y
+	var to_target := topology.shortest_delta(global_position, target.global_position) if topology != null else target.global_position - global_position
 	var distance_squared := to_target.length_squared()
 	if distance_squared > 0.1:
 		var distance := sqrt(distance_squared)
@@ -326,35 +319,19 @@ func step_fixed(delta: float) -> void:
 		# while the Doctor stands still; contact arrival itself may stop movement.
 		var safe_velocity := safe_direction * movement_speed * _crowd_speed_multiplier
 		global_position += safe_velocity * delta
-		var wrapped := global_position
-		if _arena_size.x > 0.0 and _arena_size.y > 0.0:
-			if wrapped.x < _arena_min.x:
-				wrapped.x += _arena_size.x
-			elif wrapped.x >= _arena_max.x:
-				wrapped.x -= _arena_size.x
-			if wrapped.y < _arena_min.y:
-				wrapped.y += _arena_size.y
-			elif wrapped.y >= _arena_max.y:
-				wrapped.y -= _arena_size.y
-		if wrapped != global_position:
-			global_position = wrapped
-			reset_visual_motion()
+		var resolved := topology.resolve_position(global_position, definition.radius) if topology != null else global_position
+		if not resolved.is_equal_approx(global_position):
+			global_position = resolved
+			if topology.is_wrapping():
+				reset_visual_motion()
+			else:
+				visual_current_position = global_position
 		else:
 			visual_current_position = global_position
 	# Movement may cross the contact shell during this fixed step. Resolve the
 	# post-movement distance so an enemy that just arrived deals contact damage
 	# instead of waiting for (or missing) its next crowd-steering refresh.
-	var contact_delta := target.global_position - global_position
-	if _arena_size.x > 0.0:
-		if contact_delta.x > _arena_half_size.x:
-			contact_delta.x -= _arena_size.x
-		elif contact_delta.x < -_arena_half_size.x:
-			contact_delta.x += _arena_size.x
-	if _arena_size.y > 0.0:
-		if contact_delta.y > _arena_half_size.y:
-			contact_delta.y -= _arena_size.y
-		elif contact_delta.y < -_arena_half_size.y:
-			contact_delta.y += _arena_size.y
+	var contact_delta := topology.shortest_delta(global_position, target.global_position) if topology != null else target.global_position - global_position
 	distance_squared = contact_delta.length_squared()
 	var contact_radius := definition.radius + TherapyAvatar.BODY_RADIUS
 	if definition.contact_enabled and distance_squared <= contact_radius * contact_radius and contact_cooldown <= 0.0:
@@ -386,7 +363,7 @@ func apply_displacement(offset: Vector2) -> void:
 		return
 	global_position += offset
 	if topology != null:
-		global_position = topology.wrap_position(global_position)
+		global_position = topology.resolve_position(global_position, definition.radius if definition != null else 0.0)
 	reset_visual_motion()
 
 
@@ -430,10 +407,13 @@ func _step_knockback(delta: float) -> void:
 	_knockback_applied_distance = resolved_distance
 	global_position += _knockback_direction * step_distance
 	if topology != null:
-		var wrapped := topology.wrap_position(global_position)
-		if not wrapped.is_equal_approx(global_position):
-			global_position = wrapped
-			reset_visual_motion()
+		var resolved := topology.resolve_position(global_position, definition.radius if definition != null else 0.0)
+		if not resolved.is_equal_approx(global_position):
+			global_position = resolved
+			if topology.is_wrapping():
+				reset_visual_motion()
+			else:
+				visual_current_position = global_position
 		else:
 			visual_current_position = global_position
 	else:
@@ -476,18 +456,6 @@ func _sync_visual_appearance() -> void:
 	visual_current_color = Color.WHITE.lerp(Color(1.0, 0.39, 0.33), reaction * 0.68)
 	visual_current_color.a = alpha
 
-
-func _cache_topology_bounds() -> void:
-	if topology == null:
-		_arena_min = Vector2.ZERO
-		_arena_max = Vector2.ZERO
-		_arena_size = Vector2.ZERO
-		_arena_half_size = Vector2.ZERO
-		return
-	_arena_min = topology.bounds.position
-	_arena_max = topology.bounds.end
-	_arena_size = topology.bounds.size
-	_arena_half_size = _arena_size * 0.5
 
 func _refresh_status_products() -> void:
 	_cached_status_speed_multiplier = 1.0
