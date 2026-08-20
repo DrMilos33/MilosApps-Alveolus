@@ -24,7 +24,7 @@ const CLUSTER_CROWD_RADIUS_FACTOR := 1.25
 const NEST_CROWD_RADIUS_FACTOR := 1.18
 const BOSS_CROWD_RADIUS_FACTOR := 1.12
 const DEFAULT_CROWD_RADIUS_FACTOR := 1.18
-const CROWD_STEERING_SMOOTHING := 0.24
+const CROWD_STEERING_SMOOTHING := 0.34
 
 var definition: EnemyDefinition
 var target: TherapyAvatar

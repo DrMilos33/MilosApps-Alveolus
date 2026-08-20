@@ -19,8 +19,9 @@ const AVATAR_SPACING_FACTOR := 0.84
 const MAX_CROWD_NEIGHBORS := 6
 const MAX_AVATAR_NEIGHBORS := 12
 const SMALL_ENEMY_ID := &"pneumococcus"
-const CROWD_ANTICIPATION_DISTANCE := 12.0
-const MAX_CROWD_RADIUS_FACTOR := 1.35
+const CROWD_ANTICIPATION_DISTANCE := 5.0
+const CROWD_CONTACT_GUARD_DISTANCE := 2.5
+const MAX_CROWD_RADIUS_FACTOR := 1.25
 const APPROACH_LANE_DISTANCE := 340.0
 const MAX_APPROACH_BIAS := 0.44
 const MIN_CROWDED_SPEED := 0.42
@@ -128,9 +129,9 @@ func _prepare_crowd_steering() -> void:
 	var strongest_avatar_overlap := 0.0
 	# Blend bounded local separation into each enemy's next movement vector. The
 	# uniform grid and neighbor cap preserve the mass-entity budget. Each enemy
-	# refreshes at 20 Hz while locomotion remains at the fixed 60 Hz; the 12-world-
-	# point prediction margin covers the two intervening movement ticks. Steering is
-	# deliberately retained for the intervening tick instead of snapping positions.
+	# refreshes at 20 Hz while locomotion remains at the fixed 60 Hz. A short
+	# prediction margin prevents overlap without appearing as an extra invisible
+	# body around the authored sprite. Steering is retained between refreshes.
 	for slot_value in _active_slots:
 		var slot := int(slot_value)
 		if _retiring[slot] != 0:
@@ -174,13 +175,24 @@ func _prepare_crowd_steering() -> void:
 				1.0
 			)
 			var penetration := maxf(0.0, 1.0 - distance / maxf(preferred_distance, 0.001))
-			strongest_pressure = maxf(strongest_pressure, clampf(anticipation + penetration, 0.0, 1.0))
+			var contact_guard := clampf(
+				(preferred_distance + CROWD_CONTACT_GUARD_DISTANCE - distance) / CROWD_CONTACT_GUARD_DISTANCE,
+				0.0,
+				1.0
+			)
+			strongest_pressure = maxf(
+				strongest_pressure,
+				clampf(anticipation + penetration + contact_guard, 0.0, 1.0)
+			)
 			var weight := 0.25 if enemy.definition.is_boss and not other.definition.is_boss else 1.0
-			# In a symmetric ring the lateral components of two neighbors cancel
-			# and only a small radial component remains. A three-to-one predictive
-			# weight lets that remainder beat the common center-seeking vector before
-			# contact, while InfectionEnemy still caps the final steering magnitude.
-			separation += away * (anticipation * 3.0 + penetration * 2.4) * weight
+			# Keep the outer part of the prediction zone soft, then ramp sharply at
+			# contact. This preserves near-tangent sprite spacing without permitting
+			# a dense pack to oscillate through the actual personal-space circles.
+			separation += away * (
+				anticipation * anticipation * 5.0
+				+ contact_guard * 6.0
+				+ penetration * 2.4
+			) * weight
 
 		var avatar_delta := _crowd_topology.shortest_delta(enemy.global_position, _crowd_avatar.global_position)
 		var avatar_minimum := (TherapyAvatar.BODY_RADIUS + enemy.definition.radius) * AVATAR_SPACING_FACTOR
