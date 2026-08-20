@@ -54,6 +54,8 @@ func parameter_stage(parameter_id: StringName) -> int:
 
 static func _normalized_parameters(values: Dictionary) -> Dictionary:
 	var result := values.duplicate(true)
+	if result.has("damage"):
+		result["damage"] = float(roundi(float(result["damage"])))
 	for key in [&"radius", &"range"]:
 		if result.has(key):
 			result[key] = CombatDistanceScale.quantize_world(float(result[key]))

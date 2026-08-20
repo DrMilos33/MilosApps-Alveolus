@@ -46,7 +46,7 @@ func _test_categories_and_terms() -> void:
 				_check(by_id.has(StringName("term_%s" % id)), "Begriff %s erscheint im Lexikon" % id)
 	for term in TerminologyCatalog.all():
 		_check(SimpleIcon.supports(term.visual_id), "Der produktive verwandte Begriff %s besitzt eine registrierte zentrale Glyphe" % term.id)
-	_check(TerminologyCatalog.definition(&"treatment_speed").gameplay_text.contains("höhere Behandlungsrate"), "Behandlungstempo wird als sichtbare Rate erklärt")
+	_check(TerminologyCatalog.definition(&"treatment_speed").gameplay_text.contains("höherer Attack Speed"), "Attack Speed wird als sichtbare Rate erklärt")
 	_check(TerminologyCatalog.definition(&"support_path").gameplay_text.contains("keinen direkten Schaden"), "Regeneration wird ohne Gegnerschaden erklärt")
 	_check(TerminologyCatalog.simple(&"patient_stability") == "Leben", "Leben ersetzt Zustand")
 	_check(TerminologyCatalog.simple(&"effect") == "Schaden", "Schaden ersetzt Wirkung")
@@ -58,7 +58,7 @@ func _test_enemy_values_are_sourced() -> void:
 	var provider := LexiconViewModelProvider.create_default()
 	var entries := LexiconCatalog.entries_by_id()
 	var enemies := ContentCatalog.enemy_definitions()
-	for id in [&"pneumococcus", &"bacterial_cluster", &"minor_focus", &"infection_focus"]:
+	for id in [&"pneumococcus", &"bacterial_cluster", &"minor_focus", &"localized_boss", &"infection_focus"]:
 		var enemy: EnemyDefinition = enemies[id]
 		var model := provider.make_view_model(entries[id], [id])
 		_check(not model.locked, "%s ist nach Entdeckung lesbar" % id)
@@ -107,7 +107,7 @@ func _test_character_values_are_sourced() -> void:
 	var model := provider.make_view_model(entry)
 	_assert_numeric_row(model, &"treatment_damage", stats.therapy_damage, &"player_stats", &"therapy_damage")
 	_assert_text_row(model, &"treatment_interval", &"player_stats", &"therapy_cooldown")
-	_check(String(_row(model, &"treatment_interval").value) == "1,49/s", "Behandlungstempo wird als fertige Rate statt als Intervallzahl präsentiert")
+	_check(String(_row(model, &"treatment_interval").value) == "1,49/s", "Attack Speed wird als fertige Rate statt als Intervallzahl präsentiert")
 	_assert_numeric_row(model, &"treatment_range", CombatDistanceScale.stage_from_world(stats.therapy_range), &"player_stats", &"therapy_range_stage")
 	_assert_numeric_row(model, &"treatment_targets", stats.therapy_targets, &"player_stats", &"therapy_targets")
 	_assert_numeric_row(model, &"treatment_projectiles", stats.therapy_projectiles, &"player_stats", &"therapy_projectiles")
@@ -127,7 +127,7 @@ func _test_gameplay_values_are_sourced() -> void:
 	var treatment_model := provider.make_view_model(entries[&"automatic_therapy"], [&"automatic_therapy"])
 	_assert_numeric_row(treatment_model, &"damage", treatment.base_damage, treatment.id, &"base_damage")
 	_assert_text_row(treatment_model, &"interval", treatment.id, &"base_interval")
-	_check(String(_row(treatment_model, &"interval").value) == "1,22/s", "Die Grundbehandlung liefert ihre fertig formatierte Rate")
+	_check(String(_row(treatment_model, &"interval").value) == "1,04/s", "Die langsamere Grundbehandlung liefert ihre fertig formatierte Rate")
 	_assert_numeric_row(treatment_model, &"range", treatment.base_range_stage(), treatment.id, &"base_range_stage")
 
 	var immune_stats := PlayerStats.new()

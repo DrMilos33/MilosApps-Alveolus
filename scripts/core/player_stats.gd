@@ -1,14 +1,14 @@
 class_name PlayerStats
 extends RefCounted
 
-const BASE_MAX_HEALTH := 100.0
+const BASE_MAX_HEALTH := 50.0
 const BASE_DEFENSE := 0.0
 const BASE_LIFE_REGENERATION := 0.0
-const BASE_TREATMENT_DAMAGE := 12.8
+const BASE_TREATMENT_DAMAGE := 13.0
 const BASE_MOVEMENT_SPEED := 180.0
 
 var therapy_damage: float = BASE_TREATMENT_DAMAGE
-var therapy_cooldown: float = 0.82
+var therapy_cooldown: float = 0.965
 var therapy_range: float = 480.0
 var therapy_targets: int = 1
 var therapy_projectiles: int = 1
@@ -69,11 +69,11 @@ func apply_meta_progression(research_ranks: Dictionary) -> void:
 	var regeneration_rank := int(research_ranks.get(&"life_regeneration", 0))
 	var movement_rank := int(research_ranks.get(&"movement_training", 0))
 	max_stability_bonus = float(stability_rank) * 3.0
-	therapy_damage = _treatment_base_damage * (1.0 + float(precision_rank) * 0.02)
+	therapy_damage = float(roundi(_treatment_base_damage + float(precision_rank)))
 	experience_gain_multiplier = 1.0 + float(experience_rank) * 0.05
 	defense = BASE_DEFENSE + float(defense_rank) * 2.0
 	life_regeneration_per_second = BASE_LIFE_REGENERATION + float(regeneration_rank) * 0.25
-	movement_speed = BASE_MOVEMENT_SPEED * (1.0 + float(movement_rank) * 0.03)
+	movement_speed = float(roundi(BASE_MOVEMENT_SPEED * (1.0 + float(movement_rank) * 0.03)))
 
 func apply_prepared_progression(research_ranks: Dictionary, passive_ids: Array[StringName]) -> void:
 	# Rebuilding a prepared plan must be reversible. This is also used by tests,
@@ -139,10 +139,11 @@ func preview_upgrade(definition: UpgradeDefinition) -> UpgradePreview:
 			)
 		&"cooldown_multiplier":
 			var after := maxf(0.22, therapy_cooldown * definition.magnitude)
-			var percent := roundi((1.0 - after / maxf(therapy_cooldown, 0.001)) * 100.0)
+			var before_rate := 1.0 / maxf(therapy_cooldown, 0.001)
+			var after_rate := 1.0 / maxf(after, 0.001)
 			return UpgradePreview.create(
-				"+%d %% Attack Speed" % percent,
-				"%s s  >  %s s Intervall" % [_decimal(therapy_cooldown, 2), _decimal(after, 2)],
+				"+%s/s Attack Speed" % _decimal(after_rate - before_rate, 2),
+				"%s/s  >  %s/s Attack Speed" % [_decimal(before_rate, 2), _decimal(after_rate, 2)],
 				level_text
 			)
 		&"range":
@@ -343,7 +344,7 @@ func stat_sections(
 	var general_rows: Array[Dictionary] = [
 		_stat_row(&"life", "Leben", life_value),
 		_stat_row(&"shield", "Schild", "%s / %s" % [_number(current_shield), _number(maximum_shield)]),
-		_stat_row(&"movement_speed", "Geschwindigkeit", _number(movement_speed)),
+		_stat_row(&"movement_speed", "Galopp", _number(movement_speed)),
 		_stat_row(&"defense", "Verteidigung", "%s %%" % _number(MitigationCurve.defense_effective_percent(defense))),
 		_stat_row(&"life_regeneration", "Regeneration", "%s/s" % _number(life_regeneration_per_second)),
 		_stat_row(&"experience_gain", "Erfahrung", "+%d %%" % roundi((experience_gain_multiplier - 1.0) * 100.0)),
@@ -407,7 +408,7 @@ func stat_rows(current_stability: float = -1.0, maximum_stability: float = -1.0,
 		state_value = "%s / %s" % [_number(current_stability), _number(maximum_stability)]
 	var rows: Array[Dictionary] = [
 		{"group": "ALLGEMEIN", "label": "Leben", "value": state_value},
-		{"group": "ALLGEMEIN", "label": "Geschwindigkeit", "value": _number(movement_speed)},
+		{"group": "ALLGEMEIN", "label": "Galopp", "value": _number(movement_speed)},
 		{"group": "ALLGEMEIN", "label": "Verteidigung", "value": "%s %%" % _number(MitigationCurve.defense_effective_percent(defense))},
 		{"group": "ALLGEMEIN", "label": "Regeneration", "value": "%s/s" % _number(life_regeneration_per_second)},
 		{"group": "ALLGEMEIN", "label": "Erfahrung", "value": "+%d %%" % roundi((experience_gain_multiplier - 1.0) * 100.0)},

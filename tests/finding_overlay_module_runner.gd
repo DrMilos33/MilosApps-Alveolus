@@ -127,9 +127,9 @@ func _assert_finding_interaction() -> void:
 		and reaction_payload.get("body", "") == "Befundfortschritt erhöhen.",
 		"Reaktionstooltip enthält ausschließlich den entscheidenden Effekttext"
 	)
-	_check(overlay.registered_info_source_count() == 3, "Jede Reaktion besitzt genau eine Informationsquelle")
+	_check(overlay.registered_info_source_count() == 4, "Befundtitel und jede Reaktion besitzen genau eine Informationsquelle")
 	var registrations := overlay.context_detail_registrations()
-	var all_hover_only := registrations.size() == 3
+	var all_hover_only := registrations.size() == 4
 	for registration in registrations:
 		var registration_source := registration.get("source") as Control
 		all_hover_only = all_hover_only \
@@ -138,10 +138,12 @@ func _assert_finding_interaction() -> void:
 			and not registration.has("anchor") \
 			and not registration.has("placement")
 	_check(all_hover_only, "Registrierungen öffnen automatisch ausschließlich per Maus-Hover")
-	_check(registrations.all(func(registration: Dictionary) -> bool:
+	var reaction_registrations := registrations.filter(func(registration: Dictionary) -> bool:
 		var source := registration.get("source") as Control
 		return source != null and source.has_meta(&"reaction_id")
-	), "Befund verwendet jeden echten Reaktionsbutton als globale AUTO-Quelle")
+	)
+	_check(reaction_registrations.size() == 3, "Befund verwendet jeden echten Reaktionsbutton als globale AUTO-Quelle")
+	_check(registrations.size() - reaction_registrations.size() == 1, "Befundtitel liefert genau eine zusätzliche Erklärung")
 
 	var selected: Array[StringName] = []
 	var confirmed: Array[Array] = []
@@ -234,7 +236,7 @@ func _assert_finding_interaction() -> void:
 	await _settle()
 	_check(overlay.is_compact_layout(), "480 × 270 bildet den 200-Prozent-Kompaktfall ab")
 	_check(overlay.copy_grid().columns == 1 and overlay.reaction_grid().columns == 1 and overlay.reaction_grid().get_child_count() == 3, "Kompakt bleiben Effekt und höchstens drei Reaktionen in lesbaren Einzelspalten")
-	_check(overlay.reaction_action(&"treat") == null and overlay.registered_info_source_count() == 3, "Auch ein übergroßes Presenterarray erzeugt stabil nur drei Reaktionen und Tooltipquellen")
+	_check(overlay.reaction_action(&"treat") == null and overlay.registered_info_source_count() == 4, "Auch ein übergroßes Presenterarray erzeugt drei Reaktionen plus Befundtooltip")
 	_check(overlay.action_grid().columns == 1, "Die einzelne Befundaktion nutzt im Kompaktfall die volle Breite")
 	_check(
 		overlay.copy_grid().get_index() < overlay.reaction_grid().get_index(),

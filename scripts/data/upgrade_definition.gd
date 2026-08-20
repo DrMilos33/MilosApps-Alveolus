@@ -106,7 +106,7 @@ func resolved_component_name(prepared_treatment: TreatmentDefinition, component_
 		return prepared_treatment.display_name
 	match component_id:
 		&"defense_cells": return "Abwehrzellen"
-		&"movement": return "Geschwindigkeit"
+		&"movement": return "Galopp"
 	return String(component_titles.get(component_id, title))
 
 

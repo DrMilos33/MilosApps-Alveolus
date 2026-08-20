@@ -32,9 +32,11 @@ func _test_research_catalog_contract() -> void:
 		&"unlock_spread_treatment",
 		&"unlock_piercing_treatment",
 		&"movement_training",
+		&"unlock_defense_burst",
+		&"unlock_treatment_line",
 	]
 	var definitions := ContentCatalog.research_definitions()
-	_equal(definitions.size(), expected_ids.size(), "Es gibt exakt acht aktive Forschungen")
+	_equal(definitions.size(), expected_ids.size(), "Es gibt exakt zehn aktive Forschungen")
 	var seen_ids: Dictionary = {}
 	for index in range(definitions.size()):
 		var definition: ResearchDefinition = definitions[index]
@@ -45,13 +47,15 @@ func _test_research_catalog_contract() -> void:
 
 	var expected_effects := {
 		&"stability_reserve": [&"max_health", 3.0, 3],
-		&"therapy_precision": [&"damage_multiplier", 0.02, 3],
+		&"therapy_precision": [&"damage_flat", 1.0, 3],
 		&"experience_gain": [&"experience_multiplier", 0.05, 3],
 		&"defense_training": [&"defense", 2.0, 3],
 		&"life_regeneration": [&"life_regeneration", 0.25, 3],
 		&"movement_training": [&"movement_speed_multiplier", 0.03, 3],
 		&"unlock_spread_treatment": [&"unlock", 1.0, 1],
 		&"unlock_piercing_treatment": [&"unlock", 1.0, 1],
+		&"unlock_defense_burst": [&"unlock", 1.0, 1],
+		&"unlock_treatment_line": [&"unlock", 1.0, 1],
 	}
 	for definition in definitions:
 		_true(expected_effects.has(definition.id), "Jede aktive Forschungs-ID besitzt einen geprüften Effektvertrag")
@@ -83,13 +87,13 @@ func _test_global_research_is_idempotent() -> void:
 		var stats := PlayerStats.new()
 		stats.configure_prepared_treatment(treatment)
 		stats.apply_meta_progression(ranks)
-		var expected_damage := treatment.base_damage * 1.06
-		_near(PlayerStats.BASE_MAX_HEALTH + stats.max_stability_bonus, 109.0, "Lebensforschung gilt global")
+		var expected_damage := treatment.base_damage + 3.0
+		_near(PlayerStats.BASE_MAX_HEALTH + stats.max_stability_bonus, 59.0, "Lebensforschung gilt global")
 		_near(stats.therapy_damage, expected_damage, "Schadensforschung gilt für jede Grundbehandlung")
 		_near(stats.experience_gain_multiplier, 1.15, "Erfahrungsforschung gilt global")
 		_near(stats.defense, 6.0, "Defensivforschung gilt global")
 		_near(stats.life_regeneration_per_second, 0.75, "Regenerationsforschung gilt global")
-		_near(stats.movement_speed, 196.2, "Bewegungsforschung gilt global")
+		_near(stats.movement_speed, 196.0, "Galoppforschung gilt global und bleibt ganzzahlig")
 
 		stats.apply_meta_progression(ranks)
 		_near(stats.therapy_damage, expected_damage, "Wiederholtes Anwenden vervielfacht den Grundschaden nicht")
@@ -97,7 +101,7 @@ func _test_global_research_is_idempotent() -> void:
 		_near(stats.experience_gain_multiplier, 1.15, "Wiederholtes Anwenden vervielfacht Erfahrung nicht")
 		_near(stats.defense, 6.0, "Wiederholtes Anwenden vervielfacht Defensive nicht")
 		_near(stats.life_regeneration_per_second, 0.75, "Wiederholtes Anwenden vervielfacht Regeneration nicht")
-		_near(stats.movement_speed, 196.2, "Wiederholtes Anwenden vervielfacht Bewegung nicht")
+		_near(stats.movement_speed, 196.0, "Wiederholtes Anwenden vervielfacht Galopp nicht")
 
 		stats.apply_meta_progression({})
 		_near(stats.therapy_damage, treatment.base_damage, "Ein Forschungsreset stellt den Behandlungsschaden wieder her")

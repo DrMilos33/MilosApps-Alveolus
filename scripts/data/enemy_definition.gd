@@ -43,9 +43,9 @@ static func create(
 	definition.id = definition_id
 	definition.display_name = name
 	definition.max_health = health
-	definition.speed = move_speed
-	definition.base_damage = damage
-	definition.contact_damage = damage
+	definition.speed = float(roundi(move_speed))
+	definition.base_damage = float(roundi(damage))
+	definition.contact_damage = definition.base_damage
 	definition.analysis_value = analysis
 	definition.radius = body_radius
 	definition.body_size_class = BodySizeCatalog.class_for_radius(body_radius)
@@ -80,7 +80,7 @@ static func _default_damage_profile(definition_id: StringName) -> DamageProfile:
 			return DamageProfile.from_components(&"bacterial_cluster_damage", {&"earth": 0.60, &"fire": 0.40})
 		&"minor_focus":
 			return DamageProfile.single(&"minor_focus_damage", &"wind")
-		&"infection_focus":
+		&"infection_focus", &"localized_boss", &"intro_focus":
 			return DamageProfile.from_components(&"infection_focus_damage", {&"fire": 0.40, &"wind": 0.60})
 	return null
 
@@ -93,6 +93,6 @@ static func _default_resistance_profile(definition_id: StringName) -> Resistance
 			return ResistanceProfile.from_components(&"bacterial_cluster_resistances", {&"earth": 20.0, &"fire": -15.0})
 		&"minor_focus":
 			return ResistanceProfile.from_components(&"minor_focus_resistances", {&"wind": 25.0, &"water": -20.0})
-		&"infection_focus":
+		&"infection_focus", &"localized_boss", &"intro_focus":
 			return ResistanceProfile.from_components(&"infection_focus_resistances", {&"fire": 15.0, &"wind": 25.0, &"water": -15.0})
 	return ResistanceProfile.neutral(StringName("%s_resistances" % String(definition_id)))

@@ -91,7 +91,7 @@ func _apply_player_source(view_model: LexiconEntryViewModel) -> void:
 		presentations = damage_presentations
 	view_model.set_type_presentations(presentations)
 	var rows: Array[StatRowViewModel] = [
-		StatRowViewModel.number(&"movement_speed", "Geschwindigkeit", player_stats.movement_speed, "", 1, &"player_stats", &"movement_speed"),
+		StatRowViewModel.number(&"movement_speed", "Galopp", player_stats.movement_speed, "", 0, &"player_stats", &"movement_speed"),
 		StatRowViewModel.number(&"max_life", "Leben", PlayerStats.BASE_MAX_HEALTH + player_stats.max_stability_bonus, "", 0, &"player_stats", &"max_stability_bonus"),
 		StatRowViewModel.number(&"defense", "Verteidigung", MitigationCurve.defense_effective_percent(player_stats.defense), "%", 1, &"player_stats", &"defense"),
 		StatRowViewModel.number(&"life_regeneration", "Lebensregeneration", player_stats.life_regeneration_per_second, "/s", 2, &"player_stats", &"life_regeneration_per_second"),

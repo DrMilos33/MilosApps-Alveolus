@@ -177,7 +177,7 @@ func _test_upgrade_application_and_caps() -> void:
 	var potency: UpgradeDefinition = _find_upgrade(definitions, &"potency")
 	var rhythm: UpgradeDefinition = _find_upgrade(definitions, &"rhythm")
 	_assert_true(stats.apply_upgrade(potency), "Wirksamkeitsupgrade kann angewendet werden")
-	_assert_equal(stats.therapy_damage, 19.8, "Wirksamkeitsupgrade verändert den Schaden")
+	_assert_equal(stats.therapy_damage, 20.0, "Wirksamkeitsupgrade verändert den Schaden ganzzahlig")
 	stats.apply_upgrade(potency)
 	stats.apply_upgrade(potency)
 	_assert_true(not stats.apply_upgrade(potency), "Upgrade respektiert die Maximalstufe")
@@ -231,11 +231,11 @@ func _test_upgrade_previews() -> void:
 	_assert_equal(target_preview.effect_text, "+1 Projektil", "Zielupgrade benennt den exakten Projektilzuwachs")
 	_assert_equal(target_preview.before_after_text, "1 Ziel  >  2 Ziele", "Zielupgrade zeigt Vorher und Nachher")
 	var rhythm_preview := stats.preview_upgrade(rhythm)
-	_assert_equal(rhythm_preview.effect_text, "+16 % Attack Speed", "Rhythmusupgrade priorisiert den verständlichen Prozentzuwachs")
-	_assert_equal(rhythm_preview.before_after_text, "1,22/s  >  1,45/s", "Intervallupgrade zeigt die zentral umgerechnete Vorher-/Nachher-Rate")
+	_assert_equal(rhythm_preview.effect_text, "+0,06/s Attack Speed", "Rhythmusupgrade verwendet einen linearen absoluten Zuwachs")
+	_assert_equal(rhythm_preview.before_after_text, "1,04/s  >  1,10/s", "Attack-Speed-Ausbau zeigt die mathematisch exakte Vorher-/Nachher-Rate")
 	var immune_preview := stats.preview_upgrade(immune_damage)
-	_assert_equal(immune_preview.effect_text, "+3,6 Schaden", "Abwehrupgrade verwendet die kompakte Effektzeile")
-	_assert_equal(immune_preview.before_after_text, "5,4 Schaden  >  9,0 Schaden", "Abwehrupgrade zeigt nur den Wertvergleich")
+	_assert_equal(immune_preview.effect_text, "+4 Schaden", "Abwehrupgrade verwendet eine ganzzahlige Effektzeile")
+	_assert_equal(immune_preview.before_after_text, "5 Schaden  >  9 Schaden", "Abwehrupgrade zeigt ganzzahlige Werte")
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 77
@@ -259,13 +259,13 @@ func _test_character_stat_rows() -> void:
 	var sections := stats.stat_sections(80.0, 90.0)
 	_assert_equal(sections[0].id(), &"general", "Allgemeine Werte besitzen eine stabile Section-ID")
 	_assert_equal(sections[1].id(), &"treatment:treatment_precision", "Behandlungswerte besitzen eine content-stabile Section-ID")
-	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "12,8", "Behandlungsschaden entspricht dem echten Basiswert")
+	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "13", "Behandlungsschaden entspricht dem echten Basiswert")
 	var copied_rows := sections[1].rows()
 	copied_rows[0]["value"] = "verändert"
-	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "12,8", "Section-Zeilen werden defensiv kopiert")
+	_assert_equal(_row_value_by_id(sections[1].rows(), &"damage"), "13", "Section-Zeilen werden defensiv kopiert")
 	stats.immune_level = 1
 	var compact := stats.compact_stat_text(80.0, 90.0)
-	_assert_true(compact.contains("Schaden  12,8"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
+	_assert_true(compact.contains("Schaden  13"), "Optionale HUD-Anzeige nutzt dieselben Charakterwerte")
 	_assert_true(compact.contains("Abwehrzellen  2"), "Kompakte Anzeige aktualisiert Ausbauwerte")
 
 func _test_level_catalog_and_run_config() -> void:
@@ -273,7 +273,7 @@ func _test_level_catalog_and_run_config() -> void:
 	_assert_equal(levels.size(), 4, "Levelkatalog enthält Intro und drei Hauptfälle")
 	var expected_durations := [0.0, -1.0, -1.0, -1.0]
 	var expected_boss_times := [0.0, 180.0, 180.0, 180.0]
-	var expected_stability := [100.0, 100.0, 100.0, 100.0]
+	var expected_stability := [50.0, 50.0, 50.0, 50.0]
 	for index in range(levels.size()):
 		var level: LevelDefinition = levels[index]
 		_assert_equal(level.order, index, "Levelreihenfolge ist datengetrieben und lückenlos")
@@ -401,11 +401,11 @@ func _test_meta_progression() -> void:
 	_assert_equal(meta.claim_job(jobs), 6, "Abgeschlossener Kurzbefund zahlt sechs Forschung")
 	_assert_equal(meta.claim_job(jobs), 0, "Klinikfall kann nicht doppelt abgeholt werden")
 
-	meta.research_points = 500
+	meta.research_points = 1000
 	var research := ContentCatalog.research_definitions()
 	var reserve: ResearchDefinition = _find_research(research, &"stability_reserve")
 	_assert_true(meta.purchase(reserve), "Forschungsknoten kann gekauft werden")
-	_assert_equal(meta.research_points, 480, "Erster Forschungsknoten kostet 20")
+	_assert_equal(meta.research_points, 900, "Erster Forschungsrang kostet 100")
 	meta.purchase(reserve)
 	meta.purchase(reserve)
 	_assert_true(not meta.purchase(reserve), "Forschungsknoten respektiert seine Maximalstufe")

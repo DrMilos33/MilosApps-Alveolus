@@ -19,6 +19,10 @@ extends Resource
 @export var cluster_chance_end: float
 @export var boss_health_multiplier: float
 @export var boss_speed_multiplier: float = 1.0
+@export var boss_enemy_id: StringName = &"infection_focus"
+@export var boss_ranged_enabled: bool = false
+@export var boss_projectile_damage_multiplier: float = 1.0
+@export var boss_wave_amplitude: float = 44.0
 @export var boss_phase_minions: PackedInt32Array
 @export var reward_multiplier: float
 @export_multiline var briefing_text: String
@@ -90,6 +94,18 @@ func configure_case_variation(
 
 func configure_boss_behavior(speed_multiplier: float) -> LevelDefinition:
 	boss_speed_multiplier = maxf(speed_multiplier, 0.0)
+	return self
+
+func configure_boss(
+	enemy_id: StringName,
+	ranged_enabled: bool,
+	projectile_damage_multiplier: float = 1.0,
+	wave_amplitude: float = 44.0
+) -> LevelDefinition:
+	boss_enemy_id = enemy_id if enemy_id != &"" else &"infection_focus"
+	boss_ranged_enabled = ranged_enabled
+	boss_projectile_damage_multiplier = maxf(projectile_damage_multiplier, 0.0)
+	boss_wave_amplitude = maxf(wave_amplitude, 0.0)
 	return self
 
 func duration_text() -> String:

@@ -30,6 +30,7 @@ var icon: SimpleIcon
 var title_label: Label
 var body_label: Label
 var meta_label: Label
+var illustration: TextureRect
 
 var _registrations: Dictionary = {}
 var _active_source_id := 0
@@ -254,6 +255,15 @@ func _build_card() -> void:
 	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	header.add_child(title_label)
 
+	illustration = TextureRect.new()
+	illustration.name = "Illustration"
+	illustration.custom_minimum_size = Vector2(0.0, 82.0)
+	illustration.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	illustration.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	illustration.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	illustration.hide()
+	stack.add_child(illustration)
+
 	body_label = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 	body_label.name = "Body"
 	body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -311,6 +321,9 @@ func _apply_payload(payload: Dictionary, mode: int) -> void:
 	title_label.visible = not title_label.text.is_empty()
 	body_label.visible = not body_label.text.is_empty()
 	meta_label.visible = not meta_label.text.is_empty()
+	var illustration_value: Variant = payload.get("illustration_texture", null)
+	illustration.texture = illustration_value as Texture2D if illustration_value is Texture2D else null
+	illustration.visible = illustration.texture != null
 	icon.visible = not icon_kind.is_empty()
 	header.visible = title_label.visible or icon.visible
 	if icon.visible:

@@ -13,7 +13,7 @@ const ENTRIES := {
 	&"reaction": {"simple": "Reaktion", "medical": "Reaktion auf einen Befund"},
 	&"boss": {"simple": "Boss", "medical": "Zentraler Infektionsherd"},
 	&"effect": {"simple": "Schaden", "medical": "Therapeutischer Schaden"},
-	&"treatment_speed": {"simple": "Behandlungsrate", "medical": "Applikationsfrequenz"},
+	&"treatment_speed": {"simple": "Attack Speed", "medical": "Applikationsfrequenz"},
 	&"interval": {"simple": "Intervall", "medical": "Zeitabstand"},
 	&"range": {"simple": "Reichweite", "medical": "Wirkradius"},
 	&"targets": {"simple": "Ziele", "medical": "Zielzahl"},
@@ -88,7 +88,7 @@ static func _build_definitions() -> Dictionary:
 	_add(result, &"reaction", "Eine Entscheidung nach einem abgeschlossenen Befund.", "Die gewählte Reaktion verändert den aktuellen Run und kann mit dem vorbereiteten Plan zusammenwirken.", [&"finding", &"run"], "", &"analysis_pickup")
 	_add(result, &"boss", "Das zentrale Ziel eines regulären Falls.", "Der Boss besitzt viel Leben und kann mehrere Belastungsphasen auslösen. Ein Sieg erfordert seine vollständige Kontrolle.", [&"boss_phase", &"case"], "", &"infection_focus")
 	_add(result, &"effect", "Die Stärke eines offensiven Treffers.", "Mehr Schaden zieht einem getroffenen Gegner mehr Leben ab. Schadenstyp und Resistenz bestimmen, wie viel davon tatsächlich ankommt.", [&"basic_treatment", &"resistance"], "Punkte", &"automatic_therapy")
-	_add(result, &"treatment_speed", "Wie häufig die automatische Behandlung ausgelöst wird.", "Eine höhere Behandlungsrate erzeugt in derselben Zeit mehr Impulse.", [&"interval", &"cooldown"], "Prozent", &"automatic_therapy")
+	_add(result, &"treatment_speed", "Wie häufig die automatische Behandlung ausgelöst wird.", "Ein höherer Attack Speed erzeugt in derselben Zeit mehr Impulse.", [&"interval", &"cooldown"], "Pro Sekunde", &"automatic_therapy")
 	_add(result, &"interval", "Der Zeitabstand zwischen zwei automatischen Impulsen.", "Ein kleineres Intervall bedeutet eine häufigere Behandlung.", [&"treatment_speed", &"basic_treatment"], "Sekunden", &"automatic_therapy")
 	_add(result, &"range", "Die maximale Distanzstufe, in der ein Effekt ein Ziel erreicht.", "Ziele außerhalb der Reichweitenstufe werden von der jeweiligen Behandlung oder Fähigkeit nicht erfasst.", [&"targets", &"basic_treatment"], "Stufe", &"automatic_therapy")
 	_add(result, &"targets", "Die Zahl gleichzeitig ausgewählter Gegner.", "Zusätzliche Ziele verteilen einen Behandlungsimpuls auf mehrere Gegner, sofern genug gültige Ziele vorhanden sind.", [&"projectiles", &"range"], "Anzahl", &"automatic_therapy")

@@ -32,6 +32,7 @@ var seen_discovery_ids: Dictionary = {}
 var tutorial_status: Dictionary = {}
 var show_run_stats: bool = false
 var talent_ranks: Dictionary = {}
+var bonus_talent_points: int = 0
 ## Compatibility view for older UI callers. Values are ranks instead of booleans;
 ## `bool(rank)` therefore keeps all existing read paths source-compatible.
 var selected_talent_ids: Dictionary:
@@ -84,6 +85,7 @@ func reset_defaults(now: int = -1) -> void:
 	tutorial_status = {}
 	show_run_stats = false
 	talent_ranks = {}
+	bonus_talent_points = 0
 	talent_tree_refund_pending = false
 	completed_mastery_ids = {}
 	prepared_loadouts = {}
@@ -242,6 +244,17 @@ func mark_intro_skipped() -> void:
 func set_tutorial_step(key: StringName, completed: bool = true) -> void:
 	tutorial_status[key] = completed
 
+func grant_intro_completion_rewards() -> bool:
+	if bool(tutorial_status.get(&"intro_completion_rewards", false)):
+		return false
+	research_points += 30
+	bonus_talent_points += 1
+	tutorial_status[&"intro_completion_rewards"] = true
+	tutorial_status[&"research_guidance_pending"] = true
+	research_changed.emit(research_points, claimable_research())
+	talents_changed.emit()
+	return true
+
 func talent_points_earned() -> int:
 	var catalog := MasteryObjectiveDefinition.catalog()
 	var total := 0
@@ -249,7 +262,7 @@ func talent_points_earned() -> int:
 		if catalog.has(id):
 			var definition: MasteryObjectiveDefinition = catalog[id]
 			total += definition.reward_points
-	return total
+	return total + bonus_talent_points
 
 func talent_points_spent() -> int:
 	var catalog := TalentDefinition.catalog()
@@ -476,6 +489,7 @@ func to_dict() -> Dictionary:
 		"tutorial_status": tutorial_status.duplicate(true),
 		"show_run_stats": show_run_stats,
 		"talent_ranks": _string_keyed_rank_dictionary(talent_ranks),
+		"bonus_talent_points": bonus_talent_points,
 		# Kept for one compatibility cycle so older diagnostics can still display
 		# which nodes are active. V6 loading exclusively trusts `talent_ranks`.
 		"selected_talent_ids": _positive_dictionary_keys(talent_ranks),
@@ -536,6 +550,7 @@ func load_dict(data: Dictionary) -> bool:
 		tutorial_status = {}
 	show_run_stats = bool(data.get("show_run_stats", false))
 	talent_ranks = {}
+	bonus_talent_points = maxi(0, int(data.get("bonus_talent_points", 0)))
 	talent_tree_refund_pending = false
 	completed_mastery_ids = {}
 	prepared_loadouts = {}

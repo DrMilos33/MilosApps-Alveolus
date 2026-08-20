@@ -40,7 +40,8 @@ func _test_distance_and_body_catalogs() -> void:
 
 func _test_balance_and_movement_plumbing() -> void:
 	var treatments := TreatmentDefinition.catalog()
-	_near(treatments[&"treatment_precision"].base_damage, 12.8, "Impuls besitzt den um 20 Prozent reduzierten Schaden")
+	_near(treatments[&"treatment_precision"].base_damage, 13.0, "Impuls besitzt ganzzahligen Basisschaden")
+	_near(treatments[&"treatment_precision"].base_interval, 0.965, "Impuls besitzt den um fünfzehn Prozent verlangsamten Attack Speed")
 	_near(treatments[&"treatment_spread"].base_damage, 5.0, "Streubehandlung besitzt 5 Schaden")
 	_near(treatments[&"treatment_pierce"].base_damage, 9.0, "Durchdringende Behandlung besitzt 9 Schaden")
 	_near(treatments[&"treatment_pierce"].base_interval, 1.65, "Durchdringende Behandlung besitzt 1,65 Sekunden Intervall")
@@ -56,13 +57,13 @@ func _test_balance_and_movement_plumbing() -> void:
 	var stats := PlayerStats.new()
 	stats.configure_prepared_treatment(treatments[&"treatment_precision"])
 	stats.apply_meta_progression({&"movement_training": 3})
-	_near(stats.movement_speed, 180.0 * 1.09, "Geschwindigkeitsforschung addiert drei Prozent je Rang auf Basis 180")
+	_near(stats.movement_speed, 196.0, "Galoppforschung löst auf einen ganzzahligen Wert auf")
 	var build := RunBuildState.from_treatment(treatments[&"treatment_precision"])
 	stats.bind_run_build(build, treatments[&"treatment_precision"])
 	var mobility := _upgrade(&"mobility")
 	for rank in range(3):
 		_true(stats.apply_upgrade(mobility), "Mobilitätsausbau Rang %d wird angewandt" % (rank + 1))
-	_near(stats.movement_speed, 180.0 * 1.09 * pow(1.05, 3), "Mobilitätsausbau multipliziert den aufgelösten Geschwindigkeitsstat je Rang")
+	_near(stats.movement_speed, 223.0, "Galoppausbau addiert je Rang neun und bleibt ganzzahlig")
 	_equal(PlayerStats.BASE_MOVEMENT_SPEED, 180.0, "Doctor-Basisgeschwindigkeit ist zentral 180")
 	_equal(TherapyAvatar.MOVE_SPEED, PlayerStats.BASE_MOVEMENT_SPEED, "Avatar-Fallback ist an die zentrale Doctor-Basis gekoppelt")
 	_equal(TherapyProjectile.DEFAULT_SPEED, 576.0, "Impuls-Projektile verwenden die um zwanzig Prozent reduzierte Geschwindigkeit")
@@ -102,7 +103,7 @@ func _test_stat_sections_and_headings() -> void:
 	_equal(potency.heading_component_id(treatment.id), treatment.id, "Allgemeines Behandlungsupgrade folgt dynamisch der vorbereiteten Behandlung")
 	_equal(potency.resolved_component_name(treatment), "Impuls", "UI erhält nur den aufgelösten Komponentennamen")
 	var mobility := _upgrade(&"mobility")
-	_equal(mobility.resolved_component_name(treatment), "Geschwindigkeit", "Allgemeiner Geschwindigkeitsausbau benennt seine Komponente stabil")
+	_equal(mobility.resolved_component_name(treatment), "Galopp", "Allgemeiner Galoppausbau benennt seine Komponente stabil")
 	_true(stats.apply_upgrade(_upgrade(&"neutrophils")), "Abwehrzellen können im Run erworben werden")
 	var acquired_sections := stats.stat_sections(82.0, 100.0, 7.0, 12.0)
 	_equal(acquired_sections.size(), 5, "Eine im Run erworbene Fähigkeit erscheint sofort als eigene Charakterwertsektion")
@@ -116,11 +117,11 @@ func _test_presentation_apis() -> void:
 		research_by_id[definition.id] = definition
 	var expected_totals := {
 		&"stability_reserve": "+9 Leben",
-		&"therapy_precision": "+6 % Schaden",
+		&"therapy_precision": "+3 Schaden",
 		&"experience_gain": "+15 % Erfahrung",
 		&"defense_training": "+6 Verteidigung",
 		&"life_regeneration": "+0,75/s",
-		&"movement_training": "+9 % Geschwindigkeit",
+		&"movement_training": "+9 % Galopp",
 		&"unlock_spread_treatment": "Freigeschaltet",
 		&"unlock_piercing_treatment": "Freigeschaltet",
 	}

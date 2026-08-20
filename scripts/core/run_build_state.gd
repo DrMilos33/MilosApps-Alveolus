@@ -37,7 +37,7 @@ const FINDING_PROGRESS := &"finding_progress"
 const SUPPORT_EFFECT := &"support_effect"
 const PICKUP_RANGE := &"pickup_range"
 const MOVEMENT_SPEED := &"movement_speed"
-const BASE_DEFENSE_CELL_DAMAGE := 5.4
+const BASE_DEFENSE_CELL_DAMAGE := 5.0
 const BASE_DEFENSE_CELL_RADIUS_STAGE := 4
 
 var _base_values: Dictionary = {}
@@ -101,6 +101,8 @@ func add_modifier_dictionary(source_id: StringName, index: int, data: Dictionary
 			operation = ModifierDefinition.Operation.CLAMP_MIN
 		&"clamp_max":
 			operation = ModifierDefinition.Operation.CLAMP_MAX
+		&"attack_speed_add":
+			operation = ModifierDefinition.Operation.ATTACK_SPEED_ADD
 	var required_tags := PackedStringArray()
 	for tag in data.get("required_tags", []):
 		required_tags.append(String(tag))
@@ -197,6 +199,7 @@ func value(stat: StringName, fallback: float = 0.0, context_tags: PackedStringAr
 	var override_priority := -2147483648
 	var minimum := -INF
 	var maximum := INF
+	var attack_speed_addition := 0.0
 	for definition in modifiers_for(stat, context_tags):
 		match definition.operation:
 			ModifierDefinition.Operation.ADD:
@@ -212,12 +215,20 @@ func value(stat: StringName, fallback: float = 0.0, context_tags: PackedStringAr
 				minimum = maxf(minimum, definition.value)
 			ModifierDefinition.Operation.CLAMP_MAX:
 				maximum = minf(maximum, definition.value)
+			ModifierDefinition.Operation.ATTACK_SPEED_ADD:
+				attack_speed_addition += definition.value
 	resolved = override_value if override_found else (resolved + additive) * multiplier
+	if attack_speed_addition != 0.0 and stat == TREATMENT_INTERVAL:
+		resolved = 1.0 / maxf(1.0 / maxf(resolved, 0.001) + attack_speed_addition, 0.001)
 	if minimum > maximum:
 		# A minimum is the safety boundary when contradictory modifiers exist.
 		maximum = minimum
 	resolved = clampf(resolved, minimum, maximum)
-	return CombatDistanceScale.quantize_world(resolved) if CombatDistanceScale.is_staged_stat(stat) else resolved
+	if CombatDistanceScale.is_staged_stat(stat):
+		return CombatDistanceScale.quantize_world(resolved)
+	if stat in [TREATMENT_DAMAGE, ABILITY_DAMAGE, DEFENSE_CELL_DAMAGE, MOVEMENT_SPEED]:
+		return float(roundi(resolved))
+	return resolved
 
 func value_with(candidate: ModifierDefinition, fallback: float = 0.0, context_tags: PackedStringArray = PackedStringArray()) -> float:
 	if candidate == null:
@@ -264,8 +275,8 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 			formatted_before = str(before_stage)
 			formatted_after = str(after_stage)
 		&"tempo":
-			var percent := roundi((1.0 - after / maxf(before, 0.001)) * 100.0)
-			effect_text = "+%d %% Attack Speed" % percent
+			var rate_delta := 1.0 / maxf(after, 0.001) - 1.0 / maxf(before, 0.001)
+			effect_text = "+%s/s Attack Speed" % _formatted_effect_number(rate_delta, 2)
 			formatted_before = CombatRateScale.formatted_per_second(before)
 			formatted_after = CombatRateScale.formatted_per_second(after)
 		&"cooldown":

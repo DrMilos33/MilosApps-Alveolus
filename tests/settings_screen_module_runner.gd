@@ -97,6 +97,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	var bindings: Array = []
 	var legacy_bindings: Array[StringName] = []
 	var reset_count := [0]
+	var new_game_count := [0]
 	var quit_count := [0]
 	var back_count := [0]
 	screen.audio_value_changed.connect(func(id: StringName, value: float) -> void: audio_values.append([id, value]))
@@ -106,6 +107,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	screen.binding_slot_change_requested.connect(func(id: StringName, slot_index: int) -> void: bindings.append([id, slot_index]))
 	screen.binding_change_requested.connect(func(id: StringName) -> void: legacy_bindings.append(id))
 	screen.bindings_reset_requested.connect(func() -> void: reset_count[0] += 1)
+	screen.new_game_requested.connect(func() -> void: new_game_count[0] += 1)
 	screen.quit_requested.connect(func() -> void: quit_count[0] += 1)
 	screen.back.connect(func() -> void: back_count[0] += 1)
 
@@ -115,6 +117,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	(screen.control_for_setting(&"binding.ui_info.1") as Button).pressed.emit()
 	(screen.control_for_setting(&"binding.ui_info.0") as Button).pressed.emit()
 	(screen.control_for_setting(&"bindings.reset") as Button).pressed.emit()
+	(screen.control_for_setting(&"new_game") as Button).pressed.emit()
 	(screen.control_for_setting(&"quit") as Button).pressed.emit()
 	(screen.control_for_setting(&"back") as Button).pressed.emit()
 
@@ -124,7 +127,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	_check(toggles == [[&"reduce_motion", true]], "Schalter emittiert ID und Zustand")
 	_check(bindings == [[&"ui_info", 1], [&"ui_info", 0]], "Binding-Intent enthält Aktion und den ausdrücklich gewählten Tastaturplatz")
 	_check(legacy_bindings == [&"ui_info"], "Der erste Tastaturplatz emittiert weiterhin den kompatiblen Ein-Slot-Intent")
-	_check(reset_count[0] == 1 and quit_count[0] == 1 and back_count[0] == 1, "Reset, Beenden und Zurück bleiben getrennte Intents")
+	_check(reset_count[0] == 1 and new_game_count[0] == 1 and quit_count[0] == 1 and back_count[0] == 1, "Reset, Neues Spiel, Beenden und Zurück bleiben getrennte Intents")
 
 
 func _assert_conflict_modal(screen: SettingsScreen) -> void:

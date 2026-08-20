@@ -81,11 +81,11 @@ static func definitions() -> Array[TalentDefinition]:
 		create(
 			&"treatment_damage_training",
 			"Behandlungsgrundlage",
-			"Erhöht den Schaden aller drei Grundbehandlungen um 10 %.",
+			"Erhöht den Schaden aller drei Behandlungen um 2.",
 			Category.DEPLOYMENT,
 			1,
-			&"treatment_damage_multiplier",
-			1.10
+			&"treatment_damage_flat",
+			2.0
 		).place_in_tree(0, 1),
 		create(
 			&"spread_penetration",

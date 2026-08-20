@@ -350,6 +350,9 @@ func _rebuild_modal() -> void:
 	_title_label = sheet_stack.get_child(0) as Label if not _view_model.display_title().is_empty() else null
 	if _title_label != null:
 		_title_label.name = "FindingTitle"
+		_title_label.mouse_filter = Control.MOUSE_FILTER_STOP
+		_title_label.set_meta(&"alveolus_accessible_name", "%s. Erklärung mit I anzeigen." % _view_model.display_title())
+		_register_finding_summary_source(_title_label)
 	_modal_host.add_child(_modal)
 	_apply_dynamic_state()
 	_queue_responsive_layout()
@@ -672,6 +675,33 @@ func _register_info_source(
 		"source": weakref(source),
 		"provider": _info_payload.bind(info.duplicate_immutable()),
 	}
+
+func _register_finding_summary_source(source: Control) -> void:
+	if source == null or _view_model == null:
+		return
+	var source_id := source.get_instance_id()
+	_info_sources[source_id] = {
+		"source": weakref(source),
+		"provider": _finding_summary_payload,
+	}
+
+func _finding_summary_payload() -> Dictionary:
+	var body_parts := PackedStringArray()
+	if not _view_model.medical_text().is_empty():
+		body_parts.append(_view_model.medical_text())
+	if not _view_model.gameplay_text().is_empty():
+		body_parts.append("Im Spiel: %s" % _view_model.gameplay_text())
+	var payload := {
+		"title": _view_model.display_title(),
+		"body": "\n\n".join(body_parts),
+		"meta": "Befundwirkung",
+		"icon_kind": &"information",
+		"accent": AlveolusVisualTheme.GOLD,
+		"maximum_width": 340.0,
+	}
+	if _view_model.finding_id() == &"hidden_nests":
+		payload["illustration_texture"] = VisualAssetCatalog.gameplay_sprite(&"infection_focus")
+	return payload
 
 
 func _info_payload(info: FindingOverlayViewModel.InfoViewModel) -> Dictionary:

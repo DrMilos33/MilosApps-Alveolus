@@ -44,7 +44,7 @@ func _test_catalog_contract() -> void:
 	_near(PlayerStats.BASE_MOVEMENT_SPEED, 180.0, "Doctor Milos verwendet die neue Basisgeschwindigkeit")
 
 	var treatments := TreatmentDefinition.catalog()
-	_near((treatments[&"treatment_precision"] as TreatmentDefinition).base_damage, 12.8, "Impuls verwendet den um 20 Prozent reduzierten Schaden")
+	_near((treatments[&"treatment_precision"] as TreatmentDefinition).base_damage, 13.0, "Impuls verwendet ganzzahligen Basisschaden")
 	_near((treatments[&"treatment_spread"] as TreatmentDefinition).base_damage, 5.0, "Streuimpuls verwendet den neuen Schaden")
 	_near((treatments[&"treatment_pierce"] as TreatmentDefinition).base_damage, 9.0, "Durchdringender Impuls verwendet den neuen Schaden")
 
@@ -82,7 +82,7 @@ func _test_catalog_contract() -> void:
 	}
 	for id in expected_roles:
 		_equal((traits[id] as CaseTraitDefinition).semantic_role, expected_roles[id], "Fallmerkmal %s liefert die zentrale semantische Rolle" % String(id))
-	_equal(ContentCatalog.finding_definitions().size(), 4, "Verdeckte Befunde bleiben getrennt vollständig erhalten")
+	_equal(ContentCatalog.finding_definitions().size(), 2, "Nur Gruppenbildung und verdeckte Nester bleiben aktiv")
 
 
 func _test_resistance_compilation_and_damage_resolution() -> void:
@@ -117,7 +117,7 @@ func _test_runtime_config_and_double_boss() -> void:
 	game.discovery_manager.configure(game.discovery_definitions, {})
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(discovery_id)
-	game.selected_level = game.levels[1]
+	game.selected_level = game.levels[2]
 
 	_assert_trait_config(game, &"monster_resistance_20", "enemy_resistance_effective_bonus", 20.0)
 	_assert_trait_config(game, &"monster_defense_10", "enemy_defense", 10.0)
@@ -200,7 +200,7 @@ func _test_runtime_config_and_double_boss() -> void:
 	first.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	second.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	_true(first.is_targetable() and second.is_targetable(), "Beide Bosse materialisieren regulär")
-	_near(first.speed_multiplier, game.selected_level.enemy_speed_multiplier * 1.35, "Der Fall-1-Boss erhält den zusätzlichen Geschwindigkeitsfaktor")
+	_near(first.speed_multiplier, game.selected_level.enemy_speed_multiplier * 1.35, "Der Fall-2-Boss erhält den zusätzlichen Geschwindigkeitsfaktor")
 	game.enemy_attack_director.step_fixed(0.65, game.run_session)
 	var hostile_count := 0
 	for projectile in game.projectiles:

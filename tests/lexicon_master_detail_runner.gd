@@ -72,7 +72,7 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.detail_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Detailbereich scrollt nur vertikal")
 	_check(lexicon.page_scroll != null and lexicon.page_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Die kompakte Gesamtbühne kann niemals horizontal aus dem Viewport laufen")
 	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Breites Lexikon benötigt keinen zusätzlichen vertikalen Seitenscroll")
-	_check(lexicon.entry_buttons.size() == 4, "Monsterliste enthält alle vier Gegnerarten")
+	_check(lexicon.entry_buttons.size() == 5, "Monsterliste enthält reguläre Gegner und beide Fallbosse")
 	_check(lexicon.selected_entry_id == &"", "Beim Öffnen ist kein Lexikoneintrag automatisch ausgewählt")
 	_check(lexicon.empty_detail_label.visible and lexicon.empty_detail_label.text == "Eintrag auswählen.", "Die leere Detailfläche gibt eine knappe neutrale Anleitung")
 	_check(lexicon.empty_detail_label.size_flags_vertical == Control.SIZE_SHRINK_BEGIN, "Die leere Anleitung reserviert keinen unnötigen vertikalen Leerraum")
@@ -131,7 +131,7 @@ func _test_related_term_chips(lexicon: LexiconMasterDetail) -> void:
 	view_model.display_name = "Testeintrag"
 	view_model.summary = "Test für DTO-basierte verwandte Begriffe."
 	view_model._related_presentations = [
-		RelatedTermPresentationStub.new(&"term_treatment_speed", "Behandlungstempo", "Bestimmt die Zeit zwischen automatischen Impulsen.", &"damage_wind"),
+		RelatedTermPresentationStub.new(&"term_treatment_speed", "Attack Speed", "Bestimmt die Anzahl automatischer Impulse pro Sekunde.", &"damage_wind"),
 		RelatedTermPresentationStub.new(&"term_radius", "Radius", "Bestimmt die Größe einer Flächenwirkung.", &"damage_earth"),
 	]
 	lexicon._show_detail(view_model)
@@ -152,7 +152,7 @@ func _test_related_term_chips(lexicon: LexiconMasterDetail) -> void:
 		_check(bool(emitted_registrations[0].get("hover_enabled", false)), "Mouse-Hover ist ausschließlich für verwandte Begriffschips aktiviert")
 		var provider: Callable = emitted_registrations[0].get("provider", Callable())
 		var hover_payload: Dictionary = provider.call() if provider.is_valid() else {}
-		_check(String(hover_payload.get("title", "")) == "Behandlungstempo" and String(hover_payload.get("body", "")).contains("automatischen Impulsen"), "Hover und ui_info erhalten dieselbe fertige DTO-Erklärung")
+		_check(String(hover_payload.get("title", "")) == "Attack Speed" and String(hover_payload.get("body", "")).contains("Impulse pro Sekunde"), "Hover und ui_info erhalten dieselbe fertige DTO-Erklärung")
 		_check(StringName(hover_payload.get("icon_kind", &"")) == &"damage_wind", "Der Kontextpayload übernimmt dasselbe DTO-Icon wie der Chip")
 
 		var controller := ContextDetailController.new()
@@ -198,8 +198,8 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 		_check(term_button != null and term_button.tooltip_text.is_empty(), "Begriffe erzeugen keinen Maus-Tooltip")
 	var tempo_id := &"term_treatment_speed"
 	_check(lexicon.context_detail_payload(tempo_id).is_empty(), "Auch ein direkter Begriffsprovider liefert keine redundante Detailkarte")
-	_check(lexicon.select_entry(tempo_id), "Behandlungstempo ist direkt lesbar")
-	_check(lexicon.detail_gameplay_text.text.contains("Behandlungsrate"), "Detail erklärt Behandlungstempo verständlich")
+	_check(lexicon.select_entry(tempo_id), "Attack Speed ist direkt lesbar")
+	_check(lexicon.detail_gameplay_text.text.contains("Attack Speed"), "Detail erklärt Attack Speed verständlich")
 
 func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
@@ -283,7 +283,10 @@ func _assert_type_presentations(lexicon: LexiconMasterDetail, entry_id: StringNa
 		_check(icon != null and icon.kind == presentation.icon_id, "Typwert %d zeigt das DTO-Icon" % index)
 		_check(name_label != null and name_label.text == presentation.display_name, "Typwert %d nennt den Schadenstyp ausgeschrieben" % index)
 		_check(value_label != null and value_label.text == presentation.formatted_value, "Typwert %d zeigt ausschließlich den fertig formatierten DTO-Wert" % index)
-		_check(meaning_label != null and meaning_label.text == presentation.meaning, "Typwert %d erklärt seinen Wert zusätzlich zur Farbe" % index)
+		if presentation.semantic_role == &"resistance_effective":
+			_check(meaning_label == null, "Resistenzwert %d zeigt keinen redundanten Untertext" % index)
+		else:
+			_check(meaning_label != null and meaning_label.text == presentation.meaning, "Schadenstyp %d erklärt seinen Wert zusätzlich zur Farbe" % index)
 
 func _test_game_hud_embedding() -> void:
 	var hud := GameHUD.new()

@@ -16,13 +16,19 @@ const AVAILABLE_ABILITY_IDS: Array[StringName] = [
 ]
 static func selectable_ids(definitions: Dictionary = {}, research_ranks: Dictionary = {}) -> Dictionary:
 	var result: Dictionary = {}
-	for id in [&"treatment_precision"] + AVAILABLE_ABILITY_IDS:
+	for id in [&"treatment_precision"]:
 		if definitions.is_empty() or definitions.has(id):
 			result[id] = true
 	for id in [&"treatment_spread", &"treatment_pierce"]:
 		if not definitions.is_empty() and not definitions.has(id):
 			continue
 		var research_id := &"unlock_spread_treatment" if id == &"treatment_spread" else &"unlock_piercing_treatment"
+		if int(research_ranks.get(research_id, 0)) > 0:
+			result[id] = true
+	for id in AVAILABLE_ABILITY_IDS:
+		if not definitions.is_empty() and not definitions.has(id):
+			continue
+		var research_id := &"unlock_defense_burst" if id == &"ability_defense_burst" else &"unlock_treatment_line"
 		if int(research_ranks.get(research_id, 0)) > 0:
 			result[id] = true
 	return result
@@ -36,6 +42,8 @@ static func unavailable_reason(id: StringName, definitions: Dictionary = {}, res
 	if bool(selectable_ids(definitions, research_ranks).get(id, false)):
 		return ""
 	if id == &"treatment_spread" or id == &"treatment_pierce":
+		return "Erfordert die passende Forschung"
+	if AVAILABLE_ABILITY_IDS.has(id):
 		return "Erfordert die passende Forschung"
 	var definition: Variant = definitions.get(id, null)
 	if definition is LoadoutModuleDefinition and definition.kind == LoadoutModuleDefinition.Kind.PASSIVE:
@@ -67,7 +75,7 @@ static func sanitized_copy(loadout: PreparedLoadout, definitions: Dictionary = {
 
 	var ability_ids: Array[StringName] = []
 	for id in loadout.ability_ids:
-		if AVAILABLE_ABILITY_IDS.has(id) and not ability_ids.has(id) and _valid_id_for_kind(id, LoadoutModuleDefinition.Kind.ABILITY, definitions):
+		if bool(available.get(id, false)) and AVAILABLE_ABILITY_IDS.has(id) and not ability_ids.has(id) and _valid_id_for_kind(id, LoadoutModuleDefinition.Kind.ABILITY, definitions):
 			ability_ids.append(id)
 			if ability_ids.size() >= LoadoutValidator.MAX_ACTIVE_ABILITIES:
 				break

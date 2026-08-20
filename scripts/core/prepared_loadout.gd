@@ -2,7 +2,7 @@ class_name PreparedLoadout
 extends RefCounted
 
 const DEFAULT_TREATMENT_ID := &"treatment_precision"
-const DEFAULT_ABILITY_IDS: Array[StringName] = [&"ability_defense_burst", &"ability_treatment_line"]
+const DEFAULT_ABILITY_IDS: Array[StringName] = []
 
 var treatment_id: StringName = &""
 var ability_ids: Array[StringName] = []

@@ -20,7 +20,7 @@ entsteht durch:
 - einen begrenzten Behandlungsplan vor jedem Fall;
 - zwei bewusst eingesetzte aktive Fähigkeiten;
 - Fallmerkmale, Befunde und Reaktionen während des Runs;
-- acht globale Forschungen für intrinsische Werte und
+- zehn globale Forschungen für intrinsische Werte und
   Behandlungsfreischaltungen;
 - zufällige Run-Ausbaustufen, die mit dem vorbereiteten Plan interagieren.
 
@@ -31,18 +31,18 @@ entsteht durch:
 - Vier wiederholbare Fälle einschließlich ereignisgesteuertem Intro und Bossen.
 - Einsatzplan mit einer Grundbehandlung und bis zu zwei aktiven Fähigkeiten.
   Impuls ist sofort verfügbar; Streuimpuls und Durchdringender Impuls
-  werden durch Forschung freigeschaltet. Abwehrstoß und Behandlungslinie sind
+  werden durch Forschung freigeschaltet. `idk name stoß` und `Fetter lazer` sind
   auswählbar, vier weitere aktive Fähigkeiten bleiben sichtbar gesperrt.
   Passive Module gehören nicht mehr zum aktiven Produktkatalog; technisch
   verbliebene Passiv- und Reservefelder dienen ausschließlich der
   Save-/Schema-Kompatibilität.
 - Der aktuelle Produktkatalog umfasst drei Behandlungen, sechs sichtbare aktive
-  Fähigkeiten, acht globale Forschungen, vier Rangtalente und 18
+  Fähigkeiten, zehn globale Forschungen, vier Rangtalente und 18
   Run-Ausbaustufen.
 - Praxis mit Offline-Forschung und Klinikfällen, Forschungsbrett, Talente,
   Meisterschaft, kategorisiertes Lexikon und lokale Savegame-Version 6.
 - Hauptfälle haben keine Zeitbegrenzung; ihr Boss erscheint nach 180 Sekunden.
-  Doctor Milos startet mit 100 Leben.
+  Doctor Milos startet mit 50 Leben.
 - Die sichtbaren Kampfbegriffe lauten Leben, Schaden, Regeneration, Schild und
   Verteidigung. Feuer, Wasser, Erde und Wind sind die vier aktiven
   Schadenstypen. Die UI zeigt Verteidigung und Resistenzen ausschließlich als
@@ -63,10 +63,10 @@ entsteht durch:
 konkretes Feedback zu Bedienung, Verständlichkeit, Fähigkeiten und Spielfluss
 sammeln. Bestätigte Fehler werden zuerst reproduziert und gezielt behoben.
 
-Für diesen Systemtest sind Forschung und Talentpunkte absichtlich unbegrenzt.
-Der Testpool beträgt jeweils 1.000.000.000 Punkte und beide Bereiche lassen
-sich zurücksetzen. Balancingentscheidungen werden erst getroffen, nachdem alle
-Grundsysteme verständlich und zuverlässig funktionieren.
+Der aktuelle Test verwendet die echte Forschungsökonomie. Nach dem ersten
+Introabschluss stehen 30 Forschung und ein Talentpunkt bereit. Forschung,
+Talente und der vollständige lokale Spielstand lassen sich für neue Testläufe
+gezielt zurücksetzen.
 
 Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 älterer Vergleichsstand und wird nur nach ausdrücklicher Freigabe aktualisiert.
@@ -172,6 +172,10 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-064 | Ersetzt D-057 und D-062 hinsichtlich der Level-up-Hilfe und Tempobezeichnung: Das Modal zeigt keinen zusätzlichen Satz „Du kannst 1 Upgrade auswählen.“. Jede Ausbaukarte zeigt unten rechts `gewählt/maximal`, ist geringfügig höher und nennt Anwendungen pro Sekunde `Attack Speed`. Der Geschwindigkeitskartenname erhält kompaktere Schrift. Im Run erworbene Systeme wie Abwehrzellen erscheinen sofort als eigene Charakterwertsektion. Ein Rechtsklick entfernt genau einen zulässigen Talentrang; abhängige Talente verhindern weiterhin ein ungültiges Entfernen. |
 | D-065 | Der Boss von Fall 1 bewegt sich mit dem Faktor 1,35 und feuert fortlaufend zwei korallenrote Projektile auf gespiegelten Rautenbahnen. Bei 70 und 40 Prozent Leben erscheinen jeweils vier schießende Bakterien; nach Phase zwei folgen alle 20 Sekunden vier weitere. Kleine Herde feuern ebenfalls normale Projektile. Gegnerprojektile verwenden generationssichere World-Handles, den gemeinsamen zentralen Projektil-World und einen getrennten stabilen Renderbatch. |
 | D-066 | Abwehrzellen besitzen zunächst 0,2 Sekunden Trefferabstand je Zelle, also 5 Angriffe pro Sekunde. Die technische Untergrenze von 0,1 Sekunden bleibt ausschließlich als spätere Ausbaugrenze bestehen. Die Forschung `Stärkere Behandlung` beschreibt ihren Rang sichtbar als `+2 % Schaden der Behandlungen`. |
+| D-067 | Ersetzt D-045 hinsichtlich des Basislebens, D-063 hinsichtlich des Spieler-Bewegungsbegriffs, D-066 hinsichtlich der Behandlungsforschung und D-050 hinsichtlich des Forschungsumfangs: Doctor Milos besitzt 50 Basisleben; sein Bewegungswert heißt überall `Galopp`. Schaden, Reichweite und Galopp werden nach allen Modifikatoren ganzzahlig aufgelöst. Schadensausbauten addieren feste Werte. `Stärkere Behandlung` gibt +1 Schaden je Rang. Der lineare Impuls-Ausbau addiert +0,06 Attack Speed pro Rang statt ein Intervall prozentual zu multiplizieren. Zehn Forschungen umfassen zusätzlich die Freischaltungen von `idk name stoß` für 30 und `Fetter lazer` für 1000 Forschung; sämtliche früheren Forschungskosten sind verfünffacht. |
+| D-068 | Ersetzt D-065: Der einfache neue `Bakterienkern` ist Boss von Fall 1. Der bisherige rautenförmig schießende Infektionsherd ist Boss von Fall 2, bewegt sich dort mit Faktor 1,35, besitzt eine deutlich breitere Flugbahn und 2,5-fachen Projektilschaden. Der Intro-Boss bleibt die kurze einfache Altvariante ohne Spezialprojektile. Fall 3 behält den Infektionsherd ohne den Fall-2-Projektilvertrag. |
+| D-069 | Ersetzt D-064 ausschließlich für die Introhilfe: Das erste reguläre Drei-Karten-Level-up zeigt unter `Level Up!` den knappen Satz `1 von 3 Upgrades aussuchen`. Nach dem ersten Introsieg kehrt das Spiel direkt zum Campus zurück, vergibt genau 30 Forschung und einen Talentpunkt und markiert das Forschungsgebäude einmalig. Die Markierung verschwindet dauerhaft, sobald irgendein Campusgebäude gewählt wird. Settings bieten `Neues Spiel`, das den lokalen Fortschritt auf den Startzustand zurücksetzt. |
+| D-070 | Die aktiven Befunde sind vorerst ausschließlich `Gruppenbildung` und `Verdeckte Nester`; `Beschleunigte Ausbreitung` und `Belastungsschübe` sind aus dem aktiven Katalog entfernt. Der Befundtitel besitzt dieselbe globale diagonale Detailkarte wie andere Tooltips. Sie erklärt die konkrete Wirkung; verdeckte Nester zeigen zusätzlich ihr Gegnerbild. Das Ergebnis listet den tatsächlich verursachten Schaden getrennt für Behandlung, ausgerüstete Aktive und im Run erworbene Schadenssysteme. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

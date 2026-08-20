@@ -45,9 +45,10 @@ static func _append_enemy_entries(result: Array[LexiconEntryDefinition]) -> void
 		&"pneumococcus": ["Schneller Einzelerreger", "Bewegt sich direkt auf Doctor Milos zu und verursacht Schaden, wenn er ihn erreicht."],
 		&"bacterial_cluster": ["Widerstandsfähige Gruppe", "Bewegt sich langsamer, hält mehr aus und hinterlässt mehr Erfahrung."],
 		&"minor_focus": ["Langsames Nebenziel", "Bewegt sich langsam und setzt nach einiger Zeit weitere Bakterien frei, wenn es nicht rechtzeitig kontrolliert wird."],
+		&"localized_boss": ["Erster Bossgegner", "Ein einfacher lokaler Boss. Bei 70 Prozent Leben erscheinen drei Bakterien."],
 		&"infection_focus": ["Bossgegner", "Seine Phasen erhöhen den Druck im Fall. Die tatsächlichen Werte werden je Fall skaliert."],
 	}
-	for id in [&"pneumococcus", &"bacterial_cluster", &"minor_focus", &"infection_focus"]:
+	for id in [&"pneumococcus", &"bacterial_cluster", &"minor_focus", &"localized_boss", &"infection_focus"]:
 		var enemy: EnemyDefinition = enemies[id]
 		var role: Array = roles[id]
 		result.append(LexiconEntryDefinition.create(
@@ -91,7 +92,7 @@ static func _append_gameplay_entries(result: Array[LexiconEntryDefinition]) -> v
 		&"automatic_therapy": ["Automatische Grundbehandlung", "Wählt gültige Ziele selbstständig aus. Steuerung, aktive Fähigkeiten und Ausbau bleiben deine Entscheidungen."],
 		&"neutrophil_orbit": ["Abwehr im Nahbereich", "Abwehrzellen umkreisen Doctor Milos und verursachen nur bei einer tatsächlichen Kollision Schaden."],
 		&"supportive_oxygenation": ["Automatische Heilung", "Regeneration stellt jede Sekunde Leben wieder her. Forschung erhöht die geheilte Menge pro Sekunde."],
-		&"boss_phases": ["Belastungsschübe des Bosses", "Phasengrenzen verändern den Kampf und können zusätzliche Bakterien freisetzen."],
+		&"boss_phases": ["Phasen des Bosses", "Phasengrenzen verändern den Kampf und können zusätzliche Bakterien freisetzen."],
 		&"research_reward": ["Dauerhafter Fortschritt", "Forschung wird zwischen den Fällen für Freischaltungen und Verbesserungen ausgegeben."],
 	}
 	for id in [&"analysis_pickup", &"patient_stability", &"automatic_therapy", &"neutrophil_orbit", &"supportive_oxygenation", &"boss_phases", &"research_reward"]:

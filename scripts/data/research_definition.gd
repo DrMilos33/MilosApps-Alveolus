@@ -54,6 +54,8 @@ func total_effect_text(rank: int) -> String:
 			return "+%s Leben" % _number(total)
 		&"damage_multiplier":
 			return "+%s %% Schaden" % _number(total * 100.0)
+		&"damage_flat":
+			return "+%s Schaden" % _number(total)
 		&"experience_multiplier":
 			return "+%s %% Erfahrung" % _number(total * 100.0)
 		&"defense":
@@ -61,7 +63,7 @@ func total_effect_text(rank: int) -> String:
 		&"life_regeneration":
 			return "+%s/s" % _number(total, 2)
 		&"movement_speed_multiplier":
-			return "+%s %% Geschwindigkeit" % _number(total * 100.0)
+			return "+%s %% Galopp" % _number(total * 100.0)
 		&"unlock":
 			return "Freigeschaltet" if total > 0.0 else "Noch nicht freigeschaltet"
 	return _number(total)

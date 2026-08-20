@@ -274,7 +274,7 @@ func _build_components_view() -> Control:
 	stat_group.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	stat_group.add_child(AlveolusUIComponents.section_header("Lesbarkeit", "Werte und Fortschritt", "", true))
 	stat_group.add_child(AlveolusUIComponents.stat_row("Schaden", "18 > 26", true))
-	stat_group.add_child(AlveolusUIComponents.stat_row("Behandlungstempo", "0,82 s"))
+	stat_group.add_child(AlveolusUIComponents.stat_row("Attack Speed", "1,04/s"))
 	var progress := AlveolusUIComponents.progress(64.0)
 	progress.custom_minimum_size.y = 14.0
 	stat_group.add_child(progress)
@@ -375,7 +375,7 @@ func _build_lexicon_view() -> Control:
 	stats.columns = 2
 	stats.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	stats.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
-	for data in [["Leben", "18"], ["Geschwindigkeit", "72"], ["Schaden", "5"], ["Erfahrung", "1"]]:
+	for data in [["Leben", "18"], ["Galopp", "72"], ["Schaden", "5"], ["Erfahrung", "1"]]:
 		var row := AlveolusUIComponents.stat_row(data[0], data[1])
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stats.add_child(row)

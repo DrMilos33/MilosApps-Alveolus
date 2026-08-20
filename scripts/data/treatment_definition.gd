@@ -45,7 +45,7 @@ static func create(
 	definition.medical_name = title if medical.is_empty() else medical
 	definition.description = text
 	definition.mode = treatment_mode
-	definition.base_damage = damage
+	definition.base_damage = float(roundi(damage))
 	definition.base_interval = interval
 	definition.base_range = CombatDistanceScale.quantize_world(range_value)
 	definition.base_projectiles = projectiles
@@ -64,7 +64,7 @@ static func catalog() -> Dictionary:
 	return {
 		&"treatment_precision": create(
 			&"treatment_precision", "Impuls", Mode.PRECISE,
-			12.8, 0.82, 480.0, 1, 1, 0,
+			13.0, 0.965, 480.0, 1, 1, 0,
 			PackedStringArray(["treatment", "precise", "tracking"]),
 			"Verfolgt automatisch das nächste Ziel.", "Gezielte antibiotische Therapie",
 			DamageProfile.single(&"treatment_precision_damage", &"water")

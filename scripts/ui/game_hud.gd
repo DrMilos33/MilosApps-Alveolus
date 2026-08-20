@@ -6,6 +6,7 @@ const IconTextButtonComponent = preload("res://scripts/ui/icon_text_button.gd")
 signal navigate_requested(destination: StringName)
 signal back_requested
 signal quit_requested
+signal new_game_requested
 signal story_finished
 signal level_selected(id: StringName)
 signal upgrade_chosen(definition: UpgradeDefinition)
@@ -171,6 +172,7 @@ var campus_overlay: Control
 var campus_buttons: Dictionary = {}
 var campus_research_status: Label
 var campus_clinic_status: Label
+var campus_research_prompt: VBoxContainer
 var practice_overlay: Control
 var practice_screen: PracticeScreen
 var practice_view_revision: int = 0
@@ -740,6 +742,22 @@ func _build_campus() -> Control:
 	campus_clinic_status = _label("KEIN KLINIKFALL AKTIV", 14, AlveolusVisualTheme.SKY_DEEP)
 	campus_clinic_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top_status.add_child(campus_clinic_status)
+	campus_research_prompt = VBoxContainer.new()
+	campus_research_prompt.name = "ResearchGuidance"
+	campus_research_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campus_research_prompt.alignment = BoxContainer.ALIGNMENT_CENTER
+	var research_anchor := CampusScene.building_anchor(&"research")
+	campus_research_prompt.position = research_anchor + Vector2(-210.0, -238.0)
+	campus_research_prompt.size = Vector2(420.0, 84.0)
+	var guidance_text := _label("Hier kannst du deine Fähigkeiten verbessern", 18, AlveolusVisualTheme.GOLD)
+	guidance_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	guidance_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	campus_research_prompt.add_child(guidance_text)
+	var guidance_arrow := _label("↓", 30, AlveolusVisualTheme.GOLD)
+	guidance_arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	campus_research_prompt.add_child(guidance_arrow)
+	campus_research_prompt.hide()
+	overlay.add_child(campus_research_prompt)
 	return overlay
 
 func _build_practice() -> Control:
@@ -819,6 +837,7 @@ func _build_settings() -> Control:
 	settings_screen.binding_slot_change_requested.connect(_begin_binding_capture)
 	settings_screen.binding_conflict_decided.connect(_on_binding_conflict_decided)
 	settings_screen.bindings_reset_requested.connect(func() -> void: settings_reset_bindings_requested.emit())
+	settings_screen.new_game_requested.connect(func() -> void: new_game_requested.emit())
 	settings_screen.quit_requested.connect(func() -> void: quit_requested.emit())
 	settings_screen.back.connect(func() -> void: back_requested.emit())
 	_refresh_settings_screen(true)
@@ -1961,6 +1980,14 @@ func show_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
 	refresh_campus(meta, jobs)
 	campus_overlay.show()
 	_focus_first_button.call_deferred(campus_overlay)
+
+func show_campus_research_guidance() -> void:
+	if campus_research_prompt != null:
+		campus_research_prompt.show()
+
+func hide_campus_research_guidance() -> void:
+	if campus_research_prompt != null:
+		campus_research_prompt.hide()
 
 func refresh_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
 	var job_status := "Kein Klinikfall aktiv"
@@ -3212,8 +3239,9 @@ func update_intro_timer(lesson: int, phase: StringName, boss_active: bool) -> vo
 		return
 	_apply_run_hud_model()
 
-func show_boss(maximum: float, phase_count: int) -> void:
+func show_boss(maximum: float, phase_count: int, boss_title: String = "Infektionsherd") -> void:
 	run_hud_vitals["boss_visible"] = true
+	run_hud_vitals["boss_title"] = boss_title
 	run_hud_vitals["boss_current"] = maximum
 	run_hud_vitals["boss_maximum"] = maximum
 	run_hud_vitals["boss_phase"] = "Phasen 70 % · 40 %" if phase_count > 0 else "Einführungsboss"
@@ -3223,7 +3251,7 @@ func show_boss(maximum: float, phase_count: int) -> void:
 	# The intro owns a persistent confirmation prompt. A regular timed boss
 	# announcement must never replace that top-layer state based on call order.
 	if not is_run_prompt_awaiting_confirmation():
-		show_run_prompt("Infektionsherd erkannt", PlainRunPrompt.MODE_CORAL)
+		show_run_prompt("%s erkannt" % boss_title, PlainRunPrompt.MODE_CORAL)
 		boss_announcement_time = 1.2
 		set_process(true)
 
@@ -3314,6 +3342,10 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 	upgrade_screen.set_meta(&"legacy_education_requested", show_education or scripted_intro)
 	var request_focus := input_glyph_service != null and input_glyph_service.current_method == InputGlyphService.GAMEPAD
 	upgrade_screen.present(model, request_focus)
+	var selection_helper := upgrade_screen.selection_helper()
+	if selection_helper != null:
+		selection_helper.text = "1 von 3 Upgrades aussuchen" if scripted_intro else ""
+		selection_helper.visible = scripted_intro
 	upgrade_panel = upgrade_screen.modal_sheet()
 	upgrade_cards = upgrade_screen.cards_grid()
 	upgrade_education = upgrade_screen.education_panel()
@@ -3659,6 +3691,24 @@ func set_result_reward_presentations(presentations: Array[RewardPresentation]) -
 			presentation.accessibility_text()
 		))
 		break
+	_refresh_result_screen()
+
+func set_result_damage_statistics(statistics: Array[Dictionary]) -> void:
+	var retained: Array[ResultOverlayViewModel.StatViewModel] = []
+	for stat in result_stats_data:
+		if stat != null and not String(stat.get_id()).begins_with("damage:"):
+			retained.append(stat)
+	result_stats_data = retained
+	for item in statistics:
+		var source_id := StringName(item.get("id", &""))
+		if source_id == &"":
+			continue
+		result_stats_data.append(ResultOverlayViewModel.StatViewModel.new(
+			StringName("damage:%s" % String(source_id)),
+			String(item.get("label", String(source_id))),
+			"%d Schaden" % int(item.get("damage", 0)),
+			false
+		))
 	_refresh_result_screen()
 
 func _refresh_result_screen() -> void:

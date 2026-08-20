@@ -26,7 +26,7 @@ const SPAWN_GOLDEN_ANGLE := 2.399963229728653
 const SPAWN_ANGLE_JITTER := 0.18
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
-const UNLIMITED_PROGRESSION_TEST_MODE := true
+const UNLIMITED_PROGRESSION_TEST_MODE := false
 
 var levels: Array[LevelDefinition]
 var selected_level: LevelDefinition
@@ -102,6 +102,7 @@ var active_boss_phase_by_handle: Dictionary = {}
 var boss_aggregate_maximum: float = 0.0
 var boss_aggregate_phase: int = 0
 var enemy_runtime_resistance_profiles: Dictionary = {}
+var run_damage_by_source: Dictionary = {}
 
 var pending_run_context: RunContext
 var active_run_context: RunContext
@@ -372,6 +373,8 @@ func _ready() -> void:
 	hud.run_stats_visibility_changed.connect(_on_run_stats_visibility_changed)
 	hud.ui_settings_changed.connect(_on_ui_settings_changed)
 	hud.settings_reset_bindings_requested.connect(_on_settings_reset_bindings_requested)
+	if hud.has_signal(&"new_game_requested"):
+		hud.connect(&"new_game_requested", _on_new_game_requested)
 	hud.context_detail_opened.connect(_on_context_detail_opened)
 	hud.context_detail_closed.connect(_on_context_detail_closed)
 	if hud.has_signal(&"run_prompt_confirmed"):
@@ -830,6 +833,8 @@ func _show_campus(reset_route: bool = true) -> void:
 	_save_meta()
 	_set_flow(GameFlowState.State.CAMPUS)
 	hud.show_campus(meta, clinic_definitions)
+	if bool(meta.tutorial_status.get(&"research_guidance_pending", false)) and hud.has_method("show_campus_research_guidance"):
+		hud.call("show_campus_research_guidance")
 	if reset_route:
 		ui_router.reset(&"campus")
 
@@ -872,6 +877,11 @@ func _show_settings(return_state: GameFlowState.State) -> void:
 	hud.show_settings(not OS.has_feature("web"), return_state != GameFlowState.State.MANUAL_PAUSE)
 
 func _on_navigate_requested(destination: StringName) -> void:
+	if flow_state == GameFlowState.State.CAMPUS and bool(meta.tutorial_status.get(&"research_guidance_pending", false)):
+		meta.set_tutorial_step(&"research_guidance_pending", false)
+		if hud.has_method("hide_campus_research_guidance"):
+			hud.call("hide_campus_research_guidance")
+		_save_meta()
 	match destination:
 		&"practice":
 			_show_practice()
@@ -971,6 +981,17 @@ func _on_level_selected(id: StringName) -> void:
 func _on_quit_requested() -> void:
 	_save_meta()
 	get_tree().quit()
+
+func _on_new_game_requested() -> void:
+	_cleanup_run_nodes()
+	meta.reset_defaults()
+	meta.set_unlimited_test_progression(UNLIMITED_PROGRESSION_TEST_MODE)
+	discovery_manager.configure(discovery_definitions, meta.seen_discovery_ids)
+	_save_meta()
+	story_return_state = GameFlowState.State.CAMPUS
+	ui_router.reset(&"story")
+	_set_flow(GameFlowState.State.STORY)
+	hud.show_story()
 
 func _on_run_stats_visibility_changed(enabled: bool) -> void:
 	meta.show_run_stats = enabled
@@ -1294,6 +1315,7 @@ func start_run(run_context: RunContext = null) -> void:
 	pressure_grace_timer = 0.0
 	pickup_merge_cursor = 0
 	defeats = 0
+	run_damage_by_source.clear()
 	defeat_reward_survival_bucket = -1
 	stress_reported = false
 	stress_hud_timer = 0.0
@@ -1607,8 +1629,8 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 	if damage_rank > 0:
 		build_state.add_modifier_dictionary(&"talent_treatment_damage_training", 0, {
 			"stat_id": RunBuildState.TREATMENT_DAMAGE,
-			"operation": &"multiply",
-			"value": TalentDefinition.magnitude_for(&"treatment_damage_training", 1.10),
+			"operation": &"add",
+			"value": TalentDefinition.magnitude_for(&"treatment_damage_training", 2.0) * float(damage_rank),
 			"required_tags": PackedStringArray(["treatment"]),
 		})
 	if treatment.id == &"treatment_spread" and spread_rank > 0:
@@ -1943,7 +1965,9 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 	elif role == EnemyAttackDirector.Role.MINOR_FOCUS:
 		move_speed = 205.0
 	elif role == EnemyAttackDirector.Role.BOSS:
+		amount *= config.boss_projectile_damage_multiplier
 		move_speed = 250.0
+	amount = float(roundi(amount))
 	if amount <= 0.0:
 		return
 	var projectile: TherapyProjectile
@@ -1966,7 +1990,9 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 		source.definition.damage_profile,
 		TherapyProjectile.HOSTILE_DIAMOND if pattern == EnemyAttackDirector.Pattern.DIAMOND else TherapyProjectile.HOSTILE_NORMAL,
 		phase,
-		move_speed
+		move_speed,
+		1050.0,
+		config.boss_wave_amplitude if role == EnemyAttackDirector.Role.BOSS else 44.0
 	)
 	projectile.global_position = source.global_position
 	projectile.reset_visual_motion()
@@ -2291,7 +2317,7 @@ func _spawn_boss() -> void:
 	boss_aggregate_phase = 0
 	for boss_index in range(maxi(1, config.boss_count)):
 		var request := EnemySpawnRequest.create(
-			&"infection_focus",
+			config.boss_enemy_id,
 			_spawn_position_around_avatar(600.0 + float(boss_index) * 36.0),
 			&"infection_focus",
 			config.boss_health_multiplier,
@@ -2302,7 +2328,7 @@ func _spawn_boss() -> void:
 			&"boss"
 		)
 		var boss := _spawn_enemy(
-			&"infection_focus",
+			config.boss_enemy_id,
 			request.position,
 			-1.0,
 			true,
@@ -2337,7 +2363,7 @@ func _register_active_boss(enemy: InfectionEnemy) -> void:
 	active_boss_handle_by_instance[enemy.get_instance_id()] = handle
 	active_boss_phase_by_handle[handle] = 0
 	boss_aggregate_maximum += maxf(enemy.max_health, 0.0)
-	if enemy_attack_director != null:
+	if enemy_attack_director != null and config.boss_ranged_enabled:
 		enemy_attack_director.register_enemy(handle, EnemyAttackDirector.Role.BOSS)
 	if active_boss == null:
 		active_boss = enemy
@@ -2393,7 +2419,11 @@ func _show_active_boss_hud() -> void:
 	var maximum := float(snapshot.get("maximum", 0.0))
 	if maximum <= 0.0:
 		return
-	hud.show_boss(maximum, config.boss_phase_minions.size())
+	var boss_title := "Infektionsherd"
+	var boss_definition := enemy_definitions.get(config.boss_enemy_id) as EnemyDefinition
+	if boss_definition != null:
+		boss_title = boss_definition.display_name
+	hud.show_boss(maximum, config.boss_phase_minions.size(), boss_title)
 	hud.update_boss_health(float(snapshot.get("current", 0.0)), maximum)
 	if boss_aggregate_phase > 0:
 		hud.show_boss_phase(boss_aggregate_phase)
@@ -2462,10 +2492,59 @@ func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
 	if requested:
 		_try_present_next_discovery()
 
-func _on_enemy_damage_applied(enemy: InfectionEnemy, _amount: float, source: StringName) -> void:
+func _on_enemy_damage_applied(enemy: InfectionEnemy, amount: float, source: StringName) -> void:
+	var resolved_source := _damage_stat_source(source)
+	if resolved_source != &"":
+		run_damage_by_source[resolved_source] = float(run_damage_by_source.get(resolved_source, 0.0)) + maxf(amount, 0.0)
 	if not selected_level.is_tutorial or source != &"therapy":
 		return
 	discovery_manager.mark_seen(&"automatic_therapy")
+
+func _damage_stat_source(source: StringName) -> StringName:
+	if source in [&"therapy", &"treatment"]:
+		return active_loadout.treatment_id if active_loadout != null else &"treatment_precision"
+	if source == &"immune":
+		return &"defense_cells"
+	if source == &"defense_burst":
+		return &"ability_defense_burst"
+	if source == &"treatment_line":
+		return &"ability_treatment_line"
+	if source in treatment_definitions or source in ability_definitions:
+		return source
+	return source
+
+func result_damage_statistics() -> Array[Dictionary]:
+	var ordered_ids: Array[StringName] = []
+	if active_loadout != null:
+		ordered_ids.append(active_loadout.treatment_id)
+		for ability_id in active_loadout.ability_ids:
+			if ability_id != &"" and not ordered_ids.has(ability_id):
+				ordered_ids.append(ability_id)
+	if stats != null and stats.immune_level > 0:
+		ordered_ids.append(&"defense_cells")
+	for source_value in run_damage_by_source:
+		var source_id := StringName(source_value)
+		if not ordered_ids.has(source_id):
+			ordered_ids.append(source_id)
+	var result: Array[Dictionary] = []
+	for source_id in ordered_ids:
+		if source_id == &"":
+			continue
+		result.append({
+			"id": source_id,
+			"label": _damage_stat_label(source_id),
+			"damage": roundi(float(run_damage_by_source.get(source_id, 0.0))),
+		})
+	return result
+
+func _damage_stat_label(source_id: StringName) -> String:
+	if treatment_definitions.has(source_id):
+		return (treatment_definitions[source_id] as TreatmentDefinition).display_name
+	if ability_definitions.has(source_id):
+		return (ability_definitions[source_id] as AbilityDefinition).display_name
+	if source_id == &"defense_cells":
+		return "Abwehrzellen"
+	return String(source_id).replace("_", " ").capitalize()
 
 func _try_present_next_discovery() -> void:
 	if discovery_manager == null or not discovery_manager.active.is_empty():
@@ -3216,7 +3295,7 @@ func _on_level_up_requested(level: int) -> void:
 		intro_lesson = 2
 		_set_flow(GameFlowState.State.LEVEL_UP)
 		ui_router.open_modal(&"level_up", null, get_viewport().gui_get_focus_owner())
-		hud.show_upgrade_choices(current_upgrade_options, stats, false, false)
+		hud.show_upgrade_choices(current_upgrade_options, stats, false, false, true)
 		return
 	level_up_requested.emit(level)
 	# Jede Auswahl enthält mindestens einen Ausbau der ausgerüsteten
@@ -3318,6 +3397,12 @@ func _on_run_finished(success: bool, reason: String) -> void:
 		get_tree().quit(0 if success else 2)
 		return
 	avatar.input_enabled = false
+	if success and selected_level.is_tutorial and not meta.has_completed_level(selected_level.id):
+		meta.register_level_result(selected_level, true, state.elapsed, state.level, defeats)
+		meta.grant_intro_completion_rewards()
+		_save_meta()
+		_show_campus()
+		return
 	var repeated_intro := selected_level.is_tutorial and meta.has_completed_level(selected_level.id)
 	var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
 	var reward := meta.award_run(success, state.elapsed, state.level, defeats, multiplier)
@@ -3334,6 +3419,8 @@ func _on_run_finished(success: bool, reason: String) -> void:
 	hud.show_end(selected_level, success, reason, state.elapsed, state.level, defeats, reward, unlocked_new)
 	if hud.has_method("set_result_reward_presentations"):
 		hud.call("set_result_reward_presentations", result_reward_presentations(reward))
+	if hud.has_method("set_result_damage_statistics"):
+		hud.call("set_result_damage_statistics", result_damage_statistics())
 	if ui_sound_service != null:
 		ui_sound_service.play(UISoundService.REWARD)
 	if not new_mastery_ids.is_empty():

@@ -16,6 +16,7 @@ signal binding_conflict_decided(
 	replace_existing: bool
 )
 signal bindings_reset_requested
+signal new_game_requested
 signal quit_requested
 signal back
 
@@ -310,7 +311,22 @@ func _rebuild_sections() -> void:
 	var actions := HBoxContainer.new()
 	actions.name = "SettingsActions"
 	actions.alignment = BoxContainer.ALIGNMENT_END
-	actions.visible = _view_model.should_show_quit()
+	actions.visible = true
+	var new_game_button := AlveolusUIComponents.action_button(
+		"Neues Spiel",
+		AlveolusUIComponents.ACTION_DANGER,
+		&"restart",
+		AlveolusVisualTheme.CORAL
+	)
+	new_game_button.name = "NewGameButton"
+	new_game_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	new_game_button.set_meta(&"setting_id", &"new_game")
+	new_game_button.set_meta(&"alveolus_accessible_name", "Neues Spiel. Löscht den lokalen Fortschritt.")
+	new_game_button.tooltip_text = "Setzt Forschung, Talente, Fälle und Entdeckungen zurück."
+	new_game_button.pressed.connect(func() -> void: new_game_requested.emit())
+	_controls[&"new_game"] = new_game_button
+	actions.add_child(new_game_button)
+	_focus_order.append(new_game_button)
 	var quit_button := AlveolusUIComponents.action_button(
 		"Spiel beenden",
 		AlveolusUIComponents.ACTION_DANGER,
@@ -324,8 +340,9 @@ func _rebuild_sections() -> void:
 	quit_button.pressed.connect(func() -> void: quit_requested.emit())
 	_controls[&"quit"] = quit_button
 	actions.add_child(quit_button)
+	quit_button.visible = _view_model.should_show_quit()
 	controls_content.add_child(actions)
-	if actions.visible:
+	if quit_button.visible:
 		_focus_order.append(quit_button)
 
 	_refresh_responsive_layout()

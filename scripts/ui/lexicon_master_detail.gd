@@ -707,7 +707,7 @@ func _rebuild_type_presentations(
 			presentation.type_id,
 			presentation.display_name,
 			presentation.formatted_value,
-			presentation.meaning,
+			"" if presentation.semantic_role == &"resistance_effective" else presentation.meaning,
 			_type_indicator_text(presentation.indicator)
 		)
 		var chip := parts["panel"] as PanelContainer
