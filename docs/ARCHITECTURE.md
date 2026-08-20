@@ -210,15 +210,17 @@ while `CombatSpatialGrid` and `CombatQuery` keep exact radii.
 
 Enemy crowd spacing is a separate presentation/locomotion envelope exposed by
 `InfectionEnemy.crowd_radius()`. `EnemyWorld` rebuilds a dedicated 64-unit grid,
-queries a fixed local candidate set and refreshes each steering slot
-at 10 Hz while movement stays at 60 Hz. The solver selects a safe velocity: a
-rear or converging body brakes, while close pairs use a stable lateral passing
-side. It never treats proximity as a displacement force. Only an already
-overlapping core receives a small velocity-bounded recovery; no post-movement
-position repair is allowed. Model factors approximate the visible body core,
-not its decorative outer pixels. Standard wave positions keep the deterministic
-golden-angle stream and only mirror an already selected candidate away from a
-clearly overloaded horizontal or vertical hemisphere.
+examines a bounded local broad-phase window, keeps the six nearest bodies and
+refreshes each steering slot at 10 Hz while movement stays at 60 Hz. The solver
+tests a small fixed set of chase, tangent and escape velocities against all six
+body constraints at once. A free tangent retains full authored speed; only a
+body with no geometrically valid route waits instead of entering another body.
+Bodies behind a pursuer never steer its front line, and no position repair or
+reciprocal displacement is allowed. Model factors approximate the visible body
+core, not its decorative outer pixels. Standard waves retain the deterministic
+golden-angle stream as a tie-breaker while the actual spawn direction fills the
+least occupied of twelve sectors. Materializing enemies count immediately, so
+one batch cannot collapse into a single off-screen corner.
 
 `PlayerStats.stat_sections()` returns defensive-copy `StatSectionViewModel`
 data with stable IDs `general`, `treatment:<content-id>`,

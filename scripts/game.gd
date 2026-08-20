@@ -24,6 +24,7 @@ const INTRO_CONFIRM_ATTACK := &"enable_autoattack"
 const INTRO_CONFIRM_BOSS := &"start_boss"
 const SPAWN_GOLDEN_ANGLE := 2.399963229728653
 const SPAWN_ANGLE_JITTER := 0.18
+const WAVE_SPAWN_SECTOR_COUNT := 12
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := false
@@ -3700,41 +3701,59 @@ func _spawn_position_around_avatar(distance: float) -> Vector2:
 	return topology.wrap_position(avatar.global_position + Vector2.from_angle(angle) * safe_distance)
 
 
-## Standard waves keep the deterministic golden-angle sequence, but avoid a
-## hemisphere that is already clearly overloaded. This prevents repeated
-## off-screen spawns behind the same crowd without adding a second RNG stream
-## or an allocation-heavy global sorting pass.
+## Standard waves keep the deterministic golden-angle sequence as their
+## tie-breaker, but place each new body in the least occupied of twelve sectors.
+## Materializing enemies count as occupied immediately, so a batch cannot fold
+## into one corner before its first member becomes targetable.
 func _wave_spawn_position_around_avatar(distance: float) -> Vector2:
 	var candidate := _spawn_position_around_avatar(distance)
-	if not is_instance_valid(avatar) or topology == null or enemies.size() < 6:
+	if not is_instance_valid(avatar) or topology == null:
 		return candidate
-	var above := 0
-	var below := 0
-	var left := 0
-	var right := 0
+	var sector_counts := PackedInt32Array()
+	sector_counts.resize(WAVE_SPAWN_SECTOR_COUNT)
+	sector_counts.fill(0)
 	for enemy in enemies:
-		if not is_instance_valid(enemy) or not enemy.is_targetable():
+		if not is_instance_valid(enemy) or not enemy.activation_active or enemy.dying:
 			continue
 		var enemy_delta := topology.shortest_delta(avatar.global_position, enemy.global_position)
-		if enemy_delta.y < 0.0:
-			above += 1
-		else:
-			below += 1
-		if enemy_delta.x < 0.0:
-			left += 1
-		else:
-			right += 1
+		if enemy_delta.length_squared() <= 0.0001:
+			continue
+		var enemy_sector := floori(
+			fposmod(enemy_delta.angle(), TAU) / TAU * float(WAVE_SPAWN_SECTOR_COUNT)
+		) % WAVE_SPAWN_SECTOR_COUNT
+		sector_counts[enemy_sector] += 1
 	var candidate_delta := topology.shortest_delta(avatar.global_position, candidate)
-	const IMBALANCE_MARGIN := 4
-	if above > below + IMBALANCE_MARGIN and candidate_delta.y < 0.0:
-		candidate_delta.y = absf(candidate_delta.y)
-	elif below > above + IMBALANCE_MARGIN and candidate_delta.y > 0.0:
-		candidate_delta.y = -absf(candidate_delta.y)
-	if left > right + IMBALANCE_MARGIN and candidate_delta.x < 0.0:
-		candidate_delta.x = absf(candidate_delta.x)
-	elif right > left + IMBALANCE_MARGIN and candidate_delta.x > 0.0:
-		candidate_delta.x = -absf(candidate_delta.x)
-	return topology.wrap_position(avatar.global_position + candidate_delta)
+	if candidate_delta.length_squared() <= 0.0001:
+		return candidate
+	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
+	var candidate_angle := fposmod(candidate_delta.angle(), TAU)
+	var candidate_sector := floori(candidate_angle / sector_width) % WAVE_SPAWN_SECTOR_COUNT
+	var candidate_center := (float(candidate_sector) + 0.5) * sector_width
+	var intra_sector_offset := clampf(
+		_shortest_signed_angle(candidate_center, candidate_angle),
+		-sector_width * 0.32,
+		sector_width * 0.32
+	)
+	var selected_sector := 0
+	var selected_count := sector_counts[0]
+	var selected_angle_distance := INF
+	for sector in range(WAVE_SPAWN_SECTOR_COUNT):
+		var sector_center := (float(sector) + 0.5) * sector_width
+		var angle_distance := absf(_shortest_signed_angle(candidate_angle, sector_center))
+		if sector_counts[sector] < selected_count or (
+			sector_counts[sector] == selected_count and angle_distance < selected_angle_distance
+		):
+			selected_sector = sector
+			selected_count = sector_counts[sector]
+			selected_angle_distance = angle_distance
+	var resolved_angle := (float(selected_sector) + 0.5) * sector_width + intra_sector_offset
+	return topology.wrap_position(
+		avatar.global_position + Vector2.from_angle(resolved_angle) * candidate_delta.length()
+	)
+
+
+func _shortest_signed_angle(from_angle: float, to_angle: float) -> float:
+	return fposmod(to_angle - from_angle + PI, TAU) - PI
 
 func _reset_spawn_position_sequence() -> void:
 	spawn_attempt_index += 1

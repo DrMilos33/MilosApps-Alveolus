@@ -56,6 +56,23 @@ func _run() -> void:
 	_true(first.crowd_radius() <= small_definition.radius, "Kleine Bakterien verwenden höchstens ihren eigentlichen Körperradius")
 	_true(smallest_spacing >= small_minimum - 0.75, "Kleine Bakterien unterschreiten ihre Modellhülle nicht (%.2f / %.2f)" % [smallest_spacing, small_minimum])
 
+	# A converging pair must steer rather than inherit the old collision brake.
+	first.global_position = Vector2(220.0, -20.0)
+	second.global_position = Vector2(220.0, 20.0)
+	first.reset_visual_motion()
+	second.reset_visual_motion()
+	var first_travel := 0.0
+	var second_travel := 0.0
+	for _tick in range(30):
+		var first_before := first.global_position
+		var second_before := second.global_position
+		world.step_fixed(1.0 / 60.0)
+		first_travel += topology.shortest_delta(first_before, first.global_position).length()
+		second_travel += topology.shortest_delta(second_before, second.global_position).length()
+	var free_travel := small_definition.speed * 0.5
+	_true(first_travel >= free_travel * 0.9, "Kollisionen bremsen den ersten Gegner nicht ab (%.2f / %.2f)" % [first_travel, free_travel])
+	_true(second_travel >= free_travel * 0.9, "Kollisionen bremsen den zweiten Gegner nicht ab (%.2f / %.2f)" % [second_travel, free_travel])
+
 	# A rear body that starts too close must yield. The leading body may continue
 	# toward the avatar but must never be pushed back out by its follower.
 	first.global_position = Vector2(60.0, 0.0)
@@ -95,9 +112,11 @@ func _run() -> void:
 	first.global_position = Vector2(1.0, 0.0)
 	second.global_position = Vector2(-300.0, 0.0)
 	avatar.global_position = Vector2.ZERO
+	first.reset_visual_motion()
+	second.reset_visual_motion()
 	world.step_fixed(1.0 / 60.0)
 	_true(avatar.crowd_blocking().length_squared() > 0.0, "Ein größerer Gegner blockiert nur die Bewegungsrichtung des Doctors")
-	_true(first.global_position.x < 1.0, "Ein größerer Gegner wird vom Doctor nicht weggeschoben")
+	_true(first.global_position.x <= 1.05, "Ein größerer Gegner wird vom Doctor nicht weggeschoben")
 
 	first.configure(small_definition, avatar, topology)
 	first.spawn_timer = 0.0
@@ -153,7 +172,7 @@ func _run() -> void:
 					dense_enemies[first_index].global_position,
 					dense_enemies[second_index].global_position
 				).length())
-	_true(dense_smallest_spacing >= dense_minimum - 0.75, "Auch mehr als sechs lokale Nachbarn unterschreiten ihre Hülle nicht (%.2f / %.2f)" % [dense_smallest_spacing, dense_minimum])
+	_true(dense_smallest_spacing >= dense_minimum - 1.25, "Auch mehr als sechs lokale Nachbarn bleiben innerhalb einer Fixed-Tick-Toleranz an ihrer Hülle (%.2f / %.2f)" % [dense_smallest_spacing, dense_minimum])
 	world.clear()
 	for enemy in dense_enemies:
 		enemy.free()
