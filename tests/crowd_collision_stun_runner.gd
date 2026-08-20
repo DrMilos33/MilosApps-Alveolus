@@ -53,8 +53,23 @@ func _run() -> void:
 	for _tick in range(150):
 		world.step_fixed(1.0 / 60.0)
 		smallest_spacing = minf(smallest_spacing, topology.shortest_delta(first.global_position, second.global_position).length())
-	_true(first.crowd_radius() < small_definition.radius * 1.18, "Kleine Bakterien stehen etwas enger als im vorherigen globalen Abstand")
+	_true(first.crowd_radius() <= small_definition.radius, "Kleine Bakterien verwenden höchstens ihren eigentlichen Körperradius")
 	_true(smallest_spacing >= small_minimum - 0.75, "Kleine Bakterien unterschreiten ihre Modellhülle nicht (%.2f / %.2f)" % [smallest_spacing, small_minimum])
+
+	# A rear body that starts too close must yield. The leading body may continue
+	# toward the avatar but must never be pushed back out by its follower.
+	first.global_position = Vector2(60.0, 0.0)
+	second.global_position = Vector2(92.0, 0.0)
+	first.reset_visual_motion()
+	second.reset_visual_motion()
+	var leading_start_distance := first.global_position.distance_to(avatar.global_position)
+	var initial_pair_spacing := topology.shortest_delta(first.global_position, second.global_position).length()
+	var leading_max_distance := leading_start_distance
+	for _tick in range(30):
+		world.step_fixed(1.0 / 60.0)
+		leading_max_distance = maxf(leading_max_distance, first.global_position.distance_to(avatar.global_position))
+	_true(leading_max_distance <= leading_start_distance + 0.25, "Ein hinterer Gegner schiebt den vorderen nicht vom Ziel weg")
+	_true(topology.shortest_delta(first.global_position, second.global_position).length() > initial_pair_spacing, "Eine bestehende Überlappung löst sich ohne Rückwärtsschub des vorderen Gegners")
 
 	var cluster_definition := EnemyDefinition.create(
 		&"bacterial_cluster", "Bakteriengruppe", 74.0, 45.0, 5.0, 4, 30.0, Color.WHITE
@@ -73,7 +88,8 @@ func _run() -> void:
 	for _tick in range(180):
 		world.step_fixed(1.0 / 60.0)
 		smallest_cluster_spacing = minf(smallest_cluster_spacing, topology.shortest_delta(first.global_position, second.global_position).length())
-	_true(cluster_minimum > cluster_definition.radius * 2.4, "Rote Gruppen erhalten eine modellbezogen größere Abstandshülle")
+	_true(cluster_minimum > cluster_definition.radius * 2.0, "Rote Gruppen behalten eine kleine modellbezogene Körperhülle")
+	_true(cluster_minimum <= cluster_definition.radius * 2.1, "Rote Gruppen erhalten keinen breiten unsichtbaren Außenabstand")
 	_true(smallest_cluster_spacing >= cluster_minimum - 0.75, "Rote Gruppen unterschreiten ihre Modellhülle nicht (%.2f / %.2f)" % [smallest_cluster_spacing, cluster_minimum])
 
 	first.global_position = Vector2(1.0, 0.0)
@@ -86,10 +102,10 @@ func _run() -> void:
 	first.configure(small_definition, avatar, topology)
 	first.spawn_timer = 0.0
 	first.global_position = Vector2(10.0, 0.0)
-	for _tick in range(3):
+	for _tick in range(6):
 		world.step_fixed(1.0 / 60.0)
 	var small_avatar_yield_origin := first.global_position
-	for _tick in range(3):
+	for _tick in range(6):
 		world.step_fixed(1.0 / 60.0)
 	_true(avatar.crowd_blocking().length_squared() <= 0.0001, "Ein kleines Bakterium blockiert den Doctor nicht hart")
 	_true(first.global_position.x > small_avatar_yield_origin.x, "Nur ein kleines Bakterium weicht sichtbar vor dem Doctor zurück")

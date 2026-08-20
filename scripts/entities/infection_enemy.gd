@@ -19,12 +19,15 @@ const DEATH_SECONDS := 0.0
 const HIT_REACTION_SECONDS := 0.09
 const DEFAULT_KNOCKBACK_SECONDS := 0.28
 const DEFAULT_STUN_SECONDS := 1.0
-const SMALL_CROWD_RADIUS_FACTOR := 1.10
-const CLUSTER_CROWD_RADIUS_FACTOR := 1.25
+const SMALL_CROWD_RADIUS_FACTOR := 1.00
+const CLUSTER_CROWD_RADIUS_FACTOR := 1.05
 const NEST_CROWD_RADIUS_FACTOR := 1.18
 const BOSS_CROWD_RADIUS_FACTOR := 1.12
 const DEFAULT_CROWD_RADIUS_FACTOR := 1.18
-const CROWD_STEERING_SMOOTHING := 0.34
+const CROWD_STEERING_SMOOTHING := 0.16
+const CROWD_BRAKE_SMOOTHING := 0.72
+const CROWD_RECOVERY_SMOOTHING := 0.12
+const CROWD_LATERAL_VELOCITY_FACTOR := 0.32
 
 var definition: EnemyDefinition
 var target: TherapyAvatar
@@ -309,9 +312,12 @@ func step_fixed(delta: float) -> void:
 	if distance_squared > 0.1:
 		var distance := sqrt(distance_squared)
 		var movement_direction := to_target / distance
+		var movement_speed := definition.speed * speed_multiplier * _cached_status_speed_multiplier
+		var safe_velocity := movement_direction * movement_speed * _crowd_speed_multiplier
 		if _crowd_steering.length_squared() > 0.0001:
-			movement_direction = (movement_direction + _crowd_steering).normalized()
-		global_position += movement_direction * definition.speed * speed_multiplier * _cached_status_speed_multiplier * _crowd_speed_multiplier * delta
+			safe_velocity += _crowd_steering * movement_speed * CROWD_LATERAL_VELOCITY_FACTOR
+		safe_velocity = safe_velocity.limit_length(movement_speed)
+		global_position += safe_velocity * delta
 		var wrapped := global_position
 		if _arena_size.x > 0.0 and _arena_size.y > 0.0:
 			if wrapped.x < _arena_min.x:
@@ -381,15 +387,16 @@ func apply_knockback(
 
 
 func set_crowd_steering(steering: Vector2, movement_scale: float = 1.0) -> void:
-	# EnemyWorld updates this bounded target at 20 Hz. The entity approaches it on
-	# every 60-Hz movement tick, preventing a visible three-frame steering step.
-	_crowd_steering_target = steering.limit_length(2.8)
-	_crowd_speed_target = clampf(movement_scale, 0.35, 1.0)
+	# EnemyWorld supplies a safe lateral velocity hint rather than a displacement
+	# force. The bounded angle prevents neighbors from visibly shoving one another.
+	_crowd_steering_target = steering.limit_length(1.35)
+	_crowd_speed_target = clampf(movement_scale, 0.05, 1.0)
 
 
 func _step_crowd_steering() -> void:
 	_crowd_steering = _crowd_steering.lerp(_crowd_steering_target, CROWD_STEERING_SMOOTHING)
-	_crowd_speed_multiplier = lerpf(_crowd_speed_multiplier, _crowd_speed_target, CROWD_STEERING_SMOOTHING)
+	var speed_smoothing := CROWD_BRAKE_SMOOTHING if _crowd_speed_target < _crowd_speed_multiplier else CROWD_RECOVERY_SMOOTHING
+	_crowd_speed_multiplier = lerpf(_crowd_speed_multiplier, _crowd_speed_target, speed_smoothing)
 
 
 func _step_knockback(delta: float) -> void:

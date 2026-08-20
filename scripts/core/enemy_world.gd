@@ -19,12 +19,13 @@ const AVATAR_SPACING_FACTOR := 0.84
 const MAX_CROWD_NEIGHBORS := 6
 const MAX_AVATAR_NEIGHBORS := 12
 const SMALL_ENEMY_ID := &"pneumococcus"
-const CROWD_ANTICIPATION_DISTANCE := 5.0
-const CROWD_CONTACT_GUARD_DISTANCE := 2.5
+const CROWD_NEIGHBOR_MARGIN := 8.0
+const CROWD_TIME_HORIZON := 0.70
 const MAX_CROWD_RADIUS_FACTOR := 1.25
 const APPROACH_LANE_DISTANCE := 340.0
 const MAX_APPROACH_BIAS := 0.44
-const MIN_CROWDED_SPEED := 0.42
+const MIN_BLOCKED_SPEED := 0.08
+const DIRECTLY_AHEAD_EPSILON := 0.08
 const CROWD_GRID_CELL_SIZE := 64.0
 
 func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorld:
@@ -127,11 +128,10 @@ func _prepare_crowd_steering() -> void:
 
 	var strongest_avatar_block := Vector2.ZERO
 	var strongest_avatar_overlap := 0.0
-	# Blend bounded local separation into each enemy's next movement vector. The
-	# uniform grid and neighbor cap preserve the mass-entity budget. Each enemy
-	# refreshes at 20 Hz while locomotion remains at the fixed 60 Hz. A short
-	# prediction margin prevents overlap without appearing as an extra invisible
-	# body around the authored sprite. Steering is retained between refreshes.
+	# Resolve a bounded local safe velocity rather than applying displacement.
+	# Each enemy refreshes at 10 Hz while locomotion remains at 60 Hz. Rear agents
+	# brake behind a body in front, and close pairs choose stable opposing sides.
+	# This mirrors reciprocal velocity avoidance without adding 600 server agents.
 	for slot_value in _active_slots:
 		var slot := int(slot_value)
 		if _retiring[slot] != 0:
@@ -139,19 +139,24 @@ func _prepare_crowd_steering() -> void:
 		var enemy := _typed_enemies[slot]
 		if enemy == null or not enemy.is_targetable() or enemy.definition == null:
 			continue
-		if posmod(slot, 3) != _crowd_phase:
+		if posmod(slot, 6) != _crowd_phase:
 			continue
-		# Six local occupants cover an ordinary surround arc while
-		# keeping the 600-entity stress path strictly bounded. The predictive
-		# margin prevents normal spawns from reaching a deeper stacked state.
 		_crowd_candidates = _crowd_grid.query_circle_candidates_limited(
 			enemy.global_position,
-			enemy.crowd_radius() + _maximum_crowd_radius + CROWD_ANTICIPATION_DISTANCE,
+			enemy.crowd_radius() + _maximum_crowd_radius + CROWD_NEIGHBOR_MARGIN,
 			MAX_CROWD_NEIGHBORS,
 			_crowd_candidates
 		)
-		var separation := Vector2.ZERO
-		var strongest_pressure := 0.0
+		var avatar_delta := _crowd_topology.shortest_delta(enemy.global_position, _crowd_avatar.global_position)
+		var avatar_distance_squared := avatar_delta.length_squared()
+		var chase_direction := avatar_delta.normalized() if avatar_distance_squared > 0.000001 else Vector2.RIGHT
+		var desired_speed := enemy.definition.speed * enemy.speed_multiplier * enemy.status_speed_multiplier()
+		var desired_velocity := chase_direction * desired_speed
+		var lateral_axis := chase_direction.orthogonal()
+		var lateral_avoidance := Vector2.ZERO
+		var overlap_recovery := Vector2.ZERO
+		var avatar_escape := Vector2.ZERO
+		var strongest_forward_block := 0.0
 		for other_handle in _crowd_candidates:
 			var other_slot := EntityHandle.slot(other_handle)
 			if other_slot < 0 or other_slot == slot or other_slot >= _typed_enemies.size() or _retiring[other_slot] != 0:
@@ -161,49 +166,62 @@ func _prepare_crowd_steering() -> void:
 				continue
 			var delta := _crowd_topology.shortest_delta(enemy.global_position, other.global_position)
 			var preferred_distance := enemy.crowd_radius() + other.crowd_radius()
-			var influence_distance := preferred_distance + CROWD_ANTICIPATION_DISTANCE
+			var influence_distance := preferred_distance + CROWD_NEIGHBOR_MARGIN
 			var distance_squared := delta.length_squared()
 			if distance_squared >= influence_distance * influence_distance:
 				continue
 			var distance := sqrt(maxf(distance_squared, 0.000001))
-			var away := -delta / distance if distance_squared > 0.000001 else _overlap_axis(slot, other_slot)
-			# Separation fades in before the personal-space envelopes touch. This
-			# continuous pressure removes the old touch -> repel -> re-enter cycle.
-			var anticipation := clampf(
-				(influence_distance - distance) / CROWD_ANTICIPATION_DISTANCE,
+			var toward_other := delta / distance if distance_squared > 0.000001 else -_overlap_axis(slot, other_slot)
+			var proximity := clampf(
+				(influence_distance - distance) / CROWD_NEIGHBOR_MARGIN,
 				0.0,
 				1.0
 			)
-			var penetration := maxf(0.0, 1.0 - distance / maxf(preferred_distance, 0.001))
-			var contact_guard := clampf(
-				(preferred_distance + CROWD_CONTACT_GUARD_DISTANCE - distance) / CROWD_CONTACT_GUARD_DISTANCE,
-				0.0,
-				1.0
-			)
-			strongest_pressure = maxf(
-				strongest_pressure,
-				clampf(anticipation + penetration + contact_guard, 0.0, 1.0)
-			)
-			var weight := 0.25 if enemy.definition.is_boss and not other.definition.is_boss else 1.0
-			# Keep the outer part of the prediction zone soft, then ramp sharply at
-			# contact. This preserves near-tangent sprite spacing without permitting
-			# a dense pack to oscillate through the actual personal-space circles.
-			separation += away * (
-				anticipation * anticipation * 5.0
-				+ contact_guard * 6.0
-				+ penetration * 2.4
-			) * weight
+			proximity = proximity * proximity * (3.0 - 2.0 * proximity)
+			var forward_alignment := toward_other.dot(chase_direction)
+			if forward_alignment > 0.0:
+				strongest_forward_block = maxf(
+					strongest_forward_block,
+					proximity * forward_alignment
+				)
+			var other_avatar_delta := _crowd_topology.shortest_delta(other.global_position, _crowd_avatar.global_position)
+			var other_chase_direction := other_avatar_delta.normalized() if other_avatar_delta.length_squared() > 0.000001 else Vector2.RIGHT
+			var other_speed := other.definition.speed * other.speed_multiplier * other.status_speed_multiplier()
+			var relative_closing_speed := (desired_velocity - other_chase_direction * other_speed).dot(toward_other)
+			var clearance := distance - preferred_distance
+			if clearance <= 0.0:
+				strongest_forward_block = 1.0
+				var penetration_fraction := clampf(-clearance / maxf(preferred_distance, 0.001), 0.0, 1.0)
+				overlap_recovery -= toward_other * penetration_fraction * 0.85
+			elif relative_closing_speed > 0.0001:
+				var collision_risk := clampf(
+					1.0 - clearance / (relative_closing_speed * CROWD_TIME_HORIZON),
+					0.0,
+					1.0
+				)
+				strongest_forward_block = maxf(strongest_forward_block, collision_risk)
+			var side_offset := toward_other.dot(lateral_axis)
+			var avoid_side := signf(side_offset)
+			if absf(side_offset) <= DIRECTLY_AHEAD_EPSILON:
+				avoid_side = 1.0 if slot < other_slot else -1.0
+			var importance := 0.35 if enemy.definition.is_boss and not other.definition.is_boss else 1.0
+			lateral_avoidance -= lateral_axis * avoid_side * proximity * importance
 
-		var avatar_delta := _crowd_topology.shortest_delta(enemy.global_position, _crowd_avatar.global_position)
 		var avatar_minimum := (TherapyAvatar.BODY_RADIUS + enemy.definition.radius) * AVATAR_SPACING_FACTOR
-		var avatar_distance_squared := avatar_delta.length_squared()
+		var avatar_arrival_block := clampf(
+			(avatar_minimum + CROWD_NEIGHBOR_MARGIN - sqrt(maxf(avatar_distance_squared, 0.000001)))
+			/ CROWD_NEIGHBOR_MARGIN,
+			0.0,
+			1.0
+		)
+		strongest_forward_block = maxf(strongest_forward_block, avatar_arrival_block)
 		if avatar_distance_squared < avatar_minimum * avatar_minimum:
 			var avatar_distance := sqrt(maxf(avatar_distance_squared, 0.000001))
 			var avatar_overlap := 1.0 - avatar_distance / maxf(avatar_minimum, 0.001)
 			var toward_avatar := avatar_delta / avatar_distance if avatar_distance_squared > 0.000001 else Vector2.RIGHT
 			if enemy.definition.id == SMALL_ENEMY_ID:
 				# Only the smallest bacterium yields when Doctor Milos pushes into it.
-				separation -= toward_avatar * (0.75 + avatar_overlap * 1.25)
+				avatar_escape = -toward_avatar * (1.05 + avatar_overlap * 0.25)
 		if avatar_distance_squared > 0.000001 and avatar_distance_squared < APPROACH_LANE_DISTANCE * APPROACH_LANE_DISTANCE:
 			var avatar_distance := sqrt(avatar_distance_squared)
 			var toward_avatar := avatar_delta / avatar_distance
@@ -211,11 +229,16 @@ func _prepare_crowd_steering() -> void:
 			# A stable per-slot lane bias prevents every pursuer from aiming at the
 			# exact same center line. It remains subordinate to the chase direction,
 			# so enemies still reach contact instead of orbiting indefinitely.
-			separation += toward_avatar.orthogonal() * _approach_lane_bias(slot) * lane_strength
-		var crowded_speed := lerpf(1.0, MIN_CROWDED_SPEED, strongest_pressure)
-		enemy.set_crowd_steering(separation, crowded_speed)
+			lateral_avoidance += toward_avatar.orthogonal() * _approach_lane_bias(slot) * lane_strength
+		var crowded_speed := lerpf(1.0, MIN_BLOCKED_SPEED, strongest_forward_block)
+		enemy.set_crowd_steering(
+			lateral_avoidance.limit_length(0.65)
+			+ overlap_recovery.limit_length(0.85)
+			+ avatar_escape,
+			crowded_speed
+		)
 
-	_crowd_phase = (_crowd_phase + 1) % 3
+	_crowd_phase = (_crowd_phase + 1) % 6
 	_crowd_candidates = _crowd_grid.query_circle_candidates_limited(
 		_crowd_avatar.global_position,
 		TherapyAvatar.BODY_RADIUS + _maximum_body_radius,
@@ -239,8 +262,6 @@ func _prepare_crowd_steering() -> void:
 		strongest_avatar_overlap = avatar_overlap
 		strongest_avatar_block = -toward_avatar * clampf(avatar_overlap * 1.35, 0.0, 1.0)
 	_crowd_avatar.set_crowd_blocking(strongest_avatar_block)
-
-
 func _overlap_axis(first_slot: int, second_slot: int) -> Vector2:
 	var lower := mini(first_slot, second_slot)
 	var upper := maxi(first_slot, second_slot)

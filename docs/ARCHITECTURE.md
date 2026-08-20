@@ -210,13 +210,15 @@ while `CombatSpatialGrid` and `CombatQuery` keep exact radii.
 
 Enemy crowd spacing is a separate presentation/locomotion envelope exposed by
 `InfectionEnemy.crowd_radius()`. `EnemyWorld` rebuilds a dedicated 64-unit grid,
-queries a center-first bounded local neighborhood and refreshes each steering
-slot at 20 Hz while movement stays at 60 Hz. A 12-unit anticipation band fades
-separation in before envelopes touch; no post-movement position repair is
-allowed. Per-model factors keep small bacteria compact and give bacterial
-clusters enough space for their larger artwork. Standard wave positions keep
-the deterministic golden-angle stream and only mirror an already selected
-candidate away from a clearly overloaded horizontal or vertical hemisphere.
+queries a fixed local candidate set and refreshes each steering slot
+at 10 Hz while movement stays at 60 Hz. The solver selects a safe velocity: a
+rear or converging body brakes, while close pairs use a stable lateral passing
+side. It never treats proximity as a displacement force. Only an already
+overlapping core receives a small velocity-bounded recovery; no post-movement
+position repair is allowed. Model factors approximate the visible body core,
+not its decorative outer pixels. Standard wave positions keep the deterministic
+golden-angle stream and only mirror an already selected candidate away from a
+clearly overloaded horizontal or vertical hemisphere.
 
 `PlayerStats.stat_sections()` returns defensive-copy `StatSectionViewModel`
 data with stable IDs `general`, `treatment:<content-id>`,
@@ -273,14 +275,14 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase.
 
-`EnemyWorld` owns one predictive body-separation pass before enemy movement. It
-rebuilds one `CombatSpatialGrid`, samples a bounded local neighborhood and
-mixes separation into the next locomotion direction. Preferred envelopes cover
-roughly the visible body width. A stable per-slot approach-lane bias prevents
-all pursuers from choosing the same center line, while local overlap pressure
-reduces forward speed before a rear body can push through the front row. The
-steering snapshot refreshes at 30 Hz and locomotion remains at 60 Hz. It never
-repairs enemy positions after movement. Only `pneumococcus` yields to avatar pressure;
+`EnemyWorld` owns one predictive body-avoidance pass before enemy movement. It
+rebuilds one `CombatSpatialGrid`, samples only the local neighborhood and
+constrains the next preferred velocity. Preferred envelopes cover the visible
+body core. A stable per-slot approach-lane bias prevents all pursuers from
+choosing the same center line, while a short time horizon slows converging
+bodies before a rear body can enter the front row. Steering refreshes at 10 Hz
+and locomotion remains at 60 Hz. It never repairs positions after movement.
+Only `pneumococcus` yields to avatar pressure;
 larger bodies publish one blocking normal to `TherapyAvatar`, which removes
 only movement into that body and keeps tangential escape available. Entities
 must not add independent collision polling or pairwise O(n²) scans.
