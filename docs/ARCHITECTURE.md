@@ -208,10 +208,22 @@ separately by `BodySizeCatalog`; `Game` supplies
 a magic maximum. Range checks and ordering use distance to the body surface,
 while `CombatSpatialGrid` and `CombatQuery` keep exact radii.
 
+Enemy crowd spacing is a separate presentation/locomotion envelope exposed by
+`InfectionEnemy.crowd_radius()`. `EnemyWorld` rebuilds a dedicated 64-unit grid,
+queries a center-first bounded local neighborhood and refreshes each steering
+slot at 20 Hz while movement stays at 60 Hz. A 12-unit anticipation band fades
+separation in before envelopes touch; no post-movement position repair is
+allowed. Per-model factors keep small bacteria compact and give bacterial
+clusters enough space for their larger artwork. Standard wave positions keep
+the deterministic golden-angle stream and only mirror an already selected
+candidate away from a clearly overloaded horizontal or vertical hemisphere.
+
 `PlayerStats.stat_sections()` returns defensive-copy `StatSectionViewModel`
 data with stable IDs `general`, `treatment:<content-id>`,
 `ability:0:<content-id>` and `ability:1:<content-id>`. Expansion state remains
-UI-owned. `PlayerStats.stat_rows()` remains a read-only compatibility adapter
+UI-owned. Values are resolved from the bound `RunBuildState` when the DTO is
+created, so opening the pause screen cannot fall back to run-start values after
+an upgrade. `PlayerStats.stat_rows()` remains a read-only compatibility adapter
 for the current GameHUD group keys until that facade consumes the section API;
 it exposes stages rather than render units. `LexiconEntryViewModel.type_presentations()`
 likewise returns a defensive array of immutable four-type DTOs. Each item

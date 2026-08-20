@@ -120,6 +120,36 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 	var maximum_x := floori(maximum.x / _cell_width)
 	var minimum_y := floori(minimum.y / _cell_height)
 	var maximum_y := floori(maximum.y / _cell_height)
+	if maximum_candidates > 0:
+		# Limited broad-phase queries are used by crowd steering. Visit the source
+		# cell first and expand in square rings, otherwise a top-left scan can fill
+		# the budget with farther bodies while omitting a touching neighbor.
+		var center_x := floori(local_center.x / _cell_width)
+		var center_y := floori(local_center.y / _cell_height)
+		var maximum_ring := maxi(
+			maxi(absi(minimum_x - center_x), absi(maximum_x - center_x)),
+			maxi(absi(minimum_y - center_y), absi(maximum_y - center_y))
+		)
+		for ring in range(maximum_ring + 1):
+			for y_offset in range(-ring, ring + 1):
+				for x_offset in range(-ring, ring + 1):
+					if maxi(absi(x_offset), absi(y_offset)) != ring:
+						continue
+					var raw_x := center_x + x_offset
+					var raw_y := center_y + y_offset
+					if raw_x < minimum_x or raw_x > maximum_x or raw_y < minimum_y or raw_y > maximum_y:
+						continue
+					var x := posmod(raw_x, columns)
+					var y := posmod(raw_y, rows)
+					var index := y * columns + x
+					if _visit_stamps[index] == _query_stamp:
+						continue
+					_visit_stamps[index] = _query_stamp
+					for handle in _cells[index]:
+						output.append(int(handle))
+						if output.size() >= maximum_candidates:
+							return output
+		return output
 	var x_count := mini(columns, maximum_x - minimum_x + 1)
 	var y_count := mini(rows, maximum_y - minimum_y + 1)
 	var x_start := 0 if x_count == columns else minimum_x

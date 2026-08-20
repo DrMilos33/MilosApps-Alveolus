@@ -1756,7 +1756,7 @@ func _spawn_step(delta: float) -> void:
 			cluster_chance = clampf(cluster_chance + finding.magnitude, 0.0, 0.85)
 		if discovery_manager.has_seen(&"pneumococcus") and rng.randf() < cluster_chance:
 			type = &"bacterial_cluster"
-		_spawn_enemy(type, _spawn_position_around_avatar(rng.randf_range(500.0, 620.0)))
+		_spawn_enemy(type, _wave_spawn_position_around_avatar(rng.randf_range(500.0, 620.0)))
 
 func _drain_deferred_spawns(maximum_per_tick: int) -> void:
 	var emitted := 0
@@ -3698,6 +3698,43 @@ func _spawn_position_around_avatar(distance: float) -> Vector2:
 	)
 	spawn_angle_cursor = fposmod(spawn_angle_cursor + SPAWN_GOLDEN_ANGLE, TAU)
 	return topology.wrap_position(avatar.global_position + Vector2.from_angle(angle) * safe_distance)
+
+
+## Standard waves keep the deterministic golden-angle sequence, but avoid a
+## hemisphere that is already clearly overloaded. This prevents repeated
+## off-screen spawns behind the same crowd without adding a second RNG stream
+## or an allocation-heavy global sorting pass.
+func _wave_spawn_position_around_avatar(distance: float) -> Vector2:
+	var candidate := _spawn_position_around_avatar(distance)
+	if not is_instance_valid(avatar) or topology == null or enemies.size() < 6:
+		return candidate
+	var above := 0
+	var below := 0
+	var left := 0
+	var right := 0
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or not enemy.is_targetable():
+			continue
+		var enemy_delta := topology.shortest_delta(avatar.global_position, enemy.global_position)
+		if enemy_delta.y < 0.0:
+			above += 1
+		else:
+			below += 1
+		if enemy_delta.x < 0.0:
+			left += 1
+		else:
+			right += 1
+	var candidate_delta := topology.shortest_delta(avatar.global_position, candidate)
+	const IMBALANCE_MARGIN := 4
+	if above > below + IMBALANCE_MARGIN and candidate_delta.y < 0.0:
+		candidate_delta.y = absf(candidate_delta.y)
+	elif below > above + IMBALANCE_MARGIN and candidate_delta.y > 0.0:
+		candidate_delta.y = -absf(candidate_delta.y)
+	if left > right + IMBALANCE_MARGIN and candidate_delta.x < 0.0:
+		candidate_delta.x = absf(candidate_delta.x)
+	elif right > left + IMBALANCE_MARGIN and candidate_delta.x > 0.0:
+		candidate_delta.x = -absf(candidate_delta.x)
+	return topology.wrap_position(avatar.global_position + candidate_delta)
 
 func _reset_spawn_position_sequence() -> void:
 	spawn_attempt_index += 1

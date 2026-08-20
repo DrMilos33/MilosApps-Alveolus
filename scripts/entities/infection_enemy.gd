@@ -19,6 +19,11 @@ const DEATH_SECONDS := 0.0
 const HIT_REACTION_SECONDS := 0.09
 const DEFAULT_KNOCKBACK_SECONDS := 0.28
 const DEFAULT_STUN_SECONDS := 1.0
+const SMALL_CROWD_RADIUS_FACTOR := 1.14
+const CLUSTER_CROWD_RADIUS_FACTOR := 1.35
+const NEST_CROWD_RADIUS_FACTOR := 1.18
+const BOSS_CROWD_RADIUS_FACTOR := 1.12
+const DEFAULT_CROWD_RADIUS_FACTOR := 1.18
 
 var definition: EnemyDefinition
 var target: TherapyAvatar
@@ -226,6 +231,25 @@ func visual_extent() -> float:
 		return definition.radius * 2.15
 	return definition.radius * (2.25 if definition.is_boss else 2.35)
 
+
+## Preferred personal-space radius used by EnemyWorld's predictive steering.
+## This is deliberately distinct from exact hit geometry: authored sprites do
+## not all fill their query circle by the same amount, so one global multiplier
+## made clusters overlap while leaving small bacteria slightly too far apart.
+func crowd_radius() -> float:
+	if definition == null:
+		return 0.0
+	match definition.id:
+		&"pneumococcus":
+			return definition.radius * SMALL_CROWD_RADIUS_FACTOR
+		&"bacterial_cluster":
+			return definition.radius * CLUSTER_CROWD_RADIUS_FACTOR
+		&"minor_focus":
+			return definition.radius * NEST_CROWD_RADIUS_FACTOR
+	if definition.is_boss:
+		return definition.radius * BOSS_CROWD_RADIUS_FACTOR
+	return definition.radius * DEFAULT_CROWD_RADIUS_FACTOR
+
 func _physics_process(delta: float) -> void:
 	step_fixed(delta)
 
@@ -351,7 +375,7 @@ func apply_knockback(
 func set_crowd_steering(steering: Vector2, movement_scale: float = 1.0) -> void:
 	# The steering target is updated at a lower frequency than locomotion. Smooth
 	# both values so dense groups flow instead of alternating between hard turns.
-	_crowd_steering = _crowd_steering.lerp(steering.limit_length(2.2), 0.55)
+	_crowd_steering = _crowd_steering.lerp(steering.limit_length(2.8), 0.55)
 	_crowd_speed_multiplier = lerpf(_crowd_speed_multiplier, clampf(movement_scale, 0.35, 1.0), 0.55)
 
 

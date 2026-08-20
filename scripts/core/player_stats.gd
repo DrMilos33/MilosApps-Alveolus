@@ -347,13 +347,25 @@ func stat_sections(
 	current_shield: float = 0.0,
 	maximum_shield: float = 0.0
 ) -> Array[StatSectionViewModel]:
+	# Character values are a live read model, not a copy of the values from run
+	# start. Resolve the shared RunBuildState at presentation time so every
+	# selected upgrade is visible even if a compatibility field has not been
+	# mirrored yet by an older controller path.
+	var treatment_tags := prepared_treatment.tags if prepared_treatment != null else PackedStringArray(["treatment", "precise", "tracking"])
+	var resolved_movement_speed := run_build_state.value(RunBuildState.MOVEMENT_SPEED, movement_speed) if run_build_state != null else movement_speed
+	var resolved_treatment_damage := run_build_state.value(RunBuildState.TREATMENT_DAMAGE, therapy_damage, treatment_tags) if run_build_state != null else therapy_damage
+	var resolved_treatment_interval := run_build_state.value(RunBuildState.TREATMENT_INTERVAL, therapy_cooldown, treatment_tags) if run_build_state != null else therapy_cooldown
+	var resolved_treatment_range := run_build_state.value(RunBuildState.TREATMENT_RANGE, therapy_range, treatment_tags) if run_build_state != null else therapy_range
+	var resolved_treatment_targets := maxi(1, roundi(run_build_state.value(RunBuildState.TREATMENT_TARGETS, float(therapy_targets), treatment_tags))) if run_build_state != null else therapy_targets
+	var resolved_treatment_projectiles := maxi(1, roundi(run_build_state.value(RunBuildState.TREATMENT_PROJECTILES, float(therapy_projectiles), treatment_tags))) if run_build_state != null else therapy_projectiles
+	var resolved_treatment_hits := maxi(1, roundi(run_build_state.value(RunBuildState.TREATMENT_MAX_HITS, float(therapy_max_hits), treatment_tags))) if run_build_state != null else therapy_max_hits
 	var life_value := "–"
 	if current_life >= 0.0 and maximum_life >= 0.0:
 		life_value = "%s / %s" % [_number(current_life), _number(maximum_life)]
 	var general_rows: Array[Dictionary] = [
 		_stat_row(&"life", "Leben", life_value),
 		_stat_row(&"shield", "Schild", "%s / %s" % [_number(current_shield), _number(maximum_shield)]),
-		_stat_row(&"movement_speed", "Galopp", _number(movement_speed)),
+		_stat_row(&"movement_speed", "Galopp", _number(resolved_movement_speed)),
 		_stat_row(&"defense", "Verteidigung", "%s %%" % _number(MitigationCurve.defense_effective_percent(defense))),
 		_stat_row(&"life_regeneration", "Regeneration", "%s/s" % _number(life_regeneration_per_second)),
 		_stat_row(&"experience_gain", "Erfahrung", "+%d %%" % roundi((experience_gain_multiplier - 1.0) * 100.0)),
@@ -368,12 +380,12 @@ func stat_sections(
 	var treatment_id := prepared_treatment.id if prepared_treatment != null else &"treatment_precision"
 	var treatment_title := prepared_treatment.display_name if prepared_treatment != null else "Behandlung"
 	var treatment_rows: Array[Dictionary] = [
-		_stat_row(&"damage", "Schaden", _number(therapy_damage)),
-		_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(therapy_cooldown)),
-		_stat_row(&"targets", "Ziele", str(therapy_targets)),
-		_stat_row(&"range_stage", "Reichweite", str(CombatDistanceScale.stage_from_world(therapy_range))),
-		_stat_row(&"projectiles", "Projektile", str(therapy_projectiles)),
-		_stat_row(&"max_hits", "Max. Treffer", str(therapy_max_hits)),
+		_stat_row(&"damage", "Schaden", _number(resolved_treatment_damage)),
+		_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(resolved_treatment_interval)),
+		_stat_row(&"targets", "Ziele", str(resolved_treatment_targets)),
+		_stat_row(&"range_stage", "Reichweite", str(CombatDistanceScale.stage_from_world(resolved_treatment_range))),
+		_stat_row(&"projectiles", "Projektile", str(resolved_treatment_projectiles)),
+		_stat_row(&"max_hits", "Max. Treffer", str(resolved_treatment_hits)),
 	]
 	_append_damage_type_rows(treatment_rows, prepared_treatment.damage_profile if prepared_treatment != null else null)
 	sections.append(StatSectionViewModel.create(StringName("treatment:%s" % String(treatment_id)), treatment_title, treatment_rows))
@@ -396,8 +408,9 @@ func stat_sections(
 			ability_rows.append(_stat_row(StringName("%s_stage" % String(parameter_id)), "Radius" if parameter_id == &"radius" else "Reichweite", str(CombatDistanceScale.stage_from_world(world_value))))
 		sections.append(StatSectionViewModel.create(StringName("ability:%d:%s" % [slot, String(ability.id)]), ability.display_name, ability_rows))
 	if immune_level > 0:
+		var resolved_cell_damage := run_build_state.value(RunBuildState.DEFENSE_CELL_DAMAGE, immune_damage, PackedStringArray(["defense_cell"])) if run_build_state != null else immune_damage
 		sections.append(StatSectionViewModel.create(&"ability:run:defense_cells", "Abwehrzellen", [
-			_stat_row(&"damage", "Schaden", _number(immune_damage)),
+			_stat_row(&"damage", "Schaden", _number(resolved_cell_damage)),
 			_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(immune_interval())),
 			_stat_row(&"projectiles", "Projektile", str(immune_cell_count())),
 			_stat_row(&"radius_stage", "Radius", str(CombatDistanceScale.stage_from_world(immune_radius()))),

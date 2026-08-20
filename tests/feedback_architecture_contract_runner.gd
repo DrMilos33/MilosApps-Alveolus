@@ -99,6 +99,12 @@ func _test_stat_sections_and_headings() -> void:
 	var serialized := str(sections[1].rows()) + str(sections[2].rows()) + str(sections[3].rows())
 	_true(serialized.findn("px") < 0 and serialized.findn("pixel") < 0, "ViewModel-Daten exponieren keine Pixel- oder px-Einheit")
 	_true(serialized.contains("16") and not serialized.contains("Stufe 16"), "Behandlungsreichweite liefert UI-seitig nur die Stufenzahl")
+	_true(stats.apply_upgrade(_upgrade(&"potency")), "Ein allgemeiner Behandlungsausbau wird auf den Live-Build angewandt")
+	_true(stats.apply_upgrade(_upgrade(&"precision_refinement")), "Ein behandlungsspezifischer Ausbau wird auf denselben Live-Build angewandt")
+	_true(stats.apply_upgrade(_upgrade(&"burst_effect")), "Ein Aktivfähigkeitsausbau wird auf den Live-Build angewandt")
+	var live_sections := stats.stat_sections(82.0, 100.0, 7.0, 12.0)
+	_equal(_section_value(live_sections, &"treatment:treatment_precision", &"damage"), "23", "Pausenwerte zeigen den aktuell ausgebauten Impulsschaden statt den Run-Startwert")
+	_equal(_section_value(live_sections, &"ability:0:ability_defense_burst", &"damage"), "8", "Pausenwerte zeigen den aktuell ausgebauten Stoßschaden statt den Katalogbasiswert")
 	var potency := _upgrade(&"potency")
 	_equal(potency.heading_component_id(treatment.id), treatment.id, "Allgemeines Behandlungsupgrade folgt dynamisch der vorbereiteten Behandlung")
 	_equal(potency.resolved_component_name(treatment), "Impuls", "UI erhält nur den aufgelösten Komponentennamen")
@@ -160,6 +166,16 @@ func _upgrade(id: StringName) -> UpgradeDefinition:
 		if definition.id == id:
 			return definition
 	return null
+
+
+func _section_value(sections: Array[StatSectionViewModel], section_id: StringName, row_id: StringName) -> String:
+	for section in sections:
+		if section == null or section.id() != section_id:
+			continue
+		for row in section.rows():
+			if StringName(row.get("id", &"")) == row_id:
+				return String(row.get("value", ""))
+	return ""
 
 
 func _true(condition: bool, message: String) -> void:

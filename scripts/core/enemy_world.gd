@@ -12,16 +12,19 @@ var _crowd_avatar: TherapyAvatar
 var _crowd_grid := CombatSpatialGrid.new()
 var _crowd_candidates := PackedInt64Array()
 var _maximum_body_radius: float = 72.0
+var _maximum_crowd_radius: float = 97.2
 var _crowd_phase: int = 0
 
-const ENEMY_SPACING_FACTOR := 1.18
 const AVATAR_SPACING_FACTOR := 0.84
 const MAX_CROWD_NEIGHBORS := 6
 const MAX_AVATAR_NEIGHBORS := 12
 const SMALL_ENEMY_ID := &"pneumococcus"
-const APPROACH_LANE_DISTANCE := 300.0
-const MAX_APPROACH_BIAS := 0.38
+const CROWD_ANTICIPATION_DISTANCE := 12.0
+const MAX_CROWD_RADIUS_FACTOR := 1.35
+const APPROACH_LANE_DISTANCE := 340.0
+const MAX_APPROACH_BIAS := 0.44
 const MIN_CROWDED_SPEED := 0.42
+const CROWD_GRID_CELL_SIZE := 64.0
 
 func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorld:
 	combat_capacity = runtime_capacity if runtime_capacity != null else CombatCapacity.defaults()
@@ -48,7 +51,8 @@ func configure_crowd_collision(
 	_crowd_topology = arena_topology
 	_crowd_avatar = avatar_node
 	_maximum_body_radius = maxf(maximum_body_radius, 1.0)
-	_crowd_grid.configure(arena_topology, CombatSpatialGrid.DEFAULT_CELL_SIZE)
+	_maximum_crowd_radius = _maximum_body_radius * MAX_CROWD_RADIUS_FACTOR
+	_crowd_grid.configure(arena_topology, CROWD_GRID_CELL_SIZE)
 	return self
 
 func register_enemy(enemy: Node, critical: bool = false, disable_automatic_physics: bool = true) -> int:
@@ -124,7 +128,8 @@ func _prepare_crowd_steering() -> void:
 	var strongest_avatar_overlap := 0.0
 	# Blend bounded local separation into each enemy's next movement vector. The
 	# uniform grid and neighbor cap preserve the mass-entity budget. Each enemy
-	# refreshes at 30 Hz while locomotion remains at the fixed 60 Hz; steering is
+	# refreshes at 20 Hz while locomotion remains at the fixed 60 Hz; the 12-world-
+	# point prediction margin covers the two intervening movement ticks. Steering is
 	# deliberately retained for the intervening tick instead of snapping positions.
 	for slot_value in _active_slots:
 		var slot := int(slot_value)
@@ -133,16 +138,19 @@ func _prepare_crowd_steering() -> void:
 		var enemy := _typed_enemies[slot]
 		if enemy == null or not enemy.is_targetable() or enemy.definition == null:
 			continue
-		if (slot & 1) != _crowd_phase:
+		if posmod(slot, 3) != _crowd_phase:
 			continue
+		# Six local occupants cover an ordinary surround arc while
+		# keeping the 600-entity stress path strictly bounded. The predictive
+		# margin prevents normal spawns from reaching a deeper stacked state.
 		_crowd_candidates = _crowd_grid.query_circle_candidates_limited(
 			enemy.global_position,
-			(enemy.definition.radius + _maximum_body_radius) * ENEMY_SPACING_FACTOR,
+			enemy.crowd_radius() + _maximum_crowd_radius + CROWD_ANTICIPATION_DISTANCE,
 			MAX_CROWD_NEIGHBORS,
 			_crowd_candidates
 		)
 		var separation := Vector2.ZERO
-		var strongest_overlap := 0.0
+		var strongest_pressure := 0.0
 		for other_handle in _crowd_candidates:
 			var other_slot := EntityHandle.slot(other_handle)
 			if other_slot < 0 or other_slot == slot or other_slot >= _typed_enemies.size() or _retiring[other_slot] != 0:
@@ -151,19 +159,28 @@ func _prepare_crowd_steering() -> void:
 			if other == null or not other.is_targetable() or other.definition == null:
 				continue
 			var delta := _crowd_topology.shortest_delta(enemy.global_position, other.global_position)
-			var minimum_distance := (enemy.definition.radius + other.definition.radius) * ENEMY_SPACING_FACTOR
+			var preferred_distance := enemy.crowd_radius() + other.crowd_radius()
+			var influence_distance := preferred_distance + CROWD_ANTICIPATION_DISTANCE
 			var distance_squared := delta.length_squared()
-			if distance_squared >= minimum_distance * minimum_distance:
+			if distance_squared >= influence_distance * influence_distance:
 				continue
 			var distance := sqrt(maxf(distance_squared, 0.000001))
 			var away := -delta / distance if distance_squared > 0.000001 else _overlap_axis(slot, other_slot)
-			var overlap := 1.0 - distance / maxf(minimum_distance, 0.001)
-			strongest_overlap = maxf(strongest_overlap, overlap)
+			# Separation fades in before the personal-space envelopes touch. This
+			# continuous pressure removes the old touch -> repel -> re-enter cycle.
+			var anticipation := clampf(
+				(influence_distance - distance) / CROWD_ANTICIPATION_DISTANCE,
+				0.0,
+				1.0
+			)
+			var penetration := maxf(0.0, 1.0 - distance / maxf(preferred_distance, 0.001))
+			strongest_pressure = maxf(strongest_pressure, clampf(anticipation + penetration, 0.0, 1.0))
 			var weight := 0.25 if enemy.definition.is_boss and not other.definition.is_boss else 1.0
-			# Once the preferred envelopes touch, separation must be strong enough
-			# to beat the common center-seeking direction. Smoothing happens on the
-			# entity, so this creates spacing without a positional correction pop.
-			separation += away * (0.9 + overlap * 1.8) * weight
+			# In a symmetric ring the lateral components of two neighbors cancel
+			# and only a small radial component remains. A three-to-one predictive
+			# weight lets that remainder beat the common center-seeking vector before
+			# contact, while InfectionEnemy still caps the final steering magnitude.
+			separation += away * (anticipation * 3.0 + penetration * 2.4) * weight
 
 		var avatar_delta := _crowd_topology.shortest_delta(enemy.global_position, _crowd_avatar.global_position)
 		var avatar_minimum := (TherapyAvatar.BODY_RADIUS + enemy.definition.radius) * AVATAR_SPACING_FACTOR
@@ -183,10 +200,10 @@ func _prepare_crowd_steering() -> void:
 			# exact same center line. It remains subordinate to the chase direction,
 			# so enemies still reach contact instead of orbiting indefinitely.
 			separation += toward_avatar.orthogonal() * _approach_lane_bias(slot) * lane_strength
-		var crowded_speed := lerpf(1.0, MIN_CROWDED_SPEED, clampf(strongest_overlap * 1.6, 0.0, 1.0))
+		var crowded_speed := lerpf(1.0, MIN_CROWDED_SPEED, strongest_pressure)
 		enemy.set_crowd_steering(separation, crowded_speed)
 
-	_crowd_phase = 1 - _crowd_phase
+	_crowd_phase = (_crowd_phase + 1) % 3
 	_crowd_candidates = _crowd_grid.query_circle_candidates_limited(
 		_crowd_avatar.global_position,
 		TherapyAvatar.BODY_RADIUS + _maximum_body_radius,
