@@ -10,12 +10,15 @@ signal boss_phase_changed(phase: int)
 signal materialized(enemy: InfectionEnemy)
 signal damage_applied(enemy: InfectionEnemy, amount: float, source: StringName)
 signal visual_release_requested(enemy: InfectionEnemy, generation: int)
+signal stun_changed(enemy: InfectionEnemy, stunned: bool)
 
 const SPAWN_TELEGRAPH_SECONDS := 0.55
 const SPAWN_MATERIALIZE_SECONDS := 0.15
 const SPAWN_TOTAL_SECONDS := SPAWN_TELEGRAPH_SECONDS + SPAWN_MATERIALIZE_SECONDS
 const DEATH_SECONDS := 0.0
 const HIT_REACTION_SECONDS := 0.09
+const DEFAULT_KNOCKBACK_SECONDS := 0.28
+const DEFAULT_STUN_SECONDS := 1.0
 
 var definition: EnemyDefinition
 var target: TherapyAvatar
@@ -57,6 +60,12 @@ var _arena_min: Vector2 = Vector2.ZERO
 var _arena_max: Vector2 = Vector2.ZERO
 var _arena_size: Vector2 = Vector2.ZERO
 var _arena_half_size: Vector2 = Vector2.ZERO
+var _stun_remaining: float = 0.0
+var _knockback_elapsed: float = 0.0
+var _knockback_duration: float = 0.0
+var _knockback_distance: float = 0.0
+var _knockback_applied_distance: float = 0.0
+var _knockback_direction: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -101,6 +110,8 @@ func configure(
 	status_contact_multipliers.clear()
 	_cached_status_speed_multiplier = 1.0
 	_cached_status_contact_multiplier = 1.0
+	_stun_remaining = 0.0
+	_reset_knockback()
 	detailed_visual_required = definition.is_boss or definition.id == &"minor_focus"
 	_configure_visual()
 	reset_visual_snapshot()
@@ -128,6 +139,8 @@ func recycle() -> void:
 	status_contact_multipliers.clear()
 	_cached_status_speed_multiplier = 1.0
 	_cached_status_contact_multiplier = 1.0
+	_stun_remaining = 0.0
+	_reset_knockback()
 	visual_motion_initialized = false
 
 func is_targetable() -> bool:
@@ -140,6 +153,10 @@ func combat_resistance_profile() -> ResistanceProfile:
 
 func combat_defense() -> float:
 	return runtime_defense
+
+
+func is_stunned() -> bool:
+	return activation_active and _stun_remaining > 0.0
 
 func current_handle() -> Dictionary:
 	return {
@@ -230,6 +247,15 @@ func step_fixed(delta: float) -> void:
 	if definition == null or not is_instance_valid(target):
 		return
 	contact_cooldown = maxf(0.0, contact_cooldown - delta)
+	var stunned_before := _stun_remaining > 0.0
+	_stun_remaining = maxf(0.0, _stun_remaining - delta)
+	if stunned_before and _stun_remaining <= 0.0:
+		stun_changed.emit(self, false)
+	if _knockback_duration > 0.0:
+		_step_knockback(delta)
+		return
+	if _stun_remaining > 0.0:
+		return
 	var to_target := target.global_position - global_position
 	if _arena_size.x > 0.0:
 		if to_target.x > _arena_half_size.x:
@@ -292,6 +318,67 @@ func apply_displacement(offset: Vector2) -> void:
 	if topology != null:
 		global_position = topology.wrap_position(global_position)
 	reset_visual_motion()
+
+
+func apply_knockback(
+	direction: Vector2,
+	distance: float,
+	duration: float = DEFAULT_KNOCKBACK_SECONDS,
+	stun_duration: float = DEFAULT_STUN_SECONDS
+) -> void:
+	if direction.length_squared() <= 0.0001 or distance <= 0.0 or dying or spawn_timer > 0.0:
+		return
+	var was_stunned := is_stunned()
+	_knockback_direction = direction.normalized()
+	_knockback_distance = distance
+	_knockback_applied_distance = 0.0
+	_knockback_elapsed = 0.0
+	_knockback_duration = maxf(duration, 0.05)
+	_stun_remaining = maxf(_stun_remaining, maxf(stun_duration, _knockback_duration))
+	if not was_stunned:
+		stun_changed.emit(self, true)
+
+
+func apply_crowd_correction(offset: Vector2) -> void:
+	if offset.length_squared() <= 0.000001 or dying or spawn_timer > 0.0:
+		return
+	global_position += offset
+	if topology != null:
+		var wrapped := topology.wrap_position(global_position)
+		if not wrapped.is_equal_approx(global_position):
+			global_position = wrapped
+			reset_visual_motion()
+			return
+	visual_current_position = global_position
+
+
+func _step_knockback(delta: float) -> void:
+	_knockback_elapsed = minf(_knockback_elapsed + delta, _knockback_duration)
+	var progress := clampf(_knockback_elapsed / maxf(_knockback_duration, 0.001), 0.0, 1.0)
+	var eased_progress := 1.0 - pow(1.0 - progress, 3.0)
+	var resolved_distance := _knockback_distance * eased_progress
+	var step_distance := maxf(0.0, resolved_distance - _knockback_applied_distance)
+	_knockback_applied_distance = resolved_distance
+	global_position += _knockback_direction * step_distance
+	if topology != null:
+		var wrapped := topology.wrap_position(global_position)
+		if not wrapped.is_equal_approx(global_position):
+			global_position = wrapped
+			reset_visual_motion()
+		else:
+			visual_current_position = global_position
+	else:
+		visual_current_position = global_position
+	if _knockback_elapsed >= _knockback_duration:
+		_reset_knockback()
+
+
+func _reset_knockback() -> void:
+	_knockback_elapsed = 0.0
+	_knockback_duration = 0.0
+	_knockback_distance = 0.0
+	_knockback_applied_distance = 0.0
+	_knockback_direction = Vector2.ZERO
 
 func _begin_visual_step() -> void:
 	if not visual_motion_initialized:

@@ -75,6 +75,7 @@ func _test_immutable_view_model() -> RunHUDViewModel:
 	_check(view_model.ability_at(0).title() == "Fokusfeld" and view_model.ability_at(1).title() == "Notfallhilfe", "Fähigkeiten werden unabhängig von der Eingabereihenfolge nach Slot normalisiert")
 	_check(view_model.ability_at(0).effect_text() == "Priorisiert Ziele und verstärkt die Behandlung im Zielgebiet.", "Fähigkeitswirkung wird präsentationsfertig und nur lesbar kopiert")
 	_check(view_model.ability_at(0).facts_text() == "Abklingzeit: 10 s\nRadius: 4", "Fähigkeit stellt ausschließlich strukturierte Fakten ohne interne Weltmaße bereit")
+	_check(view_model.ability_at(0).icon_fact_rows().size() == 1 and view_model.ability_at(0).icon_fact_rows()[0].value == "100 %", "Schadenstyp bleibt als reine Icon-Wert-Zeile getrennt von Textfakten")
 	_check(view_model.ability_at(0).targeting() and view_model.ability_at(0).status_text() == "Ziel wählen", "Targeting besitzt Vorrang vor dem Bereitstatus")
 	_check(is_equal_approx(view_model.ability_at(1).cooldown_progress(), 0.4), "Cooldownfortschritt wird aus kopierten Presenterwerten berechnet")
 	_check(view_model.ability_at(-1) == null and view_model.ability_at(2) == null, "Ungültige Fähigkeitsslots werden sicher abgewiesen")
@@ -221,6 +222,7 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 		hover_payload.get("title", "") == "Fokusfeld"
 		and hover_payload.get("body", "") == "Priorisiert Ziele und verstärkt die Behandlung im Zielgebiet."
 		and hover_payload.get("meta", "") == "Abklingzeit: 10 s\nRadius: 4"
+		and (hover_payload.get("icon_rows", []) as Array).size() == 1
 		and StringName(String(hover_payload.get("icon_kind", ""))) == &"",
 		"Fähigkeitstooltip verbindet Namen, Kernwirkung und strukturierte Fakten"
 	)
@@ -418,6 +420,7 @@ func _ability_rows() -> Array:
 			"fact_rows": [
 				{"label": "Abklingzeit", "value": "10 s"},
 				{"label": "Radius", "value": "4"},
+				{"label": "", "value": "100 %", "icon_kind": &"damage_water", "accessible_label": "Wasserschaden"},
 			],
 			"targeting": true,
 			"key_glyph_text": "Q",

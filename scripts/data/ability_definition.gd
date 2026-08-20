@@ -76,10 +76,10 @@ static func catalog() -> Dictionary:
 			"Stellt 14 Leben wieder her und gewährt 8 Schild."
 		),
 		&"ability_defense_burst": create(
-			&"ability_defense_burst", "idk name stoß", TargetMode.CURSOR_AREA, 14.0, &"defense_burst",
-			{"damage": 25.0, "radius": 150.0, "knockback": 120.0}, 50,
+			&"ability_defense_burst", "Stoß", TargetMode.CURSOR_AREA, 14.0, &"defense_burst",
+			{"damage": 0.0, "radius": 150.0, "knockback": 120.0, "stun_duration": 1.0}, 50,
 			PackedStringArray(["active", "defense", "area", "control"]),
-			"25 Schaden und starker Rückstoß im Zielbereich.", "",
+			"Stößt Gegner sichtbar zurück und betäubt sie für 1 Sekunde.", "",
 			DamageProfile.single(&"ability_defense_burst_damage", &"earth")
 		),
 		&"ability_treatment_line": create(

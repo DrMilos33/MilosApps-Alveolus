@@ -27,7 +27,7 @@ static func definitions() -> Array[DamageTypeDefinition]:
 		DamageTypeDefinition.create(&"fire", "Feuer", Type.FIRE),
 		DamageTypeDefinition.create(&"water", "Wasser", Type.WATER),
 		DamageTypeDefinition.create(&"earth", "Erde", Type.EARTH),
-		DamageTypeDefinition.create(&"wind", "Wind", Type.WIND),
+		DamageTypeDefinition.create(&"wind", "Luft", Type.WIND),
 	]
 
 
@@ -64,7 +64,7 @@ static func display_name(id: StringName) -> String:
 		&"fire": return "Feuer"
 		&"water": return "Wasser"
 		&"earth": return "Erde"
-		&"wind": return "Wind"
+		&"wind": return "Luft"
 	return "Unbekannt"
 
 

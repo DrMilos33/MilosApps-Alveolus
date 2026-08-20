@@ -3693,6 +3693,14 @@ func set_result_reward_presentations(presentations: Array[RewardPresentation]) -
 		break
 	_refresh_result_screen()
 
+
+func set_result_guidance(guidance: String) -> void:
+	var clean_guidance := guidance.strip_edges()
+	if clean_guidance.is_empty():
+		return
+	result_detail_text = clean_guidance if result_detail_text.is_empty() else "%s\n%s" % [result_detail_text, clean_guidance]
+	_refresh_result_screen()
+
 func set_result_damage_statistics(statistics: Array[Dictionary]) -> void:
 	var retained: Array[ResultOverlayViewModel.StatViewModel] = []
 	for stat in result_stats_data:

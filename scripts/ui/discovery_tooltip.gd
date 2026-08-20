@@ -6,7 +6,7 @@ signal dismissed
 const PANEL_MIN_WIDTH := 300.0
 const PANEL_MAX_WIDTH := 400.0
 const VIEWPORT_MARGIN := 12.0
-const TARGET_GAP := 56.0
+const TARGET_GAP := 76.0
 const MINIMUM_COPY_VIEWPORT_HEIGHT := 88.0
 
 var definition: DiscoveryDefinition
@@ -197,30 +197,50 @@ func _update_panel_position() -> void:
 	var viewport_size := size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
 		viewport_size = get_viewport_rect().size
-	var right_x := target_position.x + TARGET_GAP
-	var left_x := target_position.x - panel.size.x - TARGET_GAP
-	var fits_right := right_x + panel.size.x <= viewport_size.x - VIEWPORT_MARGIN
-	var fits_left := left_x >= VIEWPORT_MARGIN
-	_compact_sheet_active = not fits_right and not fits_left
+	var target_rect := highlighter.bounds()
+	if target_rect.size.x <= 0.0 or target_rect.size.y <= 0.0:
+		target_rect = Rect2(target_position - Vector2.ONE * 12.0, Vector2.ONE * 24.0)
 	var maximum_x := maxf(VIEWPORT_MARGIN, viewport_size.x - panel.size.x - VIEWPORT_MARGIN)
 	var maximum_y := maxf(VIEWPORT_MARGIN, viewport_size.y - panel.size.y - VIEWPORT_MARGIN)
-	if _compact_sheet_active:
-		# At high UI scales there is no meaningful side for an anchored tooltip.
-		# A centered, blocking sheet is clearer than covering the very object the
-		# connector claims to explain. The target remains bound and is restored as
-		# soon as enough side room becomes available again.
-		panel.position = Vector2(
-			clampf((viewport_size.x - panel.size.x) * 0.5, VIEWPORT_MARGIN, maximum_x),
-			clampf((viewport_size.y - panel.size.y) * 0.5, VIEWPORT_MARGIN, maximum_y)
+	var candidates: Array[Vector2] = [
+		Vector2(target_rect.end.x + TARGET_GAP, target_rect.position.y - panel.size.y - TARGET_GAP),
+		Vector2(target_rect.position.x - panel.size.x - TARGET_GAP, target_rect.position.y - panel.size.y - TARGET_GAP),
+		Vector2(target_rect.end.x + TARGET_GAP, target_rect.end.y + TARGET_GAP),
+		Vector2(target_rect.position.x - panel.size.x - TARGET_GAP, target_rect.end.y + TARGET_GAP),
+	]
+	_compact_sheet_active = false
+	for candidate in candidates:
+		var candidate_rect := Rect2(candidate, panel.size)
+		if candidate.x >= VIEWPORT_MARGIN and candidate.y >= VIEWPORT_MARGIN and candidate_rect.end.x <= viewport_size.x - VIEWPORT_MARGIN and candidate_rect.end.y <= viewport_size.y - VIEWPORT_MARGIN:
+			panel.position = candidate
+			highlighter.visible = highlighter.strength > 0.001 and highlighter.shape != ObjectHighlighter.Shape.NONE
+			return
+	for candidate in candidates:
+		var contained := Vector2(
+			clampf(candidate.x, VIEWPORT_MARGIN, maximum_x),
+			clampf(candidate.y, VIEWPORT_MARGIN, maximum_y)
 		)
-		highlighter.hide()
-		queue_redraw()
-		return
-	var x := right_x if fits_right else left_x
-	panel.position = Vector2(
-		clampf(x, VIEWPORT_MARGIN, maximum_x),
-		clampf(target_position.y - panel.size.y * 0.5, VIEWPORT_MARGIN, maximum_y)
-	)
+		if not Rect2(contained, panel.size).intersects(target_rect):
+			panel.position = contained
+			highlighter.visible = highlighter.strength > 0.001 and highlighter.shape != ObjectHighlighter.Shape.NONE
+			return
+	# On physically tiny viewports choose the farthest corner. This keeps the
+	# explained object as visible as geometry permits and never centers a modal
+	# directly over it.
+	var corners: Array[Vector2] = [
+		Vector2(VIEWPORT_MARGIN, VIEWPORT_MARGIN),
+		Vector2(maximum_x, VIEWPORT_MARGIN),
+		Vector2(VIEWPORT_MARGIN, maximum_y),
+		Vector2(maximum_x, maximum_y),
+	]
+	var farthest := corners[0]
+	var farthest_distance := -1.0
+	for corner in corners:
+		var distance := (corner + panel.size * 0.5).distance_squared_to(target_position)
+		if distance > farthest_distance:
+			farthest_distance = distance
+			farthest = corner
+	panel.position = farthest
 	highlighter.visible = highlighter.strength > 0.001 and highlighter.shape != ObjectHighlighter.Shape.NONE
 
 

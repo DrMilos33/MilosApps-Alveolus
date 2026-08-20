@@ -80,17 +80,17 @@ func _test_build_state() -> void:
 	var build := RunBuildState.from_treatment(treatment)
 	build.add_modifier(ModifierDefinition.create(&"flat", RunBuildState.TREATMENT_DAMAGE, ModifierDefinition.Operation.ADD, 8.0))
 	build.add_modifier(ModifierDefinition.create(&"scale", RunBuildState.TREATMENT_DAMAGE, ModifierDefinition.Operation.MULTIPLY, 1.5))
-	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE), 31.2, "Adds are resolved before multipliers")
+	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE), 32.0, "Gameplay damage resolves to an integer after additions and multipliers")
 	build.add_modifier(ModifierDefinition.create(&"cap", RunBuildState.TREATMENT_DAMAGE, ModifierDefinition.Operation.CLAMP_MAX, 30.0))
 	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE), 30.0, "Upper clamp is deterministic")
 	var precise_only := ModifierDefinition.create(&"tagged", RunBuildState.TREATMENT_DAMAGE, ModifierDefinition.Operation.ADD, 10.0, &"tag_source", PackedStringArray(["precise"]))
 	build.add_modifier(precise_only)
 	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, PackedStringArray(["spread"])), 30.0, "Missing tags exclude a modifier")
 	build.remove_modifier(&"cap")
-	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, treatment.tags), 46.2, "Matching tags apply a modifier")
+	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, treatment.tags), 47.0, "Matching tags apply before the integer gameplay boundary")
 	_assert_equal(build.remove_source(&"tag_source"), 1, "Modifiers can be cleared by source")
 	var preview := ModifierDefinition.create(&"preview", RunBuildState.TREATMENT_INTERVAL, ModifierDefinition.Operation.MULTIPLY, 0.8)
-	_assert_near(build.value_with(preview, treatment.base_interval), 0.656, "Preview uses the same resolver without mutating state")
+	_assert_near(build.value_with(preview, treatment.base_interval), treatment.base_interval * 0.8, "Preview uses the same resolver without mutating state")
 	_assert_true(not build.has_modifier(&"preview"), "Preview modifier is not retained")
 	var reaction_modifier := ModifierDefinition.from_dict(
 		{"stat_id": &"ability_cooldown", "operation": &"multiply", "value": 0.9},
@@ -173,7 +173,7 @@ func _test_abilities() -> void:
 	enemies = [close_enemy]
 	controller.equip(AbilityController.SLOT_Q, abilities[&"ability_defense_burst"])
 	controller.use_slot(AbilityController.SLOT_Q, Vector2(-480.0, 0.0))
-	_assert_near(close_enemy.health, 175.0, "Defense burst deals 25 area damage")
+	_assert_near(close_enemy.health, 200.0, "Stoß starts as pure control without base damage")
 	_assert_near(close_enemy.displacement.length(), 120.0, "Defense burst applies the stronger 120 displacement")
 
 	close_enemy.position = Vector2(-450.0, 0.0)
@@ -209,7 +209,7 @@ func _test_abilities() -> void:
 	)
 	controller.equip(AbilityController.SLOT_Q, fallback_burst)
 	var burst_result := controller.execute_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2(-480.0, 0.0), 1001))
-	_assert_near(float(burst_result.values.damage), 25.0, "Defense-burst fallback uses the current 25 damage contract")
+	_assert_near(float(burst_result.values.damage), 0.0, "Stoß fallback starts at zero damage")
 	_assert_near(burst_result.radius, CombatDistanceScale.world_from_stage(5), "Defense-burst fallback radius comes from central distance stage five")
 
 	close_enemy.health = 200.0

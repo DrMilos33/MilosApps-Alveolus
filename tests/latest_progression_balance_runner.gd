@@ -30,12 +30,12 @@ func _test_integer_and_attack_speed_contract() -> void:
 	_equal(StringName(rhythm.modifiers[0].get("operation", &"")), &"attack_speed_add", "Attack Speed verwendet einen linearen additiven Modifier")
 	var build := RunBuildState.from_treatment(impulse)
 	var preview := build.preview_upgrade(rhythm, 0)
-	_equal(preview.effect_text, "+0,06/s Attack Speed", "Karte nennt den absoluten Attack-Speed-Zuwachs")
-	_equal(preview.before_after_text, "1,04/s  >  1,10/s", "Vorschau rechnet denselben absoluten Zuwachs")
+	_equal(preview.effect_text, "+6 % Attack Speed", "Karte nennt den additiven Attack-Speed-Bonus")
+	_equal(preview.before_after_text, "0 %  >  6 %", "Vorschau zeigt ausschließlich den akkumulierten Bonus")
 	_true(build.apply_upgrade(rhythm, 1), "Erster Attack-Speed-Rang wird angewendet")
-	_near(1.0 / build.value(RunBuildState.TREATMENT_INTERVAL, impulse.base_interval, impulse.tags), 1.0 / impulse.base_interval + 0.06, "Erster Rang addiert exakt 0,06 pro Sekunde")
+	_near(1.0 / build.value(RunBuildState.TREATMENT_INTERVAL, impulse.base_interval, impulse.tags), (1.0 / impulse.base_interval) * 1.06, "Erster Rang erhöht den Basis-Attack-Speed exakt um sechs Prozent")
 	_true(build.apply_upgrade(rhythm, 2), "Zweiter Attack-Speed-Rang wird angewendet")
-	_near(1.0 / build.value(RunBuildState.TREATMENT_INTERVAL, impulse.base_interval, impulse.tags), 1.0 / impulse.base_interval + 0.12, "Zweiter Rang addiert linear statt exponentiell")
+	_near(1.0 / build.value(RunBuildState.TREATMENT_INTERVAL, impulse.base_interval, impulse.tags), (1.0 / impulse.base_interval) * 1.12, "Zweiter Rang addiert linear statt exponentiell")
 
 
 func _test_research_and_intro_rewards() -> void:

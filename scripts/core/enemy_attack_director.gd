@@ -115,7 +115,7 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 		if not is_instance_valid(enemy) or enemy.is_queued_for_deletion():
 			_release_slot(slot)
 			continue
-		if not enemy.is_targetable():
+		if not enemy.is_targetable() or enemy.is_stunned():
 			dense_index += 1
 			continue
 		_shot_timers[slot] -= delta

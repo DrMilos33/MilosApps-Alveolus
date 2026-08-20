@@ -61,10 +61,14 @@ class AbilityFactRowViewModel:
 
 	var _label: String
 	var _value: String
+	var _icon_kind: StringName
+	var _accessible_label: String
 
-	func _init(label_value: String, value_value: String) -> void:
+	func _init(label_value: String, value_value: String, icon_value: StringName = &"", accessible_value: String = "") -> void:
 		_label = label_value.strip_edges()
 		_value = value_value.strip_edges()
+		_icon_kind = icon_value
+		_accessible_label = accessible_value.strip_edges()
 
 	func label() -> String:
 		return _label
@@ -72,11 +76,22 @@ class AbilityFactRowViewModel:
 	func value() -> String:
 		return _value
 
+	func icon_kind() -> StringName:
+		return _icon_kind
+
+	func accessible_label() -> String:
+		return _accessible_label
+
+	func is_icon_row() -> bool:
+		return not _icon_kind.is_empty()
+
 	func formatted_text() -> String:
+		if _label.is_empty():
+			return "%s: %s" % [_accessible_label, _value] if not _accessible_label.is_empty() else _value
 		return "%s: %s" % [_label, _value]
 
 	func duplicate_immutable() -> AbilityFactRowViewModel:
-		return AbilityFactRowViewModel.new(_label, _value)
+		return AbilityFactRowViewModel.new(_label, _value, _icon_kind, _accessible_label)
 
 
 class AbilitySlotViewModel:
@@ -162,8 +177,21 @@ class AbilitySlotViewModel:
 			return _effect_text
 		var lines := PackedStringArray()
 		for row in _fact_rows:
-			lines.append(row.formatted_text())
+			if not row.is_icon_row():
+				lines.append(row.formatted_text())
 		return "\n".join(lines)
+
+	func icon_fact_rows() -> Array[Dictionary]:
+		var result: Array[Dictionary] = []
+		for row in _fact_rows:
+			if not row.is_icon_row():
+				continue
+			result.append({
+				"icon_kind": row.icon_kind(),
+				"value": row.value(),
+				"accessible_label": row.accessible_label(),
+			})
+		return result
 
 	func cooldown_progress() -> float:
 		if not _occupied:
@@ -186,17 +214,23 @@ class AbilitySlotViewModel:
 		for row_value in source:
 			var label_value := ""
 			var value_value := ""
+			var icon_value: StringName = &""
+			var accessible_value := ""
 			if row_value is AbilityFactRowViewModel:
 				var fact_row := row_value as AbilityFactRowViewModel
 				label_value = fact_row.label()
 				value_value = fact_row.value()
+				icon_value = fact_row.icon_kind()
+				accessible_value = fact_row.accessible_label()
 			elif row_value is Dictionary:
 				var fact_data := row_value as Dictionary
 				label_value = String(fact_data.get("label", fact_data.get("name", ""))).strip_edges()
 				value_value = String(fact_data.get("value", "")).strip_edges()
-			if label_value.is_empty() or value_value.is_empty():
+				icon_value = StringName(fact_data.get("icon_kind", &""))
+				accessible_value = String(fact_data.get("accessible_label", "")).strip_edges()
+			if value_value.is_empty() or (label_value.is_empty() and icon_value.is_empty()):
 				continue
-			result.append(AbilityFactRowViewModel.new(label_value, value_value))
+			result.append(AbilityFactRowViewModel.new(label_value, value_value, icon_value, accessible_value))
 		return result
 
 
@@ -565,6 +599,8 @@ func _calculate_content_hash() -> String:
 		for fact in ability.fact_rows():
 			canonical.append(_length_prefixed(fact.label()))
 			canonical.append(_length_prefixed(fact.value()))
+			canonical.append(_length_prefixed(String(fact.icon_kind())))
+			canonical.append(_length_prefixed(fact.accessible_label()))
 	return "|".join(canonical).sha256_text()
 
 

@@ -16,6 +16,7 @@ const PICKUP_BASE_EXTENT := 28.0
 const INVALID_SLOT := -1
 const MULTIMESH_STRIDE_2D := 8
 const MULTIMESH_STRIDE_2D_COLOR := 12
+const STUN_ICON_TEXTURE := preload("res://assets/vendor/kenney_game_icons/star.png")
 
 
 class EnemyRecord:
@@ -30,7 +31,9 @@ class EnemyRecord:
 	var active_index: int = -1
 	var telegraph_index: int = -1
 	var health_bar_index: int = -1
+	var stun_index: int = -1
 	var health_callback: Callable
+	var stun_callback: Callable
 	var previous_position: Vector2
 	var current_position: Vector2
 	var previous_size: Vector2
@@ -91,6 +94,7 @@ var _enemy_records: Dictionary = {}
 var _enemy_record_list: Array[EnemyRecord] = []
 var _enemy_telegraph_records: Array[EnemyRecord] = []
 var _enemy_health_bar_records: Array[EnemyRecord] = []
+var _enemy_stun_records: Array[EnemyRecord] = []
 var _pickup_records: Dictionary = {}
 var _pickup_record_list: Array[PickupRecord] = []
 var _enemy_render_states: Dictionary = {}
@@ -124,6 +128,8 @@ func _process(_delta: float) -> void:
 	if not _enemy_telegraph_records.is_empty():
 		queue_redraw()
 	if not _enemy_health_bar_records.is_empty():
+		queue_redraw()
+	if not _enemy_stun_records.is_empty():
 		queue_redraw()
 
 
@@ -248,6 +254,11 @@ func register_enemy(enemy: InfectionEnemy, force_detailed: bool = false) -> Dict
 	record.health_callback = Callable(self, "_on_enemy_health_changed").bind(enemy, record.generation)
 	if not enemy.health_changed.is_connected(record.health_callback):
 		enemy.health_changed.connect(record.health_callback)
+	record.stun_callback = Callable(self, "_on_enemy_stun_changed").bind(enemy, record.generation)
+	if not enemy.stun_changed.is_connected(record.stun_callback):
+		enemy.stun_changed.connect(record.stun_callback)
+	if enemy.is_stunned():
+		_add_stun_record(record)
 	if not VisualAssetCatalog.has_gameplay_visual(record.visual_id):
 		record.detailed = true
 		_report_unknown_enemy_visual(record.visual_id)
@@ -353,6 +364,7 @@ func clear() -> void:
 		_pickup_batch_node.multimesh.visible_instance_count = 0
 	_enemy_telegraph_records.clear()
 	_enemy_health_bar_records.clear()
+	_enemy_stun_records.clear()
 	_telegraph_was_visible = false
 	queue_redraw()
 
@@ -471,13 +483,34 @@ func _on_enemy_health_changed(
 	queue_redraw()
 
 
+func _on_enemy_stun_changed(
+	_stunned_enemy: InfectionEnemy,
+	stunned: bool,
+	enemy: InfectionEnemy,
+	generation: int
+) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var record := _enemy_records.get(enemy.get_instance_id()) as EnemyRecord
+	if record == null or record.generation != generation:
+		return
+	if stunned:
+		_add_stun_record(record)
+	else:
+		_remove_stun_record(record)
+	queue_redraw()
+
+
 func _release_enemy_record(record: EnemyRecord) -> void:
 	if record == null or _enemy_records.get(record.instance_id) != record:
 		return
 	_remove_telegraph_record(record)
 	_remove_health_bar_record(record)
+	_remove_stun_record(record)
 	if is_instance_valid(record.enemy) and record.health_callback.is_valid() and record.enemy.health_changed.is_connected(record.health_callback):
 		record.enemy.health_changed.disconnect(record.health_callback)
+	if is_instance_valid(record.enemy) and record.stun_callback.is_valid() and record.enemy.stun_changed.is_connected(record.stun_callback):
+		record.enemy.stun_changed.disconnect(record.stun_callback)
 	if not record.detailed:
 		var state := record.batch
 		if state != null:
@@ -578,6 +611,28 @@ func _remove_health_bar_record(record: EnemyRecord) -> void:
 		_enemy_health_bar_records[index] = last
 		last.health_bar_index = index
 	record.health_bar_index = -1
+
+
+func _add_stun_record(record: EnemyRecord) -> void:
+	if record == null or record.stun_index >= 0:
+		return
+	record.stun_index = _enemy_stun_records.size()
+	_enemy_stun_records.append(record)
+
+
+func _remove_stun_record(record: EnemyRecord) -> void:
+	if record == null:
+		return
+	var index := record.stun_index
+	if index < 0 or index >= _enemy_stun_records.size():
+		record.stun_index = -1
+		return
+	var last: EnemyRecord = _enemy_stun_records.back()
+	_enemy_stun_records.pop_back()
+	if index < _enemy_stun_records.size():
+		_enemy_stun_records[index] = last
+		last.stun_index = index
+	record.stun_index = -1
 
 
 func _prune_materialized_telegraphs() -> void:
@@ -1002,6 +1057,17 @@ func _draw() -> void:
 		fill_rect.size.x *= health_fraction
 		draw_rect(fill_rect, Color(AlveolusVisualTheme.CORAL, 0.92 * alpha), true)
 		draw_rect(bar_rect, Color(AlveolusVisualTheme.SKY_DEEP, 0.48 * alpha), false, 1.0)
+	for record in _enemy_stun_records:
+		var enemy := record.enemy
+		if not is_instance_valid(enemy) or not enemy.is_generation_valid(record.generation) or not enemy.is_stunned() or enemy.definition == null:
+			continue
+		var position := to_local(enemy.visual_interpolated_position(fraction))
+		var icon_size := Vector2.ONE * 10.0
+		var icon_position := position + Vector2(-5.0, -enemy.definition.radius - 19.0)
+		if STUN_ICON_TEXTURE != null:
+			draw_texture_rect(STUN_ICON_TEXTURE, Rect2(icon_position, icon_size), false, Color(AlveolusVisualTheme.GOLD, 0.96))
+		else:
+			draw_circle(icon_position + icon_size * 0.5, 4.0, AlveolusVisualTheme.GOLD)
 
 
 func _create_batch(texture: Texture2D, capacity: int, layer: int, uses_colors: bool = true) -> MultiMeshInstance2D:

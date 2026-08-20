@@ -54,7 +54,7 @@ const DAMAGE_TYPE_DISPLAY_NAMES := {
 	&"fire": "Feuer",
 	&"water": "Wasser",
 	&"earth": "Erde",
-	&"wind": "Wind",
+	&"wind": "Luft",
 }
 
 const SCREEN_MARGIN := 24

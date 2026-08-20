@@ -71,6 +71,19 @@ func step_fixed(_delta: float) -> void:
 	else:
 		velocity = Vector2.ZERO
 
+
+func apply_crowd_correction(offset: Vector2) -> void:
+	if offset.length_squared() <= 0.000001:
+		return
+	global_position += offset
+	if topology != null:
+		var wrapped := topology.wrap_position(global_position)
+		if not wrapped.is_equal_approx(global_position):
+			global_position = wrapped
+			reset_physics_interpolation()
+			if camera != null:
+				camera.reset_smoothing()
+
 func _process(delta: float) -> void:
 	var needs_redraw := false
 	var treatment_was_active := treatment_anim_time > 0.0

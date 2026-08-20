@@ -41,7 +41,7 @@ const ENTRIES := {
 	&"fire_damage": {"simple": "Feuer", "medical": "Feuerschaden"},
 	&"water_damage": {"simple": "Wasser", "medical": "Wasserschaden"},
 	&"earth_damage": {"simple": "Erde", "medical": "Erdschaden"},
-	&"wind_damage": {"simple": "Wind", "medical": "Windschaden"},
+	&"wind_damage": {"simple": "Luft", "medical": "Luftschaden"},
 	&"cooldown": {"simple": "Abklingzeit", "medical": "Erholungszeit"},
 	&"boss_phase": {"simple": "Bossphase", "medical": "Belastungsphase des Infektionsherds"},
 	&"pneumococcus": {"simple": "Bakterium", "medical": "Pneumokokke"},
@@ -98,7 +98,7 @@ static func _build_definitions() -> Dictionary:
 	_add(result, &"immune_path", "Nahbereichsangriff durch Abwehrzellen.", "Abwehrzellen umkreisen Doctor Milos. Eine Zelle verursacht nur dann Schaden, wenn sie einen Gegner tatsächlich trifft.", [&"neutrophil_orbit", &"effect"], "", &"neutrophil_orbit")
 	_add(result, &"support_path", "Stellt verlorenes Leben mit der Zeit wieder her.", "Regeneration heilt Doctor Milos regelmäßig. Sie verursacht keinen direkten Schaden an Gegnern.", [&"patient_stability", &"life_regeneration"], "", &"supportive_oxygenation")
 	_add(result, &"shield", "Ein zusätzlicher vorübergehender Puffer.", "Das Schild fängt Schaden ab, bevor das Leben sinkt. Es ist von den maximalen Lebenspunkten getrennt.", [&"patient_stability", &"defense"], "Punkte", &"patient_stability")
-	_add(result, &"finding", "Eine neue Beobachtung während eines Falls.", "Ein abgeschlossener Befund bietet Reaktionen an, die den laufenden Run verändern können.", [&"finding_progress", &"case_trait"], "", &"analysis_pickup")
+	_add(result, &"finding", "Eine neue Beobachtung während eines Falls.", "Befunde zeigen derzeit Platzhalterreaktionen und verändern den laufenden Run noch nicht.", [&"finding_progress", &"case_trait"], "", &"analysis_pickup")
 	_add(result, &"finding_progress", "Der Fortschritt bis zur nächsten Beobachtung.", "Bestimmte Erfahrung, Fähigkeiten und Module beschleunigen den Befund. Bei vollem Fortschritt wird eine Reaktion gewählt.", [&"finding", &"analysis"], "Punkte", &"analysis_pickup")
 	_add(result, &"case_trait", "Eine bekannte Besonderheit des gewählten Falls.", "Das Merkmal ist bereits in der Einsatzplanung sichtbar und hilft bei der Auswahl passender Komponenten.", [&"finding", &"capacity"], "", &"boss_phases")
 	_add(result, &"basic_treatment", "Die ständig automatisch eingesetzte Behandlung.", "Jeder Plan benötigt genau eine Grundbehandlung. Ihre Werte bilden die Basis für Ausbauten im Run.", [&"antibiotic_path", &"interval", &"effect"], "", &"automatic_therapy")
@@ -116,7 +116,7 @@ static func _build_definitions() -> Dictionary:
 	_add(result, &"fire_damage", "Ein offensiver Schadenstyp.", "Feuerschaden wird mit der Feuerresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"water_damage", "Ein offensiver Schadenstyp.", "Wasserschaden wird mit der Wasserresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"earth_damage", "Ein offensiver Schadenstyp.", "Erdschaden wird mit der Erdresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
-	_add(result, &"wind_damage", "Ein offensiver Schadenstyp.", "Windschaden wird mit der Windresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
+	_add(result, &"wind_damage", "Ein offensiver Schadenstyp.", "Luftschaden wird mit der Luftresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"cooldown", "Die Wartezeit nach einer aktiven Fähigkeit.", "Erst nach Ablauf der Abklingzeit kann die Fähigkeit erneut ausgelöst werden.", [&"active_ability", &"treatment_speed"], "Sekunden", &"automatic_therapy")
 	_add(result, &"boss_phase", "Ein Belastungsschub des Infektionsherds.", "Beim Erreichen einer Phasengrenze verändert der Boss den Kampf und kann zusätzliche Bakterien freisetzen.", [&"infection_focus", &"case_trait"], "", &"boss_phases")
 	return result

@@ -271,12 +271,13 @@ func _execute_effect(command: AbilityCommand, definition: AbilityDefinition, tar
 			result.values = {"recovery": recovery, "shield": shield_amount}
 		&"defense_burst":
 			var burst_radius := build.value(RunBuildState.ABILITY_RADIUS, float(values.get("radius", CombatDistanceScale.world_from_stage(5))), definition.tags)
-			var burst_damage := build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 25.0)), definition.tags)
+			var burst_damage := build.value(RunBuildState.ABILITY_DAMAGE, float(values.get("damage", 0.0)), definition.tags)
 			var knockback := build.value(RunBuildState.ABILITY_KNOCKBACK, float(values.get("knockback", 120.0)), definition.tags)
-			result.affected_handles = _damage_circle(target, burst_radius, burst_damage, definition.id, knockback, definition.damage_profile)
+			var stun_duration := float(values.get("stun_duration", 1.0))
+			result.affected_handles = _damage_circle(target, burst_radius, burst_damage, definition.id, knockback, definition.damage_profile, stun_duration)
 			result.radius = burst_radius
 			result.duration = 0.34
-			result.values = {"damage": burst_damage, "knockback": knockback}
+			result.values = {"damage": burst_damage, "knockback": knockback, "stun_duration": stun_duration}
 		&"treatment_line":
 			var line_result := _damage_line(target, values, definition.id, definition.damage_profile)
 			result.direction = line_result.direction
@@ -331,7 +332,8 @@ func _damage_circle(
 	amount: float,
 	source: StringName,
 	knockback: float = 0.0,
-	damage_profile: DamageProfile = null
+	damage_profile: DamageProfile = null,
+	stun_duration: float = 0.0
 ) -> PackedInt64Array:
 	var affected := PackedInt64Array()
 	if combat_query != null:
@@ -339,7 +341,7 @@ func _damage_circle(
 			var enemy: Variant = combat_query.resolve(handle)
 			if not _targetable(enemy):
 				continue
-			_apply_damage_and_displacement(enemy, center, amount, source, knockback, damage_profile)
+			_apply_damage_and_displacement(enemy, center, amount, source, knockback, damage_profile, stun_duration)
 			affected.append(handle)
 		return affected
 	for enemy in _enemies():
@@ -348,7 +350,7 @@ func _damage_circle(
 		var body_radius := _enemy_radius(enemy)
 		if topology.distance_squared(center, enemy.global_position) > pow(radius + body_radius, 2.0):
 			continue
-		_apply_damage_and_displacement(enemy, center, amount, source, knockback, damage_profile)
+		_apply_damage_and_displacement(enemy, center, amount, source, knockback, damage_profile, stun_duration)
 	return affected
 
 func _damage_line(target: Vector2, values: Dictionary, source: StringName, damage_profile: DamageProfile = null) -> Dictionary:
@@ -468,16 +470,21 @@ func _apply_damage_and_displacement(
 	amount: float,
 	source: StringName,
 	knockback: float,
-	damage_profile: DamageProfile = null
+	damage_profile: DamageProfile = null,
+	stun_duration: float = 0.0
 ) -> void:
 	var resolved_amount := amount
 	if _enemy_definition_id(enemy) == &"bacterial_cluster":
 		resolved_amount *= build.value(&"group_area_effect", 1.0)
 	resolved_amount = CombatDamageResolver.resolve_against_enemy(resolved_amount, damage_profile, enemy)
-	enemy.take_damage(resolved_amount, source)
-	if knockback > 0.0 and enemy.has_method("apply_displacement"):
+	if resolved_amount > 0.0:
+		enemy.take_damage(resolved_amount, source)
+	if knockback > 0.0:
 		var direction := topology.shortest_delta(center, enemy.global_position).normalized()
-		enemy.apply_displacement(direction * knockback)
+		if enemy.has_method("apply_knockback"):
+			enemy.apply_knockback(direction, knockback, InfectionEnemy.DEFAULT_KNOCKBACK_SECONDS, stun_duration)
+		elif enemy.has_method("apply_displacement"):
+			enemy.apply_displacement(direction * knockback)
 
 func _complete_failure(
 	command: AbilityCommand,

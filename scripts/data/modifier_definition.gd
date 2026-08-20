@@ -68,7 +68,7 @@ static func operation_from_id(operation_id: StringName) -> Operation:
 			return Operation.CLAMP_MIN
 		&"clamp_max", &"maximum":
 			return Operation.CLAMP_MAX
-		&"attack_speed_add":
+		&"attack_speed_add", &"attack_speed_percent_add":
 			return Operation.ATTACK_SPEED_ADD
 	return Operation.ADD
 

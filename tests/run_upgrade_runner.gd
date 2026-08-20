@@ -89,9 +89,9 @@ func _test_active_preview_application() -> void:
 	var effect := _find(definitions, &"burst_effect")
 	var preview := stats.preview_upgrade(effect)
 	_assert_equal(preview.effect_text, "+8 Schaden", "Active card shows the exact effect delta")
-	_assert_equal(preview.before_after_text, "25 Schaden  >  33 Schaden", "Active preview uses the selected ability base value")
+	_assert_equal(preview.before_after_text, "0 Schaden  >  8 Schaden", "Stoß damage upgrade starts from the selected ability's zero base")
 	stats.apply_upgrade(effect)
-	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 25.0, burst.tags), 33.0, "Ability controller resolves the same value as the card")
+	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 0.0, burst.tags), 8.0, "Ability controller resolves the same value as the card")
 	var line: AbilityDefinition = AbilityDefinition.catalog()[&"ability_treatment_line"]
 	stats.bind_run_build(build, precision, [burst, line])
 	var line_effect := _find(definitions, &"line_effect")

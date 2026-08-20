@@ -748,6 +748,7 @@ func _ability_info_payload(slot: int) -> Dictionary:
 		"title": ability.title(),
 		"body": effect if not effect.is_empty() else facts,
 		"meta": facts if not facts.is_empty() and facts != effect else "",
+		"icon_rows": ability.icon_fact_rows(),
 		"icon_kind": &"",
 		"accent": AlveolusVisualTheme.TURQUOISE if ability.ready() else AlveolusVisualTheme.COBALT,
 		"maximum_width": 244.0,

@@ -9,7 +9,7 @@ func _init() -> void:
 
 
 func _run() -> void:
-	_test_case_one_boss_contract()
+	_test_case_two_boss_contract()
 	await _test_generation_safe_attack_director()
 	await _test_hostile_projectile_geometry()
 	if failures == 0:
@@ -20,12 +20,12 @@ func _run() -> void:
 		quit(1)
 
 
-func _test_case_one_boss_contract() -> void:
+func _test_case_two_boss_contract() -> void:
 	var levels := ContentCatalog.level_definitions()
-	var first_case := levels[1] as LevelDefinition
-	_near(first_case.boss_speed_multiplier, 1.35, "Der erste Boss besitzt den datengetriebenen Geschwindigkeitsfaktor")
-	_equal(first_case.boss_phase_minions, PackedInt32Array([4, 4]), "Der erste Boss ruft in beiden Phasen vier Adds")
-	var config := RunConfig.from_level(first_case)
+	var second_case := levels[2] as LevelDefinition
+	_near(second_case.boss_speed_multiplier, 1.35, "Der Fall-2-Boss besitzt den datengetriebenen Geschwindigkeitsfaktor")
+	_equal(second_case.boss_phase_minions, PackedInt32Array([4, 4]), "Der Fall-2-Boss ruft in beiden Phasen vier Adds")
+	var config := RunConfig.from_level(second_case)
 	_near(config.boss_speed_multiplier, 1.35, "RunConfig bewahrt den Bossfaktor")
 	var enemies := ContentCatalog.enemy_definitions()
 	var boss := enemies[&"infection_focus"] as EnemyDefinition
@@ -69,6 +69,10 @@ func _test_generation_safe_attack_director() -> void:
 			reinforcements.append(count)
 	)
 	_true(director.register_enemy(handle, EnemyAttackDirector.Role.BOSS), "Boss wird genau einmal als Schütze registriert")
+	boss.apply_knockback(Vector2.RIGHT, 1.0, 0.1, 1.0)
+	director.step_fixed(0.65)
+	_equal(shots.size(), 0, "Ein gestunnter Boss feuert keine Projektile und pausiert seinen Angriffstimer")
+	boss.step_fixed(1.01)
 	director.step_fixed(0.65)
 	_equal(shots.size(), 2, "Ein Bossangriff erzeugt exakt zwei Projektile")
 	if shots.size() == 2:

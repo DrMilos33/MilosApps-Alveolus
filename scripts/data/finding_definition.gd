@@ -6,6 +6,7 @@ enum Behavior {
 	ACCELERATION,
 	PRESSURE_SURGES,
 	HIDDEN_NESTS,
+	NONE,
 }
 
 @export var id: StringName

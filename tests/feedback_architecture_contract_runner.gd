@@ -46,7 +46,7 @@ func _test_balance_and_movement_plumbing() -> void:
 	_near(treatments[&"treatment_pierce"].base_damage, 9.0, "Durchdringende Behandlung besitzt 9 Schaden")
 	_near(treatments[&"treatment_pierce"].base_interval, 1.65, "Durchdringende Behandlung besitzt 1,65 Sekunden Intervall")
 	var abilities := AbilityDefinition.catalog()
-	_near(float(abilities[&"ability_defense_burst"].parameters["damage"]), 25.0, "Abwehrstoß besitzt 25 Schaden")
+	_near(float(abilities[&"ability_defense_burst"].parameters["damage"]), 0.0, "Stoß beginnt ohne Schaden")
 	_near(float(abilities[&"ability_defense_burst"].parameters["knockback"]), 120.0, "Abwehrstoß besitzt den stärkeren Rückstoß")
 	_near(float(abilities[&"ability_treatment_line"].parameters["damage"]), 30.0, "Behandlungslinie besitzt 30 Schaden")
 	var enemies := ContentCatalog.enemy_definitions()

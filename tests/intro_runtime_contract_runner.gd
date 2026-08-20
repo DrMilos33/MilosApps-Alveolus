@@ -101,6 +101,14 @@ func _run() -> void:
 	game._force_current_runtime_ui_settings(settings)
 	_check(is_equal_approx(settings.ui_scale, 1.0) and settings.glyph_mode == UISettingsState.GLYPH_KEYBOARD, "Runtime normalizes legacy scale/glyph saves to 100 percent keyboard mode")
 
+	var intro_boss: InfectionEnemy = game.active_boss
+	game.run_session.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	intro_boss.take_damage(intro_boss.health, &"therapy")
+	_check(game.flow_state == GameFlowState.State.RESULT and game.hud.end_overlay.visible, "Der erste Introabschluss zeigt den normalen Rundenergebnis-Screen")
+	_check(game.hud.result_detail_text.contains("Nutze die Forschung für Upgrades im Forschungsgebäude."), "Intro-Ergebnis erklärt den nächsten Forschungsschritt")
+	_check(game.meta.research_points == MetaProgressionState.INTRO_RESEARCH_REWARD, "Intro-Ergebnis vergibt exakt %d Forschung (aktuell %d)" % [MetaProgressionState.INTRO_RESEARCH_REWARD, game.meta.research_points])
+	_check(game.meta.bonus_talent_points == 1, "Intro-Ergebnis vergibt exakt einen direkten Talentpunkt")
+
 	game.queue_free()
 	await process_frame
 	if failures == 0:

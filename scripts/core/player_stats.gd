@@ -125,7 +125,16 @@ func preview_upgrade(definition: UpgradeDefinition) -> UpgradePreview:
 	var level_text := "Stufe %d / %d" % [next_level, definition.max_level]
 	if not definition.modifiers.is_empty():
 		var build := _ensure_run_build()
-		var preview := build.preview_upgrade(definition, current_level)
+		var preview_tags := definition.preview_context_tags
+		var component_id := definition.heading_component_id(prepared_treatment.id if prepared_treatment != null else &"")
+		if prepared_treatment != null and component_id == prepared_treatment.id:
+			preview_tags = prepared_treatment.tags
+		else:
+			for ability in prepared_abilities:
+				if ability != null and component_id == ability.id:
+					preview_tags = ability.tags
+					break
+		var preview := build.preview_upgrade(definition, current_level, preview_tags)
 		preview.presentation_icon_id = definition.resolved_icon_id(prepared_treatment)
 		return preview
 	match definition.effect:
@@ -366,6 +375,7 @@ func stat_sections(
 		_stat_row(&"projectiles", "Projektile", str(therapy_projectiles)),
 		_stat_row(&"max_hits", "Max. Treffer", str(therapy_max_hits)),
 	]
+	_append_damage_type_rows(treatment_rows, prepared_treatment.damage_profile if prepared_treatment != null else null)
 	sections.append(StatSectionViewModel.create(StringName("treatment:%s" % String(treatment_id)), treatment_title, treatment_rows))
 	for slot in range(prepared_abilities.size()):
 		var ability := prepared_abilities[slot]
@@ -377,6 +387,7 @@ func stat_sections(
 		if ability.parameters.has("damage"):
 			var damage := run_build_state.value(RunBuildState.ABILITY_DAMAGE, float(ability.parameters["damage"]), ability.tags) if run_build_state != null else float(ability.parameters["damage"])
 			ability_rows.append(_stat_row(&"damage", "Schaden", _number(damage)))
+			_append_damage_type_rows(ability_rows, ability.damage_profile)
 		for parameter_id in [&"radius", &"range"]:
 			if not ability.parameters.has(parameter_id):
 				continue
@@ -397,6 +408,20 @@ func stat_sections(
 			_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(support_interval())),
 		]))
 	return sections
+
+
+func _append_damage_type_rows(rows: Array[Dictionary], profile: DamageProfile) -> void:
+	if profile == null:
+		return
+	for type_id in DamageTypeCatalog.ALL_IDS:
+		var weight := profile.weight_for_type(type_id)
+		if weight <= 0.0001:
+			continue
+		rows.append(_stat_row(
+			StringName("damage_type_%s" % String(type_id)),
+			DamageTypeCatalog.display_name(type_id),
+			"%d %%" % roundi(weight * 100.0)
+		))
 
 
 func stat_rows(current_stability: float = -1.0, maximum_stability: float = -1.0, _legacy_movement_speed: float = BASE_MOVEMENT_SPEED) -> Array[Dictionary]:

@@ -31,6 +31,7 @@ var title_label: Label
 var body_label: Label
 var meta_label: Label
 var illustration: TextureRect
+var icon_rows: VBoxContainer
 
 var _registrations: Dictionary = {}
 var _active_source_id := 0
@@ -270,6 +271,12 @@ func _build_card() -> void:
 	body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stack.add_child(body_label)
 
+	icon_rows = VBoxContainer.new()
+	icon_rows.name = "IconRows"
+	icon_rows.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	icon_rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(icon_rows)
+
 	meta_label = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
 	meta_label.name = "Meta"
 	meta_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -321,6 +328,7 @@ func _apply_payload(payload: Dictionary, mode: int) -> void:
 	title_label.visible = not title_label.text.is_empty()
 	body_label.visible = not body_label.text.is_empty()
 	meta_label.visible = not meta_label.text.is_empty()
+	_apply_icon_rows(payload.get("icon_rows", []), accent)
 	var illustration_value: Variant = payload.get("illustration_texture", null)
 	illustration.texture = illustration_value as Texture2D if illustration_value is Texture2D else null
 	illustration.visible = illustration.texture != null
@@ -333,6 +341,37 @@ func _apply_payload(payload: Dictionary, mode: int) -> void:
 	AlveolusUIComponents.apply_surface_role(card, surface_role, accent)
 	var surface_opacity := clampf(float(payload.get("surface_opacity", 1.0)), 0.35, 1.0)
 	_set_surface_opacity(surface_opacity)
+
+
+func _apply_icon_rows(rows_value: Variant, accent: Color) -> void:
+	for child in icon_rows.get_children():
+		icon_rows.remove_child(child)
+		child.queue_free()
+	icon_rows.hide()
+	if not rows_value is Array:
+		return
+	for row_value in rows_value as Array:
+		if not row_value is Dictionary:
+			continue
+		var row_data := row_value as Dictionary
+		var icon_kind := StringName(String(row_data.get("icon_kind", "")))
+		var value := String(row_data.get("value", "")).strip_edges()
+		if icon_kind.is_empty() or value.is_empty():
+			continue
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var row_icon := SimpleIcon.new()
+		row_icon.custom_minimum_size = Vector2(20.0, 20.0)
+		row_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row_icon.configure(icon_kind, accent)
+		row.add_child(row_icon)
+		var value_label := AlveolusUIComponents.label(value, AlveolusVisualTheme.TYPE_HUD_VALUE_LABEL)
+		value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(value_label)
+		row.set_meta(&"accessible_label", String(row_data.get("accessible_label", "")))
+		icon_rows.add_child(row)
+	icon_rows.visible = icon_rows.get_child_count() > 0
 
 
 func _refresh_active_payload(source_id: int) -> void:

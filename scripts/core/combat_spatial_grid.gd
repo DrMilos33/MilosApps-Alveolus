@@ -92,13 +92,22 @@ func move(handle: int, previous_position: Vector2, next_position: Vector2) -> vo
 func query_circle_candidates(center: Vector2, radius: float, output: PackedInt64Array = PackedInt64Array()) -> PackedInt64Array:
 	return _query_box_candidates(center, Vector2.ONE * maxf(radius, 0.0), output)
 
+
+func query_circle_candidates_limited(
+	center: Vector2,
+	radius: float,
+	maximum_candidates: int,
+	output: PackedInt64Array = PackedInt64Array()
+) -> PackedInt64Array:
+	return _query_box_candidates(center, Vector2.ONE * maxf(radius, 0.0), output, maxi(maximum_candidates, 1))
+
 func query_aabb_candidates(rect: Rect2, output: PackedInt64Array = PackedInt64Array()) -> PackedInt64Array:
 	return _query_box_candidates(rect.get_center(), rect.size.abs() * 0.5, output)
 
 func cell_count() -> int:
 	return _cells.size()
 
-func _query_box_candidates(center: Vector2, half_extent: Vector2, output: PackedInt64Array) -> PackedInt64Array:
+func _query_box_candidates(center: Vector2, half_extent: Vector2, output: PackedInt64Array, maximum_candidates: int = -1) -> PackedInt64Array:
 	output.clear()
 	if _cells.is_empty() or topology == null:
 		return output
@@ -127,6 +136,8 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 			_visit_stamps[index] = _query_stamp
 			for handle in _cells[index]:
 				output.append(int(handle))
+				if maximum_candidates > 0 and output.size() >= maximum_candidates:
+					return output
 	return output
 
 func _cell_index(position: Vector2) -> int:

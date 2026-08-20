@@ -1,6 +1,8 @@
 class_name MetaProgressionState
 extends RefCounted
 
+const INTRO_RESEARCH_REWARD := 30
+
 signal research_changed(points: int, claimable: int)
 signal clinic_changed
 signal upgrades_changed
@@ -247,7 +249,7 @@ func set_tutorial_step(key: StringName, completed: bool = true) -> void:
 func grant_intro_completion_rewards() -> bool:
 	if bool(tutorial_status.get(&"intro_completion_rewards", false)):
 		return false
-	research_points += 30
+	research_points += INTRO_RESEARCH_REWARD
 	bonus_talent_points += 1
 	tutorial_status[&"intro_completion_rewards"] = true
 	tutorial_status[&"research_guidance_pending"] = true

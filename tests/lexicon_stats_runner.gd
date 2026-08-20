@@ -35,11 +35,12 @@ func _test_names_and_level_language() -> void:
 
 func _test_active_damage_type_terms() -> void:
 	var expected_ids: Array[StringName] = [&"fire", &"water", &"earth", &"wind"]
-	_check(DamageTypeCatalog.ALL_IDS == expected_ids, "Das sichtbare Lexikon verwendet ausschließlich Feuer, Wasser, Erde und Wind")
+	_check(DamageTypeCatalog.ALL_IDS == expected_ids, "Das sichtbare Lexikon verwendet ausschließlich Feuer, Wasser, Erde und Luft")
 	for type_id in expected_ids:
 		var terminology_id := StringName("%s_damage" % type_id)
 		var definition := TerminologyCatalog.definition(terminology_id)
 		_check(definition != null and not definition.display_name.is_empty(), "%s besitzt einen ausgeschriebenen Lexikonbegriff" % type_id)
+	_check(TerminologyCatalog.simple(&"wind_damage") == "Luft", "Der stabile interne Wind-Typ heißt sichtbar Luft")
 	for retired_id in [&"blood_damage", &"holy_damage", &"undead_damage"]:
 		_check(TerminologyCatalog.definition(retired_id) == null, "%s erscheint nicht mehr als aktiver Lexikonbegriff" % retired_id)
 
@@ -47,14 +48,12 @@ func _test_enemy_and_character_values() -> void:
 	var discoveries := ContentCatalog.discovery_definitions()
 	for id in [&"pneumococcus", &"bacterial_cluster", &"infection_focus"]:
 		var definition: DiscoveryDefinition = discoveries[id]
-		_check(definition.gameplay_text.contains("GRUNDWERTE"), "%s zeigt Grundwerte" % id)
-		_check(definition.gameplay_text.contains("Leben"), "%s zeigt Leben" % id)
-		_check(definition.gameplay_text.contains("Geschwindigkeit"), "%s zeigt Geschwindigkeit" % id)
-		_check(definition.gameplay_text.contains("Schaden"), "%s zeigt Schaden" % id)
+		_check(not definition.gameplay_text.contains("GRUNDWERTE"), "%s hält Grundwerte aus dem Entdeckungsfenster heraus" % id)
+		_check(not definition.gameplay_text.contains(" px"), "%s zeigt im Entdeckungsfenster keine technischen Grundwerte" % id)
 		_check(not definition.gameplay_text.contains("Kontaktschaden"), "%s verwendet keinen veralteten Schadensbegriff" % id)
-		_check(definition.gameplay_text.contains("Erfahrung"), "%s zeigt den Erfahrungsertrag" % id)
+		_check(not definition.gameplay_text.contains("Erfahrung pro"), "%s zeigt im Entdeckungsfenster keinen tabellarischen Erfahrungsertrag" % id)
 	var character: DiscoveryDefinition = discoveries[&"character_stats"]
-	for label in ["Geschwindigkeit", "Leben", "Schaden", "Attack Speed", "Reichweite", "Ziel", "Erfahrungsradius"]:
+	for label in ["Galopp", "Leben", "Schaden", "Attack Speed", "Reichweite", "Ziel", "Erfahrungsradius"]:
 		_check(character.gameplay_text.contains(label), "Arztwerte enthalten %s" % label)
 
 func _test_default_character_entry() -> void:

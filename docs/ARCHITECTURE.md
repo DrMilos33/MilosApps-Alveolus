@@ -261,6 +261,20 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase.
 
+`EnemyWorld` owns a single soft body-separation pass after all enemy movement.
+It rebuilds one `CombatSpatialGrid`, resolves each nearby enemy pair once in
+stable slot order and then resolves avatar overlap from the same grid. Regular
+enemies yield more than the avatar, bosses yield less, and a bounded correction
+per fixed tick preserves crowd flow without hard-locking the player. Entities
+must not add independent collision polling or pairwise O(n²) scans.
+
+Knockback state lives on `InfectionEnemy` and advances inside the existing
+typed EnemyWorld loop. `Stoß` supplies a distance, short eased travel duration
+and one-second stun. While stunned, chase/contact handling and
+`EnemyAttackDirector` projectile scheduling are suspended. `CrowdRenderer`
+tracks only the generation-bound stunned subset and draws the tiny shared CC0
+status icon; it does not introduce per-enemy process owners.
+
 `ArenaBackdrop` precomputes the coral dashed torus seam and its eight corner
 segments during `configure()`. They are part of the existing one-shot static
 SubViewport bake. The viewport returns to `UPDATE_DISABLED`, the short bake

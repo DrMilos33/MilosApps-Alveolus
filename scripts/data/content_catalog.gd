@@ -197,16 +197,9 @@ static func is_discovery_unlocked_by_default(id: StringName) -> bool:
 	return id == &"character_stats"
 
 static func _enemy_values_text(definition: EnemyDefinition, role: String, add_scaling_note: bool = true) -> String:
-	var samples := "%d Erfahrung" % definition.analysis_value
-	var text := "%s.\nGRUNDWERTE\n%s Leben · Galopp %s · %s Schaden · %s." % [
-		role,
-		_number_text(definition.max_health),
-		_number_text(definition.speed),
-		_number_text(definition.base_damage),
-		samples,
-	]
+	var text := "%s." % role
 	if add_scaling_note:
-		text += " Die Werte können je Fall steigen."
+		text += " Ausführliche Werte stehen im Lexikon."
 	return text
 
 static func _number_text(value: float) -> String:
@@ -226,7 +219,7 @@ static func upgrade_definitions() -> Array[UpgradeDefinition]:
 	var treatments: Array[StringName] = [&"treatment_precision", &"treatment_spread", &"treatment_pierce"]
 	return [
 		_run_upgrade(&"potency", "Stärkerer Impuls", "+7 Schaden pro Treffer.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"damage", 7.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 13.0, 0, &"enemy", PackedStringArray(["treatment"])),
-		_run_upgrade(&"rhythm", "Schnellere Impulse", "+0,06 Attack Speed pro Sekunde.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 0.06, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.06, &"tempo", "Attack Speed", "Attack Speed", 0.965, 3, &"", PackedStringArray(["treatment"])),
+		_run_upgrade(&"rhythm", "Schnellere Impulse", "+6 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 0.06, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.06, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])),
 		_run_upgrade(&"penetration", "Mehr Reichweite", "+3 Reichweitenstufen.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"range", 90.0, "Gewebegängigkeit", treatments, [&"treatment", &"range"], RunBuildState.TREATMENT_RANGE, &"add", 90.0, &"distance_stage", "Stufen", "Reichweitenstufen", 480.0, 0, &"enemy", PackedStringArray(["treatment"])),
 		_run_upgrade(&"parallel_sites", "Zusätzliches Ziel", "Ein zusätzliches Ziel je Impuls.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"targets", 1.0, "Parallele Wirkorte", [&"treatment_precision"], [&"precise", &"targets"], RunBuildState.TREATMENT_TARGETS, &"add", 1.0, &"count", "Projektil", "Ziele", 1.0, 0, &"enemy", PackedStringArray(["precise"])),
 		UpgradeDefinition.create(&"neutrophils", "Abwehrzellen", "Zwei Abwehrzellen umkreisen Doctor Milos.", UpgradeDefinition.Path.IMMUNE, 1, &"immune_level", 1.0, "Neutrophile Rekrutierung"),
@@ -243,7 +236,7 @@ static func upgrade_definitions() -> Array[UpgradeDefinition]:
 		_run_upgrade(&"pierce_effect", "Stärkere Linie", "+3 Schaden pro Treffer.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 3.0, "Linienwirkung", [&"treatment_pierce"], [&"piercing", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 9.0, 0, &"enemy", PackedStringArray(["piercing"])),
 
 		# Aktive Eingriffe verbessern nur tatsächlich vorbereitete Q/E-Slots.
-		_run_upgrade(&"burst_effect", "Kräftiger Stoß", "+8 Schaden.", UpgradeDefinition.Path.IMMUNE, 3, &"run_modifier", 8.0, "Akute Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 8.0, &"delta", "Schaden", "Schaden", 25.0, 0, &"enemy", PackedStringArray(["active", "defense"])),
+		_run_upgrade(&"burst_effect", "Stoß", "+8 Schaden.", UpgradeDefinition.Path.IMMUNE, 3, &"run_modifier", 8.0, "Akute Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 8.0, &"delta", "Schaden", "Schaden", 0.0, 0, &"enemy", PackedStringArray(["active", "defense"])),
 		_run_upgrade(&"burst_radius", "Breiter Stoß", "+1 Radiusstufe.", UpgradeDefinition.Path.IMMUNE, 2, &"run_modifier", 30.0, "Ausgedehnte Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"area"], RunBuildState.ABILITY_RADIUS, &"add", 30.0, &"distance_stage", "Stufe", "Radiusstufen", 150.0, 0, &"ability", PackedStringArray(["active", "defense", "area"])),
 		_run_upgrade(&"line_effect", "Stärkerer Lazer", "+10 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 10.0, "Linienverstärkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 10.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])),
 		_run_upgrade(&"line_width", "Breiterer Lazer", "+16 Breite.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"run_modifier", 16.0, "Erweiterte Linie", [&"ability_treatment_line"], [&"active", &"line", &"area"], RunBuildState.ABILITY_WIDTH, &"add", 16.0, &"delta", "Breite", "Breite", 38.0, 0, &"ability", PackedStringArray(["active", "treatment", "line"])),
@@ -293,7 +286,7 @@ static func research_definitions() -> Array[ResearchDefinition]:
 		ResearchDefinition.create(&"unlock_spread_treatment", "Streuimpuls", "Schaltet die streuende Grundbehandlung frei", PackedInt32Array([300]), &"unlock", 1.0).configure_unlock(&"treatment_spread", &"treatment"),
 		ResearchDefinition.create(&"unlock_piercing_treatment", "Durchdringender Impuls", "Schaltet die durchdringende Grundbehandlung frei", PackedInt32Array([500]), &"unlock", 1.0).configure_unlock(&"treatment_pierce", &"treatment"),
 		ResearchDefinition.create(&"movement_training", "Mehr Galopp", "+3 % Galopp je Rang", PackedInt32Array([150, 300, 500]), &"movement_speed_multiplier", 0.03),
-		ResearchDefinition.create(&"unlock_defense_burst", "idk name stoß", "Schaltet idk name stoß frei", PackedInt32Array([30]), &"unlock", 1.0).configure_unlock(&"ability_defense_burst", &"ability"),
+		ResearchDefinition.create(&"unlock_defense_burst", "Stoß", "Schaltet Stoß frei", PackedInt32Array([30]), &"unlock", 1.0).configure_unlock(&"ability_defense_burst", &"ability"),
 		ResearchDefinition.create(&"unlock_treatment_line", "Fetter lazer", "Schaltet Fetter lazer frei", PackedInt32Array([1000]), &"unlock", 1.0).configure_unlock(&"ability_treatment_line", &"ability"),
 	]
 
@@ -304,7 +297,7 @@ static func loadout_module_definitions() -> Dictionary:
 		&"treatment_pierce": LoadoutModuleDefinition.create(&"treatment_pierce", "Durchdringender Impuls", "Durchquert mehrere Gegner in einer Linie.", LoadoutModuleDefinition.Kind.TREATMENT, 2, [&"treatment", &"pierce"], &"unlock_piercing_treatment"),
 		&"ability_focus_field": LoadoutModuleDefinition.create(&"ability_focus_field", "Fokusfeld", "Behandlung im Zielgebiet verursacht 25 % mehr Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"focus", &"control"], &"", true),
 		&"ability_emergency_support": LoadoutModuleDefinition.create(&"ability_emergency_support", "Notfallhilfe", "Stellt 14 Leben wieder her und gewährt 8 Schild.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"support"], &"", true),
-		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "idk name stoß", "25 Schaden und starker Rückstoß im Zielbereich.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"control"], &"unlock_defense_burst"),
+		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Stoß", "Stößt Gegner zurück und betäubt sie für 1 Sekunde. Schaden entsteht erst durch Run-Upgrades.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"control"], &"unlock_defense_burst"),
 		&"ability_treatment_line": LoadoutModuleDefinition.create(&"ability_treatment_line", "Fetter lazer", "30 Schaden in einer durchdringenden Linie.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"pierce"], &"unlock_treatment_line"),
 		&"ability_protection_field": LoadoutModuleDefinition.create(&"ability_protection_field", "Schildfeld", "Gegner im Feld: −35 % Geschwindigkeit und Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control", &"support"], &"unlock_protection_field"),
 		&"ability_sample_pull": LoadoutModuleDefinition.create(&"ability_sample_pull", "Erfahrungszug", "Zieht Erfahrung an und beschleunigt kurz den Befund.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"samples", &"diagnosis"], &"unlock_sample_pull"),
@@ -326,18 +319,18 @@ static func case_trait_definitions() -> Dictionary:
 static func finding_definitions() -> Dictionary:
 	var all_levels: Array[StringName] = [&"localized_focus", &"spreading_infection", &"severe_pneumonia"]
 	return {
-		&"grouping": FindingDefinition.create(&"grouping", "Gruppenbildung", "Die Bakterienlast sammelt sich vermehrt in lokalen Verbänden.", "+18 Prozentpunkte Chance auf Bakteriengruppen bei neuen Wellen.", FindingDefinition.Behavior.GROUPING, 0.18, [&"group_area", &"group_control", &"group_safety"], all_levels),
-		&"hidden_nests": FindingDefinition.create(&"hidden_nests", "Verdeckte Nester", "Kleine zusätzliche Herde halten die lokale Belastung aufrecht.", "Beim Aufdecken erscheinen 2 kleine Herde. Jeder setzt nach 20 Sekunden 4 Bakterien frei, falls er vorher nicht zerstört wird.", FindingDefinition.Behavior.HIDDEN_NESTS, 2.0, [&"nest_damage", &"nest_range", &"nest_samples"], all_levels),
+		&"grouping": FindingDefinition.create(&"grouping", "Gruppenbildung", "Platzhalter für einen später ausgearbeiteten medizinischen Befund.", "Platzhalter · dieser Befund verändert den aktuellen Run nicht.", FindingDefinition.Behavior.NONE, 0.0, [&"group_area", &"group_control", &"group_safety"], all_levels),
+		&"hidden_nests": FindingDefinition.create(&"hidden_nests", "Verdeckte Nester", "Platzhalter für einen später ausgearbeiteten medizinischen Befund.", "Platzhalter · dieser Befund verändert den aktuellen Run nicht.", FindingDefinition.Behavior.NONE, 0.0, [&"nest_damage", &"nest_range", &"nest_samples"], all_levels),
 	}
 
 static func reaction_definitions() -> Dictionary:
 	return {
-		&"group_area": ReactionDefinition.create(&"group_area", &"grouping", "Breiter Schaden", "+20 % Flächenschaden gegen Gruppen.", [{"stat_id": &"group_area_effect", "operation": &"multiply", "value": 1.20}], [&"damage"]),
-		&"group_control": ReactionDefinition.create(&"group_control", &"grouping", "Gruppen bremsen", "+30 % Kontrollwirkung gegen Gruppen.", [{"stat_id": &"group_control", "operation": &"multiply", "value": 1.30}], [&"control"]),
-		&"group_safety": ReactionDefinition.create(&"group_safety", &"grouping", "Sichere Distanz", "25 % weniger Schaden durch Gruppen.", [{"stat_id": &"group_contact", "operation": &"multiply", "value": 0.75}], [&"support"]),
-		&"nest_damage": ReactionDefinition.create(&"nest_damage", &"hidden_nests", "Herde fokussieren", "+25 % Schaden gegen kleine Herde.", [{"stat_id": &"nest_damage", "operation": &"multiply", "value": 1.25}], [&"damage"]),
-		&"nest_range": ReactionDefinition.create(&"nest_range", &"hidden_nests", "Reichweite nutzen", "+20 % Reichweite und +1 Durchdringung.", [{"stat_id": RunBuildState.TREATMENT_RANGE, "operation": &"multiply", "value": 1.20}, {"stat_id": RunBuildState.TREATMENT_MAX_HITS, "operation": &"add", "value": 1.0}], [&"pierce"]),
-		&"nest_samples": ReactionDefinition.create(&"nest_samples", &"hidden_nests", "Nester auswerten", "Kleine Herde geben zusätzliche Erfahrung.", [{"stat_id": &"nest_samples", "operation": &"add", "value": 4.0}], [&"samples"]),
+		&"group_area": ReactionDefinition.create(&"group_area", &"grouping", "Option A", "Platzhalter · noch keine Spielwirkung.", [], [&"damage"]),
+		&"group_control": ReactionDefinition.create(&"group_control", &"grouping", "Option B", "Platzhalter · noch keine Spielwirkung.", [], [&"control"]),
+		&"group_safety": ReactionDefinition.create(&"group_safety", &"grouping", "Option C", "Platzhalter · noch keine Spielwirkung.", [], [&"support"]),
+		&"nest_damage": ReactionDefinition.create(&"nest_damage", &"hidden_nests", "Option A", "Platzhalter · noch keine Spielwirkung.", [], [&"damage"]),
+		&"nest_range": ReactionDefinition.create(&"nest_range", &"hidden_nests", "Option B", "Platzhalter · noch keine Spielwirkung.", [], [&"pierce"]),
+		&"nest_samples": ReactionDefinition.create(&"nest_samples", &"hidden_nests", "Option C", "Platzhalter · noch keine Spielwirkung.", [], [&"samples"]),
 	}
 
 static func choose_upgrades(

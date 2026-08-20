@@ -101,7 +101,7 @@ func add_modifier_dictionary(source_id: StringName, index: int, data: Dictionary
 			operation = ModifierDefinition.Operation.CLAMP_MIN
 		&"clamp_max":
 			operation = ModifierDefinition.Operation.CLAMP_MAX
-		&"attack_speed_add":
+		&"attack_speed_add", &"attack_speed_percent_add":
 			operation = ModifierDefinition.Operation.ATTACK_SPEED_ADD
 	var required_tags := PackedStringArray()
 	for tag in data.get("required_tags", []):
@@ -133,14 +133,25 @@ func apply_upgrade(definition: UpgradeDefinition, level: int) -> bool:
 
 ## Uses a duplicated build plus apply_upgrade(), so this preview cannot drift
 ## from the value that gameplay receives after choosing the card.
-func preview_upgrade(definition: UpgradeDefinition, current_level: int = 0) -> UpgradePreview:
+func preview_upgrade(
+	definition: UpgradeDefinition,
+	current_level: int = 0,
+	resolved_context_tags: PackedStringArray = PackedStringArray()
+) -> UpgradePreview:
 	if definition == null:
 		return UpgradePreview.create("Unbekannter Effekt", "", "")
 	var next_level := current_level + 1
 	var level_text := "Stufe %d / %d" % [next_level, definition.max_level]
 	if definition.preview_stat.is_empty() or definition.modifiers.is_empty():
 		return UpgradePreview.create("Unbekannter Effekt", "", level_text)
-	var tags := definition.preview_context_tags
+	var tags := resolved_context_tags if not resolved_context_tags.is_empty() else definition.preview_context_tags
+	if definition.preview_style == &"tempo":
+		var before_bonus := attack_speed_bonus(definition.preview_stat, tags)
+		var speed_candidate := duplicate_state()
+		if not speed_candidate.apply_upgrade(definition, next_level):
+			return UpgradePreview.create("Unbekannter Effekt", "", level_text)
+		var after_bonus := speed_candidate.attack_speed_bonus(definition.preview_stat, tags)
+		return _format_attack_speed_preview(definition, before_bonus, after_bonus, level_text)
 	var before := value(definition.preview_stat, definition.preview_fallback, tags)
 	var candidate := duplicate_state()
 	if not candidate.apply_upgrade(definition, next_level):
@@ -187,6 +198,14 @@ func modifiers_for(stat: StringName, context_tags: PackedStringArray = PackedStr
 	)
 	return result
 
+
+func attack_speed_bonus(stat: StringName, context_tags: PackedStringArray = PackedStringArray()) -> float:
+	var result := 0.0
+	for definition in modifiers_for(stat, context_tags):
+		if definition.operation == ModifierDefinition.Operation.ATTACK_SPEED_ADD:
+			result += definition.value
+	return maxf(result, 0.0)
+
 ## Resolution order is intentionally fixed: additions, multipliers, the
 ## highest-priority override, then lower/upper clamps. This makes modifier
 ## previews independent of insertion order.
@@ -219,7 +238,10 @@ func value(stat: StringName, fallback: float = 0.0, context_tags: PackedStringAr
 				attack_speed_addition += definition.value
 	resolved = override_value if override_found else (resolved + additive) * multiplier
 	if attack_speed_addition != 0.0 and stat == TREATMENT_INTERVAL:
-		resolved = 1.0 / maxf(1.0 / maxf(resolved, 0.001) + attack_speed_addition, 0.001)
+		# Attack-Speed-Upgrades are accumulated as a bonus on the resolved base
+		# rate. Three +6 % ranks therefore produce exactly +18 %, never a
+		# compounding sequence of interval multipliers.
+		resolved /= maxf(1.0 + attack_speed_addition, 0.001)
 	if minimum > maximum:
 		# A minimum is the safety boundary when contradictory modifiers exist.
 		maximum = minimum
@@ -308,6 +330,27 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 		PackedStringArray(),
 		formatted_before,
 		formatted_after,
+		definition.resolved_icon_id()
+	)
+
+
+func _format_attack_speed_preview(
+	definition: UpgradeDefinition,
+	before_bonus: float,
+	after_bonus: float,
+	level_text: String
+) -> UpgradePreview:
+	var delta_percent := roundi((after_bonus - before_bonus) * 100.0)
+	var before_percent := roundi(before_bonus * 100.0)
+	var after_percent := roundi(after_bonus * 100.0)
+	return UpgradePreview.create(
+		"+%d %% Attack Speed" % delta_percent,
+		"%d %%  >  %d %%" % [before_percent, after_percent],
+		level_text,
+		definition.preview_target,
+		PackedStringArray(),
+		"%d %%" % before_percent,
+		"%d %%" % after_percent,
 		definition.resolved_icon_id()
 	)
 

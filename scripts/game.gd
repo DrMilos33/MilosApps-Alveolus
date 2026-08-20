@@ -295,6 +295,7 @@ func _ready() -> void:
 	avatar.z_index = 5
 	simulation_root.add_child(avatar)
 	avatar.set_physics_process(false)
+	enemy_world.configure_crowd_collision(topology, avatar, BodySizeCatalog.maximum_radius(enemy_definitions))
 	defense_cell_world = DefenseCellWorld.new().configure(topology, avatar, combat_query)
 	defense_cell_world.enemy_hit.connect(_on_defense_cell_hit)
 	treatment_beam_world = TreatmentBeamWorld.new().configure()
@@ -1673,10 +1674,16 @@ func _ability_hud_view(definition: AbilityDefinition) -> Dictionary:
 			damage = build_state.value(RunBuildState.ABILITY_DAMAGE, damage, definition.tags)
 		rows.append({"label": "Schaden", "value": _hud_number(damage)})
 		if definition.damage_profile != null:
-			rows.append({
-				"label": "Schadenstyp",
-				"value": DamageTypeCatalog.display_name(definition.damage_profile.dominant_type_id()),
-			})
+			for type_id in DamageTypeCatalog.ALL_IDS:
+				var weight := definition.damage_profile.weight_for_type(type_id)
+				if weight <= 0.0001:
+					continue
+				rows.append({
+					"label": "",
+					"value": "%d %%" % roundi(weight * 100.0),
+					"icon_kind": AlveolusVisualTheme.damage_type_icon_kind(type_id),
+					"accessible_label": "%s-Schaden" % DamageTypeCatalog.display_name(type_id),
+				})
 	if values.has("recovery"):
 		var recovery := float(values.get("recovery", 0.0))
 		if build_state != null:
@@ -3397,16 +3404,18 @@ func _on_run_finished(success: bool, reason: String) -> void:
 		get_tree().quit(0 if success else 2)
 		return
 	avatar.input_enabled = false
-	if success and selected_level.is_tutorial and not meta.has_completed_level(selected_level.id):
-		meta.register_level_result(selected_level, true, state.elapsed, state.level, defeats)
+	var first_intro_completion := success and selected_level.is_tutorial and not meta.has_completed_level(selected_level.id)
+	var reward := 0
+	var unlocked_new := false
+	if first_intro_completion:
+		unlocked_new = meta.register_level_result(selected_level, true, state.elapsed, state.level, defeats)
 		meta.grant_intro_completion_rewards()
-		_save_meta()
-		_show_campus()
-		return
-	var repeated_intro := selected_level.is_tutorial and meta.has_completed_level(selected_level.id)
-	var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
-	var reward := meta.award_run(success, state.elapsed, state.level, defeats, multiplier)
-	var unlocked_new := meta.register_level_result(selected_level, success, state.elapsed, state.level, defeats)
+		reward = MetaProgressionState.INTRO_RESEARCH_REWARD
+	else:
+		var repeated_intro := selected_level.is_tutorial and meta.has_completed_level(selected_level.id)
+		var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
+		reward = meta.award_run(success, state.elapsed, state.level, defeats, multiplier)
+		unlocked_new = meta.register_level_result(selected_level, success, state.elapsed, state.level, defeats)
 	# Der sichtbare Fallzustand bleibt bei Niederlage und Abbruch unverändert.
 	# Nur ein erfolgreicher Abschluss erzeugt die nächste deterministische
 	# Merkmals-/Befundkombination. Der allererste Sieg selbst hat keine Parameter.
@@ -3417,6 +3426,8 @@ func _on_run_finished(success: bool, reason: String) -> void:
 	_set_flow(GameFlowState.State.RESULT)
 	ui_router.replace_screen(&"result", null, get_viewport().gui_get_focus_owner())
 	hud.show_end(selected_level, success, reason, state.elapsed, state.level, defeats, reward, unlocked_new)
+	if first_intro_completion and hud.has_method("set_result_guidance"):
+		hud.call("set_result_guidance", "Nutze die Forschung für Upgrades im Forschungsgebäude.")
 	if hud.has_method("set_result_reward_presentations"):
 		hud.call("set_result_reward_presentations", result_reward_presentations(reward))
 	if hud.has_method("set_result_damage_statistics"):
@@ -3433,7 +3444,7 @@ func _on_run_finished(success: bool, reason: String) -> void:
 				mastery_cards.append(objective)
 				earned_points += objective.reward_points
 		hud.show_end_mastery(mastery_cards, earned_points, meta.talent_points_earned())
-	if discovery_manager.request(&"research_reward", null):
+	if not first_intro_completion and discovery_manager.request(&"research_reward", null):
 		_try_present_next_discovery()
 
 func _resume_manual_pause() -> void:
