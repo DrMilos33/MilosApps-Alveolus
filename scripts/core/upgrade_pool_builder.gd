@@ -4,6 +4,9 @@ extends RefCounted
 const PREPARED_WEIGHT := 3.0
 const SYNERGY_WEIGHT := 2.0
 const GENERAL_WEIGHT := 1.0
+const COMMON_FREQUENCY := 1.0
+const MAGIC_FREQUENCY := 25.0 / 70.0
+const RARE_FREQUENCY := 5.0 / 70.0
 
 
 static func choose(
@@ -109,7 +112,7 @@ static func _weighted_family_pick(
 			prepared_component_ids,
 			prepared_tags,
 			int(family_counts.get(family_key, 0))
-		)
+		) * _family_rarity_frequency(candidates, family_key, prepared_treatment_id)
 		family_keys.append(family_key)
 		family_weights.append(family_weight)
 		total += family_weight
@@ -142,6 +145,31 @@ static func _weighted_rarity_pick(
 		if cursor <= 0.0:
 			return definition
 	return variants.back()
+
+
+static func rarity_frequency(rarity: UpgradeDefinition.Rarity) -> float:
+	match rarity:
+		UpgradeDefinition.Rarity.MAGIC:
+			return MAGIC_FREQUENCY
+		UpgradeDefinition.Rarity.RARE:
+			return RARE_FREQUENCY
+	return COMMON_FREQUENCY
+
+
+static func _family_rarity_frequency(
+	candidates: Array[UpgradeDefinition],
+	family_key: StringName,
+	prepared_treatment_id: StringName
+) -> float:
+	# A complete Common/Magic/Rare family remains a normal offer family and
+	# resolves its tier through rarity_weight. A singleton Magic or Rare family
+	# is itself less common, so a rare-only projectile card cannot appear as
+	# often as a common-only card.
+	var frequency := 0.0
+	for definition in candidates:
+		if definition.resolved_family_key(prepared_treatment_id) == family_key:
+			frequency = maxf(frequency, rarity_frequency(definition.rarity))
+	return maxf(frequency, RARE_FREQUENCY)
 
 
 static func _erase_family(

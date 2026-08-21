@@ -114,6 +114,12 @@ func _test_visible_settings_and_reduced_motion(hud: GameHUD) -> void:
 	var settings := hud.current_ui_settings.duplicate_settings()
 	_true(hud.settings_scale_option == null, "Das fokussierte Settingsprofil besitzt keine UI-Größenmatrix mehr")
 	_true(hud.settings_glyph_option == null, "Das fokussierte Settingsprofil besitzt keine Eingabemodusmatrix mehr")
+	var discovery_toggle := hud.settings_screen.control_for_setting(&"toggle.show_discovery_info") as CheckButton
+	_true(discovery_toggle != null and discovery_toggle.button_pressed, "Neuigkeiten besitzen einen standardmäßig aktiven Settings-Schalter")
+	discovery_toggle.button_pressed = false
+	_true(not hud.current_ui_settings.show_discovery_info, "Der Schalter deaktiviert pausierende Entdeckungsinfos unmittelbar")
+	discovery_toggle.button_pressed = true
+	_true(hud.current_ui_settings.show_discovery_info, "Entdeckungsinfos lassen sich im selben Screen wieder aktivieren")
 	settings.reduce_motion = true
 	hud.configure_ui_settings(settings)
 	_true(hud.reduced_motion_enabled, "Reduzierte Bewegung wird im HUD unmittelbar aktiviert")

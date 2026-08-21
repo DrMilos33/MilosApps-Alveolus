@@ -321,7 +321,17 @@ fire, water, earth, wind.
 
 `MetaProgressionState.calculate_run_reward()` is the pure reward preview and is
 the only arithmetic used by `award_run()`. A loss preview therefore shares the
-same multiplier, rounding and minimum with the eventual mutation.
+same multiplier, rounding and minimum with the eventual mutation. All positive
+research income uses the central 2.5 gain factor; purchases and refunds do not.
+Run rewards apply `1 + 0.25 * bosses_defeated` once before the single final
+rounding. The one-time intro base grant is 75 for completion or skip and uses
+the same boss multiplier only when a boss was actually defeated.
+
+`UISettingsState.show_discovery_info` is an additive Save-v6 setting with a
+default of `true`. When disabled, `Game` drains requested discoveries through
+`DiscoveryManager.complete_active()` without entering `DISCOVERY_PAUSE`; IDs
+remain unlocked and cannot accumulate into a later modal backlog. It does not
+disable guided intro prompts or campus guidance.
 
 The event-driven intro uses `GameFlowState.State.INTRO_CONFIRMATION` for its two
 blocking explanations. That state pauses both `RunSession` and the scene tree;

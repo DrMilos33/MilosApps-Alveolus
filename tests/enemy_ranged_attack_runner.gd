@@ -37,7 +37,7 @@ func _test_case_two_boss_contract() -> void:
 	_equal(boss.projectile_pattern, &"diamond", "Der Boss verwendet das Rautenmuster")
 	_near(nest.projectile_damage, 2.0, "Der kleine Herd besitzt Projektilschaden")
 	_equal(nest.projectile_pattern, &"normal", "Der kleine Herd verwendet normale Projektile")
-	_near(intro_boss.projectile_damage, 2.0, "Der Intro-Boss besitzt zurückhaltenden Projektilschaden")
+	_near(intro_boss.projectile_damage, 6.0, "Der Intro-Boss besitzt dreifachen Projektil-Basiswert")
 	_near(intro_boss.projectile_interval, 2.6, "Der Intro-Boss feuert im ruhigen Normaltakt")
 	_equal(intro_boss.projectile_pattern, &"normal", "Der Intro-Boss verwendet ausdrücklich das normale Projektil")
 
@@ -53,6 +53,10 @@ func _test_intro_boss_normal_attack() -> void:
 	intro_boss.global_position = Vector2.ZERO
 	intro_boss.configure(ContentCatalog.enemy_definitions()[&"intro_focus"], avatar, topology)
 	intro_boss.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	var position_before_relocation := intro_boss.global_position
+	_true(not intro_boss.can_be_relocated(), "Ein materialisierter Boss bleibt vom Offscreen-Versetzen ausgeschlossen")
+	_true(not intro_boss.relocate_preserving_state(Vector2(420.0, 140.0)), "Die Entity-API lehnt Bossversetzung zusätzlich defensiv ab")
+	_equal(intro_boss.global_position, position_before_relocation, "Eine abgelehnte Bossversetzung verändert seine Position nicht")
 	var handle := world.register_enemy(intro_boss, true)
 	var director := EnemyAttackDirector.new().configure(CombatCapacity.defaults().max_enemies, world.resolve)
 	var shots: Array[Dictionary] = []

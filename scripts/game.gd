@@ -2645,6 +2645,14 @@ func _try_present_next_discovery() -> void:
 		return
 	if flow_state not in [GameFlowState.State.RUNNING, GameFlowState.State.RESULT, GameFlowState.State.DISCOVERY_PAUSE]:
 		return
+	if meta != null and not meta.ui_settings.show_discovery_info:
+		# The setting suppresses only the modal interruption. Discovery progress
+		# remains complete and save-compatible, so re-enabling the option cannot
+		# replay a backlog of old information cards.
+		while not discovery_manager.queue.is_empty():
+			discovery_manager.take_next()
+			discovery_manager.complete_active()
+		return
 	var item := discovery_manager.take_next()
 	if item.is_empty():
 		return
@@ -2723,7 +2731,6 @@ func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss:
 	var intro_role := StringName(intro_enemy_roles.get(enemy, &""))
 	enemies.erase(enemy)
 	defeats += 1
-	_refresh_defeat_research_preview()
 	if enemy.definition != null and enemy.definition.id == &"minor_focus":
 		hidden_nest_timers.erase(enemy)
 		if build_state != null:
@@ -2753,6 +2760,8 @@ func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss:
 			mastery_tracker.record_boss_defeated(state.elapsed if state != null else 0.0)
 		else:
 			_show_active_boss_hud()
+	if state != null and state.active:
+		_refresh_defeat_research_preview()
 	_store_enemy(enemy)
 
 
@@ -3399,7 +3408,14 @@ func _refresh_defeat_research_preview() -> void:
 		return
 	var repeated_intro := selected_level.is_tutorial and meta.has_completed_level(selected_level.id)
 	var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
-	var reward := MetaProgressionState.calculate_run_reward(false, state.elapsed, state.level, defeats, multiplier)
+	var reward := MetaProgressionState.calculate_run_reward(
+		false,
+		state.elapsed,
+		state.level,
+		defeats,
+		multiplier,
+		state.bosses_defeated
+	)
 	hud.update_defeat_research_reward(reward)
 
 
@@ -3533,12 +3549,20 @@ func _on_run_finished(success: bool, reason: String) -> void:
 	var unlocked_new := false
 	if first_intro_completion:
 		unlocked_new = meta.register_level_result(selected_level, true, state.elapsed, state.level, defeats)
-		meta.grant_intro_completion_rewards()
-		reward = MetaProgressionState.INTRO_RESEARCH_REWARD
+		var research_before_intro_reward := meta.research_points
+		meta.grant_intro_completion_rewards(state.bosses_defeated)
+		reward = meta.research_points - research_before_intro_reward
 	else:
 		var repeated_intro := selected_level.is_tutorial and meta.has_completed_level(selected_level.id)
 		var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
-		reward = meta.award_run(success, state.elapsed, state.level, defeats, multiplier)
+		reward = meta.award_run(
+			success,
+			state.elapsed,
+			state.level,
+			defeats,
+			multiplier,
+			state.bosses_defeated
+		)
 		unlocked_new = meta.register_level_result(selected_level, success, state.elapsed, state.level, defeats)
 	# Der sichtbare Fallzustand bleibt bei Niederlage und Abbruch unverändert.
 	# Nur ein erfolgreicher Abschluss erzeugt die nächste deterministische
@@ -3644,6 +3668,7 @@ func _on_intro_skip_confirmed() -> void:
 	_cleanup_run_nodes()
 	avatar.input_enabled = false
 	avatar.hide()
+	meta.grant_intro_completion_rewards()
 	meta.mark_intro_skipped()
 	meta.set_tutorial_step(&"intro_skipped")
 	_save_meta()

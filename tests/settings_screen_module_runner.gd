@@ -45,7 +45,7 @@ func _run() -> void:
 	var wide_options := screen.find_child("DisplayOptionsGrid", true, false) as GridContainer
 	_check(wide_options == null, "Dormante Anzeigeoptionen hinterlassen kein leeres Raster")
 	var wide_toggles := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
-	_check(wide_toggles != null and wide_toggles.columns == 2, "Anzeige ordnet vier Schalter platzsparend in zwei Spalten an")
+	_check(wide_toggles != null and wide_toggles.columns == 2, "Anzeige ordnet die Schalter platzsparend in zwei Spalten an")
 	_check(screen.control_for_setting(&"option.ui_scale") == null, "UI-Größe besitzt kein sichtbares oder fokussierbares Control")
 	_check(screen.control_for_setting(&"option.glyph_mode") == null, "Eingabemodus besitzt kein sichtbares oder fokussierbares Control")
 	_check(screen.control_for_setting(&"binding.ui_info.0") != null, "ui_info besitzt einen zugänglichen ersten Tastaturplatz")
@@ -114,6 +114,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	(screen.control_for_setting(&"audio.master.value") as HSlider).value = 42.0
 	(screen.control_for_setting(&"audio.master.mute") as CheckButton).toggled.emit(true)
 	(screen.control_for_setting(&"toggle.reduce_motion") as CheckButton).toggled.emit(true)
+	(screen.control_for_setting(&"toggle.show_discovery_info") as CheckButton).toggled.emit(false)
 	(screen.control_for_setting(&"binding.ui_info.1") as Button).pressed.emit()
 	(screen.control_for_setting(&"binding.ui_info.0") as Button).pressed.emit()
 	(screen.control_for_setting(&"bindings.reset") as Button).pressed.emit()
@@ -124,7 +125,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	_check(audio_values.size() == 1 and audio_values[0][0] == &"master" and is_equal_approx(audio_values[0][1], 0.42), "Lautstärke emittiert ID und linearen Wert")
 	_check(audio_mutes == [[&"master", true]], "Stummschaltung emittiert einen typisierten Intent")
 	_check(options.is_empty(), "Ausgeblendete Anzeigeoptionen können keinen sichtbaren Intent emittieren")
-	_check(toggles == [[&"reduce_motion", true]], "Schalter emittiert ID und Zustand")
+	_check(toggles == [[&"reduce_motion", true], [&"show_discovery_info", false]], "Schalter emittieren ID und Zustand")
 	_check(bindings == [[&"ui_info", 1], [&"ui_info", 0]], "Binding-Intent enthält Aktion und den ausdrücklich gewählten Tastaturplatz")
 	_check(legacy_bindings == [&"ui_info"], "Der erste Tastaturplatz emittiert weiterhin den kompatiblen Ein-Slot-Intent")
 	_check(reset_count[0] == 1 and new_game_count[0] == 1 and quit_count[0] == 1 and back_count[0] == 1, "Reset, Neues Spiel, Beenden und Zurück bleiben getrennte Intents")
@@ -188,6 +189,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	_check(explanation != null and explanation.text.contains("zwei") and explanation.text.contains("Tastatur"), "Steuerung erklärt die zwei sichtbaren Tastaturplätze ohne Controllertext")
 	for row_name in [
 		"ToggleLayout_reduce_motion",
+		"ToggleLayout_show_discovery_info",
 		"ToggleLayout_show_character_name",
 		"ToggleLayout_confirm_restart",
 	]:
@@ -204,6 +206,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	_check(restart_purpose != null and restart_purpose.text == "Strg+R bestätigen", "Neustartoption erklärt den festen Shortcut direkt in ihrer Zeile")
 	var compact_toggle_labels := {
 		&"reduce_motion": "Animationen reduzieren",
+		&"show_discovery_info": "Neuigkeiten anzeigen",
 		&"run_stats": "Werte im Run",
 		&"show_character_name": "Charaktername anzeigen",
 		&"fullscreen": "Vollbild",
@@ -255,7 +258,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	var visible_binding := _button_caption(binding_button)
 	_check(not visible_binding.contains("Y") and not visible_binding.contains("Gamepad"), "Controllerbelegungen sind in der Settings-Zeile visuell ausgeblendet")
 	var toggle_grid := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
-	for setting_id in [&"reduce_motion", &"run_stats", &"show_character_name", &"fullscreen", &"confirm_restart"]:
+	for setting_id in [&"reduce_motion", &"show_discovery_info", &"run_stats", &"show_character_name", &"fullscreen", &"confirm_restart"]:
 		var toggle := screen.control_for_setting(StringName("toggle.%s" % String(setting_id))) as CheckButton
 		var toggle_row := screen.find_child("ToggleLayout_%s" % String(setting_id), true, false) as HBoxContainer
 		_check(toggle_row != null and toggle_row.get_parent() == toggle_grid, "%s liegt ohne zusätzliche Kachel direkt im Anzeigenraster" % setting_id)
@@ -337,6 +340,7 @@ func _option_fixture() -> Array[SettingsScreenViewModel.OptionSettingViewModel]:
 func _toggle_fixture() -> Array[SettingsScreenViewModel.ToggleSettingViewModel]:
 	var result: Array[SettingsScreenViewModel.ToggleSettingViewModel] = []
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Bewegung reduzieren", false))
+	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Neuigkeiten anzeigen", true))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", true))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Name über dem Charakter", false))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"fullscreen", "Vollbild", false))

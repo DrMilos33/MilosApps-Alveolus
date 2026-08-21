@@ -23,7 +23,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 		LevelDefinition.create(
 			&"intro", 0, "Das Lungenmodell", "Einführung · die Grundlagen", true,
 			0.0, 0.0, 50.0, 1.10, 0.55, 0.55, 0.70, 0.80, 0.50, 0.0, 0.05,
-			0.18, PackedInt32Array(), 1.0,
+			0.09, PackedInt32Array(), 1.0,
 			"Lerne Galopp, Behandlung, Erfahrung und Abwehrzellen kennen.",
 			"Das erste Lungenmodell ist stabilisiert. Die regulären Patientenfälle stehen nun bereit.",
 			"Das Modell blieb instabil. Wiederhole die Einführung in deinem eigenen Tempo."
@@ -82,7 +82,7 @@ static func enemy_definitions() -> Dictionary:
 		).configure_contact_radius(47.0),
 		&"intro_focus": EnemyDefinition.create(
 			&"intro_focus", "Infektionsherd", 2200.0, 30.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
-		).configure_contact_radius(56.0).configure_projectile_attack(2.0, 2.6, &"normal", true)
+		).configure_contact_radius(56.0).configure_projectile_attack(6.0, 2.6, &"normal", true)
 	}
 	return result
 
@@ -226,7 +226,7 @@ static func upgrade_definitions() -> Array[UpgradeDefinition]:
 		_run_upgrade(&"rhythm", "Attack Speed", "+3 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.03, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.03, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
 		_run_upgrade(&"rhythm_magic", "Attack Speed", "+5 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.05, "Beschleunigter Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.05, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
 		_run_upgrade(&"rhythm_rare", "Attack Speed", "+7 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.07, "Hochfrequenter Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.07, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
-		_run_upgrade(&"parallel_sites", "Zusätzliches Projektil", "+1 Projektil.", UpgradeDefinition.Path.ANTIBIOTIC, 5, &"targets", 1.0, "Parallele Wirkorte", [&"treatment_precision"], [&"precise", &"projectiles"], RunBuildState.TREATMENT_PROJECTILES, &"add", 1.0, &"count", "Projektil", "Projektile", 1.0, 0, &"enemy", PackedStringArray(["precise"])).configure_offer(&"projectiles", UpgradeDefinition.Rarity.MAGIC, false, false, 1.0, 0.60),
+		_run_upgrade(&"parallel_sites", "Zusätzliches Projektil", "+1 Projektil.", UpgradeDefinition.Path.ANTIBIOTIC, 5, &"targets", 1.0, "Parallele Wirkorte", [&"treatment_precision"], [&"precise", &"projectiles"], RunBuildState.TREATMENT_PROJECTILES, &"add", 1.0, &"count", "Projektil", "Projektile", 1.0, 0, &"enemy", PackedStringArray(["precise"])).configure_offer(&"projectiles", UpgradeDefinition.Rarity.RARE, false, false, 5.0, 0.60),
 
 		UpgradeDefinition.create(&"neutrophils", "Abwehrzellen", "Zwei Abwehrzellen umkreisen Doctor Milos.", UpgradeDefinition.Path.IMMUNE, 1, &"immune_level", 1.0, "Neutrophile Rekrutierung").configure_offer(&"unlock", UpgradeDefinition.Rarity.RARE, false, false),
 		_run_upgrade(&"phagocytosis", "Abwehrzellenschaden", "+3 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"immune_damage", 3.0, "Effiziente Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),

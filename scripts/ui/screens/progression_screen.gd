@@ -48,6 +48,7 @@ var _research_inline_balance: Label
 var _research_reset_row: HBoxContainer
 var _research_reset_button: Button
 var _research_grid: GridContainer
+var _talent_host: Control
 var _talent_scroll: ScrollContainer
 var _talent_stack: VBoxContainer
 var _talent_inline_balance: Label
@@ -370,14 +371,18 @@ func _build_research_view(parent: VBoxContainer) -> void:
 
 
 func _build_talent_view(parent: VBoxContainer) -> void:
+	_talent_host = Control.new()
+	_talent_host.name = "TalentViewHost"
+	_talent_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_talent_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_talent_host.visible = false
+	parent.add_child(_talent_host)
 	_talent_scroll = ScrollContainer.new()
 	_talent_scroll.name = "TalentScroll"
-	_talent_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_talent_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_talent_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_talent_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_talent_scroll.follow_focus = true
-	_talent_scroll.visible = false
-	parent.add_child(_talent_scroll)
+	_talent_host.add_child(_talent_scroll)
 	_talent_stack = VBoxContainer.new()
 	_talent_stack.name = "TalentContent"
 	_talent_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -392,13 +397,17 @@ func _build_talent_view(parent: VBoxContainer) -> void:
 	_talent_stack.add_child(_talent_inline_balance)
 	_talent_lock_panel = PanelContainer.new()
 	_talent_lock_panel.name = "TalentIntroLock"
-	_talent_lock_panel.theme_type_variation = AlveolusVisualTheme.TYPE_PANEL_INSET
-	_talent_lock_panel.custom_minimum_size.y = 280.0
-	_talent_lock_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_talent_lock_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_talent_lock_panel.add_theme_stylebox_override("panel", AlveolusVisualTheme.surface_role_style(
+		AlveolusVisualTheme.SurfaceRole.MODAL_SHEET,
+		AlveolusVisualTheme.GOLD,
+		AlveolusVisualTheme.CornerTreatment.CARD_6
+	))
 	_talent_lock_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_talent_lock_panel.z_index = 1
 	_talent_lock_panel.set_meta(&"alveolus_component", &"progression_lock")
 	_talent_lock_panel.hide()
-	_talent_stack.add_child(_talent_lock_panel)
+	_talent_host.add_child(_talent_lock_panel)
 	var lock_center := CenterContainer.new()
 	lock_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_talent_lock_panel.add_child(lock_center)
@@ -843,7 +852,7 @@ func _set_selected_tab(tab: StringName) -> void:
 	_research_tab_button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB if research_selected else AlveolusVisualTheme.TYPE_SEGMENTED_TAB
 	_talent_tab_button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB if not research_selected else AlveolusVisualTheme.TYPE_SEGMENTED_TAB
 	_research_scroll.visible = research_selected
-	_talent_scroll.visible = not research_selected
+	_talent_host.visible = not research_selected
 	_balance_label.text = _research_balance_text if research_selected else _talent_balance_text
 	_research_inline_balance.text = _research_balance_text
 	_talent_inline_balance.text = _talent_balance_text
@@ -989,13 +998,12 @@ func _update_responsive_layout() -> void:
 	_research_inline_balance.visible = compact
 	_talent_inline_balance.visible = compact
 	_balance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_talent_stack.move_child(_talent_lock_panel, 1)
 	if compact:
-		_talent_stack.move_child(_talent_grid, 2)
-		_talent_stack.move_child(_talent_reset_row, 3)
-	else:
+		_talent_stack.move_child(_talent_grid, 1)
 		_talent_stack.move_child(_talent_reset_row, 2)
-		_talent_stack.move_child(_talent_grid, 3)
+	else:
+		_talent_stack.move_child(_talent_reset_row, 1)
+		_talent_stack.move_child(_talent_grid, 2)
 	_configure_branch_exits.call_deferred()
 
 

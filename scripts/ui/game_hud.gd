@@ -173,6 +173,7 @@ var campus_buttons: Dictionary = {}
 var campus_research_status: Label
 var campus_clinic_status: Label
 var campus_research_prompt: VBoxContainer
+var campus_research_guidance_arrow: Label
 var practice_overlay: Control
 var practice_screen: PracticeScreen
 var practice_view_revision: int = 0
@@ -751,14 +752,17 @@ func _build_campus() -> Control:
 	campus_research_prompt.name = "ResearchGuidance"
 	campus_research_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	campus_research_prompt.alignment = BoxContainer.ALIGNMENT_CENTER
-	campus_research_prompt.size = Vector2(420.0, 84.0)
+	campus_research_prompt.custom_minimum_size = Vector2(360.0, 92.0)
+	campus_research_prompt.size = Vector2(360.0, 92.0)
 	var guidance_text := _label("Hier kannst du deine Fähigkeiten verbessern", 18, AlveolusVisualTheme.GOLD)
+	guidance_text.custom_minimum_size.x = 336.0
 	guidance_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	guidance_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	campus_research_prompt.add_child(guidance_text)
-	var guidance_arrow := _label("↓", 30, AlveolusVisualTheme.GOLD)
-	guidance_arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	campus_research_prompt.add_child(guidance_arrow)
+	campus_research_guidance_arrow = _label("↘", 30, AlveolusVisualTheme.GOLD)
+	campus_research_guidance_arrow.name = "ResearchGuidanceArrow"
+	campus_research_guidance_arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	campus_research_prompt.add_child(campus_research_guidance_arrow)
 	campus_research_prompt.hide()
 	overlay.add_child(campus_research_prompt)
 	_position_campus_research_guidance()
@@ -855,6 +859,7 @@ func _on_settings_option_changed(setting_id: StringName, selected_index: int) ->
 func _on_settings_toggle_changed(setting_id: StringName, enabled: bool) -> void:
 	match setting_id:
 		&"reduce_motion": _on_settings_reduce_motion(enabled)
+		&"show_discovery_info": _on_settings_discovery_info(enabled)
 		&"run_stats": _on_run_stats_toggle(enabled)
 		&"show_character_name": _on_settings_character_name(enabled)
 		&"fullscreen": _on_settings_fullscreen(enabled)
@@ -887,6 +892,7 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 	]
 	var toggle_settings: Array[SettingsScreenViewModel.ToggleSettingViewModel] = [
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Animationen reduzieren", current_ui_settings.reduce_motion),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Neuigkeiten anzeigen", current_ui_settings.show_discovery_info),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", run_stats_enabled),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Charaktername anzeigen", current_ui_settings.show_character_name),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"fullscreen", "Vollbild", current_ui_settings.fullscreen, not OS.has_feature("web")),
@@ -1029,6 +1035,13 @@ func _on_settings_reduce_motion(enabled: bool) -> void:
 	current_ui_settings.reduce_motion = enabled
 	reduced_motion_enabled = enabled
 	_apply_reduced_motion()
+	_emit_ui_settings_changed()
+
+
+func _on_settings_discovery_info(enabled: bool) -> void:
+	if current_ui_settings == null:
+		return
+	current_ui_settings.show_discovery_info = enabled
 	_emit_ui_settings_changed()
 
 func _on_settings_fullscreen(enabled: bool) -> void:
@@ -1935,7 +1948,7 @@ func _apply_intro_skip_confirmation() -> void:
 	intro_skip_confirmation.apply_view_model(ConfirmationOverlayViewModel.new(
 		intro_skip_confirmation_revision,
 		"Einführung überspringen?",
-		"Fall 1 wird freigeschaltet. Es gibt keine Forschung, keinen Sieg und keinen Versuchseintrag. Die Einführung bleibt wiederholbar.",
+		"Fall 1 wird freigeschaltet und du erhältst %d Forschung. Es gibt keinen Sieg und keinen Versuchseintrag. Die Einführung bleibt wiederholbar." % MetaProgressionState.INTRO_RESEARCH_REWARD,
 		"Intro überspringen",
 		"Zurück",
 		false
@@ -2002,16 +2015,25 @@ func _position_campus_research_guidance() -> void:
 	var research_button := campus_buttons[&"research"] as CampusBuildingCard
 	if research_button == null:
 		return
-	var target_rect := Rect2(research_button.position, research_button.size)
+	var target_control: Control = research_button
 	if research_button.building_sprite != null:
-		target_rect = Rect2(
-			research_button.position + research_button.building_sprite.position,
-			research_button.building_sprite.size
-		)
+		target_control = research_button.building_sprite
+	var target_global_rect := target_control.get_global_rect()
+	var prompt_parent := campus_research_prompt.get_parent() as Control
+	if prompt_parent == null:
+		return
+	var inverse := prompt_parent.get_global_transform().affine_inverse()
+	var local_start := inverse * target_global_rect.position
+	var local_end := inverse * target_global_rect.end
+	var target_rect := Rect2(local_start, local_end - local_start)
 	var prompt_size := campus_research_prompt.size
-	var prompt_x := target_rect.get_center().x - prompt_size.x * 0.5
-	var prompt_y := target_rect.position.y - prompt_size.y - 10.0
-	campus_research_prompt.position = Vector2(prompt_x, maxf(98.0, prompt_y))
+	var available_size := prompt_parent.size
+	var prompt_x := target_rect.position.x - prompt_size.x - 18.0
+	var prompt_y := target_rect.position.y - prompt_size.y * 0.58
+	campus_research_prompt.position = Vector2(
+		clampf(prompt_x, 18.0, maxf(18.0, available_size.x - prompt_size.x - 18.0)),
+		clampf(prompt_y, 98.0, maxf(98.0, available_size.y - prompt_size.y - 18.0))
+	)
 
 func refresh_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
 	var job_status := "Kein Klinikfall aktiv"
@@ -2070,7 +2092,7 @@ func refresh_practice(meta: MetaProgressionState, jobs: Dictionary) -> void:
 			clampi(elapsed, 0, active.duration_seconds),
 			active.duration_seconds,
 			"%s verbleibend" % _format_duration(remaining, true),
-			"+%d Forschung" % active.reward,
+			"+%d Forschung" % MetaProgressionState.scaled_research_gain(active.reward),
 			"Abgeschlossen um %s" % _local_time(meta.job_finishes_at) if job_complete else "Voraussichtlich fertig um %s" % _local_time(meta.job_finishes_at)
 		)
 	var offers: Array[PracticeScreenViewModel.ClinicJobOfferViewModel] = []
@@ -2082,7 +2104,7 @@ func refresh_practice(meta: MetaProgressionState, jobs: Dictionary) -> void:
 			id,
 			definition.title,
 			definition.duration_text(),
-			"+%d Forschung" % definition.reward,
+			"+%d Forschung" % MetaProgressionState.scaled_research_gain(definition.reward),
 			true
 		))
 	var model := PracticeScreenViewModel.create(

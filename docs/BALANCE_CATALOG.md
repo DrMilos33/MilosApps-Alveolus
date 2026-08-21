@@ -174,8 +174,10 @@ Ein zehntes Forschungsfeld zeigt den nicht käuflichen Fall-1-Meilenstein für
 | Stoß | 1 | 30 | aktive Fähigkeit freischalten | freigeschaltet |
 | Fetter lazer | 1 | Abschluss Fall 1 | aktive Fähigkeit und zweiten Aktivslot freischalten | freigeschaltet |
 
-Der reguläre kaufbare Vollausbau kostet insgesamt **9.481 Forschungspunkte**. Der erste
-Introabschluss vergibt genau 30 Forschung und keinen Talentpunkt. Der erste
+Der reguläre kaufbare Vollausbau kostet insgesamt **9.481 Forschungspunkte**. Ein neuer
+Spielstand startet mit 0 Forschung. Introabschluss oder Überspringen vergeben einmalig
+75 Basisforschung und keinen Talentpunkt; der besiegte Introboss erhöht einen echten
+Abschluss auf 94. Der erste
 Talentpunkt wird mit dem Abschluss von Fall 2 verdient. Forschungs- und
 Talentreset erstatten beziehungsweise befreien alle investierten Punkte. Die
 Einführung verwendet ihre feste Lehrkonfiguration.
@@ -205,7 +207,9 @@ Der Baum kann über den Fortschrittsscreen zurückgesetzt werden.
 ## 10. Run-Ausbaustufen
 
 Schaden, Attack Speed und Galopp besitzen je eine endlos sammelbare Familie.
-Common gewährt +3, Magic +5 und Rare +7; pro Level-up kann dieselbe
+Common gewährt +3, Magic +5 und Rare +7; bei gleicher Relevanz gilt für
+Angebote immer Common häufiger als Magic häufiger als Rare. Vollständige
+Dreierfamilien verwenden 70 / 25 / 5. Pro Level-up kann dieselbe
 Komponente-Wert-Familie höchstens einmal erscheinen. Karten zeigen nur den
 gemeinsamen Rundenzähler. Der Rahmen signalisiert Common in Elfenbein, Magic in
 Kobalt und Rare in Gold.
@@ -216,7 +220,7 @@ Kobalt und Rare in Gold.
 |---|---|---|---|---|
 | Behandlungsschaden | Common / Magic / Rare | +3 / +5 / +7 Schaden | unbegrenzt | ausgewählte Behandlung |
 | Attack Speed | Common / Magic / Rare | +3 / +5 / +7 Prozentpunkte | unbegrenzt, linear | ausgewählte Behandlung |
-| Zusätzliches Projektil | Magic | +1 Projektil | +5, Basis 1 → maximal 6 | Impuls |
+| Zusätzliches Projektil | Rare | +1 Projektil | +5, Basis 1 → maximal 6 | Impuls |
 
 Das frühere allgemeine Reichweitenupgrade ist nicht mehr im aktiven Katalog.
 Projektilkarten werden nach jeder Wahl seltener; ihr internes Cap wird nicht auf
@@ -333,8 +337,17 @@ weder Zeitlimit noch zufällige Fallparameter. Der erste Erreger bleibt nach
 seiner Materialisierung drei Sekunden ohne Autoangriff beobachtbar. Danach
 bestätigt ein Linksklick den Angriff. Genau drei normale Ein-Punkt-Erfahrungen lösen
 eine Auswahl aus drei gültigen Ausbauten für `treatment_precision` aus; nach der
-Auswahl wartet der einfache Altboss erneut in einer Linksklick-Pause. Der erste
-Sieg kehrt direkt zum Campus zurück und vergibt 30 Forschung, aber keinen Talentpunkt.
+Auswahl wartet der einfache Altboss erneut in einer Linksklick-Pause. Er besitzt
+effektiv 198 Leben und sein einzelnes normales Projektil verursacht effektiv 3
+Schaden. Der erste Sieg kehrt direkt zum Campus zurück und vergibt 94 Forschung,
+der Intro-Skip 75; beide vergeben keinen Talentpunkt.
+
+Alle positiven Forschungseinnahmen werden zentral mit 2,5 multipliziert. Das
+betrifft Runbelohnungen, passive Forschung, Klinikfälle und die Introgrundbelohnung,
+nicht jedoch Kosten oder Rückerstattungen. Zusätzlich gilt am Rundenende der
+Bossmultiplikator `1 + 0,25 × besiegte Bosse`; gerundet wird genau einmal am Ende.
+Vier Stunden passive Zeit ergeben 60, der Acht-Stunden-Deckel 120 Forschung.
+Die drei Klinikfälle zahlen dadurch 15 / 45 / 105 Forschung.
 
 ### Variationsregel
 

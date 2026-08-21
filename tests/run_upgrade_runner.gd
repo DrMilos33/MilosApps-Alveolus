@@ -145,12 +145,38 @@ func _test_rarity_family_contract() -> void:
 	var common := _find(definitions, &"precision_refinement")
 	var magic := _find(definitions, &"treatment_damage_magic")
 	var rare := _find(definitions, &"potency")
+	var projectiles := _find(definitions, &"parallel_sites")
 	_assert_equal(common.rarity_role(), &"common", "Damage +3 is Common")
 	_assert_equal(magic.rarity_role(), &"magic", "Damage +5 is Magic")
 	_assert_equal(rare.rarity_role(), &"rare", "Damage +7 is Rare")
 	_assert_near(common.rarity_weight, 70.0, "Common rarity weight is 70")
 	_assert_near(magic.rarity_weight, 25.0, "Magic rarity weight is 25")
 	_assert_near(rare.rarity_weight, 5.0, "Rare rarity weight is 5")
+	_assert_equal(projectiles.rarity_role(), &"rare", "Impuls +1 Projektil ist ein Rare-Upgrade")
+	_assert_near(projectiles.rarity_weight, 5.0, "Das Projektilupgrade verwendet das Rare-Gewicht")
+	_assert_true(
+		UpgradePoolBuilder.rarity_frequency(UpgradeDefinition.Rarity.COMMON)
+		> UpgradePoolBuilder.rarity_frequency(UpgradeDefinition.Rarity.MAGIC)
+		and UpgradePoolBuilder.rarity_frequency(UpgradeDefinition.Rarity.MAGIC)
+		> UpgradePoolBuilder.rarity_frequency(UpgradeDefinition.Rarity.RARE),
+		"Bei gleicher Relevanz gilt immer Common häufiger als Magic häufiger als Rare"
+	)
+	var frequency_fixture: Array[UpgradeDefinition] = [
+		UpgradeDefinition.create(&"frequency_common", "Common", "", UpgradeDefinition.Path.SUPPORT, 1, &"test", 1.0).configure_offer(&"frequency_common", UpgradeDefinition.Rarity.COMMON),
+		UpgradeDefinition.create(&"frequency_magic", "Magic", "", UpgradeDefinition.Path.SUPPORT, 1, &"test", 1.0).configure_offer(&"frequency_magic", UpgradeDefinition.Rarity.MAGIC),
+		UpgradeDefinition.create(&"frequency_rare", "Rare", "", UpgradeDefinition.Path.SUPPORT, 1, &"test", 1.0).configure_offer(&"frequency_rare", UpgradeDefinition.Rarity.RARE),
+	]
+	var frequency_counts := {&"frequency_common": 0, &"frequency_magic": 0, &"frequency_rare": 0}
+	var frequency_rng := RandomNumberGenerator.new()
+	frequency_rng.seed = 41_902
+	for _roll in range(5000):
+		var rolled := UpgradePoolBuilder.choose(frequency_fixture, {}, frequency_rng, [], [], 1)
+		frequency_counts[rolled[0].id] = int(frequency_counts[rolled[0].id]) + 1
+	_assert_true(
+		int(frequency_counts[&"frequency_common"]) > int(frequency_counts[&"frequency_magic"])
+		and int(frequency_counts[&"frequency_magic"]) > int(frequency_counts[&"frequency_rare"]),
+		"Die echte Familienauswahl würfelt bei gleicher Relevanz Common häufiger als Magic häufiger als Rare"
+	)
 	_assert_equal(_find(definitions, &"mobility").resolved_family_key(), _find(definitions, &"mobility_rare").resolved_family_key(), "All Galopp rarities share one family")
 
 func _find(definitions: Array[UpgradeDefinition], id: StringName) -> UpgradeDefinition:

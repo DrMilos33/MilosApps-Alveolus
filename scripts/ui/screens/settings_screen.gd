@@ -493,6 +493,8 @@ func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.Toggl
 		purpose_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	if setting.get_id() == &"reduce_motion":
 		toggle.tooltip_text = "Reduziert UI-Animationen und Bewegungseffekte."
+	elif setting.get_id() == &"show_discovery_info":
+		toggle.tooltip_text = "Zeigt neue Entdeckungen als pausierende Info an."
 	elif setting.get_id() == &"show_character_name":
 		toggle.tooltip_text = "Zeigt Doctor Milos dezent über der Spielfigur."
 	_controls[key] = toggle
@@ -506,6 +508,8 @@ func _toggle_purpose(setting_id: StringName, fallback: String) -> String:
 			return "Animationen reduzieren"
 		&"run_stats":
 			return "Werte im Run"
+		&"show_discovery_info":
+			return "Neuigkeiten anzeigen"
 		&"show_character_name":
 			return "Charaktername anzeigen"
 		&"fullscreen":

@@ -34,6 +34,7 @@ var effects_muted: bool = false
 var music_muted: bool = false
 var ui_scale: float = 1.0
 var reduce_motion: bool = false
+var show_discovery_info: bool = true
 var show_character_name: bool = false
 var glyph_mode: StringName = GLYPH_AUTO
 var fullscreen: bool = false
@@ -55,6 +56,7 @@ func to_dict() -> Dictionary:
 		"music_muted": music_muted,
 		"ui_scale": ui_scale,
 		"reduce_motion": reduce_motion,
+		"show_discovery_info": show_discovery_info,
 		"show_character_name": show_character_name,
 		"glyph_mode": String(glyph_mode),
 		"fullscreen": fullscreen,
@@ -76,6 +78,7 @@ static func from_dict(data: Variant) -> UISettingsState:
 	settings.music_muted = bool(data.get("music_muted", false))
 	settings.ui_scale = _nearest_supported_scale(float(data.get("ui_scale", 1.0)))
 	settings.reduce_motion = bool(data.get("reduce_motion", false))
+	settings.show_discovery_info = bool(data.get("show_discovery_info", true))
 	settings.show_character_name = bool(data.get("show_character_name", false))
 	var requested_glyph := StringName(str(data.get("glyph_mode", GLYPH_AUTO)))
 	settings.glyph_mode = requested_glyph if requested_glyph in [GLYPH_AUTO, GLYPH_KEYBOARD, GLYPH_GAMEPAD] else GLYPH_AUTO

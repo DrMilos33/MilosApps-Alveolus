@@ -209,6 +209,9 @@ func _run() -> void:
 	await process_frame
 	_check(not screen.talents_unlocked(), "Talente bleiben vor Introabschluss semantisch gesperrt")
 	_check(screen.talent_lock_panel().is_visible_in_tree(), "Talente zeigen die vollflächige Padlock-Sperrfläche")
+	var talent_host := screen.find_child("TalentViewHost", true, false) as Control
+	_check(talent_host != null and screen.talent_lock_panel().get_global_rect().is_equal_approx(talent_host.get_global_rect()), "Padlock bedeckt die komplette Talent-Inhaltsfläche")
+	_check(screen.talent_lock_panel().mouse_filter == Control.MOUSE_FILTER_STOP, "Die vollflächige Sperre blockiert Eingaben auf den verdeckten Baum")
 	_check(not screen.talent_reset_action().visible and not screen.talent_branch(&"treatment").is_visible_in_tree(), "Gesperrte Talente legen weder Reset noch Talentbaum unter die Sperrfläche")
 	var lock_icon := screen.talent_lock_panel().find_child("TalentLockIcon", true, false) as SimpleIcon
 	var lock_copy := screen.talent_lock_panel().find_child("TalentLockCopy", true, false) as Label

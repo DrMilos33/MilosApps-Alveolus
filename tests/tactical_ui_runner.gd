@@ -16,6 +16,17 @@ func _run() -> void:
 	sound_service.wire_tree(hud.root)
 	await process_frame
 	await process_frame
+	var campus_meta := MetaProgressionState.new(func() -> int: return 1_700_000_000)
+	campus_meta.reset_defaults(1_700_000_000)
+	hud.show_campus(campus_meta, ContentCatalog.clinic_job_definitions())
+	hud.show_campus_research_guidance()
+	await process_frame
+	await process_frame
+	var research_card := hud.campus_buttons[&"research"] as CampusBuildingCard
+	var research_target := research_card.building_sprite.get_global_rect()
+	var guidance_rect := hud.campus_research_prompt.get_global_rect()
+	_check(guidance_rect.end.x < research_target.position.x and guidance_rect.get_center().y < research_target.get_center().y, "Forschungshinweis steht diagonal links oberhalb des tatsächlichen Gebäudes (Hinweis %s, Ziel %s)" % [str(guidance_rect), str(research_target)])
+	_check(hud.campus_research_guidance_arrow != null and hud.campus_research_guidance_arrow.text == "↘", "Der Pfeil zeigt vom Hinweis diagonal zum Forschungsgebäude")
 
 	var components := [
 		{"id": &"precise", "title": "Impuls", "description": "Ein verfolgtes Ziel", "kind": 0, "capacity_cost": 2, "selected": true, "visual_id": &"treatment_precision"},

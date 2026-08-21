@@ -285,7 +285,7 @@ func _test_level_catalog_and_run_config() -> void:
 		_assert_equal(config.run_duration_seconds, level.boss_spawn_seconds, "RunConfig übernimmt den Bosszeitpunkt")
 		_assert_equal(config.final_deadline_seconds, level.total_seconds, "RunConfig übernimmt die Leveldeadline")
 		_assert_true(not config.has_deadline(), "Intro und Hauptfälle besitzen keine Zeitniederlage")
-	_assert_equal(levels[0].boss_health_multiplier, 0.18, "Intro verwendet den reduzierten Boss")
+	_assert_equal(levels[0].boss_health_multiplier, 0.09, "Intro verwendet den um weitere 50 Prozent reduzierten Boss")
 	_assert_true(levels[0].boss_phase_minions.is_empty(), "Intro hat keine vollständige Bossphasenmechanik")
 	_assert_equal(levels[3].boss_phase_minions, PackedInt32Array([6, 8]), "Fall 3 verwendet die geplanten Minion-Schübe")
 
@@ -368,7 +368,7 @@ func _test_level_progression_and_records() -> void:
 	_assert_equal(meta.highest_unlocked_level, 1, "Niederlagen schalten kein Level frei")
 	var reward_before := meta.research_points
 	var repeated_reward := meta.award_run(true, 60.0, 2, 20, 0.25)
-	_assert_equal(repeated_reward, roundi(float(2 + 2 + 1 + 12) * 0.25), "Intro-Wiederholung verwendet 25 Prozent Forschungsbelohnung")
+	_assert_equal(repeated_reward, roundi(float(2 + 2 + 1 + 12) * 0.25 * 2.5), "Intro-Wiederholung verwendet den global erhöhten Forschungsgewinn")
 	_assert_equal(meta.research_points, reward_before + repeated_reward, "Belohnungsmultiplikator wird genau einmal gutgeschrieben")
 
 func _test_meta_progression() -> void:
@@ -377,14 +377,14 @@ func _test_meta_progression() -> void:
 	meta.reset_defaults(current_time[0])
 	current_time[0] += 4 * 60 * 60
 	meta.accrue_time()
-	_assert_equal(meta.claimable_research(), 24, "Vier Stunden ergeben 24 passive Forschung")
-	_assert_equal(meta.claim_passive(), 24, "Passive Forschung wird exakt einmal abgeholt")
+	_assert_equal(meta.claimable_research(), 60, "Vier Stunden ergeben nach der Erhöhung 60 passive Forschung")
+	_assert_equal(meta.claim_passive(), 60, "Passive Forschung wird exakt einmal abgeholt")
 	_assert_equal(meta.claim_passive(), 0, "Passive Forschung kann nicht doppelt abgeholt werden")
 
 	meta.reset_defaults(current_time[0])
 	current_time[0] += 12 * 60 * 60
 	meta.accrue_time()
-	_assert_equal(meta.claimable_research(), 48, "Offline-Forschung ist auf acht Stunden begrenzt")
+	_assert_equal(meta.claimable_research(), 120, "Offline-Forschung ist auf acht Stunden mit erhöhtem Ertrag begrenzt")
 	var bank_before_rollback := meta.passive_seconds
 	current_time[0] -= 24 * 60 * 60
 	meta.accrue_time()
@@ -399,7 +399,7 @@ func _test_meta_progression() -> void:
 	current_time[0] += short_job.duration_seconds - 1
 	_assert_true(not meta.is_job_complete(), "Klinikfall endet nicht zu früh")
 	current_time[0] += 1
-	_assert_equal(meta.claim_job(jobs), 6, "Abgeschlossener Kurzbefund zahlt sechs Forschung")
+	_assert_equal(meta.claim_job(jobs), 15, "Abgeschlossener Kurzbefund erhält den globalen Forschungsfaktor")
 	_assert_equal(meta.claim_job(jobs), 0, "Klinikfall kann nicht doppelt abgeholt werden")
 
 	meta.research_points = 2000
@@ -414,7 +414,9 @@ func _test_meta_progression() -> void:
 
 	var reward_meta := MetaProgressionState.new(func() -> int: return current_time[0])
 	reward_meta.reset_defaults(current_time[0])
-	_assert_equal(reward_meta.award_run(true, 600.0, 15, 200), 37, "Run-Belohnung deckelt alle Leistungsbestandteile korrekt")
+	_assert_equal(reward_meta.award_run(true, 600.0, 15, 200), 93, "Run-Belohnung deckelt alle Leistungsbestandteile und skaliert sie global")
+	_assert_equal(MetaProgressionState.calculate_run_reward(true, 600.0, 15, 200, 1.0, 1), 116, "Ein besiegter Boss erhöht die Endbelohnung um 25 Prozent")
+	_assert_equal(MetaProgressionState.calculate_run_reward(true, 600.0, 15, 200, 1.0, 2), 139, "Zwei besiegte Bosse erhöhen die Endbelohnung additiv um 50 Prozent")
 	_assert_equal(reward_meta.lifetime_runs, 1, "Beendeter Run wird genau einmal gezählt")
 
 func _test_meta_save_roundtrip_and_recovery() -> void:

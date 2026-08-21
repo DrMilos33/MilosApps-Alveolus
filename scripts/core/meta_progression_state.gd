@@ -1,7 +1,9 @@
 class_name MetaProgressionState
 extends RefCounted
 
-const INTRO_RESEARCH_REWARD := 30
+const RESEARCH_GAIN_MULTIPLIER := 2.5
+const BOSS_RESEARCH_MULTIPLIER_PER_DEFEAT := 0.25
+const INTRO_RESEARCH_REWARD := 75
 
 signal research_changed(points: int, claimable: int)
 signal clinic_changed
@@ -13,7 +15,9 @@ signal loadouts_changed(level_id: StringName)
 signal settings_changed
 
 const SAVE_VERSION := 6
-const PASSIVE_INTERVAL_SECONDS := 600.0
+# Research income is globally 150 percent higher. Reducing the interval keeps
+# offline income exact over time without introducing a saved fractional carry.
+const PASSIVE_INTERVAL_SECONDS := 240.0
 const PASSIVE_CAP_SECONDS := 28800.0
 const UNLIMITED_TEST_POINT_POOL := 1_000_000_000
 const TALENT_TREE_REVISION := 4
@@ -152,7 +156,7 @@ func claim_job(definitions: Dictionary, now: int = -1) -> int:
 	if not is_job_complete(now) or not definitions.has(active_job_id):
 		return 0
 	var definition: ClinicJobDefinition = definitions[active_job_id]
-	var reward := definition.reward
+	var reward := scaled_research_gain(definition.reward)
 	research_points += reward
 	active_job_id = &""
 	job_started_at = 0
@@ -205,22 +209,53 @@ func clear_research_ranks(definitions: Array[ResearchDefinition] = []) -> int:
 	upgrades_changed.emit()
 	return refunded
 
-func award_run(success: bool, elapsed: float, level: int, defeats: int, multiplier: float = 1.0) -> int:
-	var reward := calculate_run_reward(success, elapsed, level, defeats, multiplier)
+func award_run(
+	success: bool,
+	elapsed: float,
+	level: int,
+	defeats: int,
+	multiplier: float = 1.0,
+	bosses_defeated: int = 0
+) -> int:
+	var reward := calculate_run_reward(success, elapsed, level, defeats, multiplier, bosses_defeated)
 	research_points += reward
 	lifetime_runs += 1
 	research_changed.emit(research_points, claimable_research())
 	return reward
 
 
-static func calculate_run_reward(success: bool, elapsed: float, level: int, defeats: int, multiplier: float = 1.0) -> int:
+static func calculate_run_reward(
+	success: bool,
+	elapsed: float,
+	level: int,
+	defeats: int,
+	multiplier: float = 1.0,
+	bosses_defeated: int = 0
+) -> int:
 	var survival_bonus := mini(floori(elapsed / 120.0), 5)
 	var analysis_bonus := mini(maxi(level, 0), 10)
 	var enemy_bonus := mini(maxi(defeats, 0) / 20, 8)
 	var reward := 2 + survival_bonus + analysis_bonus + enemy_bonus
 	if success:
 		reward += 12
-	return maxi(1, roundi(float(reward) * maxf(multiplier, 0.0)))
+	return maxi(1, roundi(
+		float(reward)
+		* maxf(multiplier, 0.0)
+		* RESEARCH_GAIN_MULTIPLIER
+		* boss_research_multiplier(bosses_defeated)
+	))
+
+
+static func scaled_research_gain(base_amount: float) -> int:
+	return maxi(0, roundi(maxf(base_amount, 0.0) * RESEARCH_GAIN_MULTIPLIER))
+
+
+static func boss_research_multiplier(bosses_defeated: int) -> float:
+	return 1.0 + float(maxi(bosses_defeated, 0)) * BOSS_RESEARCH_MULTIPLIER_PER_DEFEAT
+
+
+static func intro_research_reward(bosses_defeated: int = 0) -> int:
+	return roundi(float(INTRO_RESEARCH_REWARD) * boss_research_multiplier(bosses_defeated))
 
 func is_level_unlocked(order: int) -> bool:
 	return order <= highest_unlocked_level
@@ -261,10 +296,10 @@ func mark_intro_skipped() -> void:
 func set_tutorial_step(key: StringName, completed: bool = true) -> void:
 	tutorial_status[key] = completed
 
-func grant_intro_completion_rewards() -> bool:
+func grant_intro_completion_rewards(bosses_defeated: int = 0) -> bool:
 	if bool(tutorial_status.get(&"intro_completion_rewards", false)):
 		return false
-	research_points += INTRO_RESEARCH_REWARD
+	research_points += intro_research_reward(bosses_defeated)
 	tutorial_status[&"intro_completion_rewards"] = true
 	tutorial_status[&"research_guidance_pending"] = true
 	research_changed.emit(research_points, claimable_research())
