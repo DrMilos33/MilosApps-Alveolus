@@ -16,6 +16,19 @@
     ],
     "PreToolUse": [
       {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoLogo -NoProfile -NonInteractive -File \"$(git rev-parse --show-toplevel)/.codex/hooks/pre_tool_local_only.ps1\"",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& (Join-Path ((git rev-parse --show-toplevel).Trim()) '.codex/hooks/pre_tool_local_only.ps1')\"",
+            "timeout": 5,
+            "statusMessage": "Checking ALVEOLUS local-only policy"
+          }
+        ]
+      },
+      {
+        "matcher": "^(?:mcp__|mcp_).*$",
         "hooks": [
           {
             "type": "command",

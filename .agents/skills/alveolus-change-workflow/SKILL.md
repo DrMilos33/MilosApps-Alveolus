@@ -17,8 +17,8 @@ its plan in the same task until the transcript warning requires a rollover.
 3. Plan read-only before a multi-system, ambiguous, save-sensitive, or
    performance-sensitive change.
 4. Require an exact local `BASELINE_READY` commit before writing on top of a
-   dirty integration state. Local commits and worktrees are allowed; push,
-   upload, deployment, PR, and release actions are not.
+   dirty integration state. Local commits and worktrees are fast, offline
+   checkpoints. They never imply a GitHub push.
 5. Name one integrator and one writer per file. Spawn at most two subagents,
    always with `fork_turns="none"` and a self-contained short briefing. Agents
    that review product or architecture remain read-only.
@@ -34,6 +34,13 @@ its plan in the same task until the transcript warning requires a rollover.
    same seed and scenario. Never infer performance from code shape alone.
 6. Review `git diff --check`, the owned diff, and worktree status before the
    local commit. Do not publish.
+
+Use `.\ALVEOLUS.cmd status` when branch, HEAD, Dirty-State, worktrees or the
+cached GitHub comparison are unclear. The canonical user checkout is
+`C:\Users\pasca\Documents\ChatGPT\Games` on
+`codex/alveolus-local-main`; Codex worktrees are temporary slice checkouts, not
+alternative product versions. Use `.\ALVEOLUS.cmd build-web` for timestamped
+local exports and inspect cleanup candidates before applying cleanup.
 
 ## Prepare visual evidence
 
@@ -63,5 +70,8 @@ MP4/WebM evidence only by local path and timestamp; do not embed it.
   `docs/WORKSTREAMS.md`. Do not repeat project history, logs, or media.
 
 The repository hooks are an accident-prevention guardrail, not a network
-security boundary. A later release requires a separate, explicit release task
-and deliberate hook/policy change; a development prompt cannot bypass it.
+security boundary. Direct pushes, uploads, deployments and PR mutations remain
+blocked. A release requires a separate task naming the full HEAD and the exact
+confirmation `ALVEOLUS-RELEASE-v1 <SHA> origin/dev`; only the repository-owned
+one-shot release wrapper may then target `origin/dev`. A development prompt
+cannot bypass or infer this authorization.

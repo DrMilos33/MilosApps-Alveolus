@@ -15,15 +15,21 @@ Das Projekt verwendet **Godot 4.7.1 Standard**, GDScript und den
 Compatibility-Renderer.
 
 ```powershell
-$alveolusGodot = 'C:\Users\pasca\.cache\codex-runtimes\godot\4.7.1-stable\Godot_v4.7.1-stable_win64.exe'
-& $alveolusGodot --editor --path 'C:\Users\pasca\Documents\ChatGPT\Games'
+.\ALVEOLUS.cmd setup
+.\ALVEOLUS.cmd status
+.\ALVEOLUS.cmd editor
 ```
 
-Im Editor startet `F5` das Projekt. Direkt aus PowerShell:
+`setup` ist pro lokalem Repository nur einmal nötig. Im Editor startet `F5`
+das Projekt. Direkt aus PowerShell:
 
 ```powershell
-& $alveolusGodot --path 'C:\Users\pasca\Documents\ChatGPT\Games'
+.\ALVEOLUS.cmd play
 ```
+
+Falls Godot nicht automatisch gefunden wird, `.alveolus.local.example.json`
+als `.alveolus.local.json` kopieren und dort den lokalen Godot-Pfad eintragen.
+Diese persönliche Konfiguration wird nicht committed.
 
 Steuerung:
 
@@ -39,18 +45,65 @@ Ein Webbuild muss über HTTP geöffnet werden. `file://` kann die
 WebAssembly-Dateien nicht zuverlässig laden.
 
 ```powershell
-Set-Location 'C:\Users\pasca\Documents\ChatGPT\Games'
-$alveolusGodotConsole = 'C:\Users\pasca\.cache\codex-runtimes\godot\4.7.1-stable\Godot_v4.7.1-stable_win64_console.exe'
-$alveolusPython = 'C:\Users\pasca\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
-New-Item -ItemType Directory -Force -Path build\web | Out-Null
-& $alveolusGodotConsole --headless --path . --export-release Web build/web/index.html
-& $alveolusPython -m http.server 8766 --bind 127.0.0.1 --directory build/web
+.\ALVEOLUS.cmd build-web
+.\ALVEOLUS.cmd open-build
 ```
 
-Danach: [http://127.0.0.1:8766/](http://127.0.0.1:8766/)
+Jeder Export liegt unter `build/local/<Datum>-<Commit>/` und enthält ein
+`manifest.json`. `open-build` öffnet den Ordner und gibt den vollständigen
+Serverbefehl aus. Alternativ funktioniert direkt:
+
+```powershell
+$build = (.\ALVEOLUS.cmd status -Json | ConvertFrom-Json).latest_build.path
+$python = Join-Path $env:USERPROFILE '.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe'
+& $python -m http.server 8766 --bind 127.0.0.1 --directory $build
+```
+
+Danach: [http://127.0.0.1:8766/](http://127.0.0.1:8766/).
 
 Die veröffentlichte GitHub-Pages-Version bleibt bis zu einer ausdrücklichen
 Freigabe ein eingefrorener älterer Vergleichsstand.
+
+## Lokaler Stand und GitHub
+
+`C:\Users\pasca\Documents\ChatGPT\Games` ist die kanonische lokale
+Arbeitskopie auf `codex/alveolus-local-main`. Die Begriffe sind getrennt:
+
+- **Arbeitskopie:** noch nicht committete lokale Änderungen;
+- **Git-Commit:** schneller, rein lokaler und wiederherstellbarer Checkpoint;
+- **GitHub-Push:** externe Veröffentlichung auf `origin/dev`.
+
+Lokale Commits benötigen keine Freigabe und verändern GitHub nicht. Ein Push
+ist technisch gesperrt und benötigt einen separaten Releaseauftrag mit
+vollständiger Commit-ID und der exakten Bestätigung
+`ALVEOLUS-RELEASE-v1 <SHA> origin/dev`. `.\ALVEOLUS.cmd status` zeigt lokalen
+HEAD, Dirty-State, die Zahl nur lokal vorhandener Commits, Builds sowie Rolle
+und Pfad aller Worktrees. Der GitHub-Vergleich verwendet den lokal gecachten
+Stand von `origin/dev`; `status` führt absichtlich keinen Netzwerk-Fetch aus.
+
+Alte generierte Dateien werden zuerst mit `.\ALVEOLUS.cmd cleanup-preview`
+aufgelistet. `cleanup-apply` bewahrt den neuesten gültigen Webbuild, entfernt
+nur validierte Pfade unter `build/` beziehungsweise `.codex-temp/` und schreibt
+einen lokalen Bericht.
+
+### Checkpoints und Recovery
+
+Zur kanonischen Arbeitskopie zurückkehren:
+
+```powershell
+Set-Location 'C:\Users\pasca\Documents\ChatGPT\Games'
+.\ALVEOLUS.cmd status
+```
+
+Vor einer eigenen Änderung zuerst `git status --short` prüfen. Einen lokalen
+Checkpoint erzeugst du mit `git add <deine-Dateien>` und
+`git commit -m "kurze Beschreibung"`; das lädt nichts hoch. Frühere
+Checkpoints zeigt `git log --oneline --decorate -12`. Der verlustfreie Stand
+vor der Ordnerumstellung bleibt zusätzlich unter dem lokalen Branch
+`codex/recovery-documents-dirty-20260821` und dem Tag
+`recovery/pre-canonical-migration-20260821` erhalten. Zum Prüfen genügt
+`git show --stat recovery/pre-canonical-migration-20260821`; Dateien daraus
+erst nach einem sauberen `git status` gezielt wiederherstellen.
 
 ## Projektübersicht
 
@@ -105,7 +158,7 @@ verfügbar:
 
 ## Speicherstand und Assets
 
-Der lokale Spielstand verwendet Savegame-Version 5 unter
+Der lokale Spielstand verwendet Savegame-Version 6 unter
 `user://alveolus_save_v1.json`. Der Dateiname bleibt für Migrationen älterer
 Spielstände erhalten. Es gibt kein Backend und keine Cloud-Synchronisierung.
 

@@ -56,7 +56,11 @@ Eine notwendige Scope-Erweiterung wird vor der Änderung explizit festgehalten.
 
 Lokale Branches, Worktrees, Commits, Builds und an `127.0.0.1` gebundene Smokes
 sind erlaubt. Push, Upload, Deployment, PR und Release bleiben durch die
-projektlokale Policy gesperrt. Im Handoff steht immer `Remote: keine`.
+projektlokale Policy gesperrt. Ausschließlich ein separater Release-Task darf
+mit vollständigem HEAD und `ALVEOLUS-RELEASE-v1 <SHA> origin/dev` den
+einmaligen Releasewrapper ausführen. Entwicklungshandoffs verwenden immer
+`Remote: keine`; ein Releasehandoff nennt stattdessen das exakt verifizierte
+Remoteziel und den übertragenen Commit.
 
 ## Taskgröße und Medien
 
@@ -91,7 +95,7 @@ Geänderte Verträge: <APIs, IDs, Save-, Reihenfolge-, Optik- oder Budgetvertrag
 Prüfungen: <ausgeführt und Ergebnis; bewusst ausgelassene größere Matrix>
 Lokale Artefakte: <Pfade unter .codex-temp oder lokaler Build; sonst entfällt>
 Offen: <nächste Entscheidung, manuelle Abnahme oder Blocker; sonst keine>
-Remote: keine
+Remote: <bei Entwicklung: keine; bei explizitem Release: verifiziertes Ziel und SHA>
 ```
 
 Nicht enthalten sind wiederholte Projekthistorie, Medien, vollständige Logs,

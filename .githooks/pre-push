@@ -1,0 +1,8 @@
+#!/bin/sh
+repo_root="$(git rev-parse --show-toplevel)" || exit 1
+workflow_root="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)" || exit 1
+exec powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+  -File "$workflow_root/tools/alveolus-workflow.ps1" pre-push-check \
+  -RepositoryRoot "$repo_root" \
+  -HookRemoteName "$1" \
+  -HookRemoteLocation "$2"

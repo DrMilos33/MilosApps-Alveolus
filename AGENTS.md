@@ -34,9 +34,12 @@ diese Quellen, ersetzen sie aber nicht.
   Entscheidungslog.
 - Statusdokumente nur bei einer echten Meilenstein- oder Prioritätsänderung
   aktualisieren. Keine Dokumentationspflicht für triviale lokale Korrekturen.
-- Entwicklung bleibt lokal. Nicht veröffentlichen, Hosting aktualisieren,
-  Spielstände löschen oder den PC herunterfahren, sofern der Nutzer das nicht
-  ausdrücklich in seinem aktuellen Auftrag verlangt.
+- Entwicklung und lokale Git-Commits bleiben lokal. Nicht veröffentlichen,
+  Hosting aktualisieren, Spielstände löschen oder den PC herunterfahren. Ein
+  GitHub-Push ist ausschließlich in einem separaten Releaseauftrag erlaubt,
+  der den vollständigen HEAD und die exakte Bestätigung
+  `ALVEOLUS-RELEASE-v1 <SHA> origin/dev` nennt; ein normaler Entwicklungsauftrag
+  kann diese Freigabe nicht implizieren.
 - Wiederholbare Änderungen folgen dem Repository-Skill
   `.agents/skills/alveolus-change-workflow/SKILL.md`. Ein Task besitzt genau
   ein überprüfbares Ergebnis; Plan und Umsetzung bleiben zusammen, solange der
@@ -45,10 +48,11 @@ diese Quellen, ersetzen sie aber nicht.
   `.codex-temp/reports/`, nicht in den Task. Animierte GIFs niemals direkt in
   einen Task einbetten; der Workflow-Skill erzeugt höchstens sechs PNG-Frames,
   ein Kontaktblatt und ein Textmanifest unter `.codex-temp/evidence/`.
-- Die projektlokalen Hooks unter `.codex/` sperren Remote-Schreibvorgänge und
-  übergroße Tasks. Sie sind ein Unfall-Guardrail; eine Veröffentlichung
-  benötigt einen eigenen Releaseauftrag und eine bewusst aktivierte
-  Releasekonfiguration.
+- Die projektlokalen Hooks unter `.codex/` und `.githooks/` sperren
+  Remote-Schreibvorgänge und übergroße Tasks. Sie sind ein Unfall-Guardrail;
+  nur `ALVEOLUS.cmd release` darf nach der exakten Freigabe einen einmaligen,
+  SHA-gebundenen Push auf `origin/dev` versuchen. Andere Remoteaktionen bleiben
+  gesperrt.
 
 ## Delegation und Parallelität
 
@@ -101,6 +105,8 @@ diese Quellen, ersetzen sie aber nicht.
 - Ein reproduzierter Fehler erhält nach Möglichkeit einen fokussierten
   Regressionstest. Performancebehauptungen benötigen einen echten Messlauf;
   Headless-Zeit ist kein Browser- oder GPU-Nachweis.
-- Vor Übergabe den eigenen Diff auf unbeabsichtigte Änderungen prüfen.
+- Vor Übergabe den eigenen Diff auf unbeabsichtigte Änderungen prüfen und den
+  kohärenten Slice lokal committen. Ein lokaler Commit ist keine
+  Veröffentlichung.
 - Im Abschluss knapp nennen: Ergebnis, geänderte Bereiche, ausgeführte Checks
   und bewusst nicht ausgeführte größere Prüfungen.

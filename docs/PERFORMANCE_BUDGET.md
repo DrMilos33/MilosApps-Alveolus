@@ -179,5 +179,5 @@ p95 17.9 ms, p99 20.8 ms, max 50.9 ms and 87.44 effective FPS, with no stall
 over 100 ms. The correlated in-game trace measured p95 17.4 ms and p99 19.7
 ms. Cosmetic quality stayed on `FULL` for the entire run. The complete
 machine-readable result is stored in
-`.codex-temp/test-reports/browser-soak-latest.json` and the immutable
-`.codex-temp/test-reports/browser-soak-2026-08-16-final.json`.
+`.codex-temp/reports/browser-soak/browser-soak-latest.json` and the immutable
+`.codex-temp/reports/browser-soak/browser-soak-2026-08-16-final.json`.
