@@ -141,7 +141,9 @@ func preview_upgrade(
 	if definition == null:
 		return UpgradePreview.create("Unbekannter Effekt", "", "")
 	var next_level := current_level + 1
-	var level_text := "Stufe %d / %d" % [next_level, definition.max_level]
+	var level_text := str(next_level)
+	if definition.show_cap and not definition.repeatable and definition.max_level > 0:
+		level_text = "Stufe %d / %d" % [next_level, definition.max_level]
 	if definition.preview_stat.is_empty() or definition.modifiers.is_empty():
 		return UpgradePreview.create("Unbekannter Effekt", "", level_text)
 	var tags := resolved_context_tags if not resolved_context_tags.is_empty() else definition.preview_context_tags
@@ -237,7 +239,7 @@ func value(stat: StringName, fallback: float = 0.0, context_tags: PackedStringAr
 			ModifierDefinition.Operation.ATTACK_SPEED_ADD:
 				attack_speed_addition += definition.value
 	resolved = override_value if override_found else (resolved + additive) * multiplier
-	if attack_speed_addition != 0.0 and stat == TREATMENT_INTERVAL:
+	if attack_speed_addition != 0.0 and _is_attack_interval_stat(stat):
 		# Attack-Speed-Upgrades are accumulated as a bonus on the resolved base
 		# rate. Three +6 % ranks therefore produce exactly +18 %, never a
 		# compounding sequence of interval multipliers.
@@ -251,6 +253,10 @@ func value(stat: StringName, fallback: float = 0.0, context_tags: PackedStringAr
 	if stat in [TREATMENT_DAMAGE, ABILITY_DAMAGE, DEFENSE_CELL_DAMAGE, MOVEMENT_SPEED]:
 		return float(roundi(resolved))
 	return resolved
+
+
+func _is_attack_interval_stat(stat: StringName) -> bool:
+	return stat == TREATMENT_INTERVAL or stat == DEFENSE_CELL_HIT_INTERVAL
 
 func value_with(candidate: ModifierDefinition, fallback: float = 0.0, context_tags: PackedStringArray = PackedStringArray()) -> float:
 	if candidate == null:

@@ -49,6 +49,12 @@ func _test_manual_strategies() -> void:
 	_assert_equal(precise_shots.size(), 1, "Manual precise treatment fires without an auto target")
 	_assert_equal(precise_shots[0].mode, TreatmentShot.Mode.DIRECTIONAL, "Manual precise treatment uses a fixed directional projectile")
 	_assert_true(precise_shots[0].direction.is_equal_approx(Vector2.UP), "Manual precise heading preserves the fixed-tick aim")
+	precise_build.set_base(RunBuildState.TREATMENT_PROJECTILES, 3.0)
+	precise_shots = PreciseTreatmentStrategy.new().create_shots(
+		Vector2.ZERO, Vector2.UP, [], topology, precise, precise_build, null, true
+	)
+	_assert_equal(precise_shots.size(), 3, "Manual precise treatment preserves every acquired projectile")
+	_assert_true(precise_shots.all(func(shot: TreatmentShot) -> bool: return shot.direction.is_equal_approx(Vector2.UP)), "Every manual projectile uses the sampled heading")
 
 	var piercing: TreatmentDefinition = definitions[&"treatment_pierce"]
 	var piercing_shots := PiercingTreatmentStrategy.new().create_shots(

@@ -9,6 +9,7 @@ func _init() -> void:
 	_test_treatment_preview_application()
 	_test_active_preview_application()
 	_test_upgrade_prerequisites()
+	_test_rarity_family_contract()
 	if failures == 0:
 		print("ALVEOLUS_RUN_UPGRADES_OK assertions=%d" % assertions)
 	else:
@@ -26,7 +27,9 @@ func _test_catalog_contract() -> void:
 			_assert_true(not definition.preview_stat.is_empty(), "Run modifiers declare an exact preview stat: %s" % definition.id)
 	_assert_true(ids.has(&"potency") and ids.has(&"rhythm"), "Legacy intro IDs remain present")
 	_assert_true(ids.has(&"spread_density") and ids.has(&"pierce_depth"), "Alternative treatments receive dedicated upgrades")
-	_assert_true(ids.has(&"burst_effect") and ids.has(&"line_effect"), "The two available active abilities receive dedicated upgrades")
+	_assert_true(ids.has(&"burst_radius") and ids.has(&"line_effect"), "The two available active abilities receive only their intended upgrades")
+	_assert_true(not ids.has(&"burst_effect"), "Stoß exposes no damage upgrade before its future talent unlock")
+	_assert_true(not ids.has(&"penetration"), "Impuls range upgrade is removed from the active catalog")
 
 func _test_prepared_pool_filtering() -> void:
 	var prepared: Array[StringName] = [&"treatment_precision", &"ability_defense_burst", &"ability_treatment_line"]
@@ -54,17 +57,32 @@ func _test_treatment_preview_application() -> void:
 	stats.configure_prepared_treatment(precision)
 	var build := RunBuildState.from_treatment(precision)
 	stats.bind_run_build(build, precision, [])
-	var potency := _find(definitions, &"potency")
-	var preview := stats.preview_upgrade(potency)
-	_assert_equal(preview.effect_text, "+7 Schaden", "Prepared treatment preview shows the exact delta")
-	_assert_equal(preview.before_after_text, "13 Schaden  >  20 Schaden", "Prepared treatment preview shows exact integer before/after values")
-	var range_preview := stats.preview_upgrade(_find(definitions, &"penetration"))
-	_assert_equal(range_preview.effect_text, "+3", "Distance upgrade effect exposes only the central stage delta")
-	_assert_equal(range_preview.before_after_text, "16  >  19", "Distance upgrade comparison exposes naked stage values without UI unit copy")
-	_assert_true(stats.apply_upgrade(potency), "Prepared treatment modifier applies")
-	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, precision.tags), 20.0, "Treatment controller sees the previewed damage")
-	_assert_true(stats.apply_upgrade(potency), "Repeated upgrade level stacks")
-	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, precision.tags), 27.0, "Repeated levels add once without rebasing resolved stats")
+	var common := _find(definitions, &"precision_refinement")
+	var magic := _find(definitions, &"treatment_damage_magic")
+	var rare := _find(definitions, &"potency")
+	var preview := stats.preview_upgrade(common)
+	_assert_equal(preview.effect_text, "+3 Schaden", "Common treatment damage exposes the exact delta")
+	_assert_equal(preview.before_after_text, "13 Schaden  >  16 Schaden", "Common treatment damage starts from the live value")
+	_assert_true(stats.apply_upgrade(common), "Common treatment damage applies")
+	preview = stats.preview_upgrade(magic)
+	_assert_equal(preview.effect_text, "+5 Schaden", "Magic treatment damage exposes the exact delta")
+	_assert_equal(preview.before_after_text, "16 Schaden  >  21 Schaden", "Magic treatment damage continues from the live value")
+	_assert_true(stats.apply_upgrade(magic), "Magic treatment damage applies")
+	preview = stats.preview_upgrade(rare)
+	_assert_equal(preview.effect_text, "+7 Schaden", "Rare treatment damage exposes the exact delta")
+	_assert_equal(preview.before_after_text, "21 Schaden  >  28 Schaden", "Rare treatment damage continues from the live value")
+	_assert_true(stats.apply_upgrade(rare), "Rare treatment damage applies")
+	_assert_near(build.value(RunBuildState.TREATMENT_DAMAGE, 0.0, precision.tags), 28.0, "Gameplay resolves the same accumulated treatment damage as the cards")
+	_assert_equal(stats.upgrade_pick_count(common), 3, "Common, magic and rare share one cap-free family counter")
+	_assert_true(stats.apply_upgrade(common), "Repeatable damage remains collectible beyond the former third rank")
+	_assert_equal(stats.upgrade_pick_count(rare), 4, "Every rarity reads the same aggregated family index")
+
+	var projectiles := _find(definitions, &"parallel_sites")
+	for _pick in range(5):
+		_assert_true(stats.apply_upgrade(projectiles), "Impuls projectile pick remains available below its hidden cap")
+	_assert_true(not stats.apply_upgrade(projectiles), "Impuls projectile cap is enforced after five additions")
+	_assert_near(build.value(RunBuildState.TREATMENT_PROJECTILES, 0.0, precision.tags), 6.0, "Impuls reaches one base plus five additional projectiles")
+	_assert_true(not projectiles.show_cap and is_equal_approx(projectiles.repeat_weight_decay, 0.60), "Projectile cap stays hidden while repeat offers become rarer")
 
 	var spread: TreatmentDefinition = TreatmentDefinition.catalog()[&"treatment_spread"]
 	var spread_stats := PlayerStats.new()
@@ -86,17 +104,17 @@ func _test_active_preview_application() -> void:
 	stats.configure_prepared_treatment(precision)
 	var build := RunBuildState.from_treatment(precision)
 	stats.bind_run_build(build, precision, [burst])
-	var effect := _find(definitions, &"burst_effect")
-	var preview := stats.preview_upgrade(effect)
-	_assert_equal(preview.effect_text, "+8 Schaden", "Active card shows the exact effect delta")
-	_assert_equal(preview.before_after_text, "0 Schaden  >  8 Schaden", "Stoß damage upgrade starts from the selected ability's zero base")
-	stats.apply_upgrade(effect)
-	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 0.0, burst.tags), 8.0, "Ability controller resolves the same value as the card")
+	_assert_true(_find(definitions, &"burst_effect") == null, "Stoß cannot roll a damage card before the future talent exists")
+	var radius := _find(definitions, &"burst_radius")
+	var preview := stats.preview_upgrade(radius)
+	_assert_equal(preview.effect_text, "+1", "Stoß currently exposes only its radius utility upgrade")
+	_assert_true(stats.apply_upgrade(radius), "Stoß radius upgrade applies")
+	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 0.0, burst.tags), 0.0, "Stoß remains completely damage-free")
 	var line: AbilityDefinition = AbilityDefinition.catalog()[&"ability_treatment_line"]
 	stats.bind_run_build(build, precision, [burst, line])
 	var line_effect := _find(definitions, &"line_effect")
 	_assert_true(stats.apply_upgrade(line_effect), "Treatment-line damage upgrade applies")
-	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 30.0, line.tags), 40.0, "Treatment-line upgrade resolves in the selected ability context")
+	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 30.0, line.tags), 33.0, "Treatment-line common upgrade resolves in the selected ability context")
 
 func _test_upgrade_prerequisites() -> void:
 	var definitions := ContentCatalog.upgrade_definitions()
@@ -110,6 +128,30 @@ func _test_upgrade_prerequisites() -> void:
 	var after_unlock := UpgradePoolBuilder.choose(definitions, {&"neutrophils": 1}, rng, prepared, tags, 30)
 	_assert_true(_find(after_unlock, &"phagocytosis") != null, "Defense-cell damage becomes available after selection")
 	_assert_true(_find(after_unlock, &"defense_cell_radius") != null and _find(after_unlock, &"defense_cell_projectiles") != null, "Radius and projectile improvements become available after selection")
+
+
+func _test_rarity_family_contract() -> void:
+	var definitions := ContentCatalog.upgrade_definitions()
+	var prepared: Array[StringName] = [&"treatment_precision", &"ability_defense_burst", &"ability_treatment_line"]
+	var tags: Array[StringName] = [&"treatment", &"precise", &"active", &"defense", &"line"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 58123
+	var selected := UpgradePoolBuilder.choose(definitions, {}, rng, prepared, tags, 20)
+	var seen_families: Dictionary = {}
+	for definition in selected:
+		var family_key := definition.resolved_family_key(&"treatment_precision")
+		_assert_true(not seen_families.has(family_key), "One selection never repeats the same component and stat family: %s" % family_key)
+		seen_families[family_key] = true
+	var common := _find(definitions, &"precision_refinement")
+	var magic := _find(definitions, &"treatment_damage_magic")
+	var rare := _find(definitions, &"potency")
+	_assert_equal(common.rarity_role(), &"common", "Damage +3 is Common")
+	_assert_equal(magic.rarity_role(), &"magic", "Damage +5 is Magic")
+	_assert_equal(rare.rarity_role(), &"rare", "Damage +7 is Rare")
+	_assert_near(common.rarity_weight, 70.0, "Common rarity weight is 70")
+	_assert_near(magic.rarity_weight, 25.0, "Magic rarity weight is 25")
+	_assert_near(rare.rarity_weight, 5.0, "Rare rarity weight is 5")
+	_assert_equal(_find(definitions, &"mobility").resolved_family_key(), _find(definitions, &"mobility_rare").resolved_family_key(), "All Galopp rarities share one family")
 
 func _find(definitions: Array[UpgradeDefinition], id: StringName) -> UpgradeDefinition:
 	for definition in definitions:

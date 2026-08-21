@@ -189,16 +189,19 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(not lexicon.detail_medical_name.visible, "Gesperrter Eintrag verrät keinen Fachbegriff")
 
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_TERMS)
-	_check(lexicon.entry_buttons.size() >= 38, "Begriffslexikon enthält den vollständigen Startkatalog einschließlich Schadenstypen")
+	_check(lexicon.entry_buttons.size() >= 20, "Begriffslexikon enthält weiterhin den allgemeinen Startkatalog")
 	_check(lexicon.selected_entry_id == &"", "Auch ein Kategorienwechsel wählt nicht automatisch den ersten Begriff")
 	_check(lexicon.empty_detail_label.visible, "Nach dem Kategorienwechsel bleibt die kompakte neutrale Anleitung sichtbar")
 	_check(lexicon.context_detail_sources().is_empty(), "Begriffe erzeugen keine ui_info-Detailquellen")
 	for term_button_value in lexicon.entry_buttons.values():
 		var term_button := term_button_value as Button
 		_check(term_button != null and term_button.tooltip_text.is_empty(), "Begriffe erzeugen keinen Maus-Tooltip")
+
+	lexicon.select_category(LexiconEntryDefinition.CATEGORY_CHARACTER)
 	var tempo_id := &"term_treatment_speed"
-	_check(lexicon.context_detail_payload(tempo_id).is_empty(), "Auch ein direkter Begriffsprovider liefert keine redundante Detailkarte")
-	_check(lexicon.select_entry(tempo_id), "Attack Speed ist direkt lesbar")
+	_check(lexicon.entry_buttons.has(tempo_id), "Attack Speed steht bei den Charakterwerten")
+	_check(not lexicon.context_detail_payload(tempo_id).is_empty(), "Ein Charakterwert liefert seine normale Detailkarte")
+	_check(lexicon.select_entry(tempo_id), "Attack Speed ist unter Charakter direkt lesbar")
 	_check(lexicon.detail_gameplay_text.text.contains("Attack Speed"), "Detail erklärt Attack Speed verständlich")
 
 func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:

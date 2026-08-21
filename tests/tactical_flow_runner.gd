@@ -18,6 +18,7 @@ func _run() -> void:
 	game.meta.research_ranks[&"stability_reserve"] = 1
 	game.meta.research_ranks[&"sample_logistics"] = 1
 	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
+	game.meta.research_ranks[&"unlock_defense_burst"] = 1
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(StringName(discovery_id))
 	await process_frame
@@ -85,7 +86,12 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	game._on_preparation_slot_component_requested(LoadoutSlotId.ACTIVE_1, &"ability_defense_burst")
 	game._on_preparation_slot_component_requested(LoadoutSlotId.ACTIVE_2, &"ability_treatment_line")
 	loadout = game.pending_loadout_draft.to_prepared()
-	var validation: LoadoutValidationResult = LoadoutValidator.validate(loadout, game.loadout_modules, LoadoutAvailabilityPolicy.selectable_ids(game.loadout_modules, game.meta.research_ranks), game.meta.preparation_capacity())
+	var validation: LoadoutValidationResult = LoadoutValidator.validate(
+		loadout,
+		game.loadout_modules,
+		LoadoutAvailabilityPolicy.selectable_ids(game.loadout_modules, game.meta.research_ranks, true),
+		game.meta.preparation_capacity()
+	)
 	_check(validation.valid and loadout.reserve_id == &"", "Ein reservefreier neuer Plan ist gültig")
 	game._on_preparation_start_requested(loadout.to_dict())
 	_check(game.flow_state == GameFlowState.State.RUNNING, "Ein gültiger Plan startet den Run")
@@ -252,15 +258,16 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	_check(not game.mastery_tracker.reserve_was_swapped, "Der ruhende Reservepfad erzeugt keinen versteckten Trackerzustand")
 
 	var points_before: int = game.meta.talent_points_earned()
-	game.state.mark_boss_defeated()
+	for _boss_index in range(game.state.boss_count_target):
+		game.state.mark_boss_defeated()
 	await process_frame
 	_check(game.flow_state == GameFlowState.State.RESULT, "Ein erfolgreicher Abschluss führt zum Ergebnis")
 	_check(game.meta.has_completed_mastery(&"fall_1_first_victory"), "Der erste Fall-Sieg schaltet Meisterschaft frei")
 	_check(game.meta.has_completed_mastery(&"fall_1_early_finding"), "Ein früher Befund wird am Ergebnis ausgewertet")
 	_check(game.meta.has_completed_mastery(&"fall_1_healthy_win"), "Ein stabiler Abschluss wird am Ergebnis ausgewertet")
-	_check(game.meta.talent_points_earned() >= points_before + 3, "Neue Meisterschaft vergibt getrennte Talentpunkte")
+	_check(game.meta.talent_points_earned() == points_before, "Fall 1 vergibt noch keinen Talentpunkt")
 	_check(game.hud.end_mastery_panel.visible, "Das Ergebnis zeigt neue Meisterschaft sichtbar an")
-	_check(game.hud.end_mastery_label.text.to_lower().contains("talentpunkte"), "Das Ergebnis benennt die Meisterschaftsbelohnung unabhängig von ihrer Sentence-Case-Darstellung")
+	_check(game.hud.end_mastery_label.text.to_lower().contains("0 talentpunkte"), "Das Ergebnis macht die noch punktlose Fall-1-Meisterschaft sichtbar")
 
 func _test_pause_abort_and_intro_regression(game: Node) -> void:
 	var research_before_abort: int = game.meta.research_points

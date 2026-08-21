@@ -7,6 +7,12 @@ enum Path {
 	SUPPORT
 }
 
+enum Rarity {
+	COMMON,
+	MAGIC,
+	RARE
+}
+
 @export var id: StringName
 @export var title: String
 @export_multiline var description: String
@@ -28,6 +34,12 @@ enum Path {
 @export var preview_decimals: int = 0
 @export var preview_target: StringName
 @export var preview_context_tags: PackedStringArray = PackedStringArray()
+@export var family_id: StringName
+@export var rarity: Rarity = Rarity.COMMON
+@export var repeatable: bool = false
+@export var show_cap: bool = true
+@export var rarity_weight: float = 1.0
+@export var repeat_weight_decay: float = 1.0
 
 static func create(
 	definition_id: StringName,
@@ -54,6 +66,23 @@ static func create(
 func configure_pool(requirements: Array[StringName] = [], tags: Array[StringName] = []) -> UpgradeDefinition:
 	required_component_ids = requirements.duplicate()
 	synergy_tags = tags.duplicate()
+	return self
+
+
+func configure_offer(
+	resolved_family_id: StringName,
+	rarity_value: Rarity = Rarity.COMMON,
+	repeatable_value: bool = false,
+	show_cap_value: bool = true,
+	rarity_weight_value: float = 1.0,
+	repeat_weight_decay_value: float = 1.0
+) -> UpgradeDefinition:
+	family_id = resolved_family_id
+	rarity = rarity_value
+	repeatable = repeatable_value
+	show_cap = show_cap_value
+	rarity_weight = maxf(rarity_weight_value, 0.001)
+	repeat_weight_decay = clampf(repeat_weight_decay_value, 0.01, 1.0)
 	return self
 
 func require_upgrades(ids: Array[StringName]) -> UpgradeDefinition:
@@ -95,9 +124,34 @@ func heading_component_id(prepared_treatment_id: StringName = &"") -> StringName
 		return prepared_treatment_id
 	if preview_context_tags.has("defense_cell") or id == &"neutrophils":
 		return &"defense_cells"
-	if id == &"mobility":
+	if family_id == &"movement" or id == &"mobility":
 		return &"movement"
 	return required_component_ids[0] if required_component_ids.size() == 1 else &""
+
+
+func resolved_family_key(prepared_treatment_id: StringName = &"") -> StringName:
+	var resolved_family := family_id if family_id != &"" else id
+	var component_id := heading_component_id(prepared_treatment_id)
+	if component_id == &"":
+		component_id = &"general"
+	return StringName("%s:%s" % [String(component_id), String(resolved_family)])
+
+
+func can_offer(family_pick_count: int, variant_pick_count: int = 0) -> bool:
+	if repeatable:
+		return true
+	if max_level <= 0:
+		return false
+	return family_pick_count < max_level and variant_pick_count < max_level
+
+
+func rarity_role() -> StringName:
+	match rarity:
+		Rarity.MAGIC:
+			return &"magic"
+		Rarity.RARE:
+			return &"rare"
+	return &"common"
 
 
 func resolved_component_name(prepared_treatment: TreatmentDefinition, component_titles: Dictionary = {}) -> String:

@@ -51,6 +51,9 @@ var _research_grid: GridContainer
 var _talent_scroll: ScrollContainer
 var _talent_stack: VBoxContainer
 var _talent_inline_balance: Label
+var _talent_lock_panel: PanelContainer
+var _talent_lock_title: Label
+var _talent_lock_copy: Label
 var _talent_reset_row: HBoxContainer
 var _talent_reset_button: Button
 var _talent_grid: GridContainer
@@ -69,6 +72,8 @@ var _talent_info_source_ids: Array[StringName] = []
 var _selected_tab := &"research"
 var _research_balance_text := ""
 var _talent_balance_text := ""
+var _talents_unlocked := true
+var _talent_lock_text := ""
 var _has_applied_model := false
 var _applied_revision := -1
 var _applied_content_hash := 0
@@ -115,7 +120,9 @@ func apply_view_model(view_model: ProgressionScreenViewModelType) -> bool:
 	var return_focus_id := _focused_stable_id()
 	_research_balance_text = view_model.research_balance_text()
 	_talent_balance_text = view_model.talent_balance_text()
-	AlveolusUIComponents.set_button_disabled(_talent_reset_button, not view_model.talent_reset_enabled())
+	_talents_unlocked = view_model.talents_unlocked()
+	_talent_lock_text = view_model.talent_lock_text()
+	AlveolusUIComponents.set_button_disabled(_talent_reset_button, not _talents_unlocked or not view_model.talent_reset_enabled())
 	if not _has_applied_model or view_model.research_hash() != _applied_research_hash:
 		_sync_research(view_model.research_items())
 	if not _has_applied_model or view_model.talent_hash() != _applied_talent_hash:
@@ -126,6 +133,7 @@ func apply_view_model(view_model: ProgressionScreenViewModelType) -> bool:
 		else:
 			_refresh_talents(talent_branches)
 		_applied_talent_structure_hash = next_structure_hash
+	_apply_talent_lock_state()
 	_set_selected_tab(view_model.selected_tab())
 
 	_has_applied_model = true
@@ -182,6 +190,15 @@ func talent_tab_action() -> Button:
 
 func talent_reset_action() -> Button:
 	return _talent_reset_button
+
+
+func talent_lock_panel() -> PanelContainer:
+	return _talent_lock_panel
+
+
+func talents_unlocked() -> bool:
+	return _talents_unlocked
+
 
 func research_reset_action() -> Button:
 	return _research_reset_button
@@ -373,6 +390,39 @@ func _build_talent_view(parent: VBoxContainer) -> void:
 	_talent_inline_balance.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_talent_inline_balance.hide()
 	_talent_stack.add_child(_talent_inline_balance)
+	_talent_lock_panel = PanelContainer.new()
+	_talent_lock_panel.name = "TalentIntroLock"
+	_talent_lock_panel.theme_type_variation = AlveolusVisualTheme.TYPE_PANEL_INSET
+	_talent_lock_panel.custom_minimum_size.y = 280.0
+	_talent_lock_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_talent_lock_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_talent_lock_panel.set_meta(&"alveolus_component", &"progression_lock")
+	_talent_lock_panel.hide()
+	_talent_stack.add_child(_talent_lock_panel)
+	var lock_center := CenterContainer.new()
+	lock_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_talent_lock_panel.add_child(lock_center)
+	var lock_stack := VBoxContainer.new()
+	lock_stack.custom_minimum_size.x = 320.0
+	lock_stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	lock_stack.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	lock_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lock_center.add_child(lock_stack)
+	var lock_icon := SimpleIcon.new()
+	lock_icon.name = "TalentLockIcon"
+	lock_icon.custom_minimum_size = Vector2(56.0, 56.0)
+	lock_icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	lock_icon.configure(&"locked", AlveolusVisualTheme.GOLD)
+	lock_stack.add_child(lock_icon)
+	_talent_lock_title = AlveolusUIComponents.label("TALENTE GESPERRT", AlveolusVisualTheme.TYPE_SECTION_LABEL)
+	_talent_lock_title.name = "TalentLockTitle"
+	_talent_lock_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lock_stack.add_child(_talent_lock_title)
+	_talent_lock_copy = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	_talent_lock_copy.name = "TalentLockCopy"
+	_talent_lock_copy.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_talent_lock_copy.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lock_stack.add_child(_talent_lock_copy)
 	_talent_reset_row = HBoxContainer.new()
 	_talent_reset_row.name = "TalentResetRow"
 	_talent_reset_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
@@ -388,7 +438,7 @@ func _build_talent_view(parent: VBoxContainer) -> void:
 		AlveolusVisualTheme.COBALT
 	)
 	_talent_reset_button.name = "TalentResetAction"
-	_talent_reset_button.pressed.connect(func() -> void: talent_reset.emit())
+	_talent_reset_button.pressed.connect(_on_talent_reset_pressed)
 	_talent_reset_row.add_child(_talent_reset_button)
 	_talent_grid = GridContainer.new()
 	_talent_grid.name = "TalentBranches"
@@ -713,6 +763,7 @@ func _build_item_content(
 	var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
 	var content_modulate := Color(AlveolusVisualTheme.SKY_DEEP, 0.48) if locked else Color.WHITE
 	var icon := SimpleIcon.new()
+	icon.name = "PrimaryIcon"
 	icon.custom_minimum_size = Vector2.ONE * (22.0 if talent_density else 28.0)
 	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	icon.configure(icon_kind, accent if not locked else AlveolusVisualTheme.MUTED)
@@ -760,11 +811,18 @@ func _on_research_pressed(id: StringName) -> void:
 
 
 func _on_talent_pressed(id: StringName) -> void:
-	if bool(_talent_interactive.get(id, false)):
+	if _talents_unlocked and bool(_talent_interactive.get(id, false)):
 		talent_toggle.emit(id)
 
 
+func _on_talent_reset_pressed() -> void:
+	if _talents_unlocked:
+		talent_reset.emit()
+
+
 func _on_talent_gui_input(event: InputEvent, id: StringName) -> void:
+	if not _talents_unlocked:
+		return
 	if not event is InputEventMouseButton:
 		return
 	var mouse_event := event as InputEventMouseButton
@@ -790,6 +848,20 @@ func _set_selected_tab(tab: StringName) -> void:
 	_research_inline_balance.text = _research_balance_text
 	_talent_inline_balance.text = _talent_balance_text
 	_update_responsive_layout()
+
+
+func _apply_talent_lock_state() -> void:
+	if _talent_lock_panel == null:
+		return
+	_talent_lock_panel.visible = not _talents_unlocked
+	_talent_reset_row.visible = _talents_unlocked
+	_talent_reset_button.visible = _talents_unlocked
+	_talent_grid.visible = _talents_unlocked
+	_talent_lock_copy.text = _talent_lock_text
+	_talent_lock_panel.set_meta(
+		&"alveolus_accessible_name",
+		"Talente gesperrt. %s" % _talent_lock_text
+	)
 
 
 func _register_info_source(
@@ -917,12 +989,13 @@ func _update_responsive_layout() -> void:
 	_research_inline_balance.visible = compact
 	_talent_inline_balance.visible = compact
 	_balance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_talent_stack.move_child(_talent_lock_panel, 1)
 	if compact:
-		_talent_stack.move_child(_talent_grid, 1)
-		_talent_stack.move_child(_talent_reset_row, 2)
-	else:
-		_talent_stack.move_child(_talent_reset_row, 1)
 		_talent_stack.move_child(_talent_grid, 2)
+		_talent_stack.move_child(_talent_reset_row, 3)
+	else:
+		_talent_stack.move_child(_talent_reset_row, 2)
+		_talent_stack.move_child(_talent_grid, 3)
 	_configure_branch_exits.call_deferred()
 
 
@@ -944,6 +1017,9 @@ func _restore_focus(id: StringName) -> void:
 
 
 func _focus_first_talent() -> void:
+	if not _talents_unlocked:
+		_talent_tab_button.grab_focus()
+		return
 	for branch_id in _branch_order:
 		var branch := _talent_branches.get(branch_id) as TalentTreeBranch
 		if branch == null:

@@ -28,6 +28,7 @@ func _run() -> void:
 	var fixture: Variant = _fixture(1, &"research", "Forschung 18", "4 Talentpunkte · 2 frei")
 	_check(fixture.research_item_count() == 4, "ViewModel bewahrt alle vier Forschungskarten")
 	_check(fixture.talent_branch_count() == 1, "ViewModel bündelt Root und drei Abzweigungen in einem Talentbaum")
+	_check(fixture.talents_unlocked(), "Bestehende Presenter bleiben durch den optionalen Unlockparameter rückwärtskompatibel")
 	var copied_research: Array = fixture.research_items()
 	copied_research.clear()
 	_check(fixture.research_item_count() == 4, "Ausgelesene Forschungsliste verändert das ViewModel nicht")
@@ -54,9 +55,11 @@ func _run() -> void:
 	_check(bool(available_research.get_meta(&"item_interactive", false)), "Verfügbare Forschung ist interaktiv")
 	_check(not bool(locked_research.get_meta(&"item_interactive", true)), "Gesperrte Forschung löst keine Kaufabsicht aus")
 	_check(_state_icon_kind(locked_research) == &"locked", "Gesperrte Forschung ist zusätzlich mit Schloss markiert")
+	_check(_primary_icon_kind(locked_research) == &"question", "Unbekannte Meilensteinforschung zeigt Fragezeichen plus separates Schloss")
 	_check(locked_research.theme_type_variation == AlveolusVisualTheme.TYPE_COMPACT_RESEARCH, "Gesperrte Forschung bewahrt die fokussierbare kompakte Grundrolle")
 	_check(locked_research.focus_mode == Control.FOCUS_ALL, "Gesperrte Forschung bleibt für ui_info fokussierbar")
 	_check(String(locked_research.get_meta(&"alveolus_accessible_name", "")).contains("gesperrt"), "Nicht sichtbarer zugänglicher Name benennt den Zustand ausdrücklich")
+	_check(String(screen.info_payload_for(locked_research).get("body", "")).contains("Abschluss von Fall 1"), "Meilensteinforschung erklärt ihren Unlock im Hoverdetail")
 	_check(active_research.custom_minimum_size.y == AlveolusVisualTheme.COMPACT_RESEARCH_HEIGHT and active_research.get_combined_minimum_size().y <= 68.0, "Forschungskarten bleiben einschließlich Theme-Innenrändern kompakt")
 	_check(active_research.get_meta(&"alveolus_component", &"") == &"compact_research", "Forschung verwendet die zentrale Komponentenrolle compact_research")
 	for card in [active_research, available_research, locked_research]:
@@ -201,6 +204,22 @@ func _run() -> void:
 	_check(screen.research_columns() == 1 and screen.talent_columns() == 1, "Kompakte Breite verwendet eine Spalte")
 	_check(screen.default_focus_control() == screen.talent_tab_action(), "Standardfokus folgt dem sichtbaren Tab")
 
+	var locked_talents: Variant = _talent_lock_fixture(5)
+	_check(screen.apply_view_model(locked_talents), "Intro-Sperre wird als eigener Fortschrittszustand angewendet")
+	await process_frame
+	_check(not screen.talents_unlocked(), "Talente bleiben vor Introabschluss semantisch gesperrt")
+	_check(screen.talent_lock_panel().is_visible_in_tree(), "Talente zeigen die vollflächige Padlock-Sperrfläche")
+	_check(not screen.talent_reset_action().visible and not screen.talent_branch(&"treatment").is_visible_in_tree(), "Gesperrte Talente legen weder Reset noch Talentbaum unter die Sperrfläche")
+	var lock_icon := screen.talent_lock_panel().find_child("TalentLockIcon", true, false) as SimpleIcon
+	var lock_copy := screen.talent_lock_panel().find_child("TalentLockCopy", true, false) as Label
+	_check(lock_icon != null and lock_icon.kind == &"locked", "Intro-Sperre verwendet die zentrale Padlock-Glyphe")
+	_check(lock_copy != null and lock_copy.text.contains("Einführung"), "Intro-Sperre erklärt ihre Freischaltbedingung sichtbar")
+	intents["talent"] = StringName()
+	screen.talent_action(&"manual_treatment_aim").pressed.emit()
+	_check(intents["talent"] == StringName(), "Verdeckte Talentknoten emittieren vor Introabschluss keine Absicht")
+	screen.talent_reset_action().pressed.emit()
+	_check(int(intents["reset"]) == 1, "Intro-Sperre blockiert auch direkte Resetabsichten")
+
 	_check_source_contracts()
 	screen.free()
 	_finish()
@@ -210,7 +229,7 @@ func _fixture(revision: int, tab: StringName, research_balance: String, talent_b
 	var research: Array = [
 		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben"),
 		_research_item(&"research_available", "Schnellauswertung", "Rang 0/2", "2 Forschung", ProgressionViewModelScript.ItemState.AVAILABLE, true, "+0 % Befundfortschritt"),
-		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+0 Analyse"),
+		_research_item(&"research_locked", "Fetter lazer", "Rang 0/1", "Nach Fall 1", ProgressionViewModelScript.ItemState.LOCKED, false, "Gesperrt", &"question"),
 		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit"),
 	]
 	return ProgressionViewModelScript.create(
@@ -279,17 +298,19 @@ func _research_item(
 	cost: String,
 	state: int,
 	interactive: bool,
-	total_effect: String
+	total_effect: String,
+	icon_kind: StringName = &"research"
 ) -> Variant:
+	var info_body := "Wird nach Abschluss von Fall 1 freigeschaltet." if icon_kind == &"question" else "Wirkung pro Rang von %s." % title
 	return ProgressionViewModelScript.ResearchItemViewModel.create(
 		id,
 		title,
 		rank,
 		cost,
-		&"research",
+		icon_kind,
 		state,
 		interactive,
-		_info(title, "Wirkung pro Rang von %s." % title, cost, &"research", AlveolusVisualTheme.GOLD),
+		_info(title, info_body, cost, icon_kind, AlveolusVisualTheme.GOLD),
 		total_effect
 	)
 
@@ -303,6 +324,21 @@ func _fixture_branches() -> Array:
 			_talent(&"piercing_persistence", "Durchdringende Ausdauer", "0/2 · 1 P", 1, 2, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.LOCKED, false, 0, 2),
 		]),
 	]
+
+
+func _talent_lock_fixture(revision: int) -> Variant:
+	var source: Variant = _fixture(revision, &"talents", "Forschung 18", "Talente gesperrt")
+	return ProgressionViewModelScript.create(
+		revision,
+		&"talents",
+		source.research_balance_text(),
+		source.talent_balance_text(),
+		true,
+		source.research_items(),
+		source.talent_branches(),
+		false,
+		"Schließe die Einführung ab, um Talente freizuschalten."
+	)
 
 
 func _branch(id: StringName, title: String, icon: StringName, accent: Color, nodes: Array) -> Variant:
@@ -343,6 +379,11 @@ func _info(title: String, body: String, meta: String, icon: StringName, accent: 
 
 func _state_icon_kind(root: Node) -> StringName:
 	var icon := root.find_child("StateIcon", true, false) as SimpleIcon
+	return icon.kind if icon != null else &""
+
+
+func _primary_icon_kind(root: Node) -> StringName:
+	var icon := root.find_child("PrimaryIcon", true, false) as SimpleIcon
 	return icon.kind if icon != null else &""
 
 

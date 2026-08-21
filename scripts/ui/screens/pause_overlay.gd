@@ -630,7 +630,11 @@ func _update_stat_row(stat: PauseOverlayViewModel.StatValueViewModel, row_panel:
 	row_panel.set_meta(&"stat_id", stat.id())
 	row_panel.set_meta(&"stat_group", stat.section_id())
 	row_panel.set_meta(&"stat_accent_role", stat.accent_role())
-	row_panel.tooltip_text = "%s: %s" % [stat.label(), stat.formatted_value()]
+	row_panel.tooltip_text = (
+		stat.detail_text()
+		if not stat.detail_text().is_empty()
+		else "%s: %s" % [stat.label(), stat.formatted_value()]
+	)
 	var marker := row_panel.find_child("StatIcon", true, false) as SimpleIcon
 	var caption := row_panel.find_child("StatLabel", true, false) as Label
 	var value := row_panel.find_child("StatValue", true, false) as Label

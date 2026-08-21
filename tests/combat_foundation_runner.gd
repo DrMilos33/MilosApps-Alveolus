@@ -246,9 +246,9 @@ func _test_treatments() -> void:
 	var precise_build := RunBuildState.from_treatment(precise)
 	var default_precise_shots := PreciseTreatmentStrategy.new().create_shots(avatar.position, Vector2.RIGHT, enemies, topology, precise, precise_build)
 	_assert_equal(default_precise_shots.size(), 1, "Impuls erzeugt vor dem Zusatzziel-Ausbau exakt ein Projektil")
-	precise_build.set_base(RunBuildState.TREATMENT_TARGETS, 2.0)
+	precise_build.set_base(RunBuildState.TREATMENT_PROJECTILES, 2.0)
 	var precise_shots := PreciseTreatmentStrategy.new().create_shots(avatar.position, Vector2.RIGHT, enemies, topology, precise, precise_build)
-	_assert_equal(precise_shots.size(), 2, "Precision strategy respects additional targets")
+	_assert_equal(precise_shots.size(), 2, "Impuls erzeugt für jedes zusätzliche Projektil einen eigenen Schuss")
 	_assert_equal(precise_shots[0].mode, TreatmentShot.Mode.TRACKING, "Precision produces tracking shots")
 
 	var spread: TreatmentDefinition = definitions[&"treatment_spread"]

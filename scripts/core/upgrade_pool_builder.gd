@@ -5,6 +5,7 @@ const PREPARED_WEIGHT := 3.0
 const SYNERGY_WEIGHT := 2.0
 const GENERAL_WEIGHT := 1.0
 
+
 static func choose(
 	definitions: Array[UpgradeDefinition],
 	levels: Dictionary,
@@ -15,66 +16,172 @@ static func choose(
 	excluded_ids: Array[StringName] = [],
 	guarantee_treatment: bool = false
 ) -> Array[UpgradeDefinition]:
+	var prepared_treatment_id := _prepared_treatment_id(prepared_component_ids)
+	var family_counts := _resolved_family_counts(definitions, levels, prepared_treatment_id)
+	var excluded_families: Dictionary = {}
+	for definition in definitions:
+		if excluded_ids.has(definition.id):
+			excluded_families[definition.resolved_family_key(prepared_treatment_id)] = true
+
 	var candidates: Array[UpgradeDefinition] = []
 	for definition in definitions:
-		if int(levels.get(definition.id, 0)) >= definition.max_level:
+		var family_key := definition.resolved_family_key(prepared_treatment_id)
+		var family_count := int(family_counts.get(family_key, 0))
+		var variant_count := int(levels.get(definition.id, 0))
+		if not definition.can_offer(family_count, variant_count):
 			continue
-		if excluded_ids.has(definition.id):
+		if excluded_families.has(family_key):
 			continue
 		if not _upgrade_requirements_met(definition, levels):
 			continue
 		if not _requirements_met(definition, prepared_component_ids):
 			continue
 		candidates.append(definition)
-	if candidates.size() < count and not excluded_ids.is_empty():
+	if _unique_family_count(candidates, prepared_treatment_id) < count and not excluded_ids.is_empty():
 		return choose(definitions, levels, rng, prepared_component_ids, prepared_tags, count, [], guarantee_treatment)
 
 	var selected: Array[UpgradeDefinition] = []
-	if guarantee_treatment:
-		var prepared_treatment_id := &""
-		for component_id in prepared_component_ids:
-			if String(component_id).begins_with("treatment_"):
-				prepared_treatment_id = component_id
-				break
-		var treatment_candidates := candidates.filter(func(item: UpgradeDefinition) -> bool:
-			return prepared_treatment_id != &"" \
-				and item.path == UpgradeDefinition.Path.ANTIBIOTIC \
-				and item.required_component_ids.has(prepared_treatment_id)
-		)
+	if guarantee_treatment and prepared_treatment_id != &"":
+		var treatment_candidates: Array[UpgradeDefinition] = []
+		for item in candidates:
+			if item.path == UpgradeDefinition.Path.ANTIBIOTIC and item.required_component_ids.has(prepared_treatment_id):
+				treatment_candidates.append(item)
 		if not treatment_candidates.is_empty():
-			var guaranteed := _weighted_pick(treatment_candidates, rng, prepared_component_ids, prepared_tags)
+			var guaranteed := _weighted_family_pick(
+				treatment_candidates,
+				rng,
+				prepared_component_ids,
+				prepared_tags,
+				family_counts,
+				prepared_treatment_id
+			)
 			selected.append(guaranteed)
-			candidates.erase(guaranteed)
+			_erase_family(candidates, guaranteed.resolved_family_key(prepared_treatment_id), prepared_treatment_id)
 
 	while selected.size() < count and not candidates.is_empty():
-		var picked := _weighted_pick(candidates, rng, prepared_component_ids, prepared_tags)
+		var picked := _weighted_family_pick(
+			candidates,
+			rng,
+			prepared_component_ids,
+			prepared_tags,
+			family_counts,
+			prepared_treatment_id
+		)
 		selected.append(picked)
-		candidates.erase(picked)
+		_erase_family(candidates, picked.resolved_family_key(prepared_treatment_id), prepared_treatment_id)
 	return selected
 
-static func weight_for(definition: UpgradeDefinition, prepared_component_ids: Array[StringName], prepared_tags: Array[StringName]) -> float:
-	if _matches_prepared(definition, prepared_component_ids):
-		return PREPARED_WEIGHT
-	for tag in definition.synergy_tags:
-		if prepared_tags.has(tag):
-			return SYNERGY_WEIGHT
-	return GENERAL_WEIGHT
 
-static func _weighted_pick(
+static func weight_for(
+	definition: UpgradeDefinition,
+	prepared_component_ids: Array[StringName],
+	prepared_tags: Array[StringName],
+	family_pick_count: int = 0
+) -> float:
+	var result := GENERAL_WEIGHT
+	if _matches_prepared(definition, prepared_component_ids):
+		result = PREPARED_WEIGHT
+	else:
+		for tag in definition.synergy_tags:
+			if prepared_tags.has(tag):
+				result = SYNERGY_WEIGHT
+				break
+	return result * pow(definition.repeat_weight_decay, maxf(float(family_pick_count), 0.0))
+
+
+static func _weighted_family_pick(
 	candidates: Array[UpgradeDefinition],
 	rng: RandomNumberGenerator,
 	prepared_component_ids: Array[StringName],
-	prepared_tags: Array[StringName]
+	prepared_tags: Array[StringName],
+	family_counts: Dictionary,
+	prepared_treatment_id: StringName
 ) -> UpgradeDefinition:
+	var family_keys: Array[StringName] = []
+	var family_weights := PackedFloat32Array()
 	var total := 0.0
 	for definition in candidates:
-		total += weight_for(definition, prepared_component_ids, prepared_tags)
+		var family_key := definition.resolved_family_key(prepared_treatment_id)
+		if family_keys.has(family_key):
+			continue
+		var family_weight := weight_for(
+			definition,
+			prepared_component_ids,
+			prepared_tags,
+			int(family_counts.get(family_key, 0))
+		)
+		family_keys.append(family_key)
+		family_weights.append(family_weight)
+		total += family_weight
 	var cursor := rng.randf() * maxf(total, 0.001)
+	var selected_family: StringName = family_keys.back()
+	for index in range(family_keys.size()):
+		cursor -= family_weights[index]
+		if cursor <= 0.0:
+			selected_family = family_keys[index]
+			break
+	return _weighted_rarity_pick(candidates, selected_family, rng, prepared_treatment_id)
+
+
+static func _weighted_rarity_pick(
+	candidates: Array[UpgradeDefinition],
+	family_key: StringName,
+	rng: RandomNumberGenerator,
+	prepared_treatment_id: StringName
+) -> UpgradeDefinition:
+	var variants: Array[UpgradeDefinition] = []
+	var total := 0.0
 	for definition in candidates:
-		cursor -= weight_for(definition, prepared_component_ids, prepared_tags)
+		if definition.resolved_family_key(prepared_treatment_id) != family_key:
+			continue
+		variants.append(definition)
+		total += maxf(definition.rarity_weight, 0.001)
+	var cursor := rng.randf() * maxf(total, 0.001)
+	for definition in variants:
+		cursor -= maxf(definition.rarity_weight, 0.001)
 		if cursor <= 0.0:
 			return definition
-	return candidates.back()
+	return variants.back()
+
+
+static func _erase_family(
+	candidates: Array[UpgradeDefinition],
+	family_key: StringName,
+	prepared_treatment_id: StringName
+) -> void:
+	for index in range(candidates.size() - 1, -1, -1):
+		if candidates[index].resolved_family_key(prepared_treatment_id) == family_key:
+			candidates.remove_at(index)
+
+
+static func _resolved_family_counts(
+	definitions: Array[UpgradeDefinition],
+	levels: Dictionary,
+	prepared_treatment_id: StringName
+) -> Dictionary:
+	var result: Dictionary = {}
+	for definition in definitions:
+		var picks := maxi(0, int(levels.get(definition.id, 0)))
+		if picks <= 0:
+			continue
+		var family_key := definition.resolved_family_key(prepared_treatment_id)
+		result[family_key] = int(result.get(family_key, 0)) + picks
+	return result
+
+
+static func _unique_family_count(candidates: Array[UpgradeDefinition], prepared_treatment_id: StringName) -> int:
+	var seen: Dictionary = {}
+	for definition in candidates:
+		seen[definition.resolved_family_key(prepared_treatment_id)] = true
+	return seen.size()
+
+
+static func _prepared_treatment_id(prepared_component_ids: Array[StringName]) -> StringName:
+	for component_id in prepared_component_ids:
+		if String(component_id).begins_with("treatment_"):
+			return component_id
+	return &""
+
 
 static func _requirements_met(definition: UpgradeDefinition, prepared_component_ids: Array[StringName]) -> bool:
 	if definition.required_component_ids.is_empty():
@@ -84,11 +191,13 @@ static func _requirements_met(definition: UpgradeDefinition, prepared_component_
 			return true
 	return false
 
+
 static func _upgrade_requirements_met(definition: UpgradeDefinition, levels: Dictionary) -> bool:
 	for required_id in definition.required_upgrade_ids:
 		if int(levels.get(required_id, 0)) <= 0:
 			return false
 	return true
+
 
 static func _matches_prepared(definition: UpgradeDefinition, prepared_component_ids: Array[StringName]) -> bool:
 	for component_id in definition.required_component_ids:

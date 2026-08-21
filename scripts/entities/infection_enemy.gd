@@ -19,14 +19,16 @@ const DEATH_SECONDS := 0.0
 const HIT_REACTION_SECONDS := 0.09
 const DEFAULT_KNOCKBACK_SECONDS := 0.28
 const DEFAULT_STUN_SECONDS := 1.0
+const RELOCATION_INTERACTION_LOCK_SECONDS := 1.5
 const SMALL_CROWD_RADIUS_FACTOR := 1.00
 const CLUSTER_CROWD_RADIUS_FACTOR := 1.05
 const NEST_CROWD_RADIUS_FACTOR := 1.18
 const BOSS_CROWD_RADIUS_FACTOR := 1.12
 const DEFAULT_CROWD_RADIUS_FACTOR := 1.18
-const CROWD_STEERING_SMOOTHING := 0.75
+const CROWD_STEERING_SMOOTHING := 1.0
 const CROWD_SPEED_SMOOTHING := 1.0
 const CROWD_STEERING_WEIGHT := 1.0
+const DIRECT_CHASE_CONTACT_DEPTH := 0.5
 
 var definition: EnemyDefinition
 var target: TherapyAvatar
@@ -74,6 +76,11 @@ var _crowd_steering := Vector2.ZERO
 var _crowd_speed_multiplier: float = 1.0
 var _crowd_steering_target := Vector2.ZERO
 var _crowd_speed_target: float = 1.0
+var _contact_check_pending: bool = false
+var _relocation_interaction_lock: float = 0.0
+var _topology_bounded: bool = false
+var _bounded_minimum := Vector2.ZERO
+var _bounded_maximum := Vector2.ZERO
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -96,6 +103,10 @@ func configure(
 	definition = enemy_definition
 	target = target_node
 	topology = arena_topology
+	_topology_bounded = topology != null and topology.is_bounded()
+	if _topology_bounded and definition != null:
+		_bounded_minimum = topology.bounds.position + Vector2.ONE * definition.radius
+		_bounded_maximum = topology.bounds.end - Vector2.ONE * definition.radius
 	if topology != null and definition != null:
 		global_position = topology.resolve_position(global_position, definition.radius)
 	max_health = definition.max_health * health_scale
@@ -125,6 +136,8 @@ func configure(
 	_crowd_speed_multiplier = 1.0
 	_crowd_steering_target = Vector2.ZERO
 	_crowd_speed_target = 1.0
+	_contact_check_pending = false
+	_relocation_interaction_lock = 0.0
 	detailed_visual_required = definition.is_boss or definition.id == &"minor_focus"
 	_configure_visual()
 	reset_visual_snapshot()
@@ -143,6 +156,9 @@ func recycle() -> void:
 	hide()
 	target = null
 	topology = null
+	_topology_bounded = false
+	_bounded_minimum = Vector2.ZERO
+	_bounded_maximum = Vector2.ZERO
 	runtime_resistance_profile = null
 	runtime_defense = 0.0
 	phase_minions = PackedInt32Array()
@@ -156,6 +172,8 @@ func recycle() -> void:
 	_crowd_speed_multiplier = 1.0
 	_crowd_steering_target = Vector2.ZERO
 	_crowd_speed_target = 1.0
+	_contact_check_pending = false
+	_relocation_interaction_lock = 0.0
 	visual_motion_initialized = false
 
 func is_targetable() -> bool:
@@ -172,6 +190,36 @@ func combat_defense() -> float:
 
 func is_stunned() -> bool:
 	return activation_active and _stun_remaining > 0.0
+
+
+func is_recently_interacted() -> bool:
+	return activation_active and _relocation_interaction_lock > 0.0
+
+
+## Relocation is an off-screen pressure-balancing operation, not a respawn. It
+## may only lease ordinary, fully materialized enemies which have not just been
+## hit or displaced. Ranged-role and tutorial exclusions remain Game-owned.
+func can_be_relocated() -> bool:
+	return (
+		is_targetable()
+		and definition != null
+		and not definition.is_boss
+		and definition.id != &"minor_focus"
+		and not is_stunned()
+		and _knockback_duration <= 0.0
+		and not is_recently_interacted()
+	)
+
+
+## Moves one eligible off-screen enemy without touching health, status,
+## cooldowns, combat ownership or activation generation.
+func relocate_preserving_state(value: Vector2) -> bool:
+	if not can_be_relocated():
+		return false
+	global_position = topology.resolve_position(value, definition.radius) if topology != null else value
+	_contact_check_pending = false
+	reset_visual_motion()
+	return true
 
 func current_handle() -> Dictionary:
 	return {
@@ -240,6 +288,17 @@ func visual_extent() -> float:
 	return definition.radius * (2.25 if definition.is_boss else 2.35)
 
 
+func contact_body_radius() -> float:
+	if definition == null:
+		return 0.0
+	return clampf(definition.contact_radius, 1.0, maxf(definition.radius, 1.0))
+
+
+func apply_crowd_resolved_position(value: Vector2) -> void:
+	global_position = topology.resolve_position(value, definition.radius) if topology != null and definition != null else value
+	visual_current_position = global_position
+
+
 ## Preferred personal-space radius used by EnemyWorld's predictive steering.
 ## This is deliberately distinct from exact hit geometry: authored sprites do
 ## not all fill their query circle by the same amount, so one global multiplier
@@ -261,12 +320,27 @@ func crowd_radius() -> float:
 func _physics_process(delta: float) -> void:
 	step_fixed(delta)
 
-func step_fixed(delta: float) -> void:
+func step_fixed(delta: float, defer_contact_check: bool = false) -> void:
+	_contact_check_pending = false
 	if not activation_active:
 		return
 	_begin_visual_step()
+	_relocation_interaction_lock = maxf(0.0, _relocation_interaction_lock - delta)
 	if topology != null and definition != null:
-		var bounded_position := topology.resolve_position(global_position, definition.radius)
+		var bounded_position := global_position
+		if _topology_bounded:
+			if (
+				global_position.x < _bounded_minimum.x
+				or global_position.x > _bounded_maximum.x
+				or global_position.y < _bounded_minimum.y
+				or global_position.y > _bounded_maximum.y
+			):
+				bounded_position = Vector2(
+					clampf(global_position.x, _bounded_minimum.x, _bounded_maximum.x),
+					clampf(global_position.y, _bounded_minimum.y, _bounded_maximum.y)
+				)
+		else:
+			bounded_position = topology.resolve_position(global_position, definition.radius)
 		if not bounded_position.is_equal_approx(global_position):
 			global_position = bounded_position
 			if topology.is_wrapping():
@@ -293,7 +367,6 @@ func step_fixed(delta: float) -> void:
 	if definition == null or not is_instance_valid(target):
 		return
 	contact_cooldown = maxf(0.0, contact_cooldown - delta)
-	_step_crowd_steering()
 	var stunned_before := _stun_remaining > 0.0
 	_stun_remaining = maxf(0.0, _stun_remaining - delta)
 	if stunned_before and _stun_remaining <= 0.0:
@@ -303,23 +376,41 @@ func step_fixed(delta: float) -> void:
 		return
 	if _stun_remaining > 0.0:
 		return
-	var to_target := topology.shortest_delta(global_position, target.global_position) if topology != null else target.global_position - global_position
+	var to_target := (
+		target.global_position - global_position
+		if topology == null or _topology_bounded
+		else topology.shortest_delta(global_position, target.global_position)
+	)
 	var distance_squared := to_target.length_squared()
 	if distance_squared > 0.1:
 		var distance := sqrt(distance_squared)
 		var movement_direction := to_target / distance
 		var movement_speed := definition.speed * speed_multiplier * _cached_status_speed_multiplier
-		var safe_direction := movement_direction
-		if _crowd_steering.length_squared() > 0.0001:
-			var steered_direction := movement_direction + _crowd_steering * CROWD_STEERING_WEIGHT
-			if steered_direction.length_squared() > 0.0001:
-				safe_direction = steered_direction.normalized()
-		# Normal neighbor avoidance changes only direction. EnemyWorld may reduce
-		# the magnitude solely for a follower queued behind a contact-latched attacker
-		# while the Doctor stands still; contact arrival itself may stop movement.
-		var safe_velocity := safe_direction * movement_speed * _crowd_speed_multiplier
-		global_position += safe_velocity * delta
-		var resolved := topology.resolve_position(global_position, definition.radius) if topology != null else global_position
+		var contact_radius := contact_body_radius() + TherapyAvatar.CONTACT_RADIUS
+		var stop_radius := maxf(contact_radius - DIRECT_CHASE_CONTACT_DEPTH, 0.0)
+		var step_distance := minf(
+			maxf(movement_speed, 0.0) * delta,
+			maxf(distance - stop_radius, 0.0)
+		)
+		# Survivor-style pursuit: one current target vector, no neighbour steering,
+		# no lateral lane and no self-generated retreat. Clamping the step prevents
+		# crossing the Doctor and oscillating through the contact shell.
+		global_position += movement_direction * step_distance
+		var resolved := global_position
+		if topology != null:
+			if _topology_bounded:
+				if (
+					global_position.x < _bounded_minimum.x
+					or global_position.x > _bounded_maximum.x
+					or global_position.y < _bounded_minimum.y
+					or global_position.y > _bounded_maximum.y
+				):
+					resolved = Vector2(
+						clampf(global_position.x, _bounded_minimum.x, _bounded_maximum.x),
+						clampf(global_position.y, _bounded_minimum.y, _bounded_maximum.y)
+					)
+			else:
+				resolved = topology.resolve_position(global_position, definition.radius)
 		if not resolved.is_equal_approx(global_position):
 			global_position = resolved
 			if topology.is_wrapping():
@@ -328,12 +419,27 @@ func step_fixed(delta: float) -> void:
 				visual_current_position = global_position
 		else:
 			visual_current_position = global_position
-	# Movement may cross the contact shell during this fixed step. Resolve the
-	# post-movement distance so an enemy that just arrived deals contact damage
-	# instead of waiting for (or missing) its next crowd-steering refresh.
-	var contact_delta := topology.shortest_delta(global_position, target.global_position) if topology != null else target.global_position - global_position
-	distance_squared = contact_delta.length_squared()
-	var contact_radius := definition.radius + TherapyAvatar.BODY_RADIUS
+	_contact_check_pending = true
+	if not defer_contact_check:
+		resolve_deferred_contact()
+
+
+## EnemyWorld calls this after its enemy/enemy contact boundary has accepted the
+## final position. Direct entity tests and the fallback physics path keep the
+## default immediate check through step_fixed().
+func resolve_deferred_contact() -> void:
+	if not _contact_check_pending:
+		return
+	_contact_check_pending = false
+	if definition == null or not is_instance_valid(target):
+		return
+	var contact_delta := (
+		target.global_position - global_position
+		if topology == null or _topology_bounded
+		else topology.shortest_delta(global_position, target.global_position)
+	)
+	var distance_squared := contact_delta.length_squared()
+	var contact_radius := contact_body_radius() + TherapyAvatar.CONTACT_RADIUS
 	if definition.contact_enabled and distance_squared <= contact_radius * contact_radius and contact_cooldown <= 0.0:
 		pressure_applied.emit(definition.contact_damage * damage_multiplier * _cached_status_contact_multiplier)
 		contact_cooldown = 0.82 if not definition.is_boss else 0.58
@@ -362,6 +468,7 @@ func apply_displacement(offset: Vector2) -> void:
 	if offset.length_squared() <= 0.0001 or dying or spawn_timer > 0.0:
 		return
 	global_position += offset
+	_relocation_interaction_lock = maxf(_relocation_interaction_lock, RELOCATION_INTERACTION_LOCK_SECONDS)
 	if topology != null:
 		global_position = topology.resolve_position(global_position, definition.radius if definition != null else 0.0)
 	reset_visual_motion()
@@ -382,6 +489,7 @@ func apply_knockback(
 	_knockback_elapsed = 0.0
 	_knockback_duration = maxf(duration, 0.05)
 	_stun_remaining = maxf(_stun_remaining, maxf(stun_duration, _knockback_duration))
+	_relocation_interaction_lock = maxf(_relocation_interaction_lock, RELOCATION_INTERACTION_LOCK_SECONDS)
 	if not was_stunned:
 		stun_changed.emit(self, true)
 
@@ -470,6 +578,7 @@ func take_damage(amount: float, source: StringName = &"therapy") -> void:
 		return
 	var applied := minf(amount, health)
 	last_damage_source = source
+	_relocation_interaction_lock = maxf(_relocation_interaction_lock, RELOCATION_INTERACTION_LOCK_SECONDS)
 	health -= amount
 	hit_flash = HIT_REACTION_SECONDS
 	_sync_visual_appearance()

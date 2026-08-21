@@ -60,6 +60,8 @@ func _test_immutable_section_view_model() -> PauseOverlayViewModel:
 	_check(view_model.section_by_id(&"ability:0:ability_focus_field").icon_id() == &"ability_focus_field", "Bereits präfixierte Ability-ID wird ohne Doppelpräfix als Produktionsglyphe transportiert")
 	_check(view_model.stat_at(0).label() == "Leben" and view_model.stat_at(0).icon_id() == &"stability_reserve", "Kind-View-Model enthält nur darstellungsfertige Werte")
 	_check(view_model.stat_at(2).icon_id() == &"movement_training", "Bewegung verwendet die zentrale Training-Glyphe")
+	_check(view_model.stat_at(3).formatted_value() == "10", "Verteidigung transportiert den absoluten Ratingwert sichtbar")
+	_check(view_model.stat_at(3).detail_text() == "Effektive Schadensminderung: 18,4 %", "Effektive Verteidigung bleibt ausschließlich als Hoverdetail erhalten")
 	_check(view_model.stat_at(6).icon_id() == &"damage_fire" and view_model.stat_at(6).accent_role() == &"coral", "Typresistenzen verwenden semantische Icon- und Farbrollen")
 
 	(source_sections[0] as Dictionary)["title"] = "Fremde Mutation"
@@ -76,6 +78,12 @@ func _test_immutable_section_view_model() -> PauseOverlayViewModel:
 	_check(equivalent.content_hash() == view_model.content_hash(), "Revision ist nicht Teil des semantischen Sektions-Hashs")
 	var changed: PauseOverlayViewModel = PauseOverlayViewModelScript.create(_stat_sections("79 / 90"), 13)
 	_check(changed.content_hash() != view_model.content_hash(), "Ein sichtbarer Statwert verändert den Inhaltshash")
+	var changed_detail_source := _stat_sections()
+	var changed_detail_rows := (changed_detail_source[0] as Dictionary)["rows"] as Array
+	var changed_defense_row := changed_detail_rows[3] as Dictionary
+	changed_defense_row["detail_text"] = "Effektive Schadensminderung: 19 %"
+	var changed_detail: PauseOverlayViewModel = PauseOverlayViewModelScript.create(changed_detail_source, 13)
+	_check(changed_detail.content_hash() != view_model.content_hash(), "Ein geändertes Hoverdetail verändert den Inhaltshash")
 	var one_empty_slot: PauseOverlayViewModel = PauseOverlayViewModelScript.create(_stat_sections("80 / 90", false), 14)
 	_check(one_empty_slot.section_count() == 3 and one_empty_slot.section_by_id(&"ability:1:ability_treatment_line") == null, "Ein leerer Aktivslot erzeugt keine leere Sektion")
 
@@ -124,6 +132,10 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	_check(overlay.stat_rows().size() == view_model.stat_count(), "Jeder DTO-Wert besitzt genau eine wiederverwendbare ValueRow")
 	_assert_section_contract(overlay, view_model)
 	_assert_stat_rows(overlay)
+	var defense_row := overlay.section_body(&"general").get_child(3) as PanelContainer
+	var defense_value := defense_row.find_child("StatValue", true, false) as Label
+	_check(defense_value != null and defense_value.text == "10", "Charakterwerte zeigen Verteidigung als absoluten Wert")
+	_check(defense_row.tooltip_text == "Effektive Schadensminderung: 18,4 %", "Nur Mouseover zeigt die effektive prozentuale Minderung")
 	_check(overlay.is_section_expanded(&"general"), "Grundwerte sind semantisch standardmäßig geöffnet")
 	_check(not overlay.is_section_expanded(&"treatment:treatment_precision") and not overlay.is_section_expanded(&"ability:0:ability_focus_field"), "Weitere Sektionen bleiben bis zur ausdrücklichen Auswahl kompakt")
 	_assert_section_disclosure_state(overlay, &"general", true)
@@ -257,7 +269,7 @@ func _stat_sections(life_value: String = "80 / 90", include_second_ability: bool
 				{"id": &"life", "label": "Leben", "value": life_value},
 				{"id": &"shield", "label": "Schild", "value": "12 / 20"},
 				{"id": &"movement_speed", "label": "Geschwindigkeit", "value": "300"},
-				{"id": &"defense", "label": "Verteidigung", "value": "18,4 %"},
+				{"id": &"defense", "label": "Verteidigung", "value": "10", "detail_text": "Effektive Schadensminderung: 18,4 %"},
 				{"id": &"life_regeneration", "label": "Regeneration", "value": "4/s"},
 				{"id": &"experience_gain", "label": "Erfahrung", "value": "+20 %"},
 				{"id": &"resistance_fire", "label": "Resistenz Feuer", "value": "0 %"},

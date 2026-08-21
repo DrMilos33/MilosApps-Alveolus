@@ -3,6 +3,10 @@ extends CharacterBody2D
 
 const MOVE_SPEED := PlayerStats.BASE_MOVEMENT_SPEED
 const BODY_RADIUS := 23.0
+# Damage contact follows the visible body instead of the wider movement hull.
+# Enemy crowd spacing and projectile queries keep using BODY_RADIUS; this
+# smaller radius only prevents apparently distant melee hits.
+const CONTACT_RADIUS := 12.0
 const DAMAGE_FLASH_SECONDS := 0.16
 const WALK_FRAME_SECONDS := 0.12
 const DOCTOR_DRAW_RECT := Rect2(-30.0, -44.0, 60.0, 60.0)
@@ -29,6 +33,8 @@ var _character_name_visible := false
 var _defense_cell_count: int = 0
 var _defense_cell_radius: float = 0.0
 var _crowd_blocking := Vector2.ZERO
+var _prepared_crowd_delta := Vector2.ZERO
+var _crowd_motion_prepared: bool = false
 
 func configure(bounds: Rect2, player_stats: PlayerStats, arena_topology: ArenaTopology) -> void:
 	arena_bounds = bounds
@@ -57,21 +63,24 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	step_fixed(delta)
 
-func step_fixed(_delta: float) -> void:
+func step_fixed(delta: float) -> void:
 	if input_enabled:
-		var direction := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
-		if direction.length_squared() > 0.0001 and _crowd_blocking.length_squared() > 0.0001:
+		var desired_delta := desired_movement_delta(delta)
+		if _crowd_motion_prepared:
+			desired_delta = _prepared_crowd_delta
+		elif desired_delta.length_squared() > 0.0001 and _crowd_blocking.length_squared() > 0.0001:
 			var blocking_normal := _crowd_blocking.normalized()
-			var blocked_component := direction.dot(blocking_normal)
+			var blocked_component := desired_delta.dot(blocking_normal)
 			if blocked_component > 0.0:
 				# Remove only movement into the larger body. Tangential movement stays
 				# available, so the player can slide out instead of being trapped.
-				direction -= blocking_normal * blocked_component * clampf(_crowd_blocking.length(), 0.0, 1.0)
-		var resolved_speed := stats.movement_speed if stats != null else MOVE_SPEED
-		velocity = direction * resolved_speed
+				desired_delta -= blocking_normal * blocked_component * clampf(_crowd_blocking.length(), 0.0, 1.0)
+		velocity = desired_delta / maxf(delta, 0.000001)
 		move_and_slide()
 	else:
 		velocity = Vector2.ZERO
+	_crowd_motion_prepared = false
+	_prepared_crowd_delta = Vector2.ZERO
 	if topology != null:
 		var resolved := topology.resolve_position(global_position, BODY_RADIUS)
 		if not resolved.is_equal_approx(global_position):
@@ -88,6 +97,28 @@ func set_crowd_blocking(blocking: Vector2) -> void:
 
 func crowd_blocking() -> Vector2:
 	return _crowd_blocking
+
+
+func desired_movement_delta(delta: float) -> Vector2:
+	if not input_enabled or delta <= 0.0:
+		return Vector2.ZERO
+	var direction := Input.get_vector(&"move_left", &"move_right", &"move_up", &"move_down")
+	var resolved_speed := stats.movement_speed if stats != null else MOVE_SPEED
+	return direction * resolved_speed * delta
+
+
+## EnemyWorld resolves this fixed tick's requested displacement against enemy
+## contact bodies before CharacterBody2D performs the actual move. This is a
+## physical boundary only; it never mutates the Galopp stat or applies a status.
+func prepare_crowd_movement(resolved_delta: Vector2, requested_delta: Vector2) -> void:
+	_prepared_crowd_delta = resolved_delta
+	_crowd_motion_prepared = true
+	var removed_delta := requested_delta - resolved_delta
+	_crowd_blocking = (
+		removed_delta.normalized() * clampf(removed_delta.length() / maxf(requested_delta.length(), 0.000001), 0.0, 1.0)
+		if removed_delta.length_squared() > 0.000001
+		else Vector2.ZERO
+	)
 
 func _process(delta: float) -> void:
 	var needs_redraw := false

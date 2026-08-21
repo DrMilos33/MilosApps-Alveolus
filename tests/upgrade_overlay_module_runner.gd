@@ -84,6 +84,7 @@ func _test_immutable_view_model() -> UpgradeOverlayViewModel:
 		"title": "Abwehrzellen",
 		"effect": "Größeres Schutzgebiet.",
 		"icon_id": &"neutrophil_orbit",
+		"rarity_role": &"rare",
 		"pick_count": 2,
 		"maximum_picks": 3,
 		"value_rows": [
@@ -100,7 +101,12 @@ func _test_immutable_view_model() -> UpgradeOverlayViewModel:
 	_check(values_model.option_at(0).value_rows().size() == 2, "Darstellungsfertige Wertzeilen werden defensiv kopiert")
 	_check(values_model.option_at(0).value_rows()[0].label() == "Radius" and values_model.option_at(0).value_rows()[0].value() == "4", "Radius liegt als fertige Label-Wert-Zeile ohne UI-Umrechnung vor")
 	_check(values_model.option_at(0).value_rows()[1].label() == "Attack Speed" and values_model.option_at(0).value_rows()[1].value() == "1,7/s", "Attack Speed liegt mit sichtbarer /s-Einheit statt Intervallcopy vor")
-	_check(values_model.option_at(0).pick_index_text() == "2/3", "Jede Ausbauoption transportiert ihren aktuellen Rundenzähler")
+	_check(values_model.option_at(0).pick_index_text() == "2", "Jede Ausbauoption zeigt nur ihren aggregierten Rundenzähler ohne Cap")
+	_check(values_model.option_at(0).rarity_role() == &"rare", "Seltenheit wird als primitive semantische Rolle transportiert")
+	var invalid_rarity: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create([
+		{"id": &"invalid_rarity", "title": "Ungültig", "effect": "Fallback", "rarity_role": &"legendary"},
+	], 8)
+	_check(invalid_rarity.option_at(0).rarity_role() == &"common", "Unbekannte Seltenheiten fallen sicher auf Common zurück")
 
 	var equivalent: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create([
 		{
@@ -247,6 +253,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(value_card.custom_minimum_size.y == UpgradeOverlay.CARD_HEIGHT + UpgradeOverlay.EXTRA_VALUE_ROW_HEIGHT, "Eine zweite Wertzeile vergrößert die Karte exakt um ihren zentralen Zeilenbedarf")
 	_check(rate_row != null and value_card.get_global_rect().encloses(rate_row.get_global_rect()), "Die zweite darstellungsfertige Wertzeile bleibt vollständig innerhalb der Karte sichtbar")
 	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Radius 4") and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Attack Speed 1,4/s zu 1,7/s"), "Fokusname enthält dieselben darstellungsfertigen Wertfakten")
+	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("In dieser Runde 0 Mal gewählt") and not String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains(" von "), "Fokusname nennt den Rundenzähler ohne verstecktes Maximum")
 
 	var scripted: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
 		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Änderung."
@@ -263,6 +270,10 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.present(three, false), "Drei Ausbauoptionen werden gemeinsam präsentiert")
 	await _settle()
 	_check(overlay.cards().size() == 3 and overlay.cards_grid().columns == 3, "Breiter Viewport zeigt drei kompakte Karten ohne Browse-Churn")
+	_check(overlay.cards()[0].theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_COMMON_CARD, "Common verwendet die zentrale weiße Upgrade-Kartenrolle")
+	_check(overlay.cards()[1].theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_MAGIC_CARD, "Magic verwendet die zentrale kobaltblaue Upgrade-Kartenrolle")
+	_check(overlay.cards()[2].theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_RARE_CARD, "Rare verwendet die zentrale goldene Upgrade-Kartenrolle")
+	_assert_rarity_styles(overlay.theme)
 	_check(not overlay.selection_helper().visible and overlay.selection_helper().text.is_empty(), "Normale Drei-Karten-Auswahl benötigt keinen zusätzlichen Auswahlhinweis")
 	_check(overlay.selection_helper().get_index() < overlay.cards_grid().get_index(), "Auswahlhinweis steht direkt vor den Karten in der Leserichtung")
 	var legacy_flagged_three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
@@ -328,7 +339,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 
 
 func _assert_card_contract(card: Button, option_id: StringName) -> void:
-	_check(card.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTION_CARD, "Ausbaukarte verwendet die zentrale SelectionCard-Rolle")
+	_check(card.theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_COMMON_CARD, "Ausbaukarte verwendet standardmäßig die zentrale Common-Rolle")
 	_check(card.get_meta(&"alveolus_component", &"") == &"choice_card", "Ausbaukarte stammt aus der gemeinsamen ChoiceCard-Komponente")
 	_check(card.get_meta(&"upgrade_id", &"") == option_id, "Ausbaukarte trägt ausschließlich ihre stabile ID")
 	_check(card.focus_mode == Control.FOCUS_NONE, "Mauskarten übernehmen keinen Keyboardfokus")
@@ -360,10 +371,34 @@ func _single_option_rows() -> Array:
 
 func _three_option_rows() -> Array:
 	return [
-		{"id": &"faster_impulse", "title": "Schnellere Impulse", "effect": "Behandlung erfolgt häufiger.", "before": "0,82 s", "after": "0,69 s", "icon_id": &"treatment"},
-		{"id": &"stronger_impulse", "title": "Stärkerer Impuls", "effect": "Erhöht den Grundschaden.", "before": "18", "after": "26", "icon_id": &"ability", "accent_role": &"gold"},
-		{"id": &"wider_field", "title": "Breiteres Feld", "effect": "Erreicht mehr Ziele.", "before": "1 Ziel", "after": "3 Ziele", "icon_id": &"target", "accent_role": &"cobalt"},
+		{"id": &"faster_impulse", "title": "Schnellere Impulse", "effect": "Behandlung erfolgt häufiger.", "before": "0,82 s", "after": "0,69 s", "icon_id": &"treatment", "rarity_role": &"common"},
+		{"id": &"stronger_impulse", "title": "Stärkerer Impuls", "effect": "Erhöht den Grundschaden.", "before": "18", "after": "26", "icon_id": &"ability", "accent_role": &"gold", "rarity_role": &"magic"},
+		{"id": &"wider_field", "title": "Breiteres Feld", "effect": "Erreicht mehr Ziele.", "before": "1 Ziel", "after": "3 Ziele", "icon_id": &"target", "accent_role": &"cobalt", "rarity_role": &"rare"},
 	]
+
+
+func _assert_rarity_styles(theme: Theme) -> void:
+	var roles := [
+		[AlveolusVisualTheme.TYPE_UPGRADE_COMMON_CARD, &"common", AlveolusVisualTheme.IVORY],
+		[AlveolusVisualTheme.TYPE_UPGRADE_MAGIC_CARD, &"magic", AlveolusVisualTheme.COBALT],
+		[AlveolusVisualTheme.TYPE_UPGRADE_RARE_CARD, &"rare", AlveolusVisualTheme.GOLD],
+	]
+	for role in roles:
+		var variation: StringName = role[0]
+		var rarity_role: StringName = role[1]
+		var expected_color: Color = role[2]
+		_check(AlveolusVisualTheme.upgrade_card_variation(rarity_role) == variation, "%s löst zentral auf die richtige Themevariation auf" % rarity_role)
+		for state in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
+			var style := theme.get_stylebox(state, variation) as StyleBoxFlat
+			_check(style != null, "%s besitzt einen zentralen %s-Stil" % [rarity_role, state])
+			if style == null:
+				continue
+			if state == &"normal":
+				_check(style.border_color.is_equal_approx(expected_color), "%s verwendet im Normalzustand exakt seinen Seltenheitsrahmen" % rarity_role)
+			elif state == &"disabled":
+				_check(style.border_color.a < expected_color.a, "%s bleibt deaktiviert über einen gedämpften Seltenheitsrahmen erkennbar" % rarity_role)
+			else:
+				_check(style.border_color.a > 0.0, "%s verliert seinen Seltenheitsrahmen im Zustand %s nicht" % [rarity_role, state])
 
 
 func _visible_focus_ring(card: Button) -> bool:

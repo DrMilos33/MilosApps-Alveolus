@@ -4,7 +4,7 @@ extends Resource
 @export var run_duration_seconds: float = 45.0
 @export var final_deadline_seconds: float = 60.0
 @export var initial_stability: float = 120.0
-@export var arena_size: Vector2 = Vector2(2400.0, 1350.0)
+@export var arena_size: Vector2 = Vector2(9600.0, 5400.0)
 @export var initial_spawn_interval: float = 1.10
 @export var final_spawn_interval: float = 0.55
 @export var random_seed: int = 20260809

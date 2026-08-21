@@ -124,6 +124,9 @@ const TYPE_TAB_BUTTON := &"TabButton"
 const TYPE_SELECTED_TAB_BUTTON := &"SelectedTabButton"
 const TYPE_SELECTION_CARD := &"SelectionCard"
 const TYPE_SELECTED_CARD := &"SelectedCard"
+const TYPE_UPGRADE_COMMON_CARD := &"UpgradeCommonCard"
+const TYPE_UPGRADE_MAGIC_CARD := &"UpgradeMagicCard"
+const TYPE_UPGRADE_RARE_CARD := &"UpgradeRareCard"
 const TYPE_COMPACT_RESEARCH := &"CompactResearch"
 const TYPE_SELECTED_COMPACT_RESEARCH := &"SelectedCompactResearch"
 const TYPE_TALENT_NODE := &"TalentNode"
@@ -246,6 +249,9 @@ static func _configure_variations(theme: Theme) -> void:
 	theme.set_font_size("font_size", TYPE_NAVIGATION_BUTTON, TEXT_CAPTION)
 	_register_button_variation(theme, TYPE_SELECTION_CARD, COBALT, false, false, SELECTION_CARD_HEIGHT, false, true)
 	_register_button_variation(theme, TYPE_SELECTED_CARD, TEAL, false, false, SELECTION_CARD_HEIGHT, true, true)
+	_register_upgrade_card_variation(theme, TYPE_UPGRADE_COMMON_CARD, &"common")
+	_register_upgrade_card_variation(theme, TYPE_UPGRADE_MAGIC_CARD, &"magic")
+	_register_upgrade_card_variation(theme, TYPE_UPGRADE_RARE_CARD, &"rare")
 	_register_button_variation(theme, TYPE_COMPACT_RESEARCH, COBALT, false, false, COMPACT_RESEARCH_HEIGHT, false, true)
 	_register_button_variation(theme, TYPE_SELECTED_COMPACT_RESEARCH, TEAL, false, false, COMPACT_RESEARCH_HEIGHT, true, true)
 	_register_button_variation(theme, TYPE_TALENT_NODE, COBALT, false, false, TALENT_NODE_SIZE, false, true)
@@ -318,6 +324,16 @@ static func _register_navigation_button_variation(theme: Theme, variation: Strin
 	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
 		var visual_state: StringName = &"hover" if state == &"hover_pressed" else state
 		theme.set_stylebox(state, variation, navigation_button_style(visual_state))
+
+
+static func _register_upgrade_card_variation(theme: Theme, variation: StringName, rarity_role: StringName) -> void:
+	theme.set_type_variation(variation, &"Button")
+	for color_name in [&"font_color", &"font_hover_color", &"font_pressed_color", &"font_focus_color", &"font_hover_pressed_color"]:
+		theme.set_color(color_name, variation, IVORY)
+	theme.set_color("font_disabled_color", variation, Color(SKY_DEEP, 0.54))
+	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
+		var visual_state: StringName = &"hover" if state == &"hover_pressed" else state
+		theme.set_stylebox(state, variation, upgrade_card_style(rarity_role, visual_state))
 
 static func _configure_button_variant(
 	theme: Theme,
@@ -795,6 +811,48 @@ static func case_card_style(accent: Color, state: StringName) -> StyleBoxFlat:
 	style.content_margin_right = 12.0
 	style.content_margin_top = 7.0
 	style.content_margin_bottom = 7.0
+	return style
+
+
+static func upgrade_card_variation(rarity_role: StringName) -> StringName:
+	match rarity_role:
+		&"magic":
+			return TYPE_UPGRADE_MAGIC_CARD
+		&"rare":
+			return TYPE_UPGRADE_RARE_CARD
+	return TYPE_UPGRADE_COMMON_CARD
+
+
+static func upgrade_rarity_color(rarity_role: StringName) -> Color:
+	match rarity_role:
+		&"magic":
+			return COBALT
+		&"rare":
+			return GOLD
+	return IVORY
+
+
+## Upgrade rarity is a full-frame semantic role. It is deliberately separate
+## from the treatment/ability accent so every interaction state preserves the
+## same white, cobalt or gold rarity signal without screen-local StyleBoxes.
+static func upgrade_card_style(rarity_role: StringName, state: StringName) -> StyleBoxFlat:
+	var rarity_color := upgrade_rarity_color(rarity_role)
+	var style := case_card_style(rarity_color, state)
+	style.set_border_width_all(2)
+	match state:
+		&"hover", &"hover_pressed":
+			style.border_color = rarity_color.lightened(0.12)
+			style.set_border_width_all(3)
+		&"pressed":
+			style.border_color = rarity_color.darkened(0.10)
+		&"focus":
+			style.border_color = rarity_color.lightened(0.16)
+			style.set_border_width_all(3)
+		&"disabled":
+			style.border_color = Color(rarity_color, 0.20)
+			style.set_border_width_all(1)
+		_:
+			style.border_color = rarity_color
 	return style
 
 static func input_style(state: StringName) -> StyleBoxFlat:

@@ -180,7 +180,8 @@ func _test_upgrade_application_and_caps() -> void:
 	_assert_equal(stats.therapy_damage, 20.0, "Wirksamkeitsupgrade verändert den Schaden ganzzahlig")
 	stats.apply_upgrade(potency)
 	stats.apply_upgrade(potency)
-	_assert_true(not stats.apply_upgrade(potency), "Upgrade respektiert die Maximalstufe")
+	_assert_true(stats.apply_upgrade(potency), "Schadensupgrades bleiben über die frühere Maximalstufe hinaus sammelbar")
+	_assert_equal(stats.upgrade_pick_count(potency), 4, "Endloses Schadensupgrade zählt nur seine Familienwahlen")
 	for index in range(3):
 		stats.apply_upgrade(rhythm)
 	_assert_true(stats.therapy_cooldown >= 0.22, "Therapieintervall unterschreitet nicht das Sicherheitslimit")
@@ -229,13 +230,13 @@ func _test_upgrade_previews() -> void:
 	var immune_damage: UpgradeDefinition = _find_upgrade(definitions, &"phagocytosis")
 	var target_preview := stats.preview_upgrade(targets)
 	_assert_equal(target_preview.effect_text, "+1 Projektil", "Zielupgrade benennt den exakten Projektilzuwachs")
-	_assert_equal(target_preview.before_after_text, "1 Ziel  >  2 Ziele", "Zielupgrade zeigt Vorher und Nachher")
+	_assert_equal(target_preview.before_after_text, "1  >  2 Projektile", "Projektilupgrade zeigt Vorher und Nachher")
 	var rhythm_preview := stats.preview_upgrade(rhythm)
-	_assert_equal(rhythm_preview.effect_text, "+0,06/s Attack Speed", "Rhythmusupgrade verwendet einen linearen absoluten Zuwachs")
-	_assert_equal(rhythm_preview.before_after_text, "1,04/s  >  1,10/s", "Attack-Speed-Ausbau zeigt die mathematisch exakte Vorher-/Nachher-Rate")
+	_assert_equal(rhythm_preview.effect_text, "+3 % Attack Speed", "Rhythmusupgrade verwendet einen linearen prozentualen Bonus")
+	_assert_equal(rhythm_preview.before_after_text, "0 %  >  3 %", "Attack-Speed-Ausbau zeigt ausschließlich den akkumulierten Bonus")
 	var immune_preview := stats.preview_upgrade(immune_damage)
-	_assert_equal(immune_preview.effect_text, "+4 Schaden", "Abwehrupgrade verwendet eine ganzzahlige Effektzeile")
-	_assert_equal(immune_preview.before_after_text, "5 Schaden  >  9 Schaden", "Abwehrupgrade zeigt ganzzahlige Werte")
+	_assert_equal(immune_preview.effect_text, "+3 Schaden", "Common-Abwehrupgrade verwendet eine ganzzahlige Effektzeile")
+	_assert_equal(immune_preview.before_after_text, "5 Schaden  >  8 Schaden", "Abwehrupgrade zeigt ganzzahlige Werte")
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 77
@@ -401,11 +402,11 @@ func _test_meta_progression() -> void:
 	_assert_equal(meta.claim_job(jobs), 6, "Abgeschlossener Kurzbefund zahlt sechs Forschung")
 	_assert_equal(meta.claim_job(jobs), 0, "Klinikfall kann nicht doppelt abgeholt werden")
 
-	meta.research_points = 1000
+	meta.research_points = 2000
 	var research := ContentCatalog.research_definitions()
 	var reserve: ResearchDefinition = _find_research(research, &"stability_reserve")
 	_assert_true(meta.purchase(reserve), "Forschungsknoten kann gekauft werden")
-	_assert_equal(meta.research_points, 900, "Erster Forschungsrang kostet 100")
+	_assert_equal(meta.research_points, 1950, "Erster Forschungsrang kostet 50")
 	meta.purchase(reserve)
 	meta.purchase(reserve)
 	_assert_true(not meta.purchase(reserve), "Forschungsknoten respektiert seine Maximalstufe")

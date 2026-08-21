@@ -196,6 +196,9 @@ var progression_talent_branches: Array = []
 var progression_research_balance: String = "Forschung 0"
 var progression_talent_balance: String = "0 Talentpunkte"
 var progression_talent_reset_enabled: bool = false
+var progression_first_case_complete: bool = false
+var progression_talents_unlocked: bool = true
+var progression_talent_lock_text: String = "Schließe zuerst die Einführung ab."
 var progression_context_sources: Array[Control] = []
 var research_points_label: Label
 var research_rank_labels: Dictionary = {}
@@ -351,6 +354,8 @@ var current_preparation_catalog_entries: Array = []
 var current_preparation_catalog_by_id: Dictionary = {}
 var current_preparation_unlocked_ids: Variant = {}
 var current_preparation_availability_reasons: Dictionary = {}
+var current_preparation_locked_slots: Dictionary = {}
+var current_preparation_slot_lock_reasons: Dictionary = {}
 var current_preparation_selected_components: Array = []
 var current_preparation_component_slots: Dictionary = {}
 var current_preparation_capacity_used: int = 0
@@ -2101,11 +2106,15 @@ func show_research(meta: MetaProgressionState, definitions: Array[ResearchDefini
 	_prepare_optional_navigation_focus.call_deferred(research_overlay, progression_screen.default_focus_control())
 
 
-func show_research_tabs(meta: MetaProgressionState, definitions: Array[ResearchDefinition], talent_view: Variant) -> void:
+func show_research_tabs(
+	meta: MetaProgressionState,
+	definitions: Array[ResearchDefinition],
+	talent_view: Variant
+) -> void:
 	_hide_all()
 	_show_campus_context()
 	current_research_tab = &"research"
-	_refresh_progression_research_cache(meta, definitions)
+	_refresh_progression_research_cache(meta, definitions, progression_first_case_complete)
 	var resolved_talents: Variant = _talent_view_from_meta(meta, talent_view) if talent_view is Array else talent_view
 	_refresh_progression_talent_cache(resolved_talents)
 	_apply_progression_screen_model()
@@ -2114,8 +2123,13 @@ func show_research_tabs(meta: MetaProgressionState, definitions: Array[ResearchD
 
 
 func refresh_research(meta: MetaProgressionState, definitions: Array[ResearchDefinition]) -> void:
-	_refresh_progression_research_cache(meta, definitions)
+	_refresh_progression_research_cache(meta, definitions, progression_first_case_complete)
 	_apply_progression_screen_model()
+
+
+func set_progression_availability(first_case_complete: bool, talents_unlocked: bool) -> void:
+	progression_first_case_complete = first_case_complete
+	progression_talents_unlocked = talents_unlocked
 
 
 func refresh_talents(talent_view: Variant) -> void:
@@ -2123,25 +2137,37 @@ func refresh_talents(talent_view: Variant) -> void:
 	_apply_progression_screen_model()
 
 
-func _refresh_progression_research_cache(meta: MetaProgressionState, definitions: Array[ResearchDefinition]) -> void:
+func _refresh_progression_research_cache(
+	meta: MetaProgressionState,
+	definitions: Array[ResearchDefinition],
+	first_case_complete: bool = false
+) -> void:
 	progression_research_items.clear()
 	progression_research_balance = "Forschung  ∞ · Testmodus" if meta.is_unlimited_test_progression() else "Forschung  %d" % meta.research_points
 	var module_definitions := ContentCatalog.loadout_module_definitions()
 	for definition in definitions:
-		var rank := meta.rank(definition.id)
+		var milestone_lazer := definition.id == &"unlock_treatment_line"
+		var milestone_locked := milestone_lazer and not first_case_complete
+		var rank := LoadoutAvailabilityPolicy.research_effective_rank(
+			definition,
+			meta.rank(definition.id),
+			first_case_complete
+		)
 		var maximum := rank >= definition.max_level
 		var cost := 0 if maximum else definition.cost_for_rank(rank)
-		var purchase_enabled := LoadoutAvailabilityPolicy.research_purchase_enabled(definition)
+		var purchase_enabled := LoadoutAvailabilityPolicy.research_purchase_enabled(definition, first_case_complete)
 		var available := purchase_enabled and not maximum and meta.can_afford_research(cost)
-		var state := ProgressionScreenViewModel.ItemState.LOCKED if not purchase_enabled else (ProgressionScreenViewModel.ItemState.ACTIVE if maximum else (ProgressionScreenViewModel.ItemState.AVAILABLE if available else ProgressionScreenViewModel.ItemState.LOCKED))
-		var rank_text := "Rang %d/%d" % [rank, definition.max_level]
-		var cost_text := "Maximum" if maximum else "%d Forschung" % cost
-		var state_text := LoadoutAvailabilityPolicy.research_status(definition, module_definitions) if not purchase_enabled else ("Abgeschlossen" if maximum else ("Verfügbar" if available else "Nicht genug Forschung"))
+		var state := ProgressionScreenViewModel.ItemState.ACTIVE if maximum else (ProgressionScreenViewModel.ItemState.LOCKED if not purchase_enabled else (ProgressionScreenViewModel.ItemState.AVAILABLE if available else ProgressionScreenViewModel.ItemState.LOCKED))
+		var rank_text := "Gesperrt" if milestone_locked else ("Freigeschaltet" if milestone_lazer and maximum else "Rang %d/%d" % [rank, definition.max_level])
+		var cost_text := "Gesperrt" if milestone_locked else ("Freigeschaltet" if milestone_lazer and maximum else ("Maximum" if maximum else "%d Forschung" % cost))
+		var state_text := LoadoutAvailabilityPolicy.research_status(definition, module_definitions, first_case_complete) if not purchase_enabled else ("Abgeschlossen" if maximum else ("Verfügbar" if available else "Nicht genug Forschung"))
+		var icon_id := LoadoutAvailabilityPolicy.research_icon_kind(definition, first_case_complete)
+		var description := "Wird nach Abschluss von Fall 1 freigeschaltet." if milestone_locked else definition.description
 		var info := ProgressionScreenViewModel.InfoViewModel.create(
 			definition.title,
-			definition.description,
+			description,
 			"%s · %s" % [rank_text, state_text],
-			definition.id,
+			icon_id,
 			COLOR_GOLD
 		)
 		progression_research_items.append(ProgressionScreenViewModel.ResearchItemViewModel.create(
@@ -2149,7 +2175,7 @@ func _refresh_progression_research_cache(meta: MetaProgressionState, definitions
 			definition.title,
 			rank_text,
 			cost_text,
-			definition.id,
+			icon_id,
 			state,
 			available,
 			info,
@@ -2164,9 +2190,11 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 	var unlimited := bool(_view_value(talent_view, &"unlimited", false))
 	var available_points := MetaProgressionState.UNLIMITED_TEST_POINT_POOL if unlimited else maxi(0, total - spent)
 	var refunded := bool(_view_value(talent_view, &"tree_refunded", false))
+	progression_talents_unlocked = bool(_view_value(talent_view, &"tree_unlocked", progression_talents_unlocked))
+	progression_talent_lock_text = String(_view_value(talent_view, &"tree_lock_text", progression_talent_lock_text))
 	var balance := "Unbegrenzte Talentpunkte · %d verteilt" % spent if unlimited else "%d Talentpunkte · %d frei · %d verteilt" % [total, available_points, spent]
 	progression_talent_balance = "Talentbaum erneuert · Punkte zurück · %s" % balance if refunded else balance
-	progression_talent_reset_enabled = spent > 0
+	progression_talent_reset_enabled = progression_talents_unlocked and spent > 0
 	var grouped: Dictionary = {}
 	for talent in _variant_array(_view_value(talent_view, &"talents", [])):
 		var category := _talent_category_text(_view_value(talent, &"category", &""))
@@ -2186,7 +2214,7 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 			var maximum := bool(_view_value(talent, &"maximum", current_rank >= max_rank))
 			var unlocked := bool(_view_value(talent, &"unlocked", true))
 			var prerequisite_met := bool(_view_value(talent, &"prerequisite_met", true))
-			var interactive := not maximum and unlocked and prerequisite_met and available_points >= cost
+			var interactive := progression_talents_unlocked and not maximum and unlocked and prerequisite_met and available_points >= cost
 			var state := ProgressionScreenViewModel.ItemState.ACTIVE if active else (ProgressionScreenViewModel.ItemState.AVAILABLE if interactive else ProgressionScreenViewModel.ItemState.LOCKED)
 			var requirement := String(_view_value(talent, &"requirement_text", "Einstieg des Astes"))
 			if maximum:
@@ -2243,7 +2271,9 @@ func _apply_progression_screen_model() -> void:
 		progression_talent_balance,
 		progression_talent_reset_enabled,
 		progression_research_items,
-		progression_talent_branches
+		progression_talent_branches,
+		progression_talents_unlocked,
+		progression_talent_lock_text
 	)
 	progression_screen.apply_view_model(model)
 	_register_progression_context_sources()
@@ -2710,6 +2740,10 @@ func refresh_preparation(view_model: Variant, catalog: Array = [], loadout: Vari
 			LoadoutSlotId.RESERVE: _view_value(source_loadout, &"reserve_id", &""),
 			}
 	current_preparation_slots = slot_snapshot.duplicate(true)
+	var raw_locked_slots: Variant = _view_value(view_model, &"locked_slot_ids", {})
+	current_preparation_locked_slots = raw_locked_slots.duplicate() if raw_locked_slots is Dictionary else {}
+	var raw_slot_reasons: Variant = _view_value(view_model, &"slot_lock_reasons", {})
+	current_preparation_slot_lock_reasons = raw_slot_reasons.duplicate() if raw_slot_reasons is Dictionary else {}
 	if planning_snapshot.mode == PlanningSnapshot.Mode.COMPONENT_PICK and planning_snapshot.selected_slot_id != &"":
 		planning_snapshot.current_component_id = _preparation_component_at(planning_snapshot.selected_slot_id)
 	var active_component_ids: Array = []
@@ -3258,9 +3292,13 @@ func update_intro_timer(lesson: int, phase: StringName, boss_active: bool) -> vo
 		return
 	_apply_run_hud_model()
 
-func show_boss(maximum: float, phase_count: int, boss_title: String = "Infektionsherd") -> void:
+func set_boss_title(boss_title: String) -> void:
+	run_hud_vitals["boss_title"] = boss_title.strip_edges() if not boss_title.strip_edges().is_empty() else "Infektionsherd"
+
+
+func show_boss(maximum: float, phase_count: int) -> void:
+	var boss_title := String(run_hud_vitals.get("boss_title", "Infektionsherd"))
 	run_hud_vitals["boss_visible"] = true
-	run_hud_vitals["boss_title"] = boss_title
 	run_hud_vitals["boss_current"] = maximum
 	run_hud_vitals["boss_maximum"] = maximum
 	run_hud_vitals["boss_phase"] = "Phasen 70 % · 40 %" if phase_count > 0 else "Einführungsboss"
@@ -3344,8 +3382,8 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 			"value_rows": _upgrade_value_rows(definition, before_value, after_value),
 			"icon_id": icon_id,
 			"accent_role": _upgrade_accent_role(definition),
-			"pick_count": int(stats.upgrade_levels.get(definition.id, 0)),
-			"maximum_picks": definition.max_level,
+			"rarity_role": definition.rarity_role(),
+			"pick_count": stats.upgrade_pick_count(definition),
 			"compact_title": definition.heading_component_id(stats.prepared_treatment.id if stats.prepared_treatment != null else &"") == &"movement",
 		})
 	var model := UpgradeOverlayViewModel.create(
@@ -3977,6 +4015,8 @@ func _on_preparation_slot_gui_input(event: InputEvent) -> void:
 func _on_preparation_slot_pressed(slot_id: StringName) -> void:
 	if preparation_locked or not LoadoutSlotId.planning().has(slot_id) or planning_snapshot.mode == PlanningSnapshot.Mode.REPLACE_CONFIRM:
 		return
+	if bool(current_preparation_locked_slots.get(slot_id, current_preparation_locked_slots.get(String(slot_id), false))):
+		return
 	var navigation_activation := preparation_slot_keyboard_activation \
 		or (input_glyph_service != null and input_glyph_service.method() == InputGlyphService.GAMEPAD)
 	preparation_slot_keyboard_activation = false
@@ -4127,6 +4167,13 @@ func _refresh_preparation_slot_content(slot_id: StringName, component_id: String
 	if title_label == null or description_label == null or cost_label == null or icon == null:
 		return
 	var caption := _loadout_slot_caption(slot_id)
+	if bool(current_preparation_locked_slots.get(slot_id, current_preparation_locked_slots.get(String(slot_id), false))):
+		var reason := String(current_preparation_slot_lock_reasons.get(slot_id, current_preparation_slot_lock_reasons.get(String(slot_id), "Gesperrt")))
+		title_label.text = "%s · Gesperrt" % caption
+		description_label.text = reason
+		cost_label.text = ""
+		icon.configure(&"locked", COLOR_MUTED)
+		return
 	if component_id == &"":
 		title_label.text = "%s · Wählen" % caption
 		description_label.text = "Freier Platz"
@@ -4177,6 +4224,13 @@ func _show_preparation_slot_preview(slot_id: StringName, source: Control = null,
 		return
 	if preparation_inspector_title == null or planning_snapshot.mode == PlanningSnapshot.Mode.REPLACE_CONFIRM:
 		return
+	if bool(current_preparation_locked_slots.get(slot_id, current_preparation_locked_slots.get(String(slot_id), false))):
+		preparation_inspector_title.text = "%s · Gesperrt" % _loadout_slot_caption(slot_id)
+		preparation_inspector_description.text = String(current_preparation_slot_lock_reasons.get(slot_id, current_preparation_slot_lock_reasons.get(String(slot_id), "Gesperrt")))
+		preparation_inspector_meta.text = ""
+		preparation_inspector_meta.hide()
+		_show_preparation_tooltip(source, from_hover)
+		return
 	var component_id := _preparation_component_at(slot_id)
 	var entry: Variant = current_preparation_catalog_by_id.get(component_id, null)
 	var title := String(_view_value(entry, &"title", "Leer")) if component_id != &"" else "Leer"
@@ -4189,6 +4243,14 @@ func _show_preparation_slot_preview(slot_id: StringName, source: Control = null,
 
 
 func _preparation_slot_context_payload(slot_id: StringName) -> Dictionary:
+	if bool(current_preparation_locked_slots.get(slot_id, current_preparation_locked_slots.get(String(slot_id), false))):
+		return {
+			"title": "%s · Gesperrt" % _loadout_slot_caption(slot_id),
+			"body": String(current_preparation_slot_lock_reasons.get(slot_id, current_preparation_slot_lock_reasons.get(String(slot_id), "Gesperrt"))),
+			"meta": "",
+			"accent": COLOR_MUTED,
+			"icon_kind": &"locked",
+		}
 	var component_id := _preparation_component_at(slot_id)
 	var entry: Variant = current_preparation_catalog_by_id.get(component_id, null)
 	var title := String(_view_value(entry, &"title", "Leer")) if component_id != &"" else "Leer"
@@ -4580,6 +4642,10 @@ func _apply_preparation_editor_state(tutorial_locked: bool = false) -> void:
 	for slot_id in preparation_slot_buttons:
 		var slot_button: Button = preparation_slot_buttons[slot_id]
 		AlveolusUIComponents.set_button_disabled(slot_button, tutorial_locked or modal_edit)
+		slot_button.set_meta(
+			&"milestone_locked",
+			bool(current_preparation_locked_slots.get(slot_id, current_preparation_locked_slots.get(String(slot_id), false)))
+		)
 	preparation_reserve_button.disabled = true
 	preparation_intro_skip_button.disabled = modal_edit
 	if preparation_header_back_button != null:

@@ -15,6 +15,27 @@ const CATEGORY_NAMES := {
 	LexiconEntryDefinition.CATEGORY_TERMS: "Begriffe",
 }
 
+const CHARACTER_TERM_IDS: Array[StringName] = [
+	&"patient_stability",
+	&"effect",
+	&"treatment_speed",
+	&"range",
+	&"targets",
+	&"projectiles",
+	&"penetration",
+	&"shield",
+	&"defense",
+	&"life_regeneration",
+	&"movement_speed",
+	&"experience_gain",
+	&"resistance",
+	&"fire_damage",
+	&"water_damage",
+	&"earth_damage",
+	&"wind_damage",
+	&"cooldown",
+]
+
 static func entries() -> Array[LexiconEntryDefinition]:
 	var result: Array[LexiconEntryDefinition] = []
 	_append_enemy_entries(result)
@@ -120,7 +141,7 @@ static func _append_terminology_entries(result: Array[LexiconEntryDefinition]) -
 			continue
 		result.append(LexiconEntryDefinition.create(
 			StringName("term_%s" % terminology.id),
-			LexiconEntryDefinition.CATEGORY_TERMS,
+			LexiconEntryDefinition.CATEGORY_CHARACTER if CHARACTER_TERM_IDS.has(terminology.id) else LexiconEntryDefinition.CATEGORY_TERMS,
 			terminology.display_name,
 			terminology.medical_name,
 			terminology.summary,

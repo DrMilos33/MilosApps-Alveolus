@@ -19,7 +19,7 @@ const DRAWN_KINDS: Array[StringName] = [
 	&"defense_training", &"life_regeneration", &"movement_training", &"mobility",
 	&"damage_fire", &"damage_water", &"damage_earth", &"damage_wind",
 	&"fire", &"water", &"earth", &"wind",
-	&"locked", &"check", &"remove", &"restart", &"diamond", &"circle", &"target",
+	&"locked", &"question", &"check", &"remove", &"restart", &"diamond", &"circle", &"target",
 ]
 
 static var _missing_warnings: Dictionary = {}
@@ -182,6 +182,8 @@ func _draw() -> void:
 			_draw_damage_wind()
 		&"locked":
 			_draw_lock()
+		&"question":
+			_draw_question()
 		&"check":
 			draw_line(Vector2(-17, 1), Vector2(-5, 13), accent, 4.0, true)
 			draw_line(Vector2(-5, 13), Vector2(18, -14), accent, 4.0, true)
@@ -277,6 +279,14 @@ func _draw_lock() -> void:
 	draw_rect(Rect2(-14, -4, 28, 22), Color(accent, 0.18), true)
 	draw_rect(Rect2(-14, -4, 28, 22), accent, false, 2.4)
 	draw_circle(Vector2(0, 6), 2.8, accent)
+
+
+func _draw_question() -> void:
+	draw_arc(Vector2(0, -8), 10.0, -PI * 0.92, PI * 0.47, 22, accent, 3.0, true)
+	draw_line(Vector2(9, -4), Vector2(2, 4), accent, 3.0, true)
+	draw_line(Vector2(2, 4), Vector2(2, 9), accent, 3.0, true)
+	draw_circle(Vector2(2, 16), 2.2, accent)
+
 
 func _draw_target() -> void:
 	for radius in [17.0, 10.0, 3.5]:

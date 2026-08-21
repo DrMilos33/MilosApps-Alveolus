@@ -29,8 +29,8 @@ func _run() -> void:
 func _test_catalog_contract() -> void:
 	var levels := ContentCatalog.level_definitions()
 	_equal(levels.size(), 4, "Der Fallkatalog behält Intro plus drei Hauptfälle")
-	_near(levels[1].initial_spawn_interval, 0.744, "Fall 1 startet mit dem verlangsamten Spawnintervall")
-	_near(levels[1].final_spawn_interval, 0.168, "Fall 1 endet mit dem verlangsamten Spawnintervall")
+	_near(levels[1].initial_spawn_interval, 0.827, "Fall 1 startet mit exakt zehn Prozent weniger Standardspawns")
+	_near(levels[1].final_spawn_interval, 0.187, "Fall 1 endet mit exakt zehn Prozent weniger Standardspawns")
 	_near(levels[2].initial_spawn_interval, 0.624, "Fall 2 startet mit dem verlangsamten Spawnintervall")
 	_near(levels[2].final_spawn_interval, 0.132, "Fall 2 endet mit dem verlangsamten Spawnintervall")
 	_near(levels[3].initial_spawn_interval, 0.528, "Fall 3 startet mit dem verlangsamten Spawnintervall")
@@ -51,8 +51,8 @@ func _test_catalog_contract() -> void:
 	var abilities := AbilityDefinition.catalog()
 	var burst := abilities[&"ability_defense_burst"] as AbilityDefinition
 	var line := abilities[&"ability_treatment_line"] as AbilityDefinition
-	_equal(burst.display_name, "idk name stoß", "Abwehrstoß verwendet den freigegebenen sichtbaren Namen")
-	_near(float(burst.parameters.get("damage", 0.0)), 25.0, "Abwehrstoß verwendet den neuen Schaden")
+	_equal(burst.display_name, "Stoß", "Abwehrstoß verwendet den freigegebenen sichtbaren Namen")
+	_near(float(burst.parameters.get("damage", 0.0)), 0.0, "Stoß startet ohne Schaden")
 	_near(float(burst.parameters.get("knockback", 0.0)), 120.0, "Abwehrstoß verwendet den stärkeren Rückstoß")
 	_equal(line.display_name, "Fetter lazer", "Behandlungslinie verwendet den freigegebenen sichtbaren Namen")
 	_near(float(line.parameters.get("damage", 0.0)), 30.0, "Behandlungslinie verwendet den neuen Schaden")

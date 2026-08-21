@@ -83,7 +83,7 @@ func _run() -> void:
 	_check(meta.set_talent_active(&"treatment_damage_training", true), "Der Testzustand aktiviert die Revision-4-Wurzel des Behandlungsbaums")
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
 	await process_frame
-	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 8, "Die acht aktiven Forschungen zeigen bei 1280 Pixeln vier kompakte Spalten")
+	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 10, "Die zehn aktiven Forschungen zeigen bei 1280 Pixeln vier kompakte Spalten")
 	_check(hud.research_buy_buttons.has(&"movement_training") and SimpleIcon.supports(&"movement_training"), "Bewegungstraining besitzt eine zentrale, registrierte Bewegungsglyphe")
 	for research_card in hud.research_grid.get_children():
 		_check((research_card as Control).custom_minimum_size.y <= 76.0, "Forschungskarten überschreiten die kompakte Höhe nicht")
@@ -329,7 +329,7 @@ func _run() -> void:
 	var upgrade_by_id: Dictionary = {}
 	for definition in ContentCatalog.upgrade_definitions():
 		upgrade_by_id[definition.id] = definition
-	var heading_upgrade_ids: Array[StringName] = [&"potency", &"burst_effect", &"line_effect", &"mobility"]
+	var heading_upgrade_ids: Array[StringName] = [&"potency", &"burst_radius", &"line_effect", &"mobility"]
 	var heading_upgrades: Array[UpgradeDefinition] = []
 	for upgrade_id in heading_upgrade_ids:
 		heading_upgrades.append(upgrade_by_id[upgrade_id] as UpgradeDefinition)
@@ -337,9 +337,9 @@ func _run() -> void:
 	await process_frame
 	var expected_upgrade_headings := {
 		&"potency": "Impuls",
-		&"burst_effect": "idk name stoß",
+		&"burst_radius": "Stoß",
 		&"line_effect": "Fetter lazer",
-		&"mobility": "Geschwindigkeit",
+		&"mobility": "Galopp",
 	}
 	for upgrade_card in hud.upgrade_cards.get_children():
 		var upgrade_id := StringName((upgrade_card as Control).get_meta(&"upgrade_id", &""))
@@ -351,7 +351,7 @@ func _run() -> void:
 	var movement_card := hud.upgrade_cards.get_child(0) as Control
 	var movement_title := movement_card.find_child("UpgradeTitle", true, false) as Label
 	var movement_icon := movement_card.find_child("UpgradeIcon", true, false) as SimpleIcon
-	_check(movement_title != null and movement_title.text == "Geschwindigkeit", "Der Geschwindigkeitsausbau verwendet den verbindlichen Komponentennamen")
+	_check(movement_title != null and movement_title.text == "Galopp", "Der Galoppausbau verwendet den verbindlichen Komponentennamen")
 	_check(movement_icon != null and movement_icon.kind == &"movement_training", "Der Bewegungsausbau verwendet dieselbe semantische Trainingsglyphe wie die Forschung")
 	var presentation_upgrades: Array[UpgradeDefinition] = [
 		upgrade_by_id[&"rhythm"] as UpgradeDefinition,
@@ -362,7 +362,7 @@ func _run() -> void:
 	await process_frame
 	var rhythm_card := hud.upgrade_cards.get_child(0) as Control
 	var rhythm_row := rhythm_card.find_child("UpgradeValue_*", true, false) as RichTextLabel
-	_check(rhythm_row != null and String(rhythm_row.get_meta(&"semantic_before", "")) == "1,22/s" and String(rhythm_row.get_meta(&"semantic_value", "")) == "1,45/s", "Behandlungstempo erscheint als datenformatierte Rate ohne Intervallcopy")
+	_check(rhythm_row != null and String(rhythm_row.get_meta(&"semantic_before", "")) == "0 %" and String(rhythm_row.get_meta(&"semantic_value", "")) == "3 %", "Attack Speed zeigt den additiven Familienbonus statt eines exponentiellen Intervalls")
 	var defense_cell_card := hud.upgrade_cards.get_child(1) as Control
 	var defense_cell_icon := defense_cell_card.find_child("UpgradeIcon", true, false) as SimpleIcon
 	var defense_cell_comparison := defense_cell_card.find_child("UpgradeComparison", true, false) as RichTextLabel

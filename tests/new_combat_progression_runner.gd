@@ -47,7 +47,7 @@ func _test_research_catalog_contract() -> void:
 
 	var expected_effects := {
 		&"stability_reserve": [&"max_health", 3.0, 3],
-		&"therapy_precision": [&"damage_flat", 1.0, 3],
+		&"therapy_precision": [&"damage_multiplier", 0.02, 3],
 		&"experience_gain": [&"experience_multiplier", 0.05, 3],
 		&"defense_training": [&"defense", 2.0, 3],
 		&"life_regeneration": [&"life_regeneration", 0.25, 3],
@@ -87,7 +87,7 @@ func _test_global_research_is_idempotent() -> void:
 		var stats := PlayerStats.new()
 		stats.configure_prepared_treatment(treatment)
 		stats.apply_meta_progression(ranks)
-		var expected_damage := treatment.base_damage + 3.0
+		var expected_damage := float(roundi(treatment.base_damage * 1.06))
 		_near(PlayerStats.BASE_MAX_HEALTH + stats.max_stability_bonus, 59.0, "Lebensforschung gilt global")
 		_near(stats.therapy_damage, expected_damage, "Schadensforschung gilt für jede Grundbehandlung")
 		_near(stats.experience_gain_multiplier, 1.15, "Erfahrungsforschung gilt global")

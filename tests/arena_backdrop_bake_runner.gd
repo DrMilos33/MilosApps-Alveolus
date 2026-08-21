@@ -2,6 +2,8 @@ extends SceneTree
 
 const ARENA_BOUNDS := Rect2(-1200.0, -675.0, 2400.0, 1350.0)
 const EXPECTED_SIZE := Vector2(2400.0, 1350.0)
+const LARGE_ARENA_BOUNDS := Rect2(-4800.0, -2700.0, 9600.0, 5400.0)
+const LARGE_TEXTURE_SIZE := Vector2(4096.0, 2304.0)
 
 var assertions := 0
 var failures := 0
@@ -13,6 +15,7 @@ func _init() -> void:
 
 func _run() -> void:
 	var definitions := ContentCatalog.arena_visual_definitions()
+	_assert_vector(RunConfig.new().arena_size, LARGE_ARENA_BOUNDS.size, "production arena dimensions are enlarged by 300 percent")
 	var backdrop := ArenaBackdrop.new()
 	# Production configures before inserting the arena into the Simulation tree.
 	backdrop.configure(ARENA_BOUNDS, definitions[&"intro"])
@@ -69,20 +72,22 @@ func _run() -> void:
 	_assert_true(bool(coalesced.get("ready", false)), "coalesced reconfigure ends in baked mode")
 	_assert_equal(int(coalesced.get("viewport_updates", -1)), SubViewport.UPDATE_DISABLED, "coalesced bake leaves no render target updates")
 
-	# Unsafe texture sizes use the existing primitive renderer instead of
-	# allocating an unbounded Web render target, and recover on reconfigure.
-	backdrop.configure(Rect2(Vector2.ZERO, Vector2(4097.0, 1350.0)), definitions[&"intro"])
-	await _wait_frames(2)
-	var fallback := backdrop.bake_state_snapshot()
-	_assert_true(not bool(fallback.get("ready", true)), "oversized arena stays on the safe fallback path")
-	_assert_equal(String(fallback.get("fallback_reason", "")), "size_exceeds_safe_texture_limit", "fallback records its explicit reason")
-	_assert_equal(int(fallback.get("viewport_updates", -1)), SubViewport.UPDATE_DISABLED, "fallback cannot leave the old viewport updating")
-	_assert_equal(int(fallback.get("viewport_instance_id", 0)), viewport_id, "fallback does not replace the reusable viewport")
+	# The four-times-wider and four-times-higher production arena is baked once
+	# into a Web-safe texture while preserving its aspect ratio. Logical gameplay
+	# bounds remain full size; only the static background resolution is reduced.
+	backdrop.configure(LARGE_ARENA_BOUNDS, definitions[&"intro"])
+	await _wait_for_bake(backdrop)
+	var large := backdrop.bake_state_snapshot()
+	_assert_true(bool(large.get("ready", false)), "large production arena keeps the static one-shot bake path")
+	_assert_vector(large.get("arena_size", Vector2.ZERO), LARGE_ARENA_BOUNDS.size, "large bake preserves full logical arena dimensions")
+	_assert_vector(large.get("texture_size", Vector2.ZERO), LARGE_TEXTURE_SIZE, "large bake is capped to a Web-safe 4096-wide texture")
+	_assert_equal(int(large.get("viewport_updates", -1)), SubViewport.UPDATE_DISABLED, "large bake leaves no ongoing render target updates")
+	_assert_equal(int(large.get("viewport_instance_id", 0)), viewport_id, "large bake reuses the existing viewport")
 
 	backdrop.configure(ARENA_BOUNDS, definitions[&"intro"])
 	await _wait_for_bake(backdrop)
 	var recovered := backdrop.bake_state_snapshot()
-	_assert_true(bool(recovered.get("ready", false)), "valid reconfigure recovers from fallback")
+	_assert_true(bool(recovered.get("ready", false)), "smaller reconfigure remains valid after the large bake")
 	_assert_vector(recovered.get("texture_size", Vector2.ZERO), EXPECTED_SIZE, "recovered bake restores exact arena size")
 	_assert_equal(int(recovered.get("viewport_instance_id", 0)), viewport_id, "recovery still reuses the original viewport")
 	_assert_equal(backdrop.get_child_count(), 1, "all bake and fallback cycles retain one viewport node")

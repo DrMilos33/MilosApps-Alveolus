@@ -20,8 +20,8 @@ entsteht durch:
 - einen begrenzten Behandlungsplan vor jedem Fall;
 - zwei bewusst eingesetzte aktive Fähigkeiten;
 - Fallmerkmale, Befunde und Reaktionen während des Runs;
-- zehn globale Forschungen für intrinsische Werte und
-  Behandlungsfreischaltungen;
+- neun kaufbare Forschungen für intrinsische Werte und Freischaltungen sowie
+  ein Fall-1-Meilensteinfeld;
 - zufällige Run-Ausbaustufen, die mit dem vorbereiteten Plan interagieren.
 
 ## Aktuell spielbarer Stand
@@ -31,22 +31,24 @@ entsteht durch:
 - Vier wiederholbare Fälle einschließlich ereignisgesteuertem Intro und Bossen.
 - Einsatzplan mit einer Grundbehandlung und bis zu zwei aktiven Fähigkeiten.
   Impuls ist sofort verfügbar; Streuimpuls und Durchdringender Impuls
-  werden durch Forschung freigeschaltet. `idk name stoß` und `Fetter lazer` sind
-  auswählbar, vier weitere aktive Fähigkeiten bleiben sichtbar gesperrt.
+  werden durch Forschung freigeschaltet. `Stoß` benötigt Forschung; der zweite
+  Aktivslot und `Fetter lazer` werden nach Fall 1 freigeschaltet. Vier weitere
+  aktive Fähigkeiten bleiben sichtbar gesperrt.
   Passive Module gehören nicht mehr zum aktiven Produktkatalog; technisch
   verbliebene Passiv- und Reservefelder dienen ausschließlich der
   Save-/Schema-Kompatibilität.
 - Der aktuelle Produktkatalog umfasst drei Behandlungen, sechs sichtbare aktive
-  Fähigkeiten, zehn globale Forschungen, vier Rangtalente und 18
+  Fähigkeiten, neun kaufbare Forschungen plus ein Meilensteinfeld, vier Rangtalente und 26
   Run-Ausbaustufen.
 - Praxis mit Offline-Forschung und Klinikfällen, Forschungsbrett, Talente,
   Meisterschaft, kategorisiertes Lexikon und lokale Savegame-Version 6.
 - Hauptfälle haben keine Zeitbegrenzung; ihr Boss erscheint nach 180 Sekunden.
   Doctor Milos startet mit 50 Leben.
 - Die sichtbaren Kampfbegriffe lauten Leben, Schaden, Regeneration, Schild und
-  Verteidigung. Feuer, Wasser, Erde und Wind sind die vier aktiven
-  Schadenstypen. Die UI zeigt Verteidigung und Resistenzen ausschließlich als
-  bereits berechnete effektive Prozentwerte.
+  Verteidigung. Feuer, Wasser, Erde und Luft sind die vier aktiven
+  Schadenstypen. Die Charakterwerte zeigen Verteidigung als absolutes Rating
+  und dessen effektive Prozentminderung im Hoverdetail; Resistenzen zeigen ihre
+  bereits berechneten effektiven Prozentwerte.
 - Maus und Tastatur, UI-Sounds, Audioeinstellungen, reduzierte Bewegung und
   anpassbare Tastaturbelegungen. Die sichtbare UI läuft vorerst fest bei
   100 Prozent und zeigt ausschließlich Tastatur-/Mausglyphen; frühere
@@ -185,6 +187,17 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-077 | Präzisiert D-076: Abstandshüllen folgen dem sichtbaren Gegnermodell statt einem globalen Faktor; kleine Bakterien stehen leicht enger, Bakteriengruppen deutlich weiter. Der begrenzte Trennpass fragt die räumlich nächsten Zellen ab und beginnt zwölf Weltpunkte vor Hüllenkontakt kontinuierlich zu lenken, damit Gegner nicht erst nach einer Überschneidung zurückfedern. Eine stabile, schwache Seitenspur unterstützt lockeres Umzingeln ohne harten Orbit. Standardwellen behalten ihre deterministische Goldwinkel-Folge, spiegeln einen Spawn aber in eine unterbelegte Kartenhälfte, wenn die gewählte Hälfte bereits klar überfüllt ist. Charakterwerte lösen den gemeinsamen `RunBuildState` beim Öffnen aus und zeigen daher immer die aktuell im Run ausgebauten Werte. |
 | D-078 | Ersetzt D-077 hinsichtlich des Nahkontakts: Rund um Doctor Milos verwaltet `EnemyWorld` zwölf feste Kontaktplätze. Kleine Bakterien belegen zwei, Bakteriengruppen drei Plätze; höchstens zwei große Gruppen dürfen gleichzeitig den Ring belegen. Ein Angreifer hält seinen einmal gewählten freien Platz stabil, während weitere Gegner radial dahinter warten. Tod, Rückstoß oder Verlassen des Rings gibt den Platz frei und lässt die erste Warteschlange nachrücken. Bei erneuter Bewegung des Doctors übernimmt nach kurzer Hysterese wieder die fließende lokale Ausweichbewegung; dauerhaftes Umkreisen und transitive Langsamketten sind ausgeschlossen. |
 | D-079 | Hauptläufe verwenden eine harte Arenagrenze statt eines durchquerbaren Torus. Doctor, Gegner, Aufnahmen und Projektile können nicht an der gegenüberliegenden Seite wieder eintreten oder über die Naht interagieren. Die globale Gnadenzeit nach eingehendem Schaden beträgt 0,5 Sekunden. |
+| D-080 | Ersetzt D-073 hinsichtlich des Stoßschadens und D-074 hinsichtlich des Run-Ausbaus: `Stoß` besitzt bis zu einer späteren ausdrücklichen Talentfreischaltung weder Schaden noch Schadenskarte. Schaden, Attack Speed und Galopp werden als endlos sammelbare Komponentenfamilien angeboten. Common addiert 3, Magic 5 und Rare 7 Einheiten beziehungsweise Prozentpunkte; eine Auswahl enthält pro Komponentenfamilie höchstens eine Karte und zeigt unten rechts nur deren gemeinsamen Rundenzähler. Impulsprojektile sind bei fünf zusätzlichen Projektilen verdeckt gedeckelt und werden mit jedem Pick seltener. Der Impuls besitzt kein Run-Reichweitenupgrade. Common-, Magic- und Rare-Karten verwenden zentral definierte elfenbeinfarbene, kobaltblaue und goldene Rahmen. |
+| D-081 | Präzisiert D-077 und D-078 für den bewegten Gegnerstrom: Gegner dürfen durch lokales Ausweichen niemals eine vom Doctor weg gerichtete Verfolgungskomponente erhalten. Zwischen zwei Steuerungsupdates begrenzt `EnemyWorld` dieselbe vorgeschlagene Fixed-Tick-Bewegung kontinuierlich am ersten Nachbarkontakt und lässt nur die tangentiale Restbewegung zu; es gibt weiterhin kein nachträgliches Auseinanderschieben oder Teleportieren. Schadenkontakt, Zielabfrage und sichtbare Abstandshülle sind getrennte Radien, damit Kontaktschaden erst leicht innerhalb der sichtbaren Gegnersilhouette beginnt. |
+| D-082 | Ersetzt ausschließlich die Forschungskostenklausel aus D-067: Bei Mehr Leben, Stärkere Behandlung, Mehr Erfahrung, Mehr Verteidigung, Lebensregeneration und Mehr Galopp ist Rang 1 gegenüber der vorherigen Tabelle halbiert beziehungsweise ganzzahlig gerundet; Rang 2 und 3 sind deutlich teurer. Die exakten Werte stehen im Balancekatalog. Die Hauptarena misst 9.600 × 5.400 Weltpunkte; ihr statischer Hintergrund bleibt ein einmaliger größenbegrenzter Bake. Im Lexikon stehen Doctor Milos, Charakterwerte und Schadenstypen unter `Charakter`; der Verteidigungswert verwendet das Schildsymbol der Verteidigungsforschung. |
+| D-083 | Ersetzt D-076, D-077, D-078 und D-081 ausschließlich hinsichtlich der Gegnerbewegung: Mobile Gegner fixieren Doctor Milos und verfolgen pro Fixed Tick geradlinig seine aktuelle Position. Ihr Schritt endet leicht innerhalb des eigenen Schadenskontaktradius; dort bleiben sie stehen und greifen an. Gegner beeinflussen ihre Bewegung gegenseitig nicht mehr: Es gibt keine Seitenspur, Umgehung, Separation, Kontaktringe, Platzreservierung, Warteschlange oder bewegungsabhängige Hysterese. Sichtbare Überlagerung ist zugunsten ruhiger Survivor-Verfolgung erlaubt. Nur ausdrücklicher Rückstoß und Betäubung dürfen die Verfolgung unterbrechen beziehungsweise einen Gegner vom Doctor wegbewegen; Spawnverteilung und harte Arenagrenze bleiben unverändert. |
+| D-084 | Ersetzt D-083 ausschließlich hinsichtlich der erlaubten Gegnerüberlagerung: Die Zielbewegung bleibt immer die direkte Verfolgung von Doctor Milos. `EnemyWorld` begrenzt den vorgeschlagenen Fixed-Tick-Schritt jedoch kontinuierlich an den tatsächlichen Schadenskontakt-Hitboxen anderer Gegner. Ein frontal blockierter Gegner stockt; bei einem versetzten Kontakt darf ausschließlich der geometrisch verbleibende Tangentialanteil weiterlaufen. Freie Wege erhalten keine Seitenspur, kein Gegner erzeugt eine Rückwärtskomponente und es gibt weiterhin weder Ring, Slot, Queue noch proaktives Ausweichziel. Gegnerabstände verwenden exakt die Summe ihrer `contact_radius`-Werte ohne zusätzliche sichtbare Abstandshülle. Kontaktschaden wird erst nach der kollisionssicheren Endposition geprüft. |
+| D-085 | Präzisiert D-084 für dichte Mehrfachkontakte: Ein einzelner frontaler Körper blockiert weiterhin ohne künstliche Spur. Schließen jedoch mindestens zwei reale Schadenskontakt-Hitboxen gleichzeitig den direkten Korridor, wählt der betroffene Gegner einmalig die geometrisch freiere Tangentialseite und behält sie für diese kurze Blockierepisode. Er besitzt dabei immer eine kleine positive Komponente zu Doctor Milos, darf weder Abstand noch Hitboxgrenzen verletzen und kehrt nach dem Freikommen sofort zur direkten Verfolgung zurück. Abstand, Geschwindigkeiten, Spawns und Kontaktschaden bleiben unverändert; es entsteht kein globaler Ring, keine Warteschlange und keine dauerhafte Seitenspur. |
+| D-086 | Ersetzt D-085 hinsichtlich der Blockeranzahl und Seitwärtssteuerung: Ein Gegner verfolgt Doctor Milos geradlinig, bis sein tatsächlich vorgeschlagener Fixed-Tick-Schritt die Schadenskontakt-Hitbox eines näher am Doctor stehenden Gegners schneiden würde. Nur während dieses realen Hindernisses hält er generationssicher eine Seite und umgeht den Körper mit positiver Vorwärtskomponente. Nach fünf freien Ticks fällt die Umgehung weg. Freie hintere Reihen erhalten keine Seitenspur; Rückwärtsbewegung, Ring, Queue und proaktives Flanken bleiben ausgeschlossen. |
+| D-087 | Standardwellen bewerten zwölf lokale Sektoren ausschließlich im sichtbaren und knapp außerhalb liegenden Kampfbereich. Nahe Gegner wiegen stärker, Bakteriengruppen doppelt; neue Gegner erscheinen außerhalb des Bildschirms in einem der drei druckärmsten gültigen Sektoren. Höchstens zwei gewöhnliche Nahkampfgegner werden alle zwei Sekunden aus einem stärker belegten Offscreen-Sektor versetzt. Boss, kleiner Herd, Fernkämpfer, Tutorialgegner sowie kürzlich getroffene, betäubte oder zurückgestoßene Gegner werden nie versetzt; Leben, Status und Generation bleiben erhalten. |
+| D-088 | Doctor Milos wird von allen Gegnern außer kleinen Bakterien hart an deren Schadenskontakt-Hitbox blockiert. Kleine Bakterien darf er weiterhin verdrängen, jedoch nur über eine begrenzte physische Wegdrückgeschwindigkeit; es entsteht kein Slow-Stat oder Statusmalus. Die blockierende Geometrie entspricht der sichtnahen Schadenskontaktgrenze. |
+| D-089 | Der gesamte Talentbaum ist bis zum Abschluss beziehungsweise Überspringen des Intros mit einem Schloss gesperrt; das Intro vergibt weiterhin keinen Talentpunkt, der erste entsteht nach Fall 2. Vor dem ersten Sieg in Fall 1 ist nur ein aktiver Fähigkeitsslot verfügbar. Danach werden der zweite Slot und `Fetter lazer` automatisch als Meilenstein freigeschaltet; sein Forschungsfeld zeigt vorher Fragezeichen, Schloss und die Fall-1-Bedingung und ist nicht käuflich. |
+| D-090 | Ersetzt D-067 ausschließlich für `Stärkere Behandlung`: Die Forschung erhöht den Schaden aller Behandlungen um 2 Prozentpunkte je Rang, additiv vom unveränderten Basiswert und anschließend ganzzahlig aufgelöst. Fall 1 erzeugt exakt zehn Prozent weniger reguläre zeitgesteuerte Gegner als die vorherige Kurve. In den Charakterwerten erscheint Verteidigung als absolutes Rating; die daraus berechnete prozentuale Minderung steht ausschließlich im Hoverdetail. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

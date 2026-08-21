@@ -151,6 +151,8 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 		game.discovery_manager.mark_seen(discovery_id)
 
 	game.selected_level = game.levels[1]
+	game.meta.research_ranks[&"unlock_defense_burst"] = 1
+	game.meta.register_level_result(game.selected_level, true, 1.0, 1, 1)
 	var active_ids: Array[StringName] = [&"ability_defense_burst", &"ability_treatment_line"]
 	var loadout := PreparedLoadout.create(&"treatment_precision", active_ids)
 	var context := RunContext.create(game.selected_level.id, RUN_SEED, loadout, {}, &"", &"")

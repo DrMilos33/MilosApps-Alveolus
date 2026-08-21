@@ -27,6 +27,7 @@ var resistances: ResistanceProfile = ResistanceProfile.from_components(
 )
 var pickup_range: float = 180.0
 var upgrade_levels: Dictionary = {}
+var upgrade_family_counts: Dictionary = {}
 var ability_cooldown_multiplier: float = 1.0
 var finding_progress_multiplier: float = 1.0
 var support_effect_multiplier: float = 1.0
@@ -69,7 +70,7 @@ func apply_meta_progression(research_ranks: Dictionary) -> void:
 	var regeneration_rank := int(research_ranks.get(&"life_regeneration", 0))
 	var movement_rank := int(research_ranks.get(&"movement_training", 0))
 	max_stability_bonus = float(stability_rank) * 3.0
-	therapy_damage = float(roundi(_treatment_base_damage + float(precision_rank)))
+	therapy_damage = float(roundi(_treatment_base_damage * (1.0 + float(precision_rank) * 0.02)))
 	experience_gain_multiplier = 1.0 + float(experience_rank) * 0.05
 	defense = BASE_DEFENSE + float(defense_rank) * 2.0
 	life_regeneration_per_second = BASE_LIFE_REGENERATION + float(regeneration_rank) * 0.25
@@ -120,9 +121,13 @@ func has_prepared_passive(id: StringName) -> bool:
 	return prepared_passive_ids.has(id)
 
 func preview_upgrade(definition: UpgradeDefinition) -> UpgradePreview:
+	if definition == null:
+		return UpgradePreview.create("Unbekannter Effekt", "", "")
 	var current_level := int(upgrade_levels.get(definition.id, 0))
 	var next_level := current_level + 1
-	var level_text := "Stufe %d / %d" % [next_level, definition.max_level]
+	var level_text := str(upgrade_pick_count(definition) + 1)
+	if definition.show_cap and not definition.repeatable and definition.max_level > 0:
+		level_text = "Stufe %d / %d" % [next_level, definition.max_level]
 	if not definition.modifiers.is_empty():
 		var build := _ensure_run_build()
 		var preview_tags := definition.preview_context_tags
@@ -221,14 +226,19 @@ func preview_upgrade(definition: UpgradeDefinition) -> UpgradePreview:
 	return UpgradePreview.create("Unbekannter Effekt", "", level_text)
 
 func apply_upgrade(definition: UpgradeDefinition) -> bool:
+	if definition == null:
+		return false
 	var current_level := int(upgrade_levels.get(definition.id, 0))
-	if current_level >= definition.max_level:
+	var family_key := definition.resolved_family_key(prepared_treatment.id if prepared_treatment != null else &"")
+	var family_count := upgrade_pick_count(definition)
+	if not definition.can_offer(family_count, current_level):
 		return false
 	if not definition.modifiers.is_empty():
 		var build := _ensure_run_build()
 		if not build.apply_upgrade(definition, current_level + 1):
 			return false
 		upgrade_levels[definition.id] = current_level + 1
+		upgrade_family_counts[family_key] = family_count + 1
 		_sync_fields_from_build()
 		return true
 	match definition.effect:
@@ -253,7 +263,25 @@ func apply_upgrade(definition: UpgradeDefinition) -> bool:
 		_:
 			return false
 	upgrade_levels[definition.id] = current_level + 1
+	upgrade_family_counts[family_key] = family_count + 1
 	return true
+
+
+func upgrade_pick_count(definition: UpgradeDefinition) -> int:
+	if definition == null:
+		return 0
+	var prepared_treatment_id := prepared_treatment.id if prepared_treatment != null else &""
+	var family_key := definition.resolved_family_key(prepared_treatment_id)
+	if upgrade_family_counts.has(family_key):
+		return maxi(0, int(upgrade_family_counts[family_key]))
+	# Compatibility for tests and old run snapshots that only populate the
+	# per-definition counters. Run upgrades are not persisted between runs, so
+	# this fallback is intentionally read-only and migration-free.
+	var count := 0
+	for candidate in ContentCatalog.upgrade_definitions():
+		if candidate.resolved_family_key(prepared_treatment_id) == family_key:
+			count += maxi(0, int(upgrade_levels.get(candidate.id, 0)))
+	return count
 
 func _ensure_run_build() -> RunBuildState:
 	if run_build_state == null:
@@ -366,7 +394,12 @@ func stat_sections(
 		_stat_row(&"life", "Leben", life_value),
 		_stat_row(&"shield", "Schild", "%s / %s" % [_number(current_shield), _number(maximum_shield)]),
 		_stat_row(&"movement_speed", "Galopp", _number(resolved_movement_speed)),
-		_stat_row(&"defense", "Verteidigung", "%s %%" % _number(MitigationCurve.defense_effective_percent(defense))),
+		_stat_row(
+			&"defense",
+			"Verteidigung",
+			_number(defense),
+			"Effektive Schadensminderung: %s %%" % _number(MitigationCurve.defense_effective_percent(defense))
+		),
 		_stat_row(&"life_regeneration", "Regeneration", "%s/s" % _number(life_regeneration_per_second)),
 		_stat_row(&"experience_gain", "Erfahrung", "+%d %%" % roundi((experience_gain_multiplier - 1.0) * 100.0)),
 	]
@@ -490,8 +523,11 @@ func compact_stat_text(current_stability: float = -1.0, maximum_stability: float
 	]
 
 
-func _stat_row(id: StringName, label: String, value: String) -> Dictionary:
-	return {"id": id, "label": label, "value": value}
+func _stat_row(id: StringName, label: String, value: String, detail_text: String = "") -> Dictionary:
+	var row := {"id": id, "label": label, "value": value}
+	if not detail_text.is_empty():
+		row["detail_text"] = detail_text
+	return row
 
 func _number(value: float) -> String:
 	if is_equal_approx(value, roundf(value)):

@@ -105,7 +105,7 @@ func _test_ranked_talent_catalog() -> void:
 	_near(talents[&"piercing_persistence"].magnitude, 0.5, "Laserpersistenz gewährt 0,5 Sekunden pro Rang")
 	_true(not talents.has(&"piercing_return"), "Rückkehr ist aus dem aktiven Katalog entfernt und bleibt reserviert")
 	_equal(talents[&"treatment_damage_training"].max_rank, 1, "Die Behandlungsgrundlage ist ein Einzelrang")
-	_near(talents[&"treatment_damage_training"].magnitude, 1.10, "Die Behandlungsgrundlage gewährt zehn Prozent")
+	_near(talents[&"treatment_damage_training"].magnitude, 2.0, "Die Behandlungsgrundlage gewährt zwei Prozentpunkte")
 	_equal(talents[&"manual_treatment_aim"].max_rank, 1, "Mausziel ist ein Einzelrang")
 	_equal(talents[&"spread_penetration"].cost_for_rank(2), 1, "Rangkosten sind über die kompatible API abrufbar")
 	_equal(TalentDefinition.total_cost(), 7, "Der vollständige neue Baum kostet sieben Punkte")

@@ -26,6 +26,16 @@ const PRESSURE_GRACE_SECONDS := 0.5
 const SPAWN_GOLDEN_ANGLE := 2.399963229728653
 const SPAWN_ANGLE_JITTER := 0.18
 const WAVE_SPAWN_SECTOR_COUNT := 12
+const WAVE_SPAWN_EMPTY_SECTOR_CHOICES := 3
+const WAVE_SPAWN_SCREEN_MARGIN := 110.0
+const WAVE_PRESSURE_NEAR_MARGIN := 300.0
+const WAVE_PRESSURE_NEIGHBOR_SHARE := 0.22
+const OFFSCREEN_RELOCATION_INTERVAL := 2.0
+const OFFSCREEN_RELOCATION_MAXIMUM := 2
+const OFFSCREEN_RELOCATION_SOURCE_MARGIN := 130.0
+const OFFSCREEN_PLACEMENT_ANGLE_OFFSETS: Array[float] = [0.0, -0.14, 0.14, -0.24, 0.24]
+const OFFSCREEN_PLACEMENT_RADIAL_OFFSETS: Array[float] = [0.0, 42.0, 84.0]
+const OFFSCREEN_PLACEMENT_BODY_GAP := 4.0
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := false
@@ -135,6 +145,7 @@ var ability_ready_states: Dictionary = {}
 var treatment_beam_return_visualized: Dictionary = {}
 
 var spawn_accumulator: float = 0.0
+var offscreen_relocation_timer: float = OFFSCREEN_RELOCATION_INTERVAL
 var therapy_timer: float = 0.0
 var immune_timer: float = 0.0
 var support_timer: float = 0.0
@@ -431,6 +442,7 @@ func _process(delta: float) -> void:
 		if flow_state == GameFlowState.State.PRACTICE:
 			hud.refresh_practice(meta, clinic_definitions)
 		elif flow_state == GameFlowState.State.RESEARCH:
+			_sync_progression_availability()
 			hud.refresh_research(meta, research_definitions)
 		elif flow_state == GameFlowState.State.CAMPUS:
 			hud.refresh_campus(meta, clinic_definitions)
@@ -473,6 +485,8 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 	if performance_profile_enabled:
 		last_phase_timings_ms[&"spatial_query_rebuild"] = 0.0
 	_fixed_step_active = true
+	if enemy_world != null and enemy_world.has_method(&"prepare_avatar_body_interaction"):
+		enemy_world.call(&"prepare_avatar_body_interaction", delta)
 	avatar.step_fixed(delta)
 	state.tick(delta)
 	if not state.active:
@@ -849,7 +863,12 @@ func _show_practice() -> void:
 func _show_research() -> void:
 	_route_to(&"research")
 	_set_flow(GameFlowState.State.RESEARCH)
-	hud.show_research_tabs(meta, research_definitions, TalentDefinition.definitions())
+	_sync_progression_availability()
+	hud.show_research_tabs(
+		meta,
+		research_definitions,
+		TalentDefinition.definitions()
+	)
 
 func _show_level_select(update_route: bool = true) -> void:
 	_cleanup_run_nodes()
@@ -959,7 +978,12 @@ func _restore_screen(target_state: GameFlowState.State) -> void:
 			hud.show_practice(meta, clinic_definitions)
 		GameFlowState.State.RESEARCH:
 			_set_flow(GameFlowState.State.RESEARCH)
-			hud.show_research_tabs(meta, research_definitions, TalentDefinition.definitions())
+			_sync_progression_availability()
+			hud.show_research_tabs(
+				meta,
+				research_definitions,
+				TalentDefinition.definitions()
+			)
 		GameFlowState.State.LEVEL_SELECT:
 			_show_level_select(false)
 		GameFlowState.State.LEXICON:
@@ -1063,10 +1087,11 @@ func _show_preparation() -> void:
 	pending_preparation_loadout = LoadoutAvailabilityPolicy.sanitized_copy(
 		pending_run_context.loadout_snapshot,
 		loadout_modules,
-		meta.research_ranks
+		meta.research_ranks,
+		_first_case_complete()
 	)
 	pending_run_context.loadout_snapshot = pending_preparation_loadout.duplicate_loadout()
-	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks)
+	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	pending_loadout_draft = LoadoutDraft.from_prepared(pending_preparation_loadout, loadout_modules, available, meta.preparation_capacity())
 	pending_replacement_component = &""
 	_set_flow(GameFlowState.State.PREPARATION)
@@ -1116,8 +1141,12 @@ func _refresh_preparation() -> void:
 		"validation": validation,
 		"finding_hint": _preparation_finding_hint(),
 		"unlocked_ids": meta.unlocked_module_ids(loadout_modules, research_definitions),
-		"available_ids": LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks),
+		"available_ids": LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete()),
 		"availability_reasons": _preparation_availability_reasons(),
+		"locked_slot_ids": {LoadoutSlotId.ACTIVE_2: true} if not _first_case_complete() else {},
+		"slot_lock_reasons": {
+			LoadoutSlotId.ACTIVE_2: "Wird nach Abschluss von Fall 1 freigeschaltet."
+		} if not _first_case_complete() else {},
 		"slot_snapshot": pending_loadout_draft.slot_snapshot(),
 		"loadout_snapshot": pending_preparation_loadout.to_dict(),
 		"replacement_component": pending_replacement_component,
@@ -1131,7 +1160,12 @@ func _preparation_availability_reasons() -> Dictionary:
 	var reasons: Dictionary = {}
 	for raw_id in loadout_modules:
 		var id := StringName(raw_id)
-		var reason := LoadoutAvailabilityPolicy.unavailable_reason(id, loadout_modules, meta.research_ranks)
+		var reason := LoadoutAvailabilityPolicy.unavailable_reason(
+			id,
+			loadout_modules,
+			meta.research_ranks,
+			_first_case_complete()
+		)
 		if not reason.is_empty():
 			reasons[id] = reason
 	return reasons
@@ -1139,7 +1173,7 @@ func _preparation_availability_reasons() -> Dictionary:
 func _on_preparation_component_requested(id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
 		return
-	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks)
+	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	if not bool(available.get(id, false)) or not loadout_modules.has(id):
 		return
 	var result := pending_loadout_draft.equip(id)
@@ -1150,7 +1184,9 @@ func _on_preparation_slot_component_requested(slot_id: StringName, id: StringNam
 		return
 	if not LoadoutSlotId.planning().has(slot_id) or not loadout_modules.has(id):
 		return
-	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks)
+	if slot_id == LoadoutSlotId.ACTIVE_2 and not _first_case_complete():
+		return
+	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	if not bool(available.get(id, false)):
 		return
 	# The plan already names an explicit target slot, so replacement is atomic
@@ -1168,6 +1204,8 @@ func _on_preparation_slot_requested(slot_id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
 		return
 	if not LoadoutSlotId.planning().has(slot_id):
+		return
+	if slot_id == LoadoutSlotId.ACTIVE_2 and not _first_case_complete():
 		return
 	var result: LoadoutChangeResult
 	if pending_replacement_component != &"":
@@ -1214,7 +1252,7 @@ func _on_preparation_reserve_requested(id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or not loadout_modules.has(id) or _is_preparation_loadout_locked():
 		return
 	var definition: LoadoutModuleDefinition = loadout_modules[id]
-	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks)
+	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	if definition.kind != LoadoutModuleDefinition.Kind.PASSIVE or not bool(available.get(id, false)):
 		return
 	var result := pending_loadout_draft.equip(id, LoadoutSlotId.RESERVE)
@@ -1298,6 +1336,7 @@ func start_run(run_context: RunContext = null) -> void:
 		stats.therapy_cooldown = 0.28
 		stats.therapy_range = 1200.0
 		stats.therapy_targets = 12
+		stats.therapy_projectiles = 12
 		stats.immune_level = 2
 		stats.immune_damage = 30.0
 		stats.support_level = 1
@@ -1311,6 +1350,7 @@ func start_run(run_context: RunContext = null) -> void:
 	rng.seed = config.random_seed
 	_reset_spawn_position_sequence()
 	spawn_accumulator = config.initial_spawn_interval
+	offscreen_relocation_timer = OFFSCREEN_RELOCATION_INTERVAL
 	therapy_timer = 0.18
 	immune_timer = 0.75
 	support_timer = 6.0
@@ -1537,7 +1577,12 @@ func _resolved_run_context(requested: RunContext) -> RunContext:
 	else:
 		resolved = _create_case_context(selected_level)
 	if resolved != null:
-		resolved.loadout_snapshot = LoadoutAvailabilityPolicy.sanitized_copy(resolved.loadout_snapshot, loadout_modules, meta.research_ranks)
+		resolved.loadout_snapshot = LoadoutAvailabilityPolicy.sanitized_copy(
+			resolved.loadout_snapshot,
+			loadout_modules,
+			meta.research_ranks,
+			_first_case_complete()
+		)
 	return resolved
 
 func _apply_case_trait_to_config(trait_id: StringName) -> void:
@@ -1735,6 +1780,7 @@ func _spawn_step(delta: float) -> void:
 	_drain_deferred_spawns(8)
 	if selected_level.is_tutorial or stress_test:
 		return
+	_offscreen_relocation_step(delta)
 	if state.boss_spawned or enemies.size() >= 220:
 		return
 	spawn_accumulator -= delta
@@ -1787,7 +1833,10 @@ func _therapy_step(delta: float) -> void:
 	if therapy_timer > 0.0:
 		return
 	therapy_timer += stats.therapy_cooldown
-	var targets := _nearest_targets(stats.therapy_range, stats.therapy_targets)
+	# The tutorial uses this lightweight legacy firing path, but projectile
+	# upgrades must retain the same meaning as the normal treatment strategy.
+	# Each acquired Impuls projectile therefore selects one distinct target.
+	var targets := _nearest_targets(stats.therapy_range, stats.therapy_projectiles)
 	if not targets.is_empty():
 		avatar.show_treatment_impulse()
 	for enemy in targets:
@@ -2435,7 +2484,8 @@ func _show_active_boss_hud() -> void:
 	var boss_definition := enemy_definitions.get(config.boss_enemy_id) as EnemyDefinition
 	if boss_definition != null:
 		boss_title = boss_definition.display_name
-	hud.show_boss(maximum, config.boss_phase_minions.size(), boss_title)
+	hud.set_boss_title(boss_title)
+	hud.show_boss(maximum, config.boss_phase_minions.size())
 	hud.update_boss_health(float(snapshot.get("current", 0.0)), maximum)
 	if boss_aggregate_phase > 0:
 		hud.show_boss_phase(boss_aggregate_phase)
@@ -3552,11 +3602,12 @@ func _on_research_purchase_requested(id: StringName) -> void:
 	for definition in research_definitions:
 		if definition.id != id:
 			continue
-		if not LoadoutAvailabilityPolicy.research_purchase_enabled(definition):
+		if not LoadoutAvailabilityPolicy.research_purchase_enabled(definition, _first_case_complete()):
 			break
 		if meta.purchase(definition):
 			_save_meta()
 		break
+	_sync_progression_availability()
 	hud.refresh_research(meta, research_definitions)
 
 func _on_research_reset_requested() -> void:
@@ -3564,6 +3615,7 @@ func _on_research_reset_requested() -> void:
 		return
 	meta.clear_research_ranks(research_definitions)
 	_save_meta()
+	_sync_progression_availability()
 	hud.refresh_research(meta, research_definitions)
 
 func _on_research_tab_changed(tab: StringName) -> void:
@@ -3571,14 +3623,14 @@ func _on_research_tab_changed(tab: StringName) -> void:
 		hud.refresh_talents(_talent_view_model())
 
 func _on_talent_toggle_requested(id: StringName) -> void:
-	if flow_state != GameFlowState.State.RESEARCH:
+	if flow_state != GameFlowState.State.RESEARCH or not _talents_unlocked():
 		return
 	if meta.purchase_talent_rank(id):
 		_save_meta()
 	hud.refresh_talents(_talent_view_model())
 
 func _on_talent_rank_remove_requested(id: StringName) -> void:
-	if flow_state != GameFlowState.State.RESEARCH:
+	if flow_state != GameFlowState.State.RESEARCH or not _talents_unlocked():
 		return
 	var current_rank := meta.talent_rank(id)
 	if current_rank > 0 and meta.set_talent_rank(id, current_rank - 1):
@@ -3588,7 +3640,7 @@ func _on_talent_rank_remove_requested(id: StringName) -> void:
 	hud.refresh_talents(_talent_view_model())
 
 func _on_talent_reset_requested() -> void:
-	if flow_state != GameFlowState.State.RESEARCH:
+	if flow_state != GameFlowState.State.RESEARCH or not _talents_unlocked():
 		return
 	meta.clear_talents()
 	_save_meta()
@@ -3631,8 +3683,22 @@ func _talent_view_model() -> Dictionary:
 		"spent_points": meta.talent_points_spent(),
 		"unlimited": meta.is_unlimited_test_progression(),
 		"tree_refunded": meta.talent_tree_refund_pending,
+		"tree_unlocked": _talents_unlocked(),
+		"tree_lock_text": "Schließe zuerst die Einführung ab.",
 		"talents": cards,
 	}
+
+
+func _first_case_complete() -> bool:
+	return meta != null and meta.has_completed_level(&"localized_focus")
+
+
+func _sync_progression_availability() -> void:
+	hud.set_progression_availability(_first_case_complete(), _talents_unlocked())
+
+
+func _talents_unlocked() -> bool:
+	return meta != null and (meta.has_completed_level(&"intro") or meta.intro_skipped)
 
 func _nearest_targets(max_range: float, count: int) -> Array[InfectionEnemy]:
 	var nearest: Array[InfectionEnemy] = []
@@ -3724,62 +3790,233 @@ func _safe_spawn_position_for_angle(angle: float, distance: float, body_radius: 
 	return topology.resolve_position(desired, body_radius)
 
 
-## Standard waves keep the deterministic golden-angle sequence as their
-## tie-breaker, but place each new body in the least occupied of twelve sectors.
-## Materializing enemies count as occupied immediately, so a batch cannot fold
-## into one corner before its first member becomes targetable.
+## Standard waves evaluate only the pressure which can currently influence the
+## player. Nearby bodies count more than distant ones and the wider red groups
+## count twice. One of the three calmest valid sectors is selected using the
+## dedicated deterministic spawn stream, and the body is placed just outside
+## the actual camera rectangle. This creates several attack fronts without
+## teaching locomotion to predict or flank the player.
 func _wave_spawn_position_around_avatar(distance: float, body_radius: float = 0.0) -> Vector2:
 	var candidate := _spawn_position_around_avatar(distance, body_radius)
 	if not is_instance_valid(avatar) or topology == null:
 		return candidate
-	var sector_counts := PackedInt32Array()
-	sector_counts.resize(WAVE_SPAWN_SECTOR_COUNT)
-	sector_counts.fill(0)
-	for enemy in enemies:
-		if not is_instance_valid(enemy) or not enemy.activation_active or enemy.dying:
-			continue
-		var enemy_delta := topology.shortest_delta(avatar.global_position, enemy.global_position)
-		if enemy_delta.length_squared() <= 0.0001:
-			continue
-		var enemy_sector := floori(
-			fposmod(enemy_delta.angle(), TAU) / TAU * float(WAVE_SPAWN_SECTOR_COUNT)
-		) % WAVE_SPAWN_SECTOR_COUNT
-		sector_counts[enemy_sector] += 1
+	var sector_pressure := _local_wave_sector_pressure()
 	var candidate_delta := topology.shortest_delta(avatar.global_position, candidate)
 	if candidate_delta.length_squared() <= 0.0001:
 		return candidate
 	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
 	var candidate_angle := fposmod(candidate_delta.angle(), TAU)
-	var candidate_sector := floori(candidate_angle / sector_width) % WAVE_SPAWN_SECTOR_COUNT
-	var candidate_center := (float(candidate_sector) + 0.5) * sector_width
-	var intra_sector_offset := clampf(
-		_shortest_signed_angle(candidate_center, candidate_angle),
-		-sector_width * 0.32,
-		sector_width * 0.32
-	)
-	var selected_sector := -1
-	var selected_count := 2147483647
-	var selected_angle_distance := INF
+	var ranked_sectors: Array[Dictionary] = []
 	for sector in range(WAVE_SPAWN_SECTOR_COUNT):
 		var sector_center := (float(sector) + 0.5) * sector_width
-		var sector_angle := sector_center + intra_sector_offset
-		var sector_position := avatar.global_position + Vector2.from_angle(sector_angle) * candidate_delta.length()
-		if topology.is_bounded() and not topology.contains_position(sector_position, body_radius):
+		var sector_position := _offscreen_spawn_position(sector_center, body_radius)
+		if sector_position == Vector2.INF:
 			continue
-		var angle_distance := absf(_shortest_signed_angle(candidate_angle, sector_center))
-		if sector_counts[sector] < selected_count or (
-			sector_counts[sector] == selected_count and angle_distance < selected_angle_distance
-		):
-			selected_sector = sector
-			selected_count = sector_counts[sector]
-			selected_angle_distance = angle_distance
-	if selected_sector < 0:
-		return candidate
-	var resolved_angle := (float(selected_sector) + 0.5) * sector_width + intra_sector_offset
-	return topology.resolve_position(
-		avatar.global_position + Vector2.from_angle(resolved_angle) * candidate_delta.length(),
-		body_radius
+		ranked_sectors.append({
+			"sector": sector,
+			"pressure": float(sector_pressure[sector]),
+			"angle_distance": absf(_shortest_signed_angle(candidate_angle, sector_center)),
+			"position": sector_position,
+		})
+	ranked_sectors.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var pressure_a := float(a["pressure"])
+		var pressure_b := float(b["pressure"])
+		if not is_equal_approx(pressure_a, pressure_b):
+			return pressure_a < pressure_b
+		var angle_a := float(a["angle_distance"])
+		var angle_b := float(b["angle_distance"])
+		if not is_equal_approx(angle_a, angle_b):
+			return angle_a < angle_b
+		return int(a["sector"]) < int(b["sector"])
 	)
+	if ranked_sectors.is_empty():
+		return candidate
+	var choice_count := mini(WAVE_SPAWN_EMPTY_SECTOR_CHOICES, ranked_sectors.size())
+	var choice_index := spawn_rng.randi_range(0, choice_count - 1)
+	return Vector2(ranked_sectors[choice_index]["position"])
+
+
+func _local_wave_sector_pressure() -> PackedFloat32Array:
+	var pressure := PackedFloat32Array()
+	pressure.resize(WAVE_SPAWN_SECTOR_COUNT)
+	pressure.fill(0.0)
+	if not is_instance_valid(avatar) or topology == null:
+		return pressure
+	var local_rect := _visible_world_rect().grow(WAVE_PRESSURE_NEAR_MARGIN)
+	var local_radius := local_rect.size.length() * 0.5 + avatar.global_position.distance_to(local_rect.get_center())
+	var local_radius_squared := local_radius * local_radius
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or not enemy.activation_active or enemy.dying:
+			continue
+		if not local_rect.has_point(enemy.global_position):
+			continue
+		var enemy_delta := topology.shortest_delta(avatar.global_position, enemy.global_position)
+		var distance_squared := enemy_delta.length_squared()
+		if distance_squared <= 0.0001 or distance_squared > local_radius_squared:
+			continue
+		var distance_weight := 1.0 - clampf(sqrt(distance_squared) / local_radius, 0.0, 1.0)
+		var body_weight := 2.0 if enemy.definition != null and enemy.definition.id == &"bacterial_cluster" else 1.0
+		var weight := body_weight * (0.35 + 1.65 * distance_weight * distance_weight)
+		var sector := _sector_for_delta(enemy_delta)
+		pressure[sector] += weight
+		pressure[posmod(sector - 1, WAVE_SPAWN_SECTOR_COUNT)] += weight * WAVE_PRESSURE_NEIGHBOR_SHARE
+		pressure[posmod(sector + 1, WAVE_SPAWN_SECTOR_COUNT)] += weight * WAVE_PRESSURE_NEIGHBOR_SHARE
+	return pressure
+
+
+func _visible_world_half_extents() -> Vector2:
+	var viewport_size := get_viewport().get_visible_rect().size
+	var zoom := avatar.camera.zoom if is_instance_valid(avatar) and is_instance_valid(avatar.camera) else Vector2.ONE
+	return Vector2(
+		viewport_size.x * 0.5 / maxf(absf(zoom.x), 0.001),
+		viewport_size.y * 0.5 / maxf(absf(zoom.y), 0.001)
+	)
+
+
+func _visible_world_rect() -> Rect2:
+	var half_extents := _visible_world_half_extents()
+	var center := avatar.global_position
+	if is_instance_valid(avatar) and is_instance_valid(avatar.camera):
+		center = avatar.camera.get_screen_center_position()
+	return Rect2(center - half_extents, half_extents * 2.0)
+
+
+func _offscreen_spawn_position(angle: float, body_radius: float, ignored_enemy: InfectionEnemy = null) -> Vector2:
+	for radial_offset in OFFSCREEN_PLACEMENT_RADIAL_OFFSETS:
+		for angle_offset in OFFSCREEN_PLACEMENT_ANGLE_OFFSETS:
+			var direction := Vector2.from_angle(angle + angle_offset)
+			var distance := _ray_distance_to_visible_edge(avatar.global_position, direction)
+			distance += WAVE_SPAWN_SCREEN_MARGIN + body_radius + radial_offset
+			var position := avatar.global_position + direction * distance
+			if topology.is_bounded() and not topology.contains_position(position, body_radius):
+				continue
+			position = topology.resolve_position(position, body_radius)
+			if _offscreen_position_is_clear(position, body_radius, ignored_enemy):
+				return position
+	return Vector2.INF
+
+
+func _ray_distance_to_visible_edge(origin: Vector2, direction: Vector2) -> float:
+	var visible_rect := _visible_world_rect()
+	var distance := INF
+	if direction.x > 0.0001:
+		distance = minf(distance, (visible_rect.end.x - origin.x) / direction.x)
+	elif direction.x < -0.0001:
+		distance = minf(distance, (visible_rect.position.x - origin.x) / direction.x)
+	if direction.y > 0.0001:
+		distance = minf(distance, (visible_rect.end.y - origin.y) / direction.y)
+	elif direction.y < -0.0001:
+		distance = minf(distance, (visible_rect.position.y - origin.y) / direction.y)
+	return maxf(0.0, distance if is_finite(distance) else _visible_world_half_extents().length())
+
+
+func _offscreen_position_is_clear(position: Vector2, body_radius: float, ignored_enemy: InfectionEnemy = null) -> bool:
+	for other in enemies:
+		if not is_instance_valid(other) or other == ignored_enemy or other.definition == null or other.dying:
+			continue
+		var minimum_distance := body_radius + other.definition.radius + OFFSCREEN_PLACEMENT_BODY_GAP
+		if topology.shortest_delta(position, other.global_position).length_squared() < minimum_distance * minimum_distance:
+			return false
+	return true
+
+
+func _sector_for_delta(delta: Vector2) -> int:
+	return floori(fposmod(delta.angle(), TAU) / TAU * float(WAVE_SPAWN_SECTOR_COUNT)) % WAVE_SPAWN_SECTOR_COUNT
+
+
+func _offscreen_relocation_step(delta: float) -> void:
+	offscreen_relocation_timer -= delta
+	if offscreen_relocation_timer > 0.0:
+		return
+	offscreen_relocation_timer += OFFSCREEN_RELOCATION_INTERVAL
+	if not is_instance_valid(avatar) or topology == null or enemy_world == null:
+		return
+	var pressure := _local_wave_sector_pressure()
+	var source_exclusion_rect := _visible_world_rect().grow(OFFSCREEN_RELOCATION_SOURCE_MARGIN)
+	var relocated_handles: Dictionary = {}
+	var relocated := 0
+	for _relocation_index in range(OFFSCREEN_RELOCATION_MAXIMUM):
+		var ranked_targets: Array[Dictionary] = []
+		var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
+		for sector in range(WAVE_SPAWN_SECTOR_COUNT):
+			var target := _offscreen_spawn_position((float(sector) + 0.5) * sector_width, 18.0)
+			if target != Vector2.INF:
+				ranked_targets.append({"sector": sector, "pressure": float(pressure[sector]), "position": target})
+		ranked_targets.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			if not is_equal_approx(float(a["pressure"]), float(b["pressure"])):
+				return float(a["pressure"]) < float(b["pressure"])
+			return int(a["sector"]) < int(b["sector"])
+		)
+		if ranked_targets.is_empty():
+			break
+		var target_choice_count := mini(WAVE_SPAWN_EMPTY_SECTOR_CHOICES, ranked_targets.size())
+		var target_entry := ranked_targets[spawn_rng.randi_range(0, target_choice_count - 1)]
+		var target_sector := int(target_entry["sector"])
+		var selected_enemy: InfectionEnemy = null
+		var selected_source_pressure := float(target_entry["pressure"])
+		for enemy in enemies:
+			var candidate_handle := enemy_world.handle_for(enemy) if is_instance_valid(enemy) else EntityHandle.INVALID
+			if relocated_handles.has(candidate_handle) or not _enemy_can_relocate_offscreen(enemy, source_exclusion_rect):
+				continue
+			var source_delta := topology.shortest_delta(avatar.global_position, enemy.global_position)
+			var source_sector := _sector_for_delta(source_delta)
+			var source_pressure := float(pressure[source_sector])
+			if source_pressure <= selected_source_pressure + 0.25:
+				continue
+			selected_enemy = enemy
+			selected_source_pressure = source_pressure
+		if selected_enemy == null:
+			break
+		var selected_radius := selected_enemy.definition.radius if selected_enemy.definition != null else 18.0
+		var target_position := _offscreen_spawn_position(
+			(float(target_sector) + 0.5) * sector_width,
+			selected_radius,
+			selected_enemy
+		)
+		if target_position == Vector2.INF:
+			break
+		var source_delta := topology.shortest_delta(avatar.global_position, selected_enemy.global_position)
+		var source_sector := _sector_for_delta(source_delta)
+		var weight := 2.0 if selected_enemy.definition != null and selected_enemy.definition.id == &"bacterial_cluster" else 1.0
+		var relocation_applied := false
+		if selected_enemy.has_method(&"relocate_preserving_state"):
+			relocation_applied = bool(selected_enemy.call(&"relocate_preserving_state", target_position))
+		else:
+			selected_enemy.global_position = target_position
+			selected_enemy.reset_visual_motion()
+			relocation_applied = true
+		if not relocation_applied:
+			break
+		var handle := enemy_world.handle_for(selected_enemy)
+		relocated_handles[handle] = true
+		if EntityHandle.is_valid(handle) and enemy_world.has_method(&"mark_enemy_relocated"):
+			enemy_world.call(&"mark_enemy_relocated", handle)
+		if crowd_renderer != null and crowd_renderer.has_method(&"mark_enemy_teleported"):
+			crowd_renderer.call(&"mark_enemy_teleported", selected_enemy)
+		pressure[source_sector] = maxf(0.0, pressure[source_sector] - weight)
+		pressure[target_sector] += weight
+		relocated += 1
+	if relocated > 0:
+		_combat_query_dirty = true
+
+
+func _enemy_can_relocate_offscreen(enemy: InfectionEnemy, source_exclusion_rect: Rect2) -> bool:
+	if not is_instance_valid(enemy) or enemy.definition == null:
+		return false
+	if enemy.definition.is_boss or enemy.definition.id == &"minor_focus":
+		return false
+	if enemy.definition.id not in [&"pneumococcus", &"bacterial_cluster"]:
+		return false
+	if selected_level == null or selected_level.is_tutorial or intro_enemy_roles.has(enemy):
+		return false
+	if not enemy.activation_active or enemy.dying or not enemy.is_targetable() or enemy.is_stunned():
+		return false
+	var handle := enemy_world.handle_for(enemy)
+	if enemy_attack_director != null and enemy_attack_director.role_for(handle) != EnemyAttackDirector.Role.NONE:
+		return false
+	if enemy.has_method(&"can_be_relocated") and not bool(enemy.call(&"can_be_relocated")):
+		return false
+	return not source_exclusion_rect.has_point(enemy.global_position)
 
 
 func _shortest_signed_angle(from_angle: float, to_angle: float) -> float:

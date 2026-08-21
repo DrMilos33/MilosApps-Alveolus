@@ -12,9 +12,10 @@ func _run() -> void:
 	var definitions := ContentCatalog.loadout_module_definitions()
 	var fresh_available := LoadoutAvailabilityPolicy.selectable_ids(definitions)
 	_equal(definitions.size(), 9, "Der aktive Planungskatalog enthält drei Behandlungen und sechs Aktive")
-	_equal(fresh_available.size(), 3, "Frisch verfügbar sind Präziser Impuls und zwei aktive Fähigkeiten")
-	for id in [&"treatment_precision", &"ability_defense_burst", &"ability_treatment_line"]:
-		_true(bool(fresh_available.get(id, false)), "%s ist ohne Forschung verfügbar" % String(id))
+	_equal(fresh_available.size(), 1, "Vor Forschung und Fallabschluss ist ausschließlich Impuls verfügbar")
+	_true(bool(fresh_available.get(&"treatment_precision", false)), "Impuls ist ohne Forschung verfügbar")
+	for id in [&"ability_defense_burst", &"ability_treatment_line"]:
+		_true(not bool(fresh_available.get(id, false)), "%s besitzt seinen eigenen Fortschrittsvertrag" % String(id))
 	for id in [&"treatment_spread", &"treatment_pierce"]:
 		_true(not bool(fresh_available.get(id, false)), "%s wartet auf seine Forschung" % String(id))
 	for id in [&"ability_focus_field", &"ability_emergency_support", &"ability_protection_field", &"ability_sample_pull"]:
@@ -22,11 +23,16 @@ func _run() -> void:
 
 	var default_loadout := PreparedLoadout.default_loadout()
 	_equal(default_loadout.treatment_id, &"treatment_precision", "Der Standardplan startet mit Präzisem Impuls")
-	_equal(default_loadout.ability_ids, [&"ability_defense_burst", &"ability_treatment_line"], "Der Standardplan verwendet nur die beiden aktiven Testfähigkeiten")
+	_equal(default_loadout.ability_ids, [], "Der Standardplan startet vor den Fortschrittsfreischaltungen ohne aktive Fähigkeit")
 	_true(default_loadout.passive_ids.is_empty() and default_loadout.reserve_id == &"", "Der Standardplan enthält keine Passive oder Reserve")
-	var default_validation := LoadoutValidator.validate(default_loadout, definitions, fresh_available, 8)
-	_true(default_validation.valid, "Der Standardplan ist gegen die Verfügbarkeit gültig")
-	_equal(default_validation.capacity_used, 6, "Der Standardplan benötigt sechs von acht Kapazität")
+	_true(LoadoutValidator.validate(default_loadout, definitions, fresh_available, 8).valid, "Der frische Ein-Komponenten-Plan ist vor Fortschrittsfreischaltungen gültig")
+	var burst_owned := {&"unlock_defense_burst": 1}
+	var first_case_available := LoadoutAvailabilityPolicy.selectable_ids(definitions, burst_owned, true)
+	_true(bool(first_case_available.get(&"ability_defense_burst", false)) and bool(first_case_available.get(&"ability_treatment_line", false)), "Fall-1-Abschluss ergänzt den Lazer zur erforschten Stoß-Fähigkeit")
+	_equal(LoadoutAvailabilityPolicy.active_ability_slot_limit(false), 1, "Vor Fall 1 steht genau ein Aktivplatz bereit")
+	_equal(LoadoutAvailabilityPolicy.active_ability_slot_limit(true), 2, "Nach Fall 1 stehen zwei Aktivplätze bereit")
+	_true(not LoadoutAvailabilityPolicy.slot_is_available(LoadoutSlotId.ACTIVE_2, false), "Aktiv 2 ist vor Fall 1 gesperrt")
+	_true(LoadoutAvailabilityPolicy.slot_unavailable_reason(LoadoutSlotId.ACTIVE_2, false).contains("Fall 1"), "Aktiv 2 erklärt seinen Meilenstein")
 
 	var historical := PreparedLoadout.create(
 		&"treatment_spread",
@@ -37,7 +43,7 @@ func _run() -> void:
 	var historical_snapshot := historical.to_dict()
 	var sanitized := LoadoutAvailabilityPolicy.sanitized_copy(historical, definitions)
 	_equal(sanitized.treatment_id, &"treatment_precision", "Eine noch nicht erforschte historische Behandlung fällt auf den Präzisen Impuls zurück")
-	_equal(sanitized.ability_ids, [&"ability_treatment_line"], "Erlaubte Aktive behalten ihre Reihenfolge, ohne freie Plätze still zu befüllen")
+	_equal(sanitized.ability_ids, [], "Ein historischer Lazer umgeht weder Fallmeilenstein noch ersten Aktivplatz")
 	_true(sanitized.passive_ids.is_empty() and sanitized.reserve_id == &"", "Passive und Reserve werden nur aus der effektiven Kopie entfernt")
 	_equal(historical.to_dict(), historical_snapshot, "Die historische Save-Kopie bleibt bei der Bereinigung unangetastet")
 	_true(LoadoutValidator.validate(sanitized, definitions, fresh_available, 8).valid, "Die bereinigte Kopie ist spielbar")
@@ -55,13 +61,27 @@ func _run() -> void:
 	for research in ContentCatalog.research_definitions():
 		_true(SimpleIcon.supports(research.id), "%s besitzt eine registrierte semantische Forschungsglyphe" % String(research.id))
 		meta.research_ranks[research.id] = research.max_level
-		_true(LoadoutAvailabilityPolicy.research_purchase_enabled(research), "%s bleibt im aktuellen Testschritt kaufbar" % String(research.id))
-	var available := LoadoutAvailabilityPolicy.selectable_ids(definitions, meta.research_ranks)
+		if research.id == LoadoutAvailabilityPolicy.TREATMENT_LINE_RESEARCH_ID:
+			_true(not LoadoutAvailabilityPolicy.research_purchase_enabled(research), "Fetter lazer ist ausschließlich ein Fallmeilenstein")
+			_true(LoadoutAvailabilityPolicy.research_icon_kind(research, false) == &"question", "Der gesperrte Lazer nutzt die Fragezeichenglyphe")
+			_true(LoadoutAvailabilityPolicy.research_status(research, definitions, false).contains("Fall 1"), "Der gesperrte Lazer erklärt seinen Fallmeilenstein")
+			_equal(LoadoutAvailabilityPolicy.research_effective_rank(research, research.max_level, false), 0, "Ein alter Forschungsrang umgeht den Meilenstein nicht")
+		else:
+			_true(LoadoutAvailabilityPolicy.research_purchase_enabled(research), "%s bleibt im aktuellen Testschritt kaufbar" % String(research.id))
+	meta.research_ranks[LoadoutAvailabilityPolicy.TREATMENT_LINE_RESEARCH_ID] = 0
+	meta.get_level_record(LoadoutAvailabilityPolicy.FIRST_CASE_LEVEL_ID).victories = 1
+	var available := LoadoutAvailabilityPolicy.selectable_ids(definitions, meta.research_ranks, true)
 	_equal(available.size(), 5, "Beide Forschungsbehandlungen erweitern den Planungspool")
-	var researched_sanitized := LoadoutAvailabilityPolicy.sanitized_copy(historical, definitions, meta.research_ranks)
+	var researched_sanitized := LoadoutAvailabilityPolicy.sanitized_copy(historical, definitions, meta.research_ranks, true)
 	_equal(researched_sanitized.treatment_id, &"treatment_spread", "Eine erforschte historische Behandlung bleibt erhalten")
+	_equal(researched_sanitized.ability_ids, [&"ability_treatment_line"], "Nach Fall 1 bleibt der Lazer ohne Forschungsrang erhalten")
+	_true(SimpleIcon.supports(&"question"), "Die semantische Fragezeichenglyphe ist zentral registriert")
 
-	await _test_hud(definitions, available, default_loadout, meta)
+	var completed_case_loadout := PreparedLoadout.create(
+		&"treatment_precision",
+		[&"ability_defense_burst", &"ability_treatment_line"]
+	)
+	await _test_hud(definitions, available, completed_case_loadout, meta)
 	_finish()
 
 
@@ -73,7 +93,7 @@ func _test_hud(definitions: Dictionary, available: Dictionary, loadout: Prepared
 	await process_frame
 	var reasons: Dictionary = {}
 	for id in definitions:
-		var reason := LoadoutAvailabilityPolicy.unavailable_reason(id, definitions, meta.research_ranks)
+		var reason := LoadoutAvailabilityPolicy.unavailable_reason(id, definitions, meta.research_ranks, true)
 		if not reason.is_empty():
 			reasons[id] = reason
 	var validation := LoadoutValidator.validate(loadout, definitions, available, 8)
@@ -111,6 +131,7 @@ func _test_hud(definitions: Dictionary, available: Dictionary, loadout: Prepared
 		_true(not button.disabled and not bool(button.get_meta(&"catalog_available", true)), "%s bleibt sichtbar und fokussierbar, aber nicht auswählbar" % String(id))
 		_true(String(button.get_meta(&"catalog_lock_reason", "")).contains("vorgemerkt"), "%s erklärt die vorläufige Sperre" % String(id))
 
+	hud.set_progression_availability(true, true)
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
 	await process_frame
 	_equal(hud.progression_research_items.size(), ContentCatalog.research_definitions().size(), "Alle Forschungswerte bleiben sichtbar")

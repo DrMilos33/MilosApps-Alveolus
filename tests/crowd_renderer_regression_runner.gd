@@ -219,6 +219,16 @@ func _test_spawn_alpha_and_stale_generation(renderer: CrowdRenderer, enemies: Ar
 	var fade_alpha := fade_color.a
 	_assert_true(fade_alpha > 0.0 and fade_alpha < 1.0, "Body fades only during the materialization window")
 	recycled.step_fixed(InfectionEnemy.SPAWN_MATERIALIZE_SECONDS)
+	var immediate_materialized_state := renderer.enemy_render_state(recycled)
+	var immediate_materialized_transform: Transform2D = immediate_materialized_state.get("transform", Transform2D())
+	var immediate_materialized_color: Color = immediate_materialized_state.get("color", Color.TRANSPARENT)
+	_assert_true(
+		bool(immediate_materialized_state.get("active", false))
+		and not bool(immediate_materialized_state.get("hidden", true)),
+		"Materialization activates the leased slot without waiting for another render flush"
+	)
+	_assert_vector(immediate_materialized_transform.origin, new_position, "Immediate materialization keeps the pooled owner's current position")
+	_assert_near(immediate_materialized_color.a, 1.0, "Immediate materialization removes the transient blank sprite frame")
 	renderer.publish_snapshot()
 	renderer.flush_render_state(1.0)
 	var materialized_color: Color = renderer.enemy_render_state(recycled).get("color", Color.TRANSPARENT)

@@ -122,8 +122,8 @@ func _test_independent_resets_and_seed_advance() -> void:
 	meta.upgrades_changed.connect(func() -> void: upgrade_signal_count[0] += 1)
 	var refunded := meta.clear_research_ranks(ContentCatalog.research_definitions())
 	_true(meta.research_ranks.is_empty(), "Forschungsreset löscht ausschließlich die Ränge")
-	_equal(refunded, 450, "Forschungsreset summiert die tatsächlich bezahlten Rangkosten")
-	_equal(meta.research_points, 505, "Forschungsreset gibt alle bezahlten Forschungspunkte zurück")
+	_equal(refunded, 463, "Forschungsreset summiert die aktuell katalogisierten Rangkosten")
+	_equal(meta.research_points, 518, "Forschungsreset gibt alle katalogisierten Forschungskosten zurück")
 	_equal(research_signal_count[0], 1, "Forschungsreset aktualisiert den Kontostand sichtbar")
 	_equal(upgrade_signal_count[0], 1, "Forschungsreset aktualisiert abhängige Werte")
 

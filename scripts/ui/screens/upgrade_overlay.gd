@@ -327,6 +327,8 @@ func _rebuild_cards() -> void:
 func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Button:
 	var card := AlveolusUIComponents.choice_card("", "")
 	card.name = "Upgrade_%s" % String(option.id())
+	card.theme_type_variation = AlveolusVisualTheme.upgrade_card_variation(option.rarity_role())
+	card.set_meta(&"rarity_role", option.rarity_role())
 	# One display-ready value row fits the compact base card. Every additional
 	# row grows the card uniformly instead of being clipped below the inset.
 	var extra_value_rows := maxi(0, option.value_rows().size() - 1)
@@ -390,7 +392,6 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	pick_index.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	pick_index.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	pick_index.set_meta(&"pick_count", option.pick_count())
-	pick_index.set_meta(&"maximum_picks", option.maximum_picks())
 	card.add_child(pick_index)
 
 	var focus_ring := _build_focus_ring()
@@ -418,7 +419,7 @@ func _card_accessible_name(option: UpgradeOverlayViewModel.UpgradeOptionViewMode
 			parts.append("%s%s" % [row_prefix, row.value()])
 		else:
 			parts.append("%s%s zu %s" % [row_prefix, row.before_value(), row.value()])
-	parts.append("In dieser Runde %d von %d Mal gewählt" % [option.pick_count(), option.maximum_picks()])
+	parts.append("In dieser Runde %d Mal gewählt" % option.pick_count())
 	return ". ".join(parts)
 
 

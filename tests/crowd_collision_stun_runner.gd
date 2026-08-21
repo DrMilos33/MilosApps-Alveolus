@@ -2,10 +2,13 @@ extends SceneTree
 
 var assertions := 0
 var failures := 0
-var contact_hits := 0
-var ring_contact_hits := 0
-var ring_hits_this_tick := 0
-var ring_max_hits_per_tick := 0
+var small_hits := 0
+var cluster_hits := 0
+var front_hits := 0
+var blocked_hits := 0
+var offset_hits := 0
+var mixed_small_hits := 0
+var mixed_cluster_hits := 0
 
 
 func _init() -> void:
@@ -13,346 +16,393 @@ func _init() -> void:
 
 
 func _run() -> void:
-	var topology := ArenaTopology.new(Rect2(-500.0, -500.0, 1000.0, 1000.0))
+	var added_input_actions: Array[StringName] = []
+	for action in [&"move_left", &"move_right", &"move_up", &"move_down"]:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action)
+			added_input_actions.append(action)
+	var topology := ArenaTopology.new(
+		Rect2(-600.0, -400.0, 1200.0, 800.0),
+		ArenaTopology.BoundaryMode.BOUNDED
+	)
 	var avatar := TherapyAvatar.new()
 	avatar.configure(topology.bounds, PlayerStats.new(), topology)
+	get_root().add_child(avatar)
 	avatar.global_position = Vector2.ZERO
-	avatar.velocity = Vector2.RIGHT * 100.0
-	var definition := EnemyDefinition.create(
-		&"collision_test", "Testgegner", 100.0, 60.0, 5.0, 0, 18.0, Color.WHITE
-	)
-	var first := InfectionEnemy.new()
-	var second := InfectionEnemy.new()
-	first.configure(definition, avatar, topology)
-	second.configure(definition, avatar, topology)
-	first.spawn_timer = 0.0
-	second.spawn_timer = 0.0
-	first.global_position = Vector2(80.0, 0.0)
-	second.global_position = Vector2(80.0, 0.0)
-	first.reset_visual_motion()
-	second.reset_visual_motion()
-	var world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
-	world.configure_crowd_collision(topology, avatar, 18.0)
-	_true(EntityHandle.is_valid(world.register_enemy(first)), "Erster Gegner erhält einen stabilen World-Handle")
-	_true(EntityHandle.is_valid(world.register_enemy(second)), "Zweiter Gegner erhält einen stabilen World-Handle")
-	for _tick in range(6):
-		world.step_fixed(1.0 / 60.0)
-	_true(first.global_position.distance_to(second.global_position) > 0.1, "Zwei überlagerte Gegner lenken vor der Bewegung auseinander")
-	for _tick in range(90):
-		world.step_fixed(1.0 / 60.0)
-	var sustained_spacing := topology.shortest_delta(first.global_position, second.global_position).length()
-	_true(sustained_spacing >= definition.radius * 2.3, "Lokale Spuren halten gleich große Gegner dauerhaft sichtbar auseinander (%.2f)" % sustained_spacing)
+	avatar.velocity = Vector2.ZERO
 
 	var small_definition := EnemyDefinition.create(
 		&"pneumococcus", "Kleines Bakterium", 22.0, 60.0, 2.0, 1, 18.0, Color.WHITE
-	)
-	first.configure(small_definition, avatar, topology)
-	second.configure(small_definition, avatar, topology)
-	first.pressure_applied.connect(func(_amount: float) -> void: contact_hits += 1)
-	first.spawn_timer = 0.0
-	second.spawn_timer = 0.0
-	first.global_position = Vector2(140.0, -23.0)
-	second.global_position = Vector2(140.0, 23.0)
-	first.reset_visual_motion()
-	second.reset_visual_motion()
-	var small_minimum := first.crowd_radius() + second.crowd_radius()
-	var smallest_spacing := INF
-	for _tick in range(150):
-		world.step_fixed(1.0 / 60.0)
-		smallest_spacing = minf(smallest_spacing, topology.shortest_delta(first.global_position, second.global_position).length())
-	_true(first.crowd_radius() <= small_definition.radius, "Kleine Bakterien verwenden höchstens ihren eigentlichen Körperradius")
-	_true(smallest_spacing >= small_minimum - 0.75, "Kleine Bakterien unterschreiten ihre Modellhülle nicht (%.2f / %.2f)" % [smallest_spacing, small_minimum])
-
-	# A converging pair must steer rather than inherit the old collision brake.
-	first.global_position = Vector2(220.0, -20.0)
-	second.global_position = Vector2(220.0, 20.0)
-	first.reset_visual_motion()
-	second.reset_visual_motion()
-	var first_travel := 0.0
-	var second_travel := 0.0
-	for _tick in range(30):
-		var first_before := first.global_position
-		var second_before := second.global_position
-		world.step_fixed(1.0 / 60.0)
-		first_travel += topology.shortest_delta(first_before, first.global_position).length()
-		second_travel += topology.shortest_delta(second_before, second.global_position).length()
-	var free_travel := small_definition.speed * 0.5
-	_true(first_travel >= free_travel * 0.9, "Kollisionen bremsen den ersten Gegner nicht ab (%.2f / %.2f)" % [first_travel, free_travel])
-	_true(second_travel >= free_travel * 0.9, "Kollisionen bremsen den zweiten Gegner nicht ab (%.2f / %.2f)" % [second_travel, free_travel])
-
-	# A front body owns the direct lane and must reach the contact shell. Its
-	# follower keeps one bypass side for the complete pass instead of alternating
-	# left/right every 100 ms.
-	first.global_position = Vector2(100.0, 0.0)
-	second.global_position = Vector2(140.0, 0.0)
-	first.reset_visual_motion()
-	second.reset_visual_motion()
-	contact_hits = 0
-	var follower_previous_y := second.global_position.y
-	var follower_lateral_sign := 0
-	var follower_lateral_flips := 0
-	var follower_lateral_travel := 0.0
-	for tick in range(150):
-		world.step_fixed(1.0 / 60.0)
-		var lateral_step := second.global_position.y - follower_previous_y
-		follower_previous_y = second.global_position.y
-		follower_lateral_travel += absf(lateral_step)
-		# Once the pass is complete, returning from the lane to the Doctor is an
-		# intentional direction change. Only count oscillation while the follower
-		# is still actively navigating around the front body.
-		if tick < 60 and absf(lateral_step) > 0.01:
-			var step_sign := 1 if lateral_step > 0.0 else -1
-			if follower_lateral_sign != 0 and step_sign != follower_lateral_sign:
-				follower_lateral_flips += 1
-			follower_lateral_sign = step_sign
-	_true(contact_hits > 0, "Die Vorderreihe erreicht den Doctor und löst Kontaktschaden aus")
-	_true(follower_lateral_travel >= 12.0, "Der hintere Gegner läuft sichtbar seitlich an der Vorderreihe vorbei (%.2f)" % follower_lateral_travel)
-	_true(follower_lateral_flips <= 1, "Eine aktive Umgehung wechselt nicht wiederholt ihre Seite (%d Wechsel)" % follower_lateral_flips)
-
-	# A stationary Doctor exposes twelve deterministic micro slots. Small bodies
-	# reserve two adjacent slots, so exactly six may attack while the seventh waits
-	# radially behind its matching slot instead of orbiting the complete ring.
-	var ring_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
-	ring_world.configure_crowd_collision(topology, avatar, 18.0)
-	var ring_enemies: Array[InfectionEnemy] = []
-	var ring_handles := PackedInt64Array()
-	avatar.velocity = Vector2.ZERO
-	ring_contact_hits = 0
-	ring_hits_this_tick = 0
-	ring_max_hits_per_tick = 0
-	for index in range(7):
-		var ring_enemy := InfectionEnemy.new()
-		ring_enemy.configure(small_definition, avatar, topology)
-		ring_enemy.spawn_timer = 0.0
-		var angle := 0.0 if index == 6 else TAU * float(index) / 6.0
-		var radius := 126.0 if index == 6 else 90.0
-		ring_enemy.global_position = Vector2.from_angle(angle) * radius
-		ring_enemy.reset_visual_motion()
-		ring_enemy.pressure_applied.connect(_on_ring_pressure_applied)
-		var ring_handle := ring_world.register_enemy(ring_enemy)
-		_true(EntityHandle.is_valid(ring_handle), "Ringgegner %d erhält einen stabilen Handle" % (index + 1))
-		ring_enemies.append(ring_enemy)
-		ring_handles.append(ring_handle)
-	var waiting_initial_direction := topology.shortest_delta(avatar.global_position, ring_enemies[6].global_position).normalized()
-	for _tick in range(180):
-		ring_hits_this_tick = 0
-		ring_world.step_fixed(1.0 / 60.0)
-		ring_max_hits_per_tick = maxi(ring_max_hits_per_tick, ring_hits_this_tick)
-	_true(ring_world.contact_ring_is_active(), "Der feste Kontaktring aktiviert sich nach 0,25 Sekunden Stillstand")
-	_true(ring_world.contact_ring_claim_count() == 6, "Zwölf Mikroslots ergeben maximal sechs kleine Kontaktplätze")
-	var latched_count := 0
-	var claimed_indices := PackedInt32Array()
-	for index in range(ring_handles.size()):
-		var claim := ring_world.contact_ring_claim(ring_handles[index])
-		if not claim.is_empty():
-			claimed_indices.append(index)
-			if bool(claim.get("latched", false)):
-				latched_count += 1
-	_true(latched_count == 6, "Alle sechs Slotowner erreichen ihren Kontaktpunkt und bleiben dort")
-	_true(ring_world.contact_ring_claim(ring_handles[6]).is_empty(), "Der siebte kleine Gegner erhält keinen überbuchten Kontaktplatz")
-	var waiting_distance := topology.distance(avatar.global_position, ring_enemies[6].global_position)
-	_true(waiting_distance >= 76.0 and waiting_distance <= 84.0, "Der siebte Gegner wartet radial hinter dem passenden Slot (%.2f)" % waiting_distance)
-	var waiting_final_direction := topology.shortest_delta(avatar.global_position, ring_enemies[6].global_position).normalized()
-	_true(absf(waiting_initial_direction.angle_to(waiting_final_direction)) <= 0.35, "Der wartende Gegner läuft keinen sichtbaren Orbit (%.3f rad)" % absf(waiting_initial_direction.angle_to(waiting_final_direction)))
-	var ring_minimum_spacing := INF
-	for first_index in range(claimed_indices.size()):
-		for second_index in range(first_index + 1, claimed_indices.size()):
-			ring_minimum_spacing = minf(
-				ring_minimum_spacing,
-				topology.distance(
-					ring_enemies[claimed_indices[first_index]].global_position,
-					ring_enemies[claimed_indices[second_index]].global_position
-				)
-			)
-	_true(ring_minimum_spacing >= small_minimum - 0.75, "Kontaktplätze halten die sichtbare Körperhülle ein (%.2f / %.2f)" % [ring_minimum_spacing, small_minimum])
-	_true(ring_contact_hits > 0, "Gelatchte Ringgegner lösen stabil Kontaktschaden aus")
-	_true(ring_max_hits_per_tick <= 2, "Slotphasen verhindern einen ungestaffelten Kontaktschadensburst (%d gleichzeitig)" % ring_max_hits_per_tick)
-
-	# Knockback releases a generation-safe claim. The waiting seventh body takes
-	# exactly that span and advances directly into the newly free contact point.
-	var released_index := int(claimed_indices[0])
-	var released_enemy := ring_enemies[released_index]
-	var knockback_direction := topology.shortest_delta(avatar.global_position, released_enemy.global_position).normalized()
-	released_enemy.apply_knockback(knockback_direction, 90.0, 0.28, 1.0)
-	for _tick in range(12):
-		ring_world.step_fixed(1.0 / 60.0)
-	_true(not ring_world.contact_ring_claim(ring_handles[6]).is_empty(), "Der wartende Gegner übernimmt den durch Rückstoß freigegebenen Span")
-	for _tick in range(90):
-		ring_world.step_fixed(1.0 / 60.0)
-	_true(bool(ring_world.contact_ring_claim(ring_handles[6]).get("latched", false)), "Der nachgerückte Gegner erreicht den freigegebenen Kontaktpunkt")
-
-	# Movement hysteresis releases the formation after 0.10 seconds and restores
-	# the established moving-avatar solver without retaining stale slot claims.
-	avatar.velocity = Vector2.RIGHT * 100.0
-	for _tick in range(7):
-		ring_world.step_fixed(1.0 / 60.0)
-	_true(not ring_world.contact_ring_is_active(), "Doctorbewegung löst den festen Ring nach 0,10 Sekunden")
-	_true(ring_world.contact_ring_claim_count() == 0, "Der Moving-Solver übernimmt ohne verbleibende Ringclaims")
-	ring_world.clear()
-	for ring_enemy in ring_enemies:
-		ring_enemy.free()
-
-	# Red bacterial clusters occupy three micro slots each, but they also belong
-	# to the shared large-body budget. Two may hold visible contact positions;
-	# the third stays in the radial queue even though another three-slot span is
-	# geometrically still available.
-	var ring_cluster_definition := EnemyDefinition.create(
-		&"bacterial_cluster", "Bakteriengruppe", 74.0, 45.0, 5.0, 4, 30.0, Color.WHITE
-	)
-	var cluster_ring_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
-	cluster_ring_world.configure_crowd_collision(topology, avatar, ring_cluster_definition.radius)
-	var cluster_ring_enemies: Array[InfectionEnemy] = []
-	var cluster_ring_handles := PackedInt64Array()
-	avatar.velocity = Vector2.ZERO
-	for index in range(3):
-		var cluster_ring_enemy := InfectionEnemy.new()
-		cluster_ring_enemy.configure(ring_cluster_definition, avatar, topology)
-		cluster_ring_enemy.spawn_timer = 0.0
-		cluster_ring_enemy.global_position = Vector2.from_angle(TAU * float(index) / 3.0) * 100.0
-		cluster_ring_enemy.reset_visual_motion()
-		var cluster_ring_handle := cluster_ring_world.register_enemy(cluster_ring_enemy)
-		_true(EntityHandle.is_valid(cluster_ring_handle), "Ringgruppe %d erhält einen stabilen Handle" % (index + 1))
-		cluster_ring_enemies.append(cluster_ring_enemy)
-		cluster_ring_handles.append(cluster_ring_handle)
-	for _tick in range(90):
-		cluster_ring_world.step_fixed(1.0 / 60.0)
-	_true(cluster_ring_world.contact_ring_is_active(), "Der Großkörperring aktiviert sich für rote Bakteriengruppen")
-	_true(cluster_ring_world.contact_ring_claim_count() == 2, "Der Großkörpervertrag erlaubt exakt zwei rote Bakteriengruppen am Ring")
-	for index in range(2):
-		var cluster_claim := cluster_ring_world.contact_ring_claim(cluster_ring_handles[index])
-		_true(not cluster_claim.is_empty(), "Rote Bakteriengruppe %d erhält einen Kontaktplatz" % (index + 1))
-		_true(int(cluster_claim.get("span", 0)) == 3, "Eine rote Bakteriengruppe belegt exakt drei Mikroslots")
-	_true(cluster_ring_world.contact_ring_claim(cluster_ring_handles[2]).is_empty(), "Die dritte rote Bakteriengruppe wartet trotz freier Geometrieslots")
-	var waiting_cluster_distance := topology.distance(avatar.global_position, cluster_ring_enemies[2].global_position)
-	_true(waiting_cluster_distance > TherapyAvatar.BODY_RADIUS + ring_cluster_definition.radius, "Die dritte rote Bakteriengruppe bleibt radial hinter dem Kontaktring (%.2f)" % waiting_cluster_distance)
-	cluster_ring_world.clear()
-	for cluster_ring_enemy in cluster_ring_enemies:
-		cluster_ring_enemy.free()
-	avatar.velocity = Vector2.RIGHT * 100.0
-
-	# A rear body that starts too close must yield. The leading body may continue
-	# toward the avatar but must never be pushed back out by its follower.
-	first.global_position = Vector2(60.0, 0.0)
-	second.global_position = Vector2(92.0, 0.0)
-	first.reset_visual_motion()
-	second.reset_visual_motion()
-	var leading_start_distance := first.global_position.distance_to(avatar.global_position)
-	var initial_pair_spacing := topology.shortest_delta(first.global_position, second.global_position).length()
-	var leading_max_distance := leading_start_distance
-	for _tick in range(30):
-		world.step_fixed(1.0 / 60.0)
-		leading_max_distance = maxf(leading_max_distance, first.global_position.distance_to(avatar.global_position))
-	_true(leading_max_distance <= leading_start_distance + 0.25, "Ein hinterer Gegner schiebt den vorderen nicht vom Ziel weg")
-	_true(topology.shortest_delta(first.global_position, second.global_position).length() > initial_pair_spacing, "Eine bestehende Überlappung löst sich ohne Rückwärtsschub des vorderen Gegners")
-
+	).configure_contact_radius(17.0)
 	var cluster_definition := EnemyDefinition.create(
 		&"bacterial_cluster", "Bakteriengruppe", 74.0, 45.0, 5.0, 4, 30.0, Color.WHITE
-	)
-	first.configure(cluster_definition, avatar, topology)
-	second.configure(cluster_definition, avatar, topology)
-	first.spawn_timer = 0.0
-	second.spawn_timer = 0.0
-	first.global_position = Vector2(180.0, -49.0)
-	second.global_position = Vector2(180.0, 49.0)
-	first.reset_visual_motion()
-	second.reset_visual_motion()
+	).configure_contact_radius(23.0)
+
+	# A free path remains exact direct pursuit for both enemy sizes.
+	var world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
 	world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
-	var cluster_minimum := first.crowd_radius() + second.crowd_radius()
-	var smallest_cluster_spacing := INF
+	var small := _enemy(small_definition, avatar, topology, Vector2(190.0, 70.0))
+	var cluster := _enemy(cluster_definition, avatar, topology, Vector2(-230.0, -85.0))
+	small.pressure_applied.connect(_on_small_pressure)
+	cluster.pressure_applied.connect(_on_cluster_pressure)
+	_true(EntityHandle.is_valid(world.register_enemy(small)), "Kleines Bakterium erhält einen World-Handle")
+	_true(EntityHandle.is_valid(world.register_enemy(cluster)), "Rote Bakteriengruppe erhält einen World-Handle")
+	var maximum_free_lateral := 0.0
+	var maximum_free_retreat := 0.0
+	for _tick in range(360):
+		var before_positions := [small.global_position, cluster.global_position]
+		var before_distances := [
+			topology.distance(small.global_position, avatar.global_position),
+			topology.distance(cluster.global_position, avatar.global_position),
+		]
+		world.step_fixed(1.0 / 60.0)
+		var enemies: Array[InfectionEnemy] = [small, cluster]
+		for index in range(enemies.size()):
+			var target_direction := topology.shortest_delta(before_positions[index], avatar.global_position).normalized()
+			var step := topology.shortest_delta(before_positions[index], enemies[index].global_position)
+			if step.length_squared() > 0.000001:
+				maximum_free_lateral = maxf(maximum_free_lateral, absf(step.cross(target_direction)))
+			maximum_free_retreat = maxf(
+				maximum_free_retreat,
+				topology.distance(enemies[index].global_position, avatar.global_position) - before_distances[index]
+			)
+	_true(maximum_free_lateral <= 0.001, "Freie Verfolgung bleibt exakt geradlinig (%.5f)" % maximum_free_lateral)
+	_true(maximum_free_retreat <= 0.001, "Freie Verfolgung entfernt sich nie vom Doctor (%.5f)" % maximum_free_retreat)
+	_assert_at_contact(small, avatar, topology, "Kleines Bakterium")
+	_assert_at_contact(cluster, avatar, topology, "Rote Bakteriengruppe")
+	_true(small_hits > 0, "Das kleine Bakterium greift am Schadenskontakt an")
+	_true(cluster_hits > 0, "Die rote Bakteriengruppe greift am Schadenskontakt an")
+	world.clear()
+	small.free()
+	cluster.free()
+
+	# One real front body is enough to start a stable obstacle bypass. The rear
+	# attacker chooses one side, never retreats and eventually reaches contact.
+	var queue_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	queue_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var front := _enemy(small_definition, avatar, topology, Vector2(28.5, 0.0))
+	var blocked := _enemy(cluster_definition, avatar, topology, Vector2(130.0, 0.0))
+	front.pressure_applied.connect(_on_front_pressure)
+	blocked.pressure_applied.connect(_on_blocked_pressure)
+	var front_handle := queue_world.register_enemy(front)
+	_true(EntityHandle.is_valid(front_handle), "Vorderer Angreifer erhält einen Handle")
+	_true(EntityHandle.is_valid(queue_world.register_enemy(blocked)), "Blockierte rote Gruppe erhält einen Handle")
+	var queue_minimum_spacing := INF
+	var queue_maximum_retreat := 0.0
+	var queue_lateral_sign := 0
+	var queue_lateral_sign_flips := 0
+	var queue_maximum_lateral := 0.0
+	for _tick in range(240):
+		var before_position := blocked.global_position
+		var before_distance := topology.distance(blocked.global_position, avatar.global_position)
+		queue_world.step_fixed(1.0 / 60.0)
+		var target_direction := topology.shortest_delta(before_position, avatar.global_position).normalized()
+		var step := topology.shortest_delta(before_position, blocked.global_position)
+		var lateral_step := step.cross(target_direction)
+		if absf(lateral_step) > 0.01:
+			var sign_value := 1 if lateral_step > 0.0 else -1
+			if queue_lateral_sign != 0 and sign_value != queue_lateral_sign:
+				queue_lateral_sign_flips += 1
+			queue_lateral_sign = sign_value
+		queue_maximum_lateral = maxf(queue_maximum_lateral, absf(blocked.global_position.y))
+		queue_minimum_spacing = minf(queue_minimum_spacing, topology.distance(front.global_position, blocked.global_position))
+		queue_maximum_retreat = maxf(
+			queue_maximum_retreat,
+			topology.distance(blocked.global_position, avatar.global_position) - before_distance
+		)
+	var small_cluster_boundary := front.contact_body_radius() + blocked.contact_body_radius()
+	_true(queue_minimum_spacing >= small_cluster_boundary - 0.06, "Klein/Rot unterschreiten ihre Schadenshitboxen nicht (%.3f / %.3f)" % [queue_minimum_spacing, small_cluster_boundary])
+	_true(queue_maximum_lateral > 1.0, "Ein realer Vorderkörper löst das lokale Umlaufen aus")
+	_true(queue_lateral_sign_flips <= 1, "Der Verfolger behält beim Umlaufen seine gewählte Seite (%d Wechsel)" % queue_lateral_sign_flips)
+	_true(queue_maximum_retreat <= 0.001, "Der blockierte Verfolger läuft niemals zurück (%.5f)" % queue_maximum_retreat)
+	_true(front_hits > 0, "Der vordere Körper greift weiterhin an")
+	_true(blocked_hits > 0, "Der umlaufende Körper erreicht den Doctor und greift an")
+	queue_world.release(front_handle, false)
 	for _tick in range(180):
-		world.step_fixed(1.0 / 60.0)
-		smallest_cluster_spacing = minf(smallest_cluster_spacing, topology.shortest_delta(first.global_position, second.global_position).length())
-	_true(cluster_minimum > cluster_definition.radius * 2.0, "Rote Gruppen behalten eine kleine modellbezogene Körperhülle")
-	_true(cluster_minimum <= cluster_definition.radius * 2.1, "Rote Gruppen erhalten keinen breiten unsichtbaren Außenabstand")
-	_true(smallest_cluster_spacing >= cluster_minimum - 0.75, "Rote Gruppen unterschreiten ihre Modellhülle nicht (%.2f / %.2f)" % [smallest_cluster_spacing, cluster_minimum])
+		queue_world.step_fixed(1.0 / 60.0)
+	_assert_at_contact(blocked, avatar, topology, "Freigegebene rote Bakteriengruppe")
+	_true(blocked_hits > 0, "Nach Freigabe verfolgt und trifft der zuvor blockierte Körper")
+	queue_world.clear()
+	front.free()
+	blocked.free()
 
-	first.global_position = Vector2(1.0, 0.0)
-	second.global_position = Vector2(-300.0, 0.0)
-	avatar.global_position = Vector2.ZERO
-	first.reset_visual_motion()
-	second.reset_visual_motion()
-	world.step_fixed(1.0 / 60.0)
-	_true(avatar.crowd_blocking().length_squared() > 0.0, "Ein größerer Gegner blockiert nur die Bewegungsrichtung des Doctors")
-	_true(first.global_position.x <= 1.05, "Ein größerer Gegner wird vom Doctor nicht weggeschoben")
+	# A slightly offset blocker is the only source of lateral movement. The
+	# direct remainder slides on its circle and never gains a retreat component.
+	var slide_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	slide_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var slide_front := _enemy(small_definition, avatar, topology, Vector2(28.5, 0.0))
+	var slider := _enemy(small_definition, avatar, topology, Vector2(100.0, 12.0))
+	slider.pressure_applied.connect(_on_offset_pressure)
+	_true(EntityHandle.is_valid(slide_world.register_enemy(slide_front)), "Seitlicher Blocker erhält einen Handle")
+	_true(EntityHandle.is_valid(slide_world.register_enemy(slider)), "Seitlicher Verfolger erhält einen Handle")
+	var slide_minimum_spacing := INF
+	var slide_maximum_retreat := 0.0
+	var blocked_lateral := 0.0
+	var clear_lateral := 0.0
+	var clear_ticks := 0
+	var small_boundary := slide_front.contact_body_radius() + slider.contact_body_radius()
+	for _tick in range(360):
+		var before_position := slider.global_position
+		var before_doctor_distance := topology.distance(before_position, avatar.global_position)
+		var target_direction := topology.shortest_delta(before_position, avatar.global_position).normalized()
+		var direct_step := target_direction * minf(
+			small_definition.speed / 60.0,
+			maxf(before_doctor_distance - TherapyAvatar.CONTACT_RADIUS - slider.contact_body_radius() + 0.5, 0.0)
+		)
+		var direct_endpoint := before_position + direct_step
+		var direct_would_block := topology.distance(direct_endpoint, slide_front.global_position) < (
+			small_boundary
+			+ EnemyWorld.DIRECT_COLLISION_SKIN
+			+ EnemyWorld.DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
+		)
+		slide_world.step_fixed(1.0 / 60.0)
+		var step := topology.shortest_delta(before_position, slider.global_position)
+		var lateral := absf(step.cross(target_direction))
+		var after_pair_distance := topology.distance(slider.global_position, slide_front.global_position)
+		slide_minimum_spacing = minf(slide_minimum_spacing, after_pair_distance)
+		slide_maximum_retreat = maxf(
+			slide_maximum_retreat,
+			topology.distance(slider.global_position, avatar.global_position) - before_doctor_distance
+		)
+		if direct_would_block:
+			clear_ticks = 0
+			blocked_lateral = maxf(blocked_lateral, lateral)
+		else:
+			clear_ticks += 1
+			if clear_ticks > EnemyWorld.DIRECT_COLLISION_BYPASS_CLEAR_TICKS:
+				clear_lateral = maxf(clear_lateral, lateral)
+	_true(slide_minimum_spacing >= small_boundary - 0.06, "Seitliches Gleiten hält die exakte Klein/Klein-Hitboxgrenze (%.3f / %.3f)" % [slide_minimum_spacing, small_boundary])
+	_true(blocked_lateral > 0.01, "Seitliche Bewegung entsteht, wenn ein echter Körper den Weg blockiert")
+	_true(clear_lateral <= 0.001, "Ohne Körperkontakt bleibt die Verfolgung geradlinig (%.5f)" % clear_lateral)
+	_true(slide_maximum_retreat <= 0.001, "Auch beim Gleiten entsteht keine Fluchtbewegung (%.5f)" % slide_maximum_retreat)
+	_true(offset_hits > 0, "Der seitlich geglittene Gegner erreicht danach den Doctor")
+	slide_world.clear()
+	slide_front.free()
+	slider.free()
 
-	first.configure(small_definition, avatar, topology)
-	first.spawn_timer = 0.0
-	first.global_position = Vector2(10.0, 0.0)
-	for _tick in range(6):
-		world.step_fixed(1.0 / 60.0)
-	var small_avatar_yield_origin := first.global_position
-	for _tick in range(6):
-		world.step_fixed(1.0 / 60.0)
-	_true(avatar.crowd_blocking().length_squared() <= 0.0001, "Ein kleines Bakterium blockiert den Doctor nicht hart")
-	_true(first.global_position.x > small_avatar_yield_origin.x, "Nur ein kleines Bakterium weicht sichtbar vor dem Doctor zurück")
+	# A shallow wedge keeps the same stable side for the complete obstacle pass.
+	var wedge_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	wedge_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var static_small_definition := EnemyDefinition.create(
+		&"static_small", "Statischer Testkörper", 22.0, 0.0, 0.0, 0, 18.0, Color.WHITE
+	).configure_contact_radius(17.0)
+	var wedge_upper := _enemy(static_small_definition, avatar, topology, Vector2(72.0, -26.0))
+	var wedge_lower := _enemy(static_small_definition, avatar, topology, Vector2(72.0, 26.0))
+	var wedge_follower := _enemy(small_definition, avatar, topology, Vector2(120.0, 0.0))
+	_true(EntityHandle.is_valid(wedge_world.register_enemy(wedge_upper)), "Oberer Keilkörper erhält einen Handle")
+	_true(EntityHandle.is_valid(wedge_world.register_enemy(wedge_lower)), "Unterer Keilkörper erhält einen Handle")
+	var wedge_follower_handle := wedge_world.register_enemy(wedge_follower)
+	_true(EntityHandle.is_valid(wedge_follower_handle), "Keilverfolger erhält einen Handle")
+	var wedge_start_distance := topology.distance(wedge_follower.global_position, avatar.global_position)
+	var wedge_maximum_lateral := 0.0
+	var wedge_lateral_sign := 0
+	var wedge_lateral_sign_flips := 0
+	var wedge_maximum_retreat := 0.0
+	var wedge_minimum_margin := INF
+	for _tick in range(300):
+		var before_position := wedge_follower.global_position
+		var before_distance := topology.distance(before_position, avatar.global_position)
+		var before_target_direction := topology.shortest_delta(before_position, avatar.global_position).normalized()
+		wedge_world.step_fixed(1.0 / 60.0)
+		var wedge_step := topology.shortest_delta(before_position, wedge_follower.global_position)
+		var wedge_lateral_step := wedge_step.cross(before_target_direction)
+		if absf(wedge_lateral_step) > 0.01:
+			var lateral_sign := 1 if wedge_lateral_step > 0.0 else -1
+			if wedge_lateral_sign != 0 and lateral_sign != wedge_lateral_sign:
+				wedge_lateral_sign_flips += 1
+			wedge_lateral_sign = lateral_sign
+		wedge_maximum_lateral = maxf(wedge_maximum_lateral, absf(wedge_follower.global_position.y))
+		wedge_maximum_retreat = maxf(
+			wedge_maximum_retreat,
+			topology.distance(wedge_follower.global_position, avatar.global_position) - before_distance
+		)
+		for blocker in [wedge_upper, wedge_lower]:
+			wedge_minimum_margin = minf(
+				wedge_minimum_margin,
+				topology.distance(wedge_follower.global_position, blocker.global_position)
+					- wedge_follower.contact_body_radius()
+					- blocker.contact_body_radius()
+			)
+	_true(wedge_minimum_margin >= -0.06, "Der Mehrfachkontakt hält weiterhin exakt die Schadenshitboxen (Margin %.3f)" % wedge_minimum_margin)
+	_true(wedge_maximum_retreat <= 0.001, "Der geometrische Ausweg erzeugt keine Rückwärtsbewegung (%.5f)" % wedge_maximum_retreat)
+	_true(wedge_maximum_lateral > 1.0, "Der Keilverfolger nutzt einen sichtbaren, lokalen Bogen (%.2f)" % wedge_maximum_lateral)
+	_true(wedge_lateral_sign_flips <= 1, "Ein bestehender Knubbel erzeugt kein wiederholtes Links-Rechts-Wackeln (%d Wechsel)" % wedge_lateral_sign_flips)
+	_true(
+		topology.distance(wedge_follower.global_position, avatar.global_position) <= wedge_start_distance - 20.0,
+		"Der Keilverfolger verfolgt bis an die echte Körpergrenze und stockt erst dort (%.2f -> %.2f)" % [wedge_start_distance, topology.distance(wedge_follower.global_position, avatar.global_position)]
+	)
+	wedge_world.clear()
+	wedge_upper.free()
+	wedge_lower.free()
+	wedge_follower.free()
 
-	first.global_position = Vector2(100.0, 0.0)
-	first.reset_visual_motion()
-	var knockback_origin := first.global_position
-	first.apply_knockback(Vector2.RIGHT, 120.0, 0.28, 1.0)
-	_true(first.is_stunned(), "Stoß markiert den Gegner sofort als betäubt")
-	world.step_fixed(0.08)
-	var partial_distance := first.global_position.distance_to(knockback_origin)
-	_true(partial_distance > 0.0 and partial_distance < 120.0, "Rückstoß bewegt sichtbar über mehrere Ticks statt zu teleportieren")
-	for _step in range(3):
-		world.step_fixed(0.08)
-	_true(first.global_position.distance_to(knockback_origin) >= 119.0, "Der vollständige Rückstoßweg wird erreicht")
-	for _step in range(11):
-		world.step_fixed(0.08)
-	_true(not first.is_stunned(), "Betäubung endet nach einer Sekunde")
+	# A mixed pack preserves every pair's own contact boundary. Rear bodies may
+	# stop, while both enemy classes still produce visible front attackers.
+	var mixed_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	mixed_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var mixed_enemies: Array[InfectionEnemy] = []
+	for index in range(9):
+		var definition := small_definition if index < 6 else cluster_definition
+		var angle := TAU * float(index) / 9.0
+		# Put one representative of both sizes on the eventual front. The test
+		# validates collision geometry, not a particular spawn-order advantage.
+		var radius := 150.0 + float(index % 3) * 8.0 if index < 6 else 108.0 + float(index % 3) * 8.0
+		var enemy := _enemy(definition, avatar, topology, Vector2.from_angle(angle) * radius)
+		if index < 6:
+			enemy.pressure_applied.connect(_on_mixed_small_pressure)
+		else:
+			enemy.pressure_applied.connect(_on_mixed_cluster_pressure)
+		mixed_enemies.append(enemy)
+		_true(EntityHandle.is_valid(mixed_world.register_enemy(enemy)), "Gemischter Verfolger %d erhält einen Handle" % (index + 1))
+	var mixed_minimum_margin := INF
+	var mixed_minimum_pair := Vector2i(-1, -1)
+	var mixed_minimum_tick := -1
+	var mixed_maximum_retreat := 0.0
+	for tick in range(420):
+		var distances_before := PackedFloat32Array()
+		for enemy in mixed_enemies:
+			distances_before.append(topology.distance(enemy.global_position, avatar.global_position))
+		mixed_world.step_fixed(1.0 / 60.0)
+		for index in range(mixed_enemies.size()):
+			mixed_maximum_retreat = maxf(
+				mixed_maximum_retreat,
+				topology.distance(mixed_enemies[index].global_position, avatar.global_position) - distances_before[index]
+			)
+		for first_index in range(mixed_enemies.size()):
+			for second_index in range(first_index + 1, mixed_enemies.size()):
+				var required := mixed_enemies[first_index].contact_body_radius() + mixed_enemies[second_index].contact_body_radius()
+				var margin := topology.distance(mixed_enemies[first_index].global_position, mixed_enemies[second_index].global_position) - required
+				if margin < mixed_minimum_margin:
+					mixed_minimum_margin = margin
+					mixed_minimum_pair = Vector2i(first_index, second_index)
+					mixed_minimum_tick = tick
+	_true(mixed_minimum_margin >= -0.06, "Gemischte Gegner überlappen ihre individuellen Schadenshitboxen nicht (Margin %.3f, Tick %d, Paar %s)" % [mixed_minimum_margin, mixed_minimum_tick, mixed_minimum_pair])
+	_true(mixed_maximum_retreat <= 0.001, "Der gemischte Pulk erzeugt keine Rückwärtsbewegung (%.5f)" % mixed_maximum_retreat)
+	_true(mixed_small_hits > 0, "Mindestens ein kleines Bakterium erreicht und trifft den Doctor")
+	_true(mixed_cluster_hits > 0, "Mindestens eine rote Bakteriengruppe erreicht und trifft den Doctor")
 
-	# Dense packs previously queried only the first six occupants of a grid cell;
-	# a nearer seventh body could therefore be missed and briefly overlap. Keep a
-	# full 12-unit ring outside the avatar and track every pair while it closes in.
-	avatar.global_position = Vector2.ZERO
-	first.configure(small_definition, avatar, topology)
-	second.configure(small_definition, avatar, topology)
-	first.spawn_timer = 0.0
-	second.spawn_timer = 0.0
-	world.clear()
-	world = EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
-	world.configure_crowd_collision(topology, avatar, 18.0)
-	_true(EntityHandle.is_valid(world.register_enemy(first)), "Dichter erster Gegner erhält einen frischen World-Handle")
-	_true(EntityHandle.is_valid(world.register_enemy(second)), "Dichter zweiter Gegner erhält einen frischen World-Handle")
-	var dense_enemies: Array[InfectionEnemy] = [first, second]
-	for index in range(10):
-		var extra := InfectionEnemy.new()
-		extra.configure(small_definition, avatar, topology)
-		extra.spawn_timer = 0.0
-		_true(EntityHandle.is_valid(world.register_enemy(extra)), "Dichter Gegner %d erhält einen stabilen Handle" % (index + 3))
-		dense_enemies.append(extra)
-	for index in range(dense_enemies.size()):
-		dense_enemies[index].global_position = Vector2.from_angle(TAU * float(index) / float(dense_enemies.size())) * 120.0
-		dense_enemies[index].reset_visual_motion()
-	var dense_minimum := first.crowd_radius() + second.crowd_radius()
-	var dense_smallest_spacing := INF
-	var dense_minimum_tick := -1
-	var dense_minimum_pair := Vector2i(-1, -1)
-	for tick in range(90):
-		world.step_fixed(1.0 / 60.0)
-		for first_index in range(dense_enemies.size()):
-			for second_index in range(first_index + 1, dense_enemies.size()):
-				var pair_spacing := topology.shortest_delta(
-					dense_enemies[first_index].global_position,
-					dense_enemies[second_index].global_position
-				).length()
-				if pair_spacing < dense_smallest_spacing:
-					dense_smallest_spacing = pair_spacing
-					dense_minimum_tick = tick
-					dense_minimum_pair = Vector2i(first_index, second_index)
-	var dense_first_position := dense_enemies[dense_minimum_pair.x].global_position if dense_minimum_pair.x >= 0 else Vector2.ZERO
-	var dense_second_position := dense_enemies[dense_minimum_pair.y].global_position if dense_minimum_pair.y >= 0 else Vector2.ZERO
-	_true(dense_smallest_spacing >= dense_minimum - 2.5, "Auch mehr als sechs lokale Nachbarn bleiben innerhalb einer Fixed-Tick-Toleranz an ihrer Hülle (%.2f / %.2f, Tick %d, Paar %s, Positionen %s / %s)" % [dense_smallest_spacing, dense_minimum, dense_minimum_tick, dense_minimum_pair, dense_first_position, dense_second_position])
-	world.clear()
-	for enemy in dense_enemies:
+	# Explicit knockback remains the only intentional distance increase.
+	mixed_world.clear()
+	for enemy in mixed_enemies:
 		enemy.free()
-	avatar.free()
+	var knockback_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	knockback_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var knocked := _enemy(small_definition, avatar, topology, Vector2(80.0, 0.0))
+	_true(EntityHandle.is_valid(knockback_world.register_enemy(knocked)), "Rückstoßgegner erhält einen Handle")
+	knocked.apply_knockback(Vector2.RIGHT, 45.0, 0.28, 1.0)
+	var knockback_origin_distance := topology.distance(knocked.global_position, avatar.global_position)
+	for _tick in range(18):
+		knockback_world.step_fixed(1.0 / 60.0)
+	var knocked_distance := topology.distance(knocked.global_position, avatar.global_position)
+	_true(knocked_distance > knockback_origin_distance + 30.0, "Nur expliziter Rückstoß bewegt einen Gegner sichtbar vom Doctor weg")
+	_true(knocked.is_stunned(), "Rückstoß betäubt den Gegner weiterhin")
+	for _tick in range(72):
+		knockback_world.step_fixed(1.0 / 60.0)
+	_true(not knocked.is_stunned(), "Betäubung endet weiterhin nach einer Sekunde")
+	_true(topology.distance(knocked.global_position, avatar.global_position) < knocked_distance, "Nach Betäubung verfolgt der Gegner sofort wieder den Doctor")
+	knockback_world.clear()
+	knocked.free()
 
+	# Doctor Milos uses the same damage-contact circles as physical boundaries.
+	# Large bodies hard-block; small bacteria yield slowly without a status slow.
+	avatar.global_position = Vector2.ZERO
+	avatar.input_enabled = true
+	var hard_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	hard_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var static_cluster_definition := EnemyDefinition.create(
+		&"bacterial_cluster", "Statische Bakteriengruppe", 74.0, 0.0, 0.0, 0, 30.0, Color.WHITE
+	).configure_contact_radius(23.0)
+	var hard_cluster := _enemy(
+		static_cluster_definition,
+		avatar,
+		topology,
+		Vector2(TherapyAvatar.CONTACT_RADIUS + 23.2, 0.0)
+	)
+	_true(EntityHandle.is_valid(hard_world.register_enemy(hard_cluster)), "Harter Spielerkörper erhält einen Handle")
+	hard_world.step_fixed(1.0 / 60.0)
+	Input.action_press(&"move_right")
+	for _tick in range(30):
+		hard_world.prepare_avatar_body_interaction(1.0 / 60.0)
+		avatar.step_fixed(1.0 / 60.0)
+	Input.action_release(&"move_right")
+	_true(avatar.global_position.x <= 0.25, "Eine rote Bakteriengruppe blockiert den Doctor an ihrer sichtbaren Schadenshitbox (%.3f)" % avatar.global_position.x)
+	_true(hard_cluster.global_position.is_equal_approx(Vector2(TherapyAvatar.CONTACT_RADIUS + 23.2, 0.0)), "Ein harter Körper wird vom Spieler nicht verschoben")
+	hard_world.clear()
+	hard_cluster.free()
+
+	avatar.global_position = Vector2.ZERO
+	var push_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	push_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var push_definition := EnemyDefinition.create(
+		&"pneumococcus", "Schiebbares Bakterium", 22.0, 0.0, 0.0, 0, 18.0, Color.WHITE
+	).configure_contact_radius(17.0)
+	var pushed_small := _enemy(
+		push_definition,
+		avatar,
+		topology,
+		Vector2(TherapyAvatar.CONTACT_RADIUS + 17.2, 0.0)
+	)
+	var pushed_handle := push_world.register_enemy(pushed_small)
+	_true(EntityHandle.is_valid(pushed_handle), "Schiebbares kleines Bakterium erhält einen Handle")
+	push_world.step_fixed(1.0 / 60.0)
+	var small_origin := pushed_small.global_position
+	Input.action_press(&"move_right")
+	for _tick in range(30):
+		push_world.prepare_avatar_body_interaction(1.0 / 60.0)
+		avatar.step_fixed(1.0 / 60.0)
+	Input.action_release(&"move_right")
+	_true(avatar.global_position.x > 5.0 and avatar.global_position.x < 40.0, "Der Doctor arbeitet sich physisch, aber nicht mit vollem Galopp durch kleine Bakterien (%.2f)" % avatar.global_position.x)
+	_true(pushed_small.global_position.x > small_origin.x + 5.0, "Das kleine Bakterium wird über mehrere Ticks sichtbar weggedrückt")
+	_true(
+		pushed_small.global_position.distance_to(avatar.global_position) >= TherapyAvatar.CONTACT_RADIUS + pushed_small.contact_body_radius() - 0.1,
+		"Spieler und kleines Bakterium unterschreiten beim Schieben nie ihre Schadenshitboxgrenze"
+	)
+	_true(not pushed_small.is_stunned(), "Normales Spielerschieben betäubt kleine Bakterien nicht")
+
+	# Off-screen relocation owns no respawn semantics and is locked immediately
+	# after damage. Game adds ranged/tutorial exclusions before calling this API.
+	pushed_small.take_damage(1.0, &"relocation_contract")
+	var preserved_health := pushed_small.health
+	_true(pushed_small.is_recently_interacted() and not pushed_small.can_be_relocated(), "Ein kürzlich getroffener Gegner ist nicht versetzbar")
+	pushed_small.step_fixed(InfectionEnemy.RELOCATION_INTERACTION_LOCK_SECONDS + 0.01)
+	_true(pushed_small.can_be_relocated(), "Der reine Interaktionsschutz läuft deterministisch aus")
+	var relocation_target := Vector2(-240.0, 180.0)
+	_true(pushed_small.relocate_preserving_state(relocation_target), "Ein normaler off-screen Gegner kann ohne Respawn versetzt werden")
+	_true(pushed_small.health == preserved_health, "Versetzen erhält das aktuelle Leben")
+	_true(pushed_small.global_position.is_equal_approx(relocation_target), "Versetzen übernimmt die neue Position atomar")
+	_true(push_world.mark_enemy_relocated(pushed_handle), "EnemyWorld verwirft nach Versetzen den lokalen Bypasszustand")
+	push_world.clear()
+	pushed_small.free()
+	avatar.input_enabled = false
+	avatar.free()
+	for action in added_input_actions:
+		InputMap.erase_action(action)
 	if failures == 0:
 		print("ALVEOLUS_CROWD_COLLISION_STUN_OK assertions=%d" % assertions)
 	else:
 		push_error("ALVEOLUS_CROWD_COLLISION_STUN_FAILED failures=%d assertions=%d" % [failures, assertions])
 	quit(0 if failures == 0 else 1)
+
+
+func _enemy(
+	definition: EnemyDefinition,
+	avatar: TherapyAvatar,
+	topology: ArenaTopology,
+	position: Vector2
+) -> InfectionEnemy:
+	var enemy := InfectionEnemy.new()
+	enemy.configure(definition, avatar, topology)
+	enemy.spawn_timer = 0.0
+	enemy.global_position = position
+	enemy.reset_visual_motion()
+	return enemy
+
+
+func _assert_at_contact(enemy: InfectionEnemy, avatar: TherapyAvatar, topology: ArenaTopology, label: String) -> void:
+	var distance := topology.distance(enemy.global_position, avatar.global_position)
+	var expected := TherapyAvatar.CONTACT_RADIUS + enemy.contact_body_radius()
+	_true(distance <= expected + 0.05, "%s erreicht den Schadenskontakt (%.2f / %.2f)" % [label, distance, expected])
+	_true(distance >= expected - 0.65, "%s läuft nicht durch Doctor Milos hindurch (%.2f / %.2f)" % [label, distance, expected])
 
 
 func _true(condition: bool, message: String) -> void:
@@ -363,6 +413,29 @@ func _true(condition: bool, message: String) -> void:
 	push_error(message)
 
 
-func _on_ring_pressure_applied(_amount: float) -> void:
-	ring_contact_hits += 1
-	ring_hits_this_tick += 1
+func _on_small_pressure(_amount: float) -> void:
+	small_hits += 1
+
+
+func _on_cluster_pressure(_amount: float) -> void:
+	cluster_hits += 1
+
+
+func _on_front_pressure(_amount: float) -> void:
+	front_hits += 1
+
+
+func _on_blocked_pressure(_amount: float) -> void:
+	blocked_hits += 1
+
+
+func _on_offset_pressure(_amount: float) -> void:
+	offset_hits += 1
+
+
+func _on_mixed_small_pressure(_amount: float) -> void:
+	mixed_small_hits += 1
+
+
+func _on_mixed_cluster_pressure(_amount: float) -> void:
+	mixed_cluster_hits += 1

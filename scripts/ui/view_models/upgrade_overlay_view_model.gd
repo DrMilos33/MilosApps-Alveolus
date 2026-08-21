@@ -54,6 +54,7 @@ class UpgradeOptionViewModel:
 	var _after_value: String
 	var _icon_id: StringName
 	var _accent_role: StringName
+	var _rarity_role: StringName
 	var _value_rows: Array[ValueRowViewModel]
 	var _pick_count: int
 	var _maximum_picks: int
@@ -67,6 +68,7 @@ class UpgradeOptionViewModel:
 		after_value: String,
 		icon_value: StringName,
 		accent_value: StringName,
+		rarity_value: StringName,
 		value_rows_value: Array[ValueRowViewModel] = [],
 		pick_count_value: int = 0,
 		maximum_picks_value: int = 1,
@@ -79,6 +81,7 @@ class UpgradeOptionViewModel:
 		_after_value = after_value
 		_icon_id = icon_value
 		_accent_role = accent_value
+		_rarity_role = rarity_value
 		_value_rows.assign(value_rows_value)
 		_pick_count = maxi(0, pick_count_value)
 		_maximum_picks = maxi(1, maximum_picks_value)
@@ -112,6 +115,9 @@ class UpgradeOptionViewModel:
 	func accent_role() -> StringName:
 		return _accent_role
 
+	func rarity_role() -> StringName:
+		return _rarity_role
+
 	func value_rows() -> Array[ValueRowViewModel]:
 		var result: Array[ValueRowViewModel] = []
 		result.assign(_value_rows)
@@ -127,7 +133,7 @@ class UpgradeOptionViewModel:
 		return _maximum_picks
 
 	func pick_index_text() -> String:
-		return "%d/%d" % [_pick_count, _maximum_picks]
+		return str(_pick_count)
 
 	func compact_title() -> bool:
 		return _compact_title
@@ -142,7 +148,7 @@ var _revision := 0
 var _content_hash := ""
 
 
-## Accepted row keys: id, title, effect, before, after, icon_id, accent_role,
+## Accepted row keys: id, title, effect, before, after, icon_id, accent_role, rarity_role,
 ## value_rows, pick_count, maximum_picks and compact_title. Each value row is
 ## already display-ready and accepts id, label, value, optional before and
 ## accent_role. The UI never derives units or maps content IDs. Invalid or
@@ -183,6 +189,9 @@ static func create(
 		var accent_value := StringName(String(row.get("accent_role", "turquoise")))
 		if accent_value == &"":
 			accent_value = &"turquoise"
+		var rarity_value := StringName(String(row.get("rarity_role", "common")))
+		if rarity_value not in [&"common", &"magic", &"rare"]:
+			rarity_value = &"common"
 		var value_rows := _copy_value_rows(row.get("value_rows", []), accent_value)
 		result._options.append(UpgradeOptionViewModel.new(
 			option_id,
@@ -192,6 +201,7 @@ static func create(
 			String(row.get("after", "")).strip_edges(),
 			icon_value,
 			accent_value,
+			rarity_value,
 			value_rows,
 			int(row.get("pick_count", 0)),
 			int(row.get("maximum_picks", 1)),
@@ -295,6 +305,7 @@ func _calculate_content_hash() -> String:
 		canonical.append(_length_prefixed(option.after_value()))
 		canonical.append(_length_prefixed(String(option.icon_id())))
 		canonical.append(_length_prefixed(String(option.accent_role())))
+		canonical.append(_length_prefixed(String(option.rarity_role())))
 		canonical.append(str(option.pick_count()))
 		canonical.append(str(option.maximum_picks()))
 		canonical.append("1" if option.compact_title() else "0")

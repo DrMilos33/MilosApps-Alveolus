@@ -34,6 +34,7 @@ class EnemyRecord:
 	var stun_index: int = -1
 	var health_callback: Callable
 	var stun_callback: Callable
+	var materialized_callback: Callable
 	var previous_position: Vector2
 	var current_position: Vector2
 	var previous_size: Vector2
@@ -257,6 +258,9 @@ func register_enemy(enemy: InfectionEnemy, force_detailed: bool = false) -> Dict
 	record.stun_callback = Callable(self, "_on_enemy_stun_changed").bind(enemy, record.generation)
 	if not enemy.stun_changed.is_connected(record.stun_callback):
 		enemy.stun_changed.connect(record.stun_callback)
+	record.materialized_callback = Callable(self, "_on_enemy_materialized").bind(record.generation)
+	if not enemy.materialized.is_connected(record.materialized_callback):
+		enemy.materialized.connect(record.materialized_callback)
 	if enemy.is_stunned():
 		_add_stun_record(record)
 	if not VisualAssetCatalog.has_gameplay_visual(record.visual_id):
@@ -501,6 +505,48 @@ func _on_enemy_stun_changed(
 	queue_redraw()
 
 
+func _on_enemy_materialized(enemy: InfectionEnemy, generation: int) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var record := _enemy_records.get(enemy.get_instance_id()) as EnemyRecord
+	if record == null or record.generation != generation or not enemy.is_generation_valid(generation):
+		return
+	_remove_telegraph_record(record)
+	if record.detailed or record.slot < 0 or record.batch == null or record.batch.node == null:
+		queue_redraw()
+		return
+	# Materialization happens inside the fixed enemy tick. Publish this one slot
+	# immediately so a pooled cluster cannot spend an extra render frame hidden
+	# between its telegraph ending and the next whole-batch upload.
+	record.previous_position = enemy.visual_current_position
+	record.current_position = enemy.visual_current_position
+	record.previous_size = enemy.visual_current_size
+	record.current_size = enemy.visual_current_size
+	record.previous_color = enemy.visual_current_color
+	record.current_color = enemy.visual_current_color
+	record.snap_interpolation = false
+	_write_buffer_instance(
+		record.batch.render_buffer,
+		record.slot,
+		record.current_size,
+		record.current_position,
+		record.current_color
+	)
+	record.batch.node.multimesh.set_buffer(record.batch.render_buffer)
+	if _debug_snapshots_enabled:
+		_enemy_render_states[record.instance_id] = {
+			"generation": record.generation,
+			"slot": record.slot,
+			"visual_id": record.visual_id,
+			"detailed": false,
+			"active": true,
+			"hidden": false,
+			"transform": Transform2D(BATCH_TEXTURE_ROTATION, record.current_size, 0.0, record.current_position),
+			"color": record.current_color,
+		}
+	queue_redraw()
+
+
 func _release_enemy_record(record: EnemyRecord) -> void:
 	if record == null or _enemy_records.get(record.instance_id) != record:
 		return
@@ -511,6 +557,8 @@ func _release_enemy_record(record: EnemyRecord) -> void:
 		record.enemy.health_changed.disconnect(record.health_callback)
 	if is_instance_valid(record.enemy) and record.stun_callback.is_valid() and record.enemy.stun_changed.is_connected(record.stun_callback):
 		record.enemy.stun_changed.disconnect(record.stun_callback)
+	if is_instance_valid(record.enemy) and record.materialized_callback.is_valid() and record.enemy.materialized.is_connected(record.materialized_callback):
+		record.enemy.materialized.disconnect(record.materialized_callback)
 	if not record.detailed:
 		var state := record.batch
 		if state != null:

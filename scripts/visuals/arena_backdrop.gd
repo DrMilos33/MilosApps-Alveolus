@@ -134,12 +134,9 @@ func _request_bake(generation: int) -> void:
 func _begin_bake(generation: int) -> void:
 	if generation != _bake_generation or arena_bounds.size == Vector2.ZERO:
 		return
-	var requested_size := Vector2i(ceili(arena_bounds.size.x), ceili(arena_bounds.size.y))
+	var requested_size := _resolved_bake_size()
 	if requested_size.x <= 0 or requested_size.y <= 0:
 		_set_bake_fallback("invalid_size")
-		return
-	if requested_size.x > MAX_BAKE_DIMENSION or requested_size.y > MAX_BAKE_DIMENSION:
-		_set_bake_fallback("size_exceeds_safe_texture_limit")
 		return
 	if not _ensure_bake_resources():
 		_set_bake_fallback("subviewport_unavailable")
@@ -149,7 +146,9 @@ func _begin_bake(generation: int) -> void:
 	_bake_ready = false
 	_bake_fallback_reason = "bake_pending"
 	_bake_viewport.size = requested_size
-	_bake_canvas.position = -arena_bounds.position
+	var bake_scale := Vector2(requested_size) / arena_bounds.size
+	_bake_canvas.scale = bake_scale
+	_bake_canvas.position = -arena_bounds.position * bake_scale
 	_bake_canvas.queue_redraw()
 	_bake_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	# Waiting two idle frames guarantees that UPDATE_ONCE received a render
@@ -192,7 +191,7 @@ func _complete_bake(generation: int) -> void:
 	# explicitly as part of the contract so Web and native cannot keep updating.
 	_bake_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	var viewport_texture := _bake_viewport.get_texture()
-	var expected_size := Vector2i(ceili(arena_bounds.size.x), ceili(arena_bounds.size.y))
+	var expected_size := _resolved_bake_size()
 	if viewport_texture == null or viewport_texture.get_size() != Vector2(expected_size):
 		_set_bake_fallback("render_target_capture_failed")
 		return
@@ -202,6 +201,22 @@ func _complete_bake(generation: int) -> void:
 	_bake_fallback_reason = ""
 	set_process(false)
 	queue_redraw()
+
+
+func _resolved_bake_size() -> Vector2i:
+	if arena_bounds.size.x <= 0.0 or arena_bounds.size.y <= 0.0:
+		return Vector2i.ZERO
+	var scale := minf(
+		1.0,
+		minf(
+			float(MAX_BAKE_DIMENSION) / arena_bounds.size.x,
+			float(MAX_BAKE_DIMENSION) / arena_bounds.size.y
+		)
+	)
+	return Vector2i(
+		maxi(1, roundi(arena_bounds.size.x * scale)),
+		maxi(1, roundi(arena_bounds.size.y * scale))
+	)
 
 
 func _set_bake_fallback(reason: String) -> void:

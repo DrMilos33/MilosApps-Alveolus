@@ -37,6 +37,8 @@ const ENTRIES := {
 	&"enemy_damage": {"simple": "Gegnerschaden", "medical": "Verursachter Schaden"},
 	&"defense": {"simple": "Verteidigung", "medical": "Schadensminderung"},
 	&"life_regeneration": {"simple": "Lebensregeneration", "medical": "Regenerative Erholung"},
+	&"movement_speed": {"simple": "Galopp", "medical": "Bewegungsgeschwindigkeit"},
+	&"experience_gain": {"simple": "Erfahrungsbonus", "medical": "Analysezuwachs"},
 	&"resistance": {"simple": "Resistenz", "medical": "Schadenstypresistenz"},
 	&"fire_damage": {"simple": "Feuer", "medical": "Feuerschaden"},
 	&"water_damage": {"simple": "Wasser", "medical": "Wasserschaden"},
@@ -110,8 +112,10 @@ static func _build_definitions() -> Dictionary:
 	_add(result, &"talent_points", "Begrenzt verteilbare Punkte für die Vorbereitung.", "Talentpunkte werden vor einem Fall verteilt. Eine andere Verteilung ermöglicht neue Spezialisierungen.", [&"research", &"capacity"], "Punkte", &"research_reward")
 	_add(result, &"mastery", "Dauerhafte Erfahrung mit einzelnen Fällen.", "Meisterschaft dokumentiert besondere Leistungen und kann zusätzliche Talentpunkte freischalten.", [&"talent_points", &"case_trait"], "Stufe", &"research_reward")
 	_add(result, &"enemy_damage", "Der Grundschaden eines Gegners.", "Wenn ein Gegner Doctor Milos trifft, werden Schadenstyp, Resistenz und Verteidigung verrechnet. Danach fängt ein vorhandenes Schild Schaden ab.", [&"patient_stability", &"resistance", &"defense", &"shield"], "Punkte", &"patient_stability")
-	_add(result, &"defense", "Die effektive allgemeine Minderung eingehenden Schadens.", "Verteidigung reduziert den Schaden nach der Typresistenz. Sie kann einen Treffer abschwächen, aber nicht heilen.", [&"enemy_damage", &"resistance", &"shield"], "Prozent", &"patient_stability")
+	_add(result, &"defense", "Die effektive allgemeine Minderung eingehenden Schadens.", "Verteidigung reduziert den Schaden nach der Typresistenz. Sie kann einen Treffer abschwächen, aber nicht heilen.", [&"enemy_damage", &"resistance", &"shield"], "Prozent", &"defense_training")
 	_add(result, &"life_regeneration", "Automatische Heilung über Zeit.", "Lebensregeneration stellt fortlaufend Leben wieder her, solange Doctor Milos nicht bereits sein maximales Leben besitzt.", [&"patient_stability", &"support_path"], "Leben pro Sekunde", &"supportive_oxygenation")
+	_add(result, &"movement_speed", "Die Laufgeschwindigkeit von Doctor Milos.", "Mehr Galopp lässt Doctor Milos pro Sekunde eine größere Strecke zurücklegen.", [&"patient_stability", &"experience_gain"], "", &"movement_training")
+	_add(result, &"experience_gain", "Der Bonus auf eingesammelte Erfahrung.", "Mehr Erfahrungsbonus erhöht die Erfahrung, die Doctor Milos von kontrollierten Gegnern erhält.", [&"analysis", &"movement_speed"], "Prozent", &"experience_gain")
 	_add(result, &"resistance", "Minderung oder Verwundbarkeit gegenüber einem Schadenstyp.", "Ein positiver effektiver Wert verringert diesen Schadenstyp. Ein negativer Wert bedeutet Verwundbarkeit und erhöht den erlittenen Schaden.", [&"enemy_damage", &"defense", &"fire_damage", &"water_damage", &"earth_damage", &"wind_damage"], "Prozent", &"patient_stability")
 	_add(result, &"fire_damage", "Ein offensiver Schadenstyp.", "Feuerschaden wird mit der Feuerresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")
 	_add(result, &"water_damage", "Ein offensiver Schadenstyp.", "Wasserschaden wird mit der Wasserresistenz des Ziels verrechnet.", [&"resistance", &"effect"], "", &"automatic_therapy")

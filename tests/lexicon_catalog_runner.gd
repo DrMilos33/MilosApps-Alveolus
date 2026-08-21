@@ -32,7 +32,7 @@ func _test_categories_and_terms() -> void:
 		&"shield", &"finding", &"finding_progress", &"case_trait", &"basic_treatment",
 		&"active_ability", &"passive_module", &"reserve", &"capacity", &"research",
 		&"talent_points", &"mastery", &"enemy_damage", &"defense", &"life_regeneration",
-		&"resistance", &"fire_damage", &"water_damage", &"earth_damage", &"wind_damage",
+		&"movement_speed", &"experience_gain", &"resistance", &"fire_damage", &"water_damage", &"earth_damage", &"wind_damage",
 		&"cooldown", &"boss_phase",
 	]
 	for id in required_terms:
@@ -53,6 +53,11 @@ func _test_categories_and_terms() -> void:
 	_check(TerminologyCatalog.simple(&"support_path") == "Regeneration", "Regeneration ersetzt Atemhilfe")
 	_check(TerminologyCatalog.simple(&"shield") == "Schild", "Schild ersetzt Schutz")
 	_check(TerminologyCatalog.definition(&"contact_damage") == null, "Kontaktschaden ist kein sichtbarer Lexikonbegriff")
+	for id in LexiconCatalog.CHARACTER_TERM_IDS:
+		var character_term: LexiconEntryDefinition = by_id.get(StringName("term_%s" % id)) as LexiconEntryDefinition
+		_check(character_term != null and character_term.category == LexiconEntryDefinition.CATEGORY_CHARACTER, "%s steht bei den Charakterwerten" % id)
+	_check(TerminologyCatalog.definition(&"defense").visual_id == &"defense_training", "Verteidigung verwendet das zentrale Schildsymbol der Forschung")
+	_check(TerminologyCatalog.simple(&"movement_speed") == "Galopp", "Galopp besitzt einen eigenen Charakterbegriff")
 
 func _test_enemy_values_are_sourced() -> void:
 	var provider := LexiconViewModelProvider.create_default()

@@ -27,12 +27,16 @@ func _run() -> void:
 	var finding_reactions: Array = [reactions[&"group_area"], reactions[&"group_control"], reactions[&"group_safety"]]
 	var swappable_passives: Array = []
 	var prepared := PreparedLoadout.default_loadout()
+	var prepared_with_active := PreparedLoadout.create(
+		PreparedLoadout.DEFAULT_TREATMENT_ID,
+		[&"ability_focus_field"]
+	)
 	var prep_view := {
 		"level_title": "Die Ausbreitung",
 		"level_description": "Eine zunehmende Belastung erfordert einen klaren Plan.",
 		"duration_text": "Ohne Zeitlimit",
 		"boss_time_text": "3:00 Min.",
-		"trait": ContentCatalog.case_trait_definitions()[&"high_load"],
+		"trait": ContentCatalog.case_trait_definitions()[&"monster_spawn_10"],
 		"validation": LoadoutValidator.validate(prepared, loadout_modules, {}, 8),
 	}
 
@@ -90,7 +94,7 @@ func _run() -> void:
 			hud.show_research_tabs(meta, research, TalentDefinition.definitions())
 			hud._select_research_tab(&"talents")
 		var show_preparation_picker := func() -> void:
-			hud.show_preparation(prep_view, loadout_modules.values(), prepared)
+			hud.show_preparation(prep_view, loadout_modules.values(), prepared_with_active)
 			hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
 		var show_intro_preparation := func() -> void:
 			var tutorial_view := prep_view.duplicate(true)
@@ -601,69 +605,37 @@ func _check_finding_tooltip_placement(hud: GameHUD, viewport_size: Vector2i, con
 	var source_registrations: Array = [registrations[0]]
 	if registrations.size() > 1:
 		source_registrations.append(registrations[registrations.size() - 1])
-	var observed_right_above := false
-	var observed_left_fallback := false
-	var observed_right_aligned_fallback := false
-	var observed_left_aligned_fallback := false
-	var right_candidate_possible := false
-	var left_candidate_possible := false
-	var right_aligned_candidate_possible := false
-	var left_aligned_candidate_possible := false
 	for registration_value in source_registrations:
 		var registration := registration_value as Dictionary
 		var source := registration.get("source") as Control
-		var anchor := registration.get("anchor") as Control
-		_check(source != null and source.is_visible_in_tree() and anchor != null and anchor.is_visible_in_tree(), "%s bindet den Befund-Tooltip an eine sichtbare Reaktion mit kompaktem Anker" % context)
-		if source == null or not source.is_visible_in_tree() or anchor == null or not anchor.is_visible_in_tree():
+		_check(source != null and source.is_visible_in_tree(), "%s bindet den Befund-Tooltip an eine sichtbare Quelle" % context)
+		if source == null or not source.is_visible_in_tree():
 			continue
 		source.mouse_entered.emit()
 		await _settle()
 		var card := hud.context_detail_controller.card
-		var source_rect := anchor.get_global_rect()
+		var source_rect := source.get_global_rect()
 		var card_rect := card.get_global_rect()
-		var right_above := card_rect.position.x >= source_rect.end.x - 0.5 and card_rect.end.y <= source_rect.position.y + 0.5
-		var left_above := card_rect.end.x <= source_rect.position.x + 0.5 and card_rect.end.y <= source_rect.position.y + 0.5
-		var right_aligned_above := absf(card_rect.end.x - source_rect.end.x) <= 1.0 and card_rect.end.y <= source_rect.position.y + 0.5
-		var left_aligned_above := absf(card_rect.position.x - source_rect.position.x) <= 1.0 and card_rect.end.y <= source_rect.position.y + 0.5
-		var transform := anchor.get_global_transform_with_canvas()
+		var transform := source.get_global_transform_with_canvas()
 		var source_scale := maxf(transform.x.length(), transform.y.length())
 		var scaled_gap := ContextDetailController.SOURCE_GAP * source_scale
 		var scaled_margin := ContextDetailController.VIEWPORT_MARGIN * source_scale
-		var vertical_candidate_fits := source_rect.position.y - card_rect.size.y - scaled_gap >= scaled_margin
-		var right_candidate_fits := source_rect.end.x + scaled_gap + card_rect.size.x <= float(viewport_size.x) - scaled_margin \
-			and vertical_candidate_fits
-		var left_candidate_fits := source_rect.position.x - card_rect.size.x - scaled_gap >= scaled_margin \
-			and vertical_candidate_fits
-		var right_aligned_candidate_fits := source_rect.end.x - card_rect.size.x >= scaled_margin \
-			and source_rect.end.x <= float(viewport_size.x) - scaled_margin \
-			and vertical_candidate_fits
-		var left_aligned_candidate_fits := source_rect.position.x >= scaled_margin \
-			and source_rect.position.x + card_rect.size.x <= float(viewport_size.x) - scaled_margin \
-			and vertical_candidate_fits
-		right_candidate_possible = right_candidate_possible or right_candidate_fits
-		left_candidate_possible = left_candidate_possible or (not right_candidate_fits and left_candidate_fits)
-		right_aligned_candidate_possible = right_aligned_candidate_possible or (not right_candidate_fits and not left_candidate_fits and right_aligned_candidate_fits)
-		left_aligned_candidate_possible = left_aligned_candidate_possible or (not right_candidate_fits and not left_candidate_fits and not right_aligned_candidate_fits and left_aligned_candidate_fits)
-		observed_right_above = observed_right_above or (right_candidate_fits and right_above)
-		observed_left_fallback = observed_left_fallback or (not right_candidate_fits and left_candidate_fits and left_above)
-		observed_right_aligned_fallback = observed_right_aligned_fallback or (not right_candidate_fits and not left_candidate_fits and right_aligned_candidate_fits and right_aligned_above)
-		observed_left_aligned_fallback = observed_left_aligned_fallback or (not right_candidate_fits and not left_candidate_fits and not right_aligned_candidate_fits and left_aligned_candidate_fits and left_aligned_above)
 		_check(card.is_visible_in_tree() and _inside_viewport(card, viewport_size), "%s hält den Befund-Tooltip vollständig im Viewport" % context)
-		var title := hud.finding_screen.modal_sheet().find_child("FindingTitle", true, false) as Control
-		var effect := hud.finding_screen.effect_label() as Control
-		_check((title == null or not card_rect.intersects(title.get_global_rect())) and (effect == null or not card_rect.intersects(effect.get_global_rect())), "%s verdeckt weder Befundtitel noch mechanische Effektzeile" % context)
-		_check(
-			right_above if right_candidate_fits else (
-				left_above if left_candidate_fits else (
-					right_aligned_above if right_aligned_candidate_fits else left_aligned_above
-				)
-			),
-			"%s setzt den Befund-Tooltip diagonal oder bei Vollbreite direkt oberhalb" % context
+		_check(not card_rect.intersects(source_rect), "%s überdeckt seine tatsächliche Befundquelle nicht" % context)
+		var bounds := Rect2(
+			Vector2(scaled_margin, scaled_margin),
+			Vector2(viewport_size) - Vector2(scaled_margin, scaled_margin) * 2.0
 		)
-	_check(not right_candidate_possible or observed_right_above, "%s deckt jede mögliche Position diagonal rechts-oben ab" % context)
-	_check(not left_candidate_possible or observed_left_fallback, "%s deckt jeden möglichen Viewport-Fallback diagonal links-oben ab" % context)
-	_check(not right_aligned_candidate_possible or observed_right_aligned_fallback, "%s deckt den rechtsbündigen Vollbreiten-Fallback ab" % context)
-	_check(not left_aligned_candidate_possible or observed_left_aligned_fallback, "%s deckt den linksbündigen Vollbreiten-Fallback ab" % context)
+		var candidates := [
+			Vector2(source_rect.end.x + scaled_gap, source_rect.position.y - card_rect.size.y - scaled_gap),
+			Vector2(source_rect.position.x - card_rect.size.x - scaled_gap, source_rect.position.y - card_rect.size.y - scaled_gap),
+			Vector2(source_rect.end.x + scaled_gap, source_rect.end.y + scaled_gap),
+			Vector2(source_rect.position.x - card_rect.size.x - scaled_gap, source_rect.end.y + scaled_gap),
+		]
+		for candidate in candidates:
+			if bounds.encloses(Rect2(candidate, card_rect.size)):
+				_check(card_rect.position.distance_to(candidate) <= 1.5, "%s verwendet die erste vollständig passende globale AUTO-Position" % context)
+				break
 	hud.close_all_context_details()
 	await _settle()
 

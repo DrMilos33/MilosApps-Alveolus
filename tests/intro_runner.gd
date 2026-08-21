@@ -72,7 +72,11 @@ func _run_intro() -> void:
 	_check(game.flow_state == GameFlowState.State.LEVEL_UP, "Der dritte normale EXP-Drop öffnet Level Up")
 	_check(game.current_upgrade_options.size() == 3, "Das Intro zeigt exakt drei normale Upgradeoptionen")
 	_check(game.hud.upgrade_screen.cards().size() == 3, "Das sichtbare Level-Up enthält drei Karten")
-	_check(not game.hud.upgrade_screen.selection_helper().visible and game.hud.upgrade_screen.selection_helper().text.is_empty(), "Das Level-Up verzichtet auf den redundanten Auswahlhinweis")
+	_check(
+		game.hud.upgrade_screen.selection_helper().visible
+		and game.hud.upgrade_screen.selection_helper().text == "1 von 3 Upgrades aussuchen",
+		"Das Intro-Level-Up zeigt den knappen Auswahlhinweis"
+	)
 	for card in game.hud.upgrade_screen.cards():
 		var title := card.find_child("UpgradeTitle", true, false) as Label
 		var comparison := card.find_child("UpgradeComparison", true, false) as RichTextLabel

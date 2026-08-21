@@ -10,6 +10,7 @@ extends Resource
 var contact_damage: float
 @export var analysis_value: int
 @export var radius: float
+@export var contact_radius: float
 @export var body_size_class: BodySizeCatalog.SizeClass = BodySizeCatalog.SizeClass.SMALL
 @export var color: Color
 @export var is_boss: bool = false
@@ -48,6 +49,7 @@ static func create(
 	definition.contact_damage = definition.base_damage
 	definition.analysis_value = analysis
 	definition.radius = body_radius
+	definition.contact_radius = maxf(1.0, body_radius * 0.90)
 	definition.body_size_class = BodySizeCatalog.class_for_radius(body_radius)
 	definition.color = body_color
 	definition.is_boss = boss
@@ -57,6 +59,11 @@ static func create(
 	definition.damage_profile = profile if profile != null else _default_damage_profile(definition_id)
 	definition.resistance_profile = resistances if resistances != null else _default_resistance_profile(definition_id)
 	return definition
+
+
+func configure_contact_radius(radius_value: float) -> EnemyDefinition:
+	contact_radius = clampf(radius_value, 1.0, maxf(radius, 1.0))
+	return self
 
 
 func configure_projectile_attack(

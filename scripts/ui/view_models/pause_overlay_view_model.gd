@@ -17,6 +17,7 @@ class StatValueViewModel:
 	var _formatted_value: String
 	var _icon_id: StringName
 	var _accent_role: StringName
+	var _detail_text: String
 
 	func _init(
 		row_id: StringName,
@@ -24,7 +25,8 @@ class StatValueViewModel:
 		label_value: String,
 		formatted_value: String,
 		icon_value: StringName,
-		accent_value: StringName
+		accent_value: StringName,
+		detail_text_value: String = ""
 	) -> void:
 		_id = row_id
 		_section_id = section_id_value
@@ -32,6 +34,7 @@ class StatValueViewModel:
 		_formatted_value = formatted_value
 		_icon_id = icon_value
 		_accent_role = accent_value
+		_detail_text = detail_text_value.strip_edges()
 
 	func id() -> StringName:
 		return _id
@@ -54,6 +57,9 @@ class StatValueViewModel:
 
 	func accent_role() -> StringName:
 		return _accent_role
+
+	func detail_text() -> String:
+		return _detail_text
 
 
 class SectionViewModel:
@@ -164,7 +170,8 @@ static func create(stat_sections: Array, revision_value: int = 0, show_intro_ski
 				label_value,
 				formatted_value,
 				icon_value,
-				accent_value
+				accent_value,
+				String(row.get("detail_text", row.get("tooltip_text", "")))
 			))
 			seen_row_ids[row_id] = true
 		if rows.is_empty():
@@ -258,6 +265,7 @@ func _calculate_content_hash() -> String:
 			canonical.append(_length_prefixed(row.formatted_value()))
 			canonical.append(_length_prefixed(String(row.icon_id())))
 			canonical.append(_length_prefixed(String(row.accent_role())))
+			canonical.append(_length_prefixed(row.detail_text()))
 	return "|".join(canonical).sha256_text()
 
 

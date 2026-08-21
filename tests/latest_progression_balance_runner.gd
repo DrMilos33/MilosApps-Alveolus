@@ -30,24 +30,24 @@ func _test_integer_and_attack_speed_contract() -> void:
 	_equal(StringName(rhythm.modifiers[0].get("operation", &"")), &"attack_speed_add", "Attack Speed verwendet einen linearen additiven Modifier")
 	var build := RunBuildState.from_treatment(impulse)
 	var preview := build.preview_upgrade(rhythm, 0)
-	_equal(preview.effect_text, "+6 % Attack Speed", "Karte nennt den additiven Attack-Speed-Bonus")
-	_equal(preview.before_after_text, "0 %  >  6 %", "Vorschau zeigt ausschließlich den akkumulierten Bonus")
+	_equal(preview.effect_text, "+3 % Attack Speed", "Common-Karte nennt den additiven Attack-Speed-Bonus")
+	_equal(preview.before_after_text, "0 %  >  3 %", "Vorschau zeigt ausschließlich den akkumulierten Bonus")
 	_true(build.apply_upgrade(rhythm, 1), "Erster Attack-Speed-Rang wird angewendet")
-	_near(1.0 / build.value(RunBuildState.TREATMENT_INTERVAL, impulse.base_interval, impulse.tags), (1.0 / impulse.base_interval) * 1.06, "Erster Rang erhöht den Basis-Attack-Speed exakt um sechs Prozent")
+	_near(1.0 / build.value(RunBuildState.TREATMENT_INTERVAL, impulse.base_interval, impulse.tags), (1.0 / impulse.base_interval) * 1.03, "Erster Common-Pick erhöht den Basis-Attack-Speed exakt um drei Prozent")
 	_true(build.apply_upgrade(rhythm, 2), "Zweiter Attack-Speed-Rang wird angewendet")
-	_near(1.0 / build.value(RunBuildState.TREATMENT_INTERVAL, impulse.base_interval, impulse.tags), (1.0 / impulse.base_interval) * 1.12, "Zweiter Rang addiert linear statt exponentiell")
+	_near(1.0 / build.value(RunBuildState.TREATMENT_INTERVAL, impulse.base_interval, impulse.tags), (1.0 / impulse.base_interval) * 1.06, "Zweiter Pick addiert linear statt exponentiell")
 
 
 func _test_research_and_intro_rewards() -> void:
 	var expected_costs := {
-		&"stability_reserve": PackedInt32Array([100, 225, 400]),
-		&"therapy_precision": PackedInt32Array([125, 275, 475]),
-		&"experience_gain": PackedInt32Array([125, 275, 475]),
-		&"defense_training": PackedInt32Array([150, 300, 500]),
-		&"life_regeneration": PackedInt32Array([150, 300, 500]),
+		&"stability_reserve": PackedInt32Array([50, 350, 800]),
+		&"therapy_precision": PackedInt32Array([63, 425, 950]),
+		&"experience_gain": PackedInt32Array([63, 425, 950]),
+		&"defense_training": PackedInt32Array([75, 450, 1000]),
+		&"life_regeneration": PackedInt32Array([75, 450, 1000]),
 		&"unlock_spread_treatment": PackedInt32Array([300]),
 		&"unlock_piercing_treatment": PackedInt32Array([500]),
-		&"movement_training": PackedInt32Array([150, 300, 500]),
+		&"movement_training": PackedInt32Array([75, 450, 1000]),
 		&"unlock_defense_burst": PackedInt32Array([30]),
 		&"unlock_treatment_line": PackedInt32Array([1000]),
 	}
@@ -56,13 +56,15 @@ func _test_research_and_intro_rewards() -> void:
 	for definition in definitions:
 		_true(expected_costs.has(definition.id), "Forschungs-ID %s ist Teil des aktuellen Vertrags" % definition.id)
 		if expected_costs.has(definition.id):
-			_equal(definition.costs, expected_costs[definition.id], "%s verwendet die vereinbarten fünffachen Kosten" % definition.id)
+			_equal(definition.costs, expected_costs[definition.id], "%s verwendet den günstigen Einstieg und die steile Folgekostenkurve" % definition.id)
 
 	var modules := ContentCatalog.loadout_module_definitions()
 	var empty_available := LoadoutAvailabilityPolicy.selectable_ids(modules, {})
 	_true(not empty_available.has(&"ability_defense_burst") and not empty_available.has(&"ability_treatment_line"), "Aktive Fähigkeiten sind vor Forschung gesperrt")
-	var unlocked := LoadoutAvailabilityPolicy.selectable_ids(modules, {&"unlock_defense_burst": 1, &"unlock_treatment_line": 1})
-	_true(unlocked.has(&"ability_defense_burst") and unlocked.has(&"ability_treatment_line"), "Beide Aktiven werden durch ihre Forschung freigeschaltet")
+	var researched_before_case := LoadoutAvailabilityPolicy.selectable_ids(modules, {&"unlock_defense_burst": 1, &"unlock_treatment_line": 1})
+	_true(researched_before_case.has(&"ability_defense_burst") and not researched_before_case.has(&"ability_treatment_line"), "Ein alter Lazer-Forschungsrang umgeht den Fallmeilenstein nicht")
+	var unlocked := LoadoutAvailabilityPolicy.selectable_ids(modules, {&"unlock_defense_burst": 1}, true)
+	_true(unlocked.has(&"ability_defense_burst") and unlocked.has(&"ability_treatment_line"), "Fall 1 schaltet den zweiten Aktivplatz und den Lazer frei")
 
 	var meta := MetaProgressionState.new(func() -> int: return 1_700_000_000)
 	meta.reset_defaults(1_700_000_000)

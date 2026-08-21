@@ -373,6 +373,8 @@ var _selected_tab: StringName
 var _research_balance_text: String
 var _talent_balance_text: String
 var _talent_reset_enabled: bool
+var _talents_unlocked: bool
+var _talent_lock_text: String
 var _research_items: Array[ResearchItemViewModel] = []
 var _talent_branches: Array[TalentBranchViewModel] = []
 
@@ -391,7 +393,9 @@ static func create(
 	talent_balance_text_value: String,
 	talent_reset_enabled_value: bool,
 	research_item_values: Array,
-	talent_branch_values: Array
+	talent_branch_values: Array,
+	talents_unlocked_value: bool = true,
+	talent_lock_text_value: String = ""
 ) -> ProgressionScreenViewModel:
 	var model := ProgressionScreenViewModel.new()
 	model._revision = maxi(0, revision_value)
@@ -399,6 +403,10 @@ static func create(
 	model._research_balance_text = research_balance_text_value
 	model._talent_balance_text = talent_balance_text_value
 	model._talent_reset_enabled = talent_reset_enabled_value
+	model._talents_unlocked = talents_unlocked_value
+	model._talent_lock_text = talent_lock_text_value.strip_edges()
+	if not model._talents_unlocked and model._talent_lock_text.is_empty():
+		model._talent_lock_text = "Schließe die Einführung ab, um Talente freizuschalten."
 	for item_value in research_item_values:
 		if item_value is ResearchItemViewModel:
 			model._research_items.append((item_value as ResearchItemViewModel).duplicate_value())
@@ -443,6 +451,14 @@ func talent_reset_enabled() -> bool:
 	return _talent_reset_enabled
 
 
+func talents_unlocked() -> bool:
+	return _talents_unlocked
+
+
+func talent_lock_text() -> String:
+	return _talent_lock_text
+
+
 func research_items() -> Array[ResearchItemViewModel]:
 	var result: Array[ResearchItemViewModel] = []
 	for item in _research_items:
@@ -471,6 +487,8 @@ func _content_signature() -> Array:
 		_research_balance_text,
 		_talent_balance_text,
 		_talent_reset_enabled,
+		_talents_unlocked,
+		_talent_lock_text,
 		_research_signatures(),
 		_talent_signatures(),
 	]

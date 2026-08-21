@@ -156,12 +156,23 @@ active abilities. Focus Field, Emergency Aid, Protection Field and Sample Pull
 remain visible but unavailable. The UI may explain a locked definition, but it
 must never infer availability from the mere existence of a stable content ID.
 
-There are eight global research definitions. Six are applied directly through
+There are ten research definitions. Six are applied directly through
 `PlayerStats.apply_meta_progression()` to maximum life, treatment damage,
 sample experience, defense, life regeneration and movement speed. Two unlock
-the additional treatments. None of these effects depends on an equipped
+the additional treatments and two unlock the selectable active abilities.
+None of these effects depends on an equipped
 passive module. `RunBuildState.MOVEMENT_SPEED` is the common research/run-build
 surface; `TherapyAvatar` reads its resolved fixed-step value from `PlayerStats`.
+
+Run upgrades are grouped by the resolved `<component>:<family>` key. Damage,
+attack speed and movement families contain weighted Common, Magic and Rare
+definitions, but `UpgradePoolBuilder` may offer at most one rarity of a family
+in one choice. `PlayerStats` retains per-definition counts for modifier-source
+stability and a separate aggregate family count for UI and weighting. A
+repeatable definition ignores `max_level`; finite utility upgrades keep their
+cap in data while `show_cap == false` prevents that implementation limit from
+leaking into the card. Reroll exclusion expands from a picked ID to its whole
+resolved family.
 
 Savegame version 6 and `talent_tree_revision` 4 are the current outer formats.
 The treatment tree contains exactly four ranked definitions: the root
@@ -208,24 +219,42 @@ never render units. Body radii remain exact query geometry and are classified
 separately by `BodySizeCatalog`; `Game` supplies
 `BodySizeCatalog.maximum_radius(enemy_definitions)` to `CombatQuery` instead of
 a magic maximum. Range checks and ordering use distance to the body surface,
-while `CombatSpatialGrid` and `CombatQuery` keep exact radii.
+while `CombatSpatialGrid` and `CombatQuery` keep exact radii. Enemy damage
+contact uses the separately authored `EnemyDefinition.contact_radius`; it is
+slightly smaller than the visible enemy core and does not alter targeting,
+projectile hits, body-size classes or crowd spacing.
 
-Enemy crowd spacing is a separate presentation/locomotion envelope exposed by
-`InfectionEnemy.crowd_radius()`. While Doctor Milos is stationary, `EnemyWorld`
-owns a fixed ring of twelve generation-safe contact micro-slots. A small
-bacterium reserves two contiguous slots, a bacterial cluster three; no more
-than two large bodies may own the ring at once. Owners approach one stable
-contact point and attack there. Further enemies keep a stable radial queue
-behind an owner instead of orbiting or propagating a global slow chain. Death,
-knockback, stun or leaving the contact envelope releases the claim, and the
-first valid waiter advances deterministically. Movement-state hysteresis hands
-control back to local flowing avoidance when the Doctor moves and restores the
-ring only after he has settled. Model factors approximate the visible body core,
-not its decorative outer pixels.
-Standard waves retain the deterministic golden-angle stream as a tie-breaker
-while the actual spawn direction fills the least occupied of twelve sectors.
-Materializing enemies count immediately, so one batch cannot collapse into a
-single off-screen corner.
+Enemy locomotion starts with one direct-pursuit proposal. Every mobile
+`InfectionEnemy` recomputes the shortest direction to Doctor Milos on every
+fixed tick and clamps that tick's travel to its separately authored
+damage-contact shell. `EnemyWorld` then performs a local contact-circle query
+against other targetable enemies. The minimum center distance is exactly the
+sum of both `contact_radius` values. A free path remains perfectly direct. Only
+when the proposed Fixed-Tick endpoint would intersect a closer body's contact
+circle may the follower use a short obstacle bypass. That bypass keeps a
+generation-safe blocker lease and stable side, combines a positive Doctor-bound
+component with the current tangent and is released after five clear ticks. It
+is not a lane, waypoint or predictive flanking decision. The accepted movement
+can never point away from Doctor Milos. There is no contact ring, slot
+allocation, queue, proactive avoidance or position-repair push. Contact damage
+is resolved after the accepted position, so a blocked rear body cannot hit
+through the front one. Knockback and stun remain the only systems permitted to
+interrupt pursuit or intentionally move an enemy away from the Doctor.
+`EnemyWorld` remains the single typed fixed-step owner and reuses its spatial
+grid; entities add no process loops.
+
+Before the avatar step, `EnemyWorld.prepare_avatar_body_interaction()` resolves
+the same authored contact circles from the player's side. Every non-small enemy
+hard-clips the proposed avatar displacement. Small bacteria instead receive a
+bounded physical push and therefore yield gradually without changing the
+avatar's movement stat or applying a slow status.
+
+Standard-wave placement evaluates twelve sectors around the current camera.
+Only enemies on screen or in the near offscreen band contribute pressure;
+closer bodies count more and a bacterial cluster counts twice. New bodies are
+placed beyond the viewport in one of the three lowest-pressure valid sectors.
+Materializing enemies publish their leased render slot immediately, so a batch
+does not create a transient invisible frame.
 
 `PlayerStats.stat_sections()` returns defensive-copy `StatSectionViewModel`
 data with stable IDs `general`, `treatment:<content-id>`,
@@ -282,16 +311,12 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase.
 
-Outside the stationary contact ring, `EnemyWorld` owns one predictive
-body-avoidance pass before enemy movement. It rebuilds one `CombatSpatialGrid`,
-samples only the local neighborhood and constrains the next preferred velocity.
-Preferred envelopes cover the visible body core. Steering refreshes at a
-bounded cadence while locomotion remains at 60 Hz. It never repairs positions
-after movement.
-Only `pneumococcus` yields to avatar pressure;
-larger bodies publish one blocking normal to `TherapyAvatar`, which removes
-only movement into that body and keeps tangential escape available. Entities
-must not add independent collision polling or pairwise O(n²) scans.
+At most two ordinary melee enemies per two-second relocation window may move
+from an overloaded offscreen sector to a calm one. Relocation preserves the
+generation, health and status and atomically snaps renderer history. It is
+denied for bosses, minor foci, ranged roles, tutorial roles, stunned or recently
+damaged/knocked bodies. Runtime locomotion still performs only the bounded local
+contact-circle query described above; it never gains a global steering target.
 
 Knockback state lives on `InfectionEnemy` and advances inside the existing
 typed EnemyWorld loop. `Stoß` supplies a distance, short eased travel duration
@@ -302,8 +327,11 @@ status icon; it does not introduce per-enemy process owners.
 
 `ArenaBackdrop` precomputes the coral dashed hard boundary and its eight corner
 segments during `configure()`. They are part of the existing one-shot static
-SubViewport bake. The viewport returns to `UPDATE_DISABLED`, the short bake
-callback stops, and reconfiguration reuses the same viewport/canvas nodes.
+SubViewport bake. Logical arenas may exceed GPU-safe texture dimensions; the
+bake preserves aspect ratio while capping its longest texture edge and then
+maps that immutable result over the full 9,600 × 5,400 world rectangle. The
+viewport returns to `UPDATE_DISABLED`, the short bake callback stops, and
+reconfiguration reuses the same viewport/canvas nodes.
 
 ## Defense-cell hit contract
 

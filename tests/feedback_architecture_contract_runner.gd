@@ -63,7 +63,7 @@ func _test_balance_and_movement_plumbing() -> void:
 	var mobility := _upgrade(&"mobility")
 	for rank in range(3):
 		_true(stats.apply_upgrade(mobility), "Mobilitätsausbau Rang %d wird angewandt" % (rank + 1))
-	_near(stats.movement_speed, 223.0, "Galoppausbau addiert je Rang neun und bleibt ganzzahlig")
+	_near(stats.movement_speed, 205.0, "Common-Galoppausbau addiert je Wahl drei und bleibt ganzzahlig")
 	_equal(PlayerStats.BASE_MOVEMENT_SPEED, 180.0, "Doctor-Basisgeschwindigkeit ist zentral 180")
 	_equal(TherapyAvatar.MOVE_SPEED, PlayerStats.BASE_MOVEMENT_SPEED, "Avatar-Fallback ist an die zentrale Doctor-Basis gekoppelt")
 	_equal(TherapyProjectile.DEFAULT_SPEED, 576.0, "Impuls-Projektile verwenden die um zwanzig Prozent reduzierte Geschwindigkeit")
@@ -99,12 +99,14 @@ func _test_stat_sections_and_headings() -> void:
 	var serialized := str(sections[1].rows()) + str(sections[2].rows()) + str(sections[3].rows())
 	_true(serialized.findn("px") < 0 and serialized.findn("pixel") < 0, "ViewModel-Daten exponieren keine Pixel- oder px-Einheit")
 	_true(serialized.contains("16") and not serialized.contains("Stufe 16"), "Behandlungsreichweite liefert UI-seitig nur die Stufenzahl")
-	_true(stats.apply_upgrade(_upgrade(&"potency")), "Ein allgemeiner Behandlungsausbau wird auf den Live-Build angewandt")
-	_true(stats.apply_upgrade(_upgrade(&"precision_refinement")), "Ein behandlungsspezifischer Ausbau wird auf denselben Live-Build angewandt")
-	_true(stats.apply_upgrade(_upgrade(&"burst_effect")), "Ein Aktivfähigkeitsausbau wird auf den Live-Build angewandt")
+	_true(stats.apply_upgrade(_upgrade(&"precision_refinement")), "Common-Behandlungsschaden wird auf den Live-Build angewandt")
+	_true(stats.apply_upgrade(_upgrade(&"treatment_damage_magic")), "Magic-Behandlungsschaden wird auf denselben Live-Build angewandt")
+	_true(stats.apply_upgrade(_upgrade(&"potency")), "Rare-Behandlungsschaden wird auf denselben Live-Build angewandt")
+	_true(stats.apply_upgrade(_upgrade(&"line_effect")), "Der ausgerüstete Lazer wird auf demselben Live-Build ausgebaut")
 	var live_sections := stats.stat_sections(82.0, 100.0, 7.0, 12.0)
-	_equal(_section_value(live_sections, &"treatment:treatment_precision", &"damage"), "23", "Pausenwerte zeigen den aktuell ausgebauten Impulsschaden statt den Run-Startwert")
-	_equal(_section_value(live_sections, &"ability:0:ability_defense_burst", &"damage"), "8", "Pausenwerte zeigen den aktuell ausgebauten Stoßschaden statt den Katalogbasiswert")
+	_equal(_section_value(live_sections, &"treatment:treatment_precision", &"damage"), "28", "Pausenwerte zeigen den akkumulierten Common-, Magic- und Rare-Impulsschaden")
+	_equal(_section_value(live_sections, &"ability:0:ability_defense_burst", &"damage"), "0", "Stoß bleibt in den aktuellen Charakterwerten ausdrücklich schadensfrei")
+	_equal(_section_value(live_sections, &"ability:1:ability_treatment_line", &"damage"), "33", "Pausenwerte zeigen den aktuellen Lazerwert nach Run-Ausbau")
 	var potency := _upgrade(&"potency")
 	_equal(potency.heading_component_id(treatment.id), treatment.id, "Allgemeines Behandlungsupgrade folgt dynamisch der vorbereiteten Behandlung")
 	_equal(potency.resolved_component_name(treatment), "Impuls", "UI erhält nur den aufgelösten Komponentennamen")
@@ -123,7 +125,7 @@ func _test_presentation_apis() -> void:
 		research_by_id[definition.id] = definition
 	var expected_totals := {
 		&"stability_reserve": "+9 Leben",
-		&"therapy_precision": "+3 Schaden",
+		&"therapy_precision": "+6 % Schaden",
 		&"experience_gain": "+15 % Erfahrung",
 		&"defense_training": "+6 Verteidigung",
 		&"life_regeneration": "+0,75/s",
@@ -138,7 +140,7 @@ func _test_presentation_apis() -> void:
 
 	var treatment := TreatmentDefinition.catalog()[&"treatment_precision"] as TreatmentDefinition
 	_equal(_upgrade(&"potency").resolved_icon_id(treatment), &"treatment_precision", "Allgemeines Behandlungsupgrade erbt die vorbereitete Komponenten-ID")
-	_equal(_upgrade(&"burst_effect").resolved_icon_id(treatment), &"ability_defense_burst", "Aktivupgrade liefert direkt die stabile Ability-ID")
+	_equal(_upgrade(&"burst_radius").resolved_icon_id(treatment), &"ability_defense_burst", "Stoß-Radiusupgrade liefert direkt die stabile Ability-ID")
 	_equal(_upgrade(&"phagocytosis").resolved_icon_id(treatment), &"neutrophil_orbit", "Abwehrzellenupgrade liefert das zentrale Neutrophilen-Icon")
 	_equal(_upgrade(&"mobility").resolved_icon_id(treatment), &"movement_training", "Geschwindigkeitsupgrade liefert das zentrale Forschungs-Icon")
 	_equal(CombatRateScale.formatted_per_second(0.82), "1,22/s", "Interne Behandlung 0,82 s wird zentral als sichtbare Rate formatiert")
