@@ -20,7 +20,7 @@
 [ext_resource type="Texture2D" uid="uid://b3wydqa7yhfj4" path="res://assets/vendor/kenney_sketch_town_expansion/well_S.png" id="18_well"]
 [ext_resource type="Texture2D" uid="uid://b6tfg37nsijmp" path="res://assets/vendor/kenney_sketch_town/rocks_grass_S.png" id="19_rocks"]
 [ext_resource type="Texture2D" uid="uid://biyqof6ixidac" path="res://assets/vendor/kenney_sketch_town_expansion/fence_woodCorner_S.png" id="20_fence"]
-[ext_resource type="Script" path="res://scripts/ui/campus_backdrop.gd" id="21_backdrop"]
+[ext_resource type="Script" uid="uid://t8qett350jmv" path="res://scripts/ui/campus_backdrop.gd" id="21_backdrop"]
 
 [node name="CampusLayout" type="Control" unique_id=1200258104]
 custom_minimum_size = Vector2(1280, 720)
@@ -54,7 +54,7 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.811765, 0.894118, 0.898039, 1)
 
-[node name="EnvironmentBackdrop" type="Control" parent="."]
+[node name="EnvironmentBackdrop" type="Control" parent="." unique_id=1052522987]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -486,8 +486,10 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = 48.0
-offset_bottom = 48.0
+offset_left = 18.0
+offset_top = -243.0
+offset_right = 18.0
+offset_bottom = -243.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
