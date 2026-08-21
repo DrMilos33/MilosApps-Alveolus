@@ -107,9 +107,10 @@ const DIRECT_COLLISION_EPSILON := 0.0001
 const DIRECT_COLLISION_UPDATE_PHASES := 24
 const DIRECT_COLLISION_GUARD_LOOKAHEAD := 50.0
 const DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN := 8.0
+const DIRECT_COLLISION_QUEUE_MARGIN := 8.0
 const DIRECT_COLLISION_BYPASS_FORWARD_WEIGHT := 0.55
 const DIRECT_COLLISION_BYPASS_LATERAL_WEIGHT := 0.835
-const DIRECT_COLLISION_BYPASS_CLEAR_TICKS := 10
+const DIRECT_COLLISION_BYPASS_CLEAR_TICKS := 5
 const DIRECT_COLLISION_CORRIDOR_RADII := 3.0
 const DIRECT_COLLISION_CORRIDOR_DIRECTION_DOT := 0.98
 const AVATAR_BODY_COLLISION_PASSES := 3
@@ -847,7 +848,7 @@ func _cached_closed_corridors_still_blocked(slot: int, enemy: InfectionEnemy) ->
 		own_contact_radius
 		+ float(_direct_collision_radii[trigger_slot])
 		+ DIRECT_COLLISION_SKIN
-		+ DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
+		+ DIRECT_COLLISION_QUEUE_MARGIN
 	)
 	if (
 		to_trigger.dot(requested_direction) <= 0.0
@@ -936,7 +937,11 @@ func _refresh_direct_collision_guards(slot: int, enemy: InfectionEnemy) -> void:
 			var maximum_front_distance := maxf(own_target_distance - FRONT_PRIORITY_EPSILON, 0.0)
 			maximum_front_distance_squared = maximum_front_distance * maximum_front_distance
 	var stored_blocker := int(_direct_collision_blocker_handles[slot])
-	var corridor_blocker := stored_blocker if _active_collision_enemy(stored_blocker) != null else EntityHandle.INVALID
+	var corridor_blocker := (
+		stored_blocker
+		if _active_collision_enemy(stored_blocker) != null
+		else EntityHandle.INVALID
+	)
 	var corridor_entry := INF
 	for candidate_handle_value in _crowd_candidates:
 		var candidate_handle := int(candidate_handle_value)
@@ -1039,6 +1044,48 @@ func _refresh_direct_collision_guards(slot: int, enemy: InfectionEnemy) -> void:
 								stored_index = guard_index
 					_crowd_motion_guard_neighbors[guard_offset + stored_index] = stored_blocker
 					_crowd_motion_guard_distances[guard_offset + stored_index] = stored_clearance
+	# The complete phased query may identify a real front trigger which is not
+	# among the three nearest surfaces in a dense edge cell. Keep that exact
+	# trigger in the hot-path guards, otherwise a verified open corridor could
+	# never turn into a lease and the follower would wait for another phase.
+	if corridor_blocker != EntityHandle.INVALID and corridor_blocker != stored_blocker:
+		var corridor_present := false
+		for guard_index in range(guard_count):
+			if int(_crowd_motion_guard_neighbors[guard_offset + guard_index]) == corridor_blocker:
+				corridor_present = true
+				break
+		if not corridor_present:
+			var corridor_enemy := _active_collision_enemy(corridor_blocker)
+			if corridor_enemy != null:
+				var corridor_slot := EntityHandle.slot(corridor_blocker)
+				var corridor_delta := (
+					corridor_enemy.global_position - enemy.global_position
+					if _crowd_bounded
+					else _crowd_topology.shortest_delta(enemy.global_position, corridor_enemy.global_position)
+				)
+				var corridor_clearance := (
+					corridor_delta.length()
+					- own_contact_radius
+					- float(_direct_collision_radii[corridor_slot])
+				)
+				var corridor_index := guard_count
+				if guard_count < guard_limit:
+					guard_count += 1
+				else:
+					corridor_index = -1
+					for guard_index in range(guard_count):
+						var guard_handle := int(_crowd_motion_guard_neighbors[guard_offset + guard_index])
+						if guard_handle == stored_blocker:
+							continue
+						if (
+							corridor_index < 0
+							or float(_crowd_motion_guard_distances[guard_offset + guard_index])
+								> float(_crowd_motion_guard_distances[guard_offset + corridor_index])
+						):
+							corridor_index = guard_index
+				if corridor_index >= 0:
+					_crowd_motion_guard_neighbors[guard_offset + corridor_index] = corridor_blocker
+					_crowd_motion_guard_distances[guard_offset + corridor_index] = corridor_clearance
 	_refresh_direct_collision_corridor_cache(
 		slot,
 		enemy,
@@ -1162,7 +1209,7 @@ func _refresh_direct_collision_corridor_cache(
 				own_contact_radius
 				+ float(_direct_collision_radii[blocker_slot])
 				+ DIRECT_COLLISION_SKIN
-				+ DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
+				+ DIRECT_COLLISION_QUEUE_MARGIN
 			)
 			if to_blocker.dot(requested_direction) > 0.0 and to_blocker.length_squared() <= queue_distance * queue_distance:
 				_direct_collision_queued[slot] = 1
@@ -1408,6 +1455,13 @@ func _direct_collision_obstacle_bypass(
 	var selected_entry := INF
 	var stored_still_blocks := false
 	var own_target_distance := _crowd_topology.distance(movement_origin, _crowd_avatar.global_position)
+	var remaining_to_contact := maxf(
+		own_target_distance
+			- TherapyAvatar.CONTACT_RADIUS
+			- own_contact_radius
+			+ InfectionEnemy.DIRECT_CHASE_CONTACT_DEPTH,
+		0.0
+	)
 	for neighbor_index in range(neighbor_count):
 		var candidate_handle := int(_crowd_motion_guard_neighbors[neighbor_offset + neighbor_index])
 		var other := _active_collision_enemy(candidate_handle)
@@ -1430,7 +1484,10 @@ func _direct_collision_obstacle_bypass(
 		var candidate_entry := forward_distance - sqrt(
 			collision_distance * collision_distance - perpendicular_squared
 		)
-		if candidate_entry > requested_length + DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN:
+		if (
+			candidate_entry > requested_length + DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
+			or candidate_entry > remaining_to_contact
+		):
 			continue
 		# Only a body which is genuinely ahead in the chase can initiate a bypass.
 		# Side-by-side peers therefore never invent opposing lateral forces.
@@ -1510,14 +1567,19 @@ func _direct_collision_obstacle_bypass(
 			if _crowd_profile_enabled:
 				_crowd_profile_counters[CrowdProfileCounter.QUEUED_NO_CORRIDOR] += 1
 			return Vector2.ZERO
-		current_sign = 1
-		if positive_clearance < 0.0 or negative_clearance > positive_clearance + DIRECT_COLLISION_EPSILON:
+		var previous_sign := int(_direct_collision_previous_lane_signs[slot])
+		if previous_sign > 0 and positive_clearance >= 0.0:
+			current_sign = 1
+		elif previous_sign < 0 and negative_clearance >= 0.0:
 			current_sign = -1
-		elif absf(positive_clearance - negative_clearance) <= DIRECT_COLLISION_EPSILON and posmod(slot, 2) != 0:
-			current_sign = -1
+		else:
+			current_sign = 1
+			if positive_clearance < 0.0 or negative_clearance > positive_clearance + DIRECT_COLLISION_EPSILON:
+				current_sign = -1
+			elif absf(positive_clearance - negative_clearance) <= DIRECT_COLLISION_EPSILON and posmod(slot, 2) != 0:
+				current_sign = -1
 		_direct_collision_blocker_handles[slot] = selected_blocker
 		_direct_collision_clear_ticks[slot] = 0
-		var previous_sign := int(_direct_collision_previous_lane_signs[slot])
 		if _crowd_profile_enabled and previous_sign != 0 and previous_sign != current_sign:
 			_crowd_profile_counters[CrowdProfileCounter.SIDE_SWITCHES] += 1
 		_direct_collision_previous_lane_signs[slot] = current_sign

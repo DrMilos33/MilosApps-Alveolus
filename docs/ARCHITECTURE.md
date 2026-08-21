@@ -250,8 +250,10 @@ When the exact sweep identifies a real body nearer to Doctor Milos within an
 eight-world-unit activation envelope, the phased guard refresh evaluates both
 short side corridors from the complete local
 `CombatSpatialGrid` candidate buffer before reducing collision guards to the
-nearest fixed set. Each corridor sweeps the follower's contact circle for up
-to three own contact radii, capped by the existing guard lookahead. The
+nearest fixed set. The exact first swept front body is then retained in that
+small guard set even when three other surfaces are nearer. Each corridor
+sweeps the follower's contact circle for up to three own contact radii, capped
+by the existing guard lookahead. The
 triggering front body is excluded from this occupancy test; all other active
 bodies and the hard arena boundary count. If both corridors are closed, the
 follower waits without an intentional lateral component. If one is open, the
@@ -266,10 +268,11 @@ valid lease it may never preserve a tangential remainder. This makes the three
 runtime outcomes explicit without adding per-entity objects: direct pursuit,
 one verified bypass side, or stationary wait.
 
-An active lease never switches sides directly. A phased refresh may close its
+An active lease never switches sides or front bodies directly. A phased refresh may close its
 route, which clears the lease and leaves the follower waiting until a later
-refresh can acquire a valid corridor; otherwise ten consecutive free fixed
-ticks release the lease. Between full samples the selected side is checked
+refresh can acquire a valid corridor; otherwise five consecutive free fixed
+ticks release the lease. A later episode prefers its previous side whenever
+that side remains valid. Between full samples the selected side is checked
 cheaply against the hard arena, its generation-safe side blocker and the fixed
 nearest-contact guard set. A second body entering the leased route stalls the
 tick and cannot trigger an immediate opposite-side switch. Handles and the

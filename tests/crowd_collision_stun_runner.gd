@@ -10,6 +10,7 @@ var offset_hits := 0
 var mixed_small_hits := 0
 var mixed_cluster_hits := 0
 var boss_hits := 0
+var edge_hits := 0
 
 
 func _init() -> void:
@@ -429,6 +430,7 @@ func _run() -> void:
 		edge_blockers.append(blocker)
 		_true(EntityHandle.is_valid(edge_world.register_enemy(blocker)), "Randkörper %d erhält einen Handle" % (index + 1))
 	var edge_follower := _enemy(small_definition, avatar, topology, edge_origin)
+	edge_follower.pressure_applied.connect(_on_edge_pressure)
 	var edge_handle := edge_world.register_enemy(edge_follower)
 	_true(EntityHandle.is_valid(edge_handle), "Der Randverfolger erhält einen Handle")
 	var edge_slot := EntityHandle.slot(edge_handle)
@@ -438,8 +440,10 @@ func _run() -> void:
 	var edge_lease_sign := 0
 	var edge_sign_flips := 0
 	var edge_open_count_at_start := -1
+	var edge_first_lease_tick := -1
+	var edge_first_attack_tick := -1
 	var edge_minimum_margin := INF
-	for _tick in range(180):
+	for _tick in range(210):
 		var before_position := edge_follower.global_position
 		var before_distance := topology.distance(before_position, avatar.global_position)
 		edge_world.step_fixed(1.0 / 60.0)
@@ -447,6 +451,7 @@ func _run() -> void:
 		if lane_sign != 0:
 			if edge_lease_sign == 0:
 				edge_lease_sign = lane_sign
+				edge_first_lease_tick = _tick
 				var corridor_offset := edge_slot * 2
 				edge_open_count_at_start = int(edge_world._direct_collision_corridor_open[corridor_offset]) + int(edge_world._direct_collision_corridor_open[corridor_offset + 1])
 			elif lane_sign != edge_lease_sign:
@@ -463,14 +468,21 @@ func _run() -> void:
 					- edge_follower.contact_body_radius()
 					- blocker.contact_body_radius()
 			)
+		if edge_hits > 0 and edge_first_attack_tick < 0:
+			edge_first_attack_tick = _tick
 	_true(edge_open_count_at_start == 1, "Der Randfall besitzt beim Start exakt einen freien Körperkorridor")
+	_true(
+		edge_first_lease_tick >= 0 and edge_first_lease_tick < EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES,
+		"Der freie Randkorridor wird innerhalb eines verteilten Guard-Zyklus aktiv (%d Ticks)" % edge_first_lease_tick
+	)
 	_true(edge_lease_sign != 0 and edge_maximum_lateral >= 8.0, "Der Randgegner nutzt den einzigen freien Korridor (%.2f)" % edge_maximum_lateral)
 	_true(edge_sign_flips == 0, "Die geleaste Randseite wechselt nicht direkt (%d Wechsel)" % edge_sign_flips)
 	_true(edge_minimum_margin >= -0.06, "Der Randbogen wahrt alle Schadenshitboxen (Margin %.3f)" % edge_minimum_margin)
 	_true(edge_maximum_retreat <= 0.001, "Der Randbogen erzeugt keine Fluchtbewegung (%.5f)" % edge_maximum_retreat)
+	_assert_at_contact(edge_follower, avatar, topology, "Aggressiver Randgegner")
 	_true(
-		topology.distance(edge_follower.global_position, avatar.global_position) <= edge_start_distance - 10.0,
-		"Der Randgegner nähert sich durch den freien Korridor sichtbar an"
+		edge_first_attack_tick >= 0 and edge_first_attack_tick <= 190,
+		"Der Randgegner erreicht den Doctor in gut drei Sekunden und greift an (Tick %d)" % edge_first_attack_tick
 	)
 	edge_world.clear()
 	for blocker in edge_blockers:
@@ -753,3 +765,7 @@ func _on_mixed_cluster_pressure(_amount: float) -> void:
 
 func _on_boss_pressure(_amount: float) -> void:
 	boss_hits += 1
+
+
+func _on_edge_pressure(_amount: float) -> void:
+	edge_hits += 1
