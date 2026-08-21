@@ -2,14 +2,14 @@ extends SceneTree
 
 const Metrics = preload("res://tests/support/performance_metrics.gd")
 
-const ENEMY_COUNT := 600
+const DEFAULT_ENEMY_COUNT := 600
 const PICKUP_DROP_COUNT := 1200
 const PROJECTILE_COUNT := 512
 const FEEDBACK_EFFECT_COUNT := 80
 const FIXED_DELTA := 1.0 / 60.0
-const WARMUP_PHYSICS_FRAMES := 120
-const MEASURED_PHYSICS_FRAMES := 600
-const MAX_WALL_TIME_MS := 10000.0
+const WARMUP_PHYSICS_FRAMES := 480
+const MEASURED_PHYSICS_FRAMES := 900
+const MAX_WALL_TIME_MS := 30000.0
 const MAX_AVERAGE_FRAME_MS := 16.7
 const MAX_P95_FRAME_MS := 16.7
 const MAX_P99_FRAME_MS := 20.0
@@ -19,6 +19,7 @@ func _init() -> void:
 	call_deferred("_run_performance_test")
 
 func _run_performance_test() -> void:
+	var enemy_count := _requested_enemy_count()
 	Engine.physics_ticks_per_second = 60
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	var game = packed.instantiate()
@@ -32,6 +33,7 @@ func _run_performance_test() -> void:
 	game.spawn_accumulator = 9999.0
 	game.treatment_controller.enabled = false
 	game.performance_profile_enabled = true
+	game.enemy_world.set_crowd_profile_enabled(true)
 	# This is a combat-runtime benchmark, not a level-outcome test. Keep the
 	# session alive for the entire sample so a normal case deadline or patient
 	# pressure cannot invalidate the capacity/reuse assertions below.
@@ -41,8 +43,9 @@ func _run_performance_test() -> void:
 	game.state.max_stability = 1000000000.0
 	game.state.stability = game.state.max_stability
 
-	for index in range(ENEMY_COUNT):
-		var angle := TAU * float(index) / float(ENEMY_COUNT)
+	var enemies_to_add := maxi(enemy_count - game.enemies.size(), 0)
+	for index in range(enemies_to_add):
+		var angle := TAU * float(index) / float(maxi(enemies_to_add, 1))
 		var ring := 380.0 + float(index % 9) * 58.0
 		game._spawn_enemy(&"pneumococcus", game.topology.wrap_position(Vector2.from_angle(angle) * ring))
 	_spawn_moving_projectiles(game, PROJECTILE_COUNT)
@@ -63,6 +66,7 @@ func _run_performance_test() -> void:
 	for _frame in range(WARMUP_PHYSICS_FRAMES):
 		game.run_session.step_fixed(FIXED_DELTA)
 		_flush_all_renderers(game)
+	game.enemy_world.reset_crowd_profile_counters()
 	var memory_before: float = Performance.get_monitor(Performance.MEMORY_STATIC)
 	var node_count_before: int = int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
 	var frame_samples_ms: Array[float] = []
@@ -78,6 +82,7 @@ func _run_performance_test() -> void:
 		_profile_renderer_flushes(game, subsystem_samples)
 		frame_samples_ms.append(float(Time.get_ticks_usec() - frame_started_usec) / 1000.0)
 	var elapsed_ms := float(Time.get_ticks_usec() - started_usec) / 1000.0
+	var crowd_profile: PackedInt64Array = game.enemy_world.crowd_profile_snapshot()
 	var timings: Dictionary = Metrics.summarize_ms(frame_samples_ms)
 	var average_ms := float(timings.avg)
 	var p50_ms := float(timings.p50)
@@ -100,6 +105,18 @@ func _run_performance_test() -> void:
 	var feedback_rendered: bool = game.feedback_renderer.active_count() == FEEDBACK_EFFECT_COUNT
 	var projectiles_rendered: bool = game.projectile_renderer.active_count() == PROJECTILE_COUNT
 	var feedback_lifetime_stable := is_equal_approx(_feedback_remaining(game), feedback_remaining_before)
+	var exact_enemy_count: bool = game.enemies.size() == enemy_count
+	var maximum_guard_queries: int = MEASURED_PHYSICS_FRAMES * (
+		ceili(float(enemy_count) / float(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES)) + 1
+	)
+	var guard_queries_bounded: bool = (
+		crowd_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES] <= maximum_guard_queries
+	)
+	var corridor_queries_reuse_guards: bool = (
+		crowd_profile[EnemyWorld.CrowdProfileCounter.CORRIDOR_EVALUATIONS]
+		<= crowd_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES]
+	)
+	var grid_updates_incremental: bool = crowd_profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILDS] == 0
 	var replacement_clean: bool = (
 		replacement != null
 		and replacement.global_position.is_equal_approx(game.topology.wrap_position(Vector2(700.0, 0.0)))
@@ -123,6 +140,10 @@ func _run_performance_test() -> void:
 		and feedback_rendered
 		and projectiles_rendered
 		and feedback_lifetime_stable
+		and exact_enemy_count
+		and guard_queries_bounded
+		and corridor_queries_reuse_guards
+		and grid_updates_incremental
 	)
 	var quality := {
 		"bounded_pickups": bounded_pickups,
@@ -135,6 +156,11 @@ func _run_performance_test() -> void:
 		"feedback_rendered": feedback_rendered,
 		"projectiles_rendered": projectiles_rendered,
 		"feedback_lifetime_stable": feedback_lifetime_stable,
+		"exact_enemy_count": exact_enemy_count,
+		"guard_queries_bounded": guard_queries_bounded,
+		"maximum_guard_queries": maximum_guard_queries,
+		"corridor_queries_reuse_guards": corridor_queries_reuse_guards,
+		"grid_updates_incremental": grid_updates_incremental,
 	}
 	var subsystem_timings: Dictionary = {}
 	for phase_id in subsystem_samples:
@@ -186,6 +212,19 @@ func _run_performance_test() -> void:
 			"peak": Performance.get_monitor(Performance.MEMORY_STATIC_MAX),
 		},
 		"quality": quality,
+		"crowd_profile": {
+			"grid_rebuilds": crowd_profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILDS],
+			"guard_queries": crowd_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES],
+			"guard_candidates": crowd_profile[EnemyWorld.CrowdProfileCounter.GUARD_CANDIDATES],
+			"corridor_evaluations": crowd_profile[EnemyWorld.CrowdProfileCounter.CORRIDOR_EVALUATIONS],
+			"active_bypass_ticks": crowd_profile[EnemyWorld.CrowdProfileCounter.ACTIVE_BYPASS_TICKS],
+			"queued_no_corridor": crowd_profile[EnemyWorld.CrowdProfileCounter.QUEUED_NO_CORRIDOR],
+			"bypass_starts": crowd_profile[EnemyWorld.CrowdProfileCounter.BYPASS_STARTS],
+			"side_switches": crowd_profile[EnemyWorld.CrowdProfileCounter.SIDE_SWITCHES],
+			"grid_rebuild_usec": crowd_profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILD_USEC],
+			"guard_prepare_usec": crowd_profile[EnemyWorld.CrowdProfileCounter.GUARD_PREPARE_USEC],
+			"movement_usec": crowd_profile[EnemyWorld.CrowdProfileCounter.MOVEMENT_USEC],
+		},
 		"subsystem_timing_ms": subsystem_timings,
 	}, true)
 	print("ALVEOLUS_PERF %s enemies=%d pickups=%d drops=%d stored=%d feedback=%d enemy_reused=%s crowd_batched=%s frames=%d elapsed_ms=%.1f average_ms=%.3f p95_ms=%.3f p99_ms=%.3f max_ms=%.3f nodes=%d" % [
@@ -199,6 +238,13 @@ func _run_performance_test() -> void:
 	await process_frame
 	quit(0 if passed else 1)
 
+
+func _requested_enemy_count() -> int:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--crowd-enemies="):
+			return clampi(argument.trim_prefix("--crowd-enemies=").to_int(), 1, 600)
+	return DEFAULT_ENEMY_COUNT
+
 func _spawn_moving_projectiles(game: Node, count: int) -> void:
 	var shots: Array[TreatmentShot] = []
 	for index in range(count):
@@ -208,7 +254,10 @@ func _spawn_moving_projectiles(game: Node, count: int) -> void:
 	for index in range(game.projectiles.size()):
 		var projectile: TherapyProjectile = game.projectiles[index]
 		projectile.lifetime = 100000.0
-		projectile.speed = 520.0
+		# The bounded arena intentionally retires projectiles at its hard edge.
+		# A low non-zero speed keeps all 512 moving for the complete 23-second
+		# benchmark instead of silently turning this into a zero-projectile sample.
+		projectile.speed = 24.0
 		projectile.direction = Vector2.from_angle(TAU * float(index) / float(maxi(game.projectiles.size(), 1)) + PI * 0.5)
 		projectile.rotation = projectile.direction.angle()
 		projectile.target = null

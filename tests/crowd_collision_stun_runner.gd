@@ -236,6 +236,201 @@ func _run() -> void:
 	wedge_lower.free()
 	wedge_follower.free()
 
+	# A body inside a closed six-body shell has no body-width side corridor. It
+	# queues geometrically instead of inventing a lateral bypass.
+	var enclosed_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	enclosed_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var enclosed_origin := Vector2(160.0, 0.0)
+	var enclosed_blockers: Array[InfectionEnemy] = []
+	for index in range(6):
+		var blocker := _enemy(
+			static_small_definition,
+			avatar,
+			topology,
+			enclosed_origin + Vector2.from_angle(TAU * float(index) / 6.0) * 34.05
+		)
+		enclosed_blockers.append(blocker)
+		_true(EntityHandle.is_valid(enclosed_world.register_enemy(blocker)), "Hüllkörper %d erhält einen Handle" % (index + 1))
+	var enclosed := _enemy(small_definition, avatar, topology, enclosed_origin)
+	var enclosed_handle := enclosed_world.register_enemy(enclosed)
+	_true(EntityHandle.is_valid(enclosed_handle), "Der innere Verfolger erhält einen Handle")
+	var enclosed_maximum_drift := 0.0
+	var enclosed_lateral_travel := 0.0
+	var enclosed_maximum_retreat := 0.0
+	for _tick in range(90):
+		var before_position := enclosed.global_position
+		var before_distance := topology.distance(before_position, avatar.global_position)
+		enclosed_world.step_fixed(1.0 / 60.0)
+		var step := topology.shortest_delta(before_position, enclosed.global_position)
+		var target_direction := topology.shortest_delta(before_position, avatar.global_position).normalized()
+		enclosed_lateral_travel += absf(step.cross(target_direction))
+		enclosed_maximum_drift = maxf(enclosed_maximum_drift, topology.distance(enclosed_origin, enclosed.global_position))
+		enclosed_maximum_retreat = maxf(
+			enclosed_maximum_retreat,
+			topology.distance(enclosed.global_position, avatar.global_position) - before_distance
+		)
+	_true(enclosed_lateral_travel <= 0.001, "Ein innerer Gegner erzeugt keine absichtliche Seitenbewegung (%.5f)" % enclosed_lateral_travel)
+	_true(enclosed_maximum_drift <= 0.01, "Ein vollständig umschlossener Gegner wartet geometrisch (%.5f)" % enclosed_maximum_drift)
+	_true(enclosed_maximum_retreat <= 0.001, "Auch ein umschlossener Gegner läuft nie vom Doctor weg (%.5f)" % enclosed_maximum_retreat)
+	var enclosed_slot := EntityHandle.slot(enclosed_handle)
+	_true(enclosed_world._crowd_lane_signs[enclosed_slot] == 0, "Ohne freien Korridor wird keine Bypassseite geleast")
+	var enclosed_trigger_handle := int(enclosed_world._direct_collision_corridor_blockers[enclosed_slot])
+	_true(EntityHandle.is_valid(enclosed_trigger_handle), "Die Warteschlange bindet ihren auslösenden Vorderkörper generationssicher")
+	var release_start_distance := topology.distance(enclosed.global_position, avatar.global_position)
+	_true(enclosed_world.release(enclosed_trigger_handle, false), "Der auslösende Vorderkörper kann generation-sicher freigegeben werden")
+	for _tick in range(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES + 1):
+		if int(enclosed_world._direct_collision_corridor_blockers[enclosed_slot]) != enclosed_trigger_handle:
+			break
+		enclosed_world.step_fixed(1.0 / 60.0)
+	_true(
+		int(enclosed_world._direct_collision_corridor_blockers[enclosed_slot]) != enclosed_trigger_handle,
+		"Die phasenweise Prüfung entfernt den freigegebenen Vorderkörper generationssicher aus dem Cache"
+	)
+	for blocker in enclosed_blockers:
+		var remaining_handle := enclosed_world.handle_for(blocker)
+		if EntityHandle.is_valid(remaining_handle):
+			_true(enclosed_world.release(remaining_handle, false), "Ein verbleibender Hüllkörper wird freigegeben")
+	for _tick in range(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES + 2):
+		enclosed_world.step_fixed(1.0 / 60.0)
+	_true(
+		topology.distance(enclosed.global_position, avatar.global_position) < release_start_distance - 0.5,
+		"Nach Freigabe des Vorderkörpers bleibt der innere Gegner nicht im geschlossenen Cache hängen"
+	)
+	enclosed_world.clear()
+	for blocker in enclosed_blockers:
+		blocker.free()
+	enclosed.free()
+
+	# At the outer edge exactly one body-width corridor stays open. The follower
+	# leases that side once, makes progress and never flips while the lease lives.
+	var edge_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	edge_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var edge_origin := Vector2(160.0, 0.0)
+	var edge_offsets := [
+		Vector2(-36.0, 0.0),
+		Vector2(36.0, 0.0),
+		Vector2(-18.0, 31.177),
+		Vector2(18.0, 31.177),
+	]
+	var edge_blockers: Array[InfectionEnemy] = []
+	for index in range(edge_offsets.size()):
+		var blocker := _enemy(static_small_definition, avatar, topology, edge_origin + edge_offsets[index])
+		edge_blockers.append(blocker)
+		_true(EntityHandle.is_valid(edge_world.register_enemy(blocker)), "Randkörper %d erhält einen Handle" % (index + 1))
+	var edge_follower := _enemy(small_definition, avatar, topology, edge_origin)
+	var edge_handle := edge_world.register_enemy(edge_follower)
+	_true(EntityHandle.is_valid(edge_handle), "Der Randverfolger erhält einen Handle")
+	var edge_slot := EntityHandle.slot(edge_handle)
+	var edge_start_distance := topology.distance(edge_follower.global_position, avatar.global_position)
+	var edge_maximum_lateral := 0.0
+	var edge_maximum_retreat := 0.0
+	var edge_lease_sign := 0
+	var edge_sign_flips := 0
+	var edge_open_count_at_start := -1
+	var edge_minimum_margin := INF
+	for _tick in range(180):
+		var before_position := edge_follower.global_position
+		var before_distance := topology.distance(before_position, avatar.global_position)
+		edge_world.step_fixed(1.0 / 60.0)
+		var lane_sign := int(edge_world._crowd_lane_signs[edge_slot])
+		if lane_sign != 0:
+			if edge_lease_sign == 0:
+				edge_lease_sign = lane_sign
+				var corridor_offset := edge_slot * 2
+				edge_open_count_at_start = int(edge_world._direct_collision_corridor_open[corridor_offset]) + int(edge_world._direct_collision_corridor_open[corridor_offset + 1])
+			elif lane_sign != edge_lease_sign:
+				edge_sign_flips += 1
+		edge_maximum_lateral = maxf(edge_maximum_lateral, absf(edge_follower.global_position.y - edge_origin.y))
+		edge_maximum_retreat = maxf(
+			edge_maximum_retreat,
+			topology.distance(edge_follower.global_position, avatar.global_position) - before_distance
+		)
+		for blocker in edge_blockers:
+			edge_minimum_margin = minf(
+				edge_minimum_margin,
+				topology.distance(edge_follower.global_position, blocker.global_position)
+					- edge_follower.contact_body_radius()
+					- blocker.contact_body_radius()
+			)
+	_true(edge_open_count_at_start == 1, "Der Randfall besitzt beim Start exakt einen freien Körperkorridor")
+	_true(edge_lease_sign != 0 and edge_maximum_lateral >= 8.0, "Der Randgegner nutzt den einzigen freien Korridor (%.2f)" % edge_maximum_lateral)
+	_true(edge_sign_flips == 0, "Die geleaste Randseite wechselt nicht direkt (%d Wechsel)" % edge_sign_flips)
+	_true(edge_minimum_margin >= -0.06, "Der Randbogen wahrt alle Schadenshitboxen (Margin %.3f)" % edge_minimum_margin)
+	_true(edge_maximum_retreat <= 0.001, "Der Randbogen erzeugt keine Fluchtbewegung (%.5f)" % edge_maximum_retreat)
+	_true(
+		topology.distance(edge_follower.global_position, avatar.global_position) <= edge_start_distance - 10.0,
+		"Der Randgegner nähert sich durch den freien Korridor sichtbar an"
+	)
+	edge_world.clear()
+	for blocker in edge_blockers:
+		blocker.free()
+	edge_follower.free()
+
+	# Closing the leased corridor releases it before another side may be chosen.
+	# Reopening the same unique edge route allows a fresh lease without a flip.
+	var closing_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	closing_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var closing_blockers: Array[InfectionEnemy] = []
+	for index in range(edge_offsets.size()):
+		var blocker := _enemy(static_small_definition, avatar, topology, edge_origin + edge_offsets[index])
+		closing_blockers.append(blocker)
+		_true(EntityHandle.is_valid(closing_world.register_enemy(blocker)), "Schließkörper %d erhält einen Handle" % (index + 1))
+	var corridor_gate := _enemy(static_small_definition, avatar, topology, Vector2(520.0, 320.0))
+	var corridor_gate_handle := closing_world.register_enemy(corridor_gate)
+	_true(EntityHandle.is_valid(corridor_gate_handle), "Das Korridortor erhält einen Handle")
+	var closing_follower := _enemy(small_definition, avatar, topology, edge_origin)
+	var closing_handle := closing_world.register_enemy(closing_follower)
+	_true(EntityHandle.is_valid(closing_handle), "Der Schließtest-Verfolger erhält einen Handle")
+	var closing_slot := EntityHandle.slot(closing_handle)
+	var closing_sign := 0
+	for _tick in range(90):
+		closing_world.step_fixed(1.0 / 60.0)
+		closing_sign = int(closing_world._crowd_lane_signs[closing_slot])
+		if closing_sign != 0:
+			break
+	_true(closing_sign != 0, "Der Schließtest beginnt mit einer gültigen Randlease")
+	var closing_direction := topology.shortest_delta(closing_follower.global_position, avatar.global_position).normalized()
+	var closing_tangent := closing_direction.orthogonal()
+	var leased_direction := (
+		closing_direction * EnemyWorld.DIRECT_COLLISION_BYPASS_FORWARD_WEIGHT
+		+ closing_tangent * EnemyWorld.DIRECT_COLLISION_BYPASS_LATERAL_WEIGHT * float(closing_sign)
+	).normalized()
+	var gate_previous_position := corridor_gate.global_position
+	corridor_gate.global_position = closing_follower.global_position + leased_direction * 74.0
+	corridor_gate.reset_visual_motion()
+	_true(closing_world.mark_enemy_relocated(corridor_gate_handle, gate_previous_position), "Das geschlossene Tor aktualisiert seinen Spatial-Cache")
+	closing_world.step_fixed(1.0 / 60.0)
+	_true(closing_world._crowd_lane_signs[closing_slot] == 0, "Eine Relocation invalidiert benachbarte Guards sofort und gibt den geschlossenen Korridor frei")
+	var closed_position := closing_follower.global_position
+	for _tick in range(4):
+		closing_world.step_fixed(1.0 / 60.0)
+		_true(closing_world._crowd_lane_signs[closing_slot] != -closing_sign, "Der geschlossene Korridor erzeugt keinen direkten Links-Rechts-Wechsel")
+	var closed_drift := topology.distance(closed_position, closing_follower.global_position)
+	_true(closed_drift <= 0.1, "Mit beiden Seiten geschlossen bleibt nur minimale geometrische Korrektur (Drift %.3f)" % closed_drift)
+	gate_previous_position = corridor_gate.global_position
+	corridor_gate.global_position = Vector2(520.0, 320.0)
+	corridor_gate.reset_visual_motion()
+	_true(closing_world.mark_enemy_relocated(corridor_gate_handle, gate_previous_position), "Das wieder geöffnete Tor aktualisiert seinen Spatial-Cache")
+	for _tick in range(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES + 2):
+		closing_world.step_fixed(1.0 / 60.0)
+		if closing_world._crowd_lane_signs[closing_slot] != 0:
+			break
+	_true(closing_world._crowd_lane_signs[closing_slot] == closing_sign, "Nach Wiederöffnung wird dieselbe einzige Randseite neu geleast")
+	var closing_minimum_margin := INF
+	for blocker in closing_blockers + [corridor_gate]:
+		closing_minimum_margin = minf(
+			closing_minimum_margin,
+			topology.distance(closing_follower.global_position, blocker.global_position)
+				- closing_follower.contact_body_radius()
+				- blocker.contact_body_radius()
+		)
+	_true(closing_minimum_margin >= -0.06, "Schließen und Öffnen bewahren die Schadenshitboxen (Margin %.3f)" % closing_minimum_margin)
+	closing_world.clear()
+	for blocker in closing_blockers:
+		blocker.free()
+	corridor_gate.free()
+	closing_follower.free()
+
 	# A mixed pack preserves every pair's own contact boundary. Rear bodies may
 	# stop, while both enemy classes still produce visible front attackers.
 	var mixed_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())

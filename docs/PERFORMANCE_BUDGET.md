@@ -87,6 +87,41 @@ and required status feedback are never degraded.
 - Short feedback effects are process-free records stepped by one
   `FeedbackRenderer`; they must not create one particle node or callback per
   hit.
+- Dense-crowd guard and body-width corridor queries reuse the existing
+  `CombatSpatialGrid`, a caller-owned packed candidate buffer and 24 slot
+  phases. A queued follower may retain the exact two side blockers and skip a
+  full refresh only while both generation-safe bodies still close their
+  sweeps. The number of spatial refreshes stays bounded by active slots divided
+  by the phase count; an active bypass must not restore one query per enemy and
+  tick. Deferred contact is resolved from one local grid query per fixed tick,
+  not one Doctor-distance check per distant enemy.
+- Offscreen relocation uses the incrementally maintained EnemyWorld broad
+  phase before its exact body-distance check and falls back to the complete
+  `CombatQuery` registry while materializing bodies exist. Candidate placement
+  must not scan every enemy for every attempted sector position.
+
+## Crowd measurement contract
+
+Crowd changes report two deterministic CPU scenarios with the same seed and
+fixture: 220 enemies as the currently reachable dense gameplay load and 600
+enemies as the technical capacity gate. Both retain 360 pickup stacks, 512
+moving gameplay projectiles and 80 feedback effects. Warm-up lasts eight
+simulated seconds and the measured interval at least fifteen simulated
+seconds.
+
+The report includes total, `enemy_world`, `clock_spawn` and `crowd_renderer`
+p50/p95/p99/max plus exact entity counts, node/memory development and fixed
+crowd counters for grid rebuilds, guard queries, examined candidates, corridor
+evaluations, queued ticks, bypass starts and side switches. Counters are active
+only in the profiling run and are returned as one fixed `PackedInt64Array`
+snapshot; production movement creates no report dictionaries.
+
+The 220-enemy scenario must satisfy the native frame budget and may not regress
+against its exact pre-change baseline. The 600-enemy scenario remains the
+capacity gate and is reported honestly if it misses an absolute threshold;
+an improvement relative to a broken baseline is not a pass. Headless CPU
+figures remain diagnostic until a visible native 1280×720 run confirms the
+rendered result.
 
 ## Render and browser telemetry
 

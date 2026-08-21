@@ -320,6 +320,26 @@ func crowd_radius() -> float:
 func _physics_process(delta: float) -> void:
 	step_fixed(delta)
 
+
+## Dense inner followers are already known to be materialized, alive and
+## stationary for this tick. Keep visual/contact clocks exact without paying
+## the full pursuit and topology path for hundreds of queued bodies.
+func step_queued_fixed(delta: float, defer_contact_check: bool = false) -> void:
+	_contact_check_pending = false
+	if not activation_active or definition == null:
+		return
+	_begin_visual_step()
+	_relocation_interaction_lock = maxf(0.0, _relocation_interaction_lock - delta)
+	if hit_flash > 0.0:
+		hit_flash = maxf(0.0, hit_flash - delta)
+		_sync_visual_appearance()
+		queue_redraw()
+	contact_cooldown = maxf(0.0, contact_cooldown - delta)
+	_contact_check_pending = true
+	if not defer_contact_check:
+		resolve_deferred_contact()
+
+
 func step_fixed(delta: float, defer_contact_check: bool = false) -> void:
 	_contact_check_pending = false
 	if not activation_active:

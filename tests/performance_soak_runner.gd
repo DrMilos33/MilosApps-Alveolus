@@ -7,7 +7,9 @@ const PICKUP_DROP_COUNT := 1200
 const PROJECTILE_COUNT := 512
 const FEEDBACK_COUNT := 80
 const FIXED_DELTA := 1.0 / 60.0
-const WARMUP_FRAMES := 120
+## Crowd measurements use the same eight-second settling window as the
+## documented 220/600 gate before percentiles are sampled.
+const WARMUP_FRAMES := 480
 const QUICK_MEASURED_FRAMES := 600
 const FULL_MEASURED_FRAMES := 18000
 const CHURN_INTERVAL_FRAMES := 12
@@ -24,6 +26,7 @@ func _init() -> void:
 func _run() -> void:
 	Engine.physics_ticks_per_second = 60
 	var full_soak := OS.get_cmdline_user_args().has("--soak-full")
+	var phase_profile := OS.get_cmdline_user_args().has("--phase-profile")
 	var measured_frames := FULL_MEASURED_FRAMES if full_soak else QUICK_MEASURED_FRAMES
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	var game = packed.instantiate()
@@ -38,6 +41,7 @@ func _run() -> void:
 	game.start_run()
 	game.spawn_accumulator = 9999.0
 	game.treatment_controller.enabled = false
+	game.performance_profile_enabled = phase_profile
 	# The full soak deliberately outlives every shipped case. It validates the
 	# runtime lifecycle, so the normal boss/deadline rules must not end it first.
 	game.config.run_duration_seconds = 100000.0
@@ -75,6 +79,7 @@ func _run() -> void:
 		&"projectile_renderer": [] as Array[float],
 		&"feedback_renderer": [] as Array[float],
 	}
+	var phase_samples: Dictionary = {}
 	var churn_attempts := 0
 	var churn_reused := 0
 	var long_frames := 0
@@ -93,6 +98,11 @@ func _run() -> void:
 					churn_reused += 1
 		var started_usec := Time.get_ticks_usec()
 		game.run_session.step_fixed(FIXED_DELTA)
+		if phase_profile:
+			for phase_id in game.last_phase_timings_ms:
+				if not phase_samples.has(phase_id):
+					phase_samples[phase_id] = [] as Array[float]
+				(phase_samples[phase_id] as Array[float]).append(float(game.last_phase_timings_ms[phase_id]))
 		_profile_renderer_flushes(game, renderer_samples)
 		var frame_ms := float(Time.get_ticks_usec() - started_usec) / 1000.0
 		samples_ms.append(frame_ms)
@@ -129,6 +139,9 @@ func _run() -> void:
 	var renderer_timings: Dictionary = {}
 	for renderer_id in renderer_samples:
 		renderer_timings[String(renderer_id)] = Metrics.summarize_ms(renderer_samples[renderer_id])
+	var phase_timings: Dictionary = {}
+	for phase_id in phase_samples:
+		phase_timings[String(phase_id)] = Metrics.summarize_ms(phase_samples[phase_id])
 	report.merge({
 		"schema": "alveolus.performance_soak.v1",
 		"mode": "full_5_minute" if full_soak else "quick_10_second",
@@ -163,6 +176,7 @@ func _run() -> void:
 			"pool_reuse_ratio": reuse_ratio,
 		},
 		"subsystem_timing_ms": renderer_timings,
+		"game_phase_timing_ms": phase_timings,
 		"baseline_monitors": baseline,
 		"final_monitors": final_snapshot,
 	}, true)
@@ -201,7 +215,10 @@ func _spawn_moving_projectiles(game: Node, count: int) -> void:
 	for index in range(game.projectiles.size()):
 		var projectile: TherapyProjectile = game.projectiles[index]
 		projectile.lifetime = 100000.0
-		projectile.speed = 520.0
+		# Keep the entire fixed-capacity projectile workload moving inside the
+		# bounded arena for the soak instead of retiring it at the hard edge during
+		# warm-up and silently measuring an empty renderer/world.
+		projectile.speed = 24.0
 		projectile.direction = Vector2.from_angle(TAU * float(index) / float(maxi(game.projectiles.size(), 1)) + PI * 0.5)
 		projectile.rotation = projectile.direction.angle()
 		projectile.target = null

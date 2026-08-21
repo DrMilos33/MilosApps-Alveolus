@@ -119,19 +119,34 @@ system never runs after pause, finish or cancellation in the same tick.
 
 ## Integration path
 
-The core classes are deliberately usable with the current Node runtime:
+The core registries, generation-safe handles, spawn requests, event queue and
+snapshot renderers are already the durable foundation. Further decomposition
+is deliberately serial and begins only after the current crowd behavior has
+passed the manual gameplay acceptance:
 
-- Give active nodes a slot and generation in a small registry.
-- Register current enemy, projectile, and pickup nodes with `EnemyWorld`,
-  `ProjectileWorld`, and `PickupWorld`. Registration disables their automatic
-  physics callback; the world invokes their public `step_fixed(delta)` method.
-- Configure `CombatQuery` with Callables that resolve handle position, radius,
-  targetability, and the underlying node.
-- Replace direct spawn argument lists with `EnemySpawnRequest`.
-- Queue current signal outcomes in `CombatEventQueue`; flush after each combat
-  phase rather than erasing arrays inside signal callbacks.
-- Move orchestration behind `RunSession` one system at a time while retaining
-  the existing `Game` signals as the external facade.
+1. Remove the unreachable ring, lane, queue and predictive-steering path from
+   `EnemyWorld` and the corresponding compatibility fields from
+   `InfectionEnemy`; keep the accepted direct-collision path unchanged.
+2. Add flow-invariant tests, then introduce an internal `AppFlowCoordinator`
+   that updates route, modal, focus, tree pause, `GameFlowState` and
+   `RunSession` as one transition. `Game` remains the public facade.
+3. Move launch flags, test switches and smoke-harness orchestration out of
+   `Game` without changing production startup.
+4. Register the fixed-step phases with `RunSession` one at a time. Every slice
+   preserves phase order, RNG trace, pause semantics and determinism hash.
+5. Put enemy, projectile and pickup lease/pool/render-slot changes behind
+   small lifecycle services so activation and release stay atomic.
+6. Extract preparation presentation and its immutable view models from
+   `GameHUD`; the facade keeps its public signals and methods while screens
+   emit intents only. Presenters, not `Game`, format domain values.
+7. Add caller-owned `CombatQuery` buffers only for a hotpath demonstrated by
+   profiling; do not add speculative query abstractions.
+
+Each wave is a separate local commit and focused task. Save version, content
+IDs, public Game/HUD signals and the deterministic gameplay trace stay
+compatible throughout. A possible process-free `EnemyCrowdMotionSolver`
+extraction is considered only after the dead path is removed and profiling
+shows that the remaining `EnemyWorld` boundary is still too broad.
 
 Mass entities keep pooled scene nodes only as data/compatibility shells; their
 automatic physics callbacks are disabled and the worlds step them centrally.
@@ -227,21 +242,40 @@ projectile hits, body-size classes or crowd spacing.
 Enemy locomotion starts with one direct-pursuit proposal. Every mobile
 `InfectionEnemy` recomputes the shortest direction to Doctor Milos on every
 fixed tick and clamps that tick's travel to its separately authored
-damage-contact shell. `EnemyWorld` then performs a local contact-circle query
-against other targetable enemies. The minimum center distance is exactly the
-sum of both `contact_radius` values. A free path remains perfectly direct. Only
-when the proposed Fixed-Tick endpoint would intersect a closer body's contact
-circle may the follower use a short obstacle bypass. That bypass keeps a
-generation-safe blocker lease and stable side, combines a positive Doctor-bound
-component with the current tangent and is released after five clear ticks. It
-is not a lane, waypoint or predictive flanking decision. The accepted movement
-can never point away from Doctor Milos. There is no contact ring, slot
-allocation, queue, proactive avoidance or position-repair push. Contact damage
-is resolved after the accepted position, so a blocked rear body cannot hit
-through the front one. Knockback and stun remain the only systems permitted to
-interrupt pursuit or intentionally move an enemy away from the Doctor.
-`EnemyWorld` remains the single typed fixed-step owner and reuses its spatial
-grid; entities add no process loops.
+damage-contact shell. `EnemyWorld` then resolves the proposal against other
+targetable enemies. The minimum center distance is exactly the sum of both
+`contact_radius` values, and a free path remains perfectly direct.
+
+When a real body nearer to Doctor Milos blocks that proposal, the phased guard
+refresh evaluates both short side corridors from the complete local
+`CombatSpatialGrid` candidate buffer before reducing collision guards to the
+nearest fixed set. Each corridor sweeps the follower's contact circle for up
+to three own contact radii, capped by the existing guard lookahead. The
+triggering front body is excluded from this occupancy test; all other active
+bodies and the hard arena boundary count. If both corridors are closed, the
+follower waits without an intentional lateral component. If one is open, the
+generation-safe blocker lease binds that side. If both are open, greater
+clearance wins and slot parity resolves an exact tie deterministically.
+
+An active lease never switches sides directly. A phased refresh may close its
+route, which clears the lease and leaves the follower waiting until a later
+refresh can acquire a valid corridor. Handles and the current blocking body
+are validated every tick, while spatial guard/corridor queries are distributed
+over 24 slot phases. A closed queued corridor additionally retains the exact
+generation-safe body closing each side. If both still intersect their sweeps at
+the next phase, the full neighborhood query is unnecessary; either body moving
+or invalidating immediately restores the complete query.
+
+Registration, release, ordinary movement, avatar push and explicit relocation
+update the same grid incrementally; a full rebuild is only the recovery path
+after topology configuration or an unlocated relocation. A queued body uses a
+stationary fixed-step that preserves visual, cooldown and contact clocks, and
+`EnemyWorld` batches exact deferred contact checks behind one local grid query.
+This preserves post-movement contact semantics without scanning every distant
+enemy against the Doctor. No per-enemy node, timer, dictionary or second
+spatial index is introduced. Knockback and stun remain the only systems
+permitted to intentionally move an enemy away from the Doctor. `EnemyWorld`
+remains the single typed fixed-step owner; entities add no process loops.
 
 Before the avatar step, `EnemyWorld.prepare_avatar_body_interaction()` resolves
 the same authored contact circles from the player's side. Every non-small enemy
