@@ -349,11 +349,15 @@ second phase.
 
 The relocation director snapshots the complete eligible offscreen backlog every
 0.5 seconds instead of deriving sources from the local target-pressure window.
-It schedules at most two distinct handles from that snapshot and executes them
-0.25 seconds apart. The most distant body in the strongest backlog sector is
-preferred. Its target is selected only from sectors at least 120 degrees away,
-using the three calmest values from the existing local pressure model. The full
-body plus a 24-world-unit safety margin must remain outside the actual camera
+The same single pass also determines the adaptive budget: every 20 eligible
+bodies add one move to the half-second snapshot, capped at five moves or ten
+moves per second. Those generation-safe handles are executed at evenly spaced
+times inside the snapshot window, at most one per fixed tick; the director does
+not increase its full-world scan frequency as pressure rises. The most distant
+body in the strongest backlog sector is preferred. Its target is selected only
+from sectors at least 120 degrees away, using the three calmest values from the
+existing local pressure model. The full body plus a 24-world-unit safety margin
+must remain outside the actual camera
 rectangle; there is no visible or same-side fallback. A source still lies at
 least 72 world units beyond the camera and the same entity cannot move again for
 three seconds. Relocation preserves generation, health and status and

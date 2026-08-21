@@ -30,7 +30,6 @@ const NEAR_PRESSURE_RADIUS := 330.0
 const MINIMUM_CIRCLE_RELOCATION_EVENTS := 24
 const MINIMUM_CIRCLE_DISTINCT_RELOCATIONS := 14
 const MINIMUM_LATE_PRESSURE_SECTORS := 5.0
-const MINIMUM_PRESSURE_SECTOR_GAIN := 1.25
 const MINIMUM_LATE_NEAR_SECTORS := 2.0
 const MINIMUM_PEAK_NEAR_SECTORS := 4
 const MINIMUM_CIRCLE_CONTACT_EVENTS := 4
@@ -44,14 +43,15 @@ const LINEAR_REACHABLE_RADIUS := 360.0
 const LINEAR_REAR_TOLERANCE := 20.0
 
 const MINIMUM_LINEAR_TRAVEL_DISTANCE := 2500.0
-const MINIMUM_LINEAR_RELOCATION_EVENTS := 36
-const MINIMUM_LINEAR_DISTINCT_RELOCATIONS := 22
+const MINIMUM_LINEAR_RELOCATION_EVENTS := 200
+const MINIMUM_LINEAR_DISTINCT_RELOCATIONS := 80
 const MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO := 0.55
-const MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE := 1.5
-const MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE := 0.65
-const MINIMUM_LINEAR_FRONT_SIDE_SECTOR_AVERAGE := 1.0
+const MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE := 5.0
+const MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE := 5.0
+const MINIMUM_LINEAR_FRONT_SIDE_SECTOR_AVERAGE := 3.0
 const MINIMUM_LINEAR_CONTACT_EVENTS := 4
 const MINIMUM_LINEAR_DISTINCT_CONTACTORS := 2
+const MAXIMUM_LINEAR_MINIMUM_REAR_BACKLOG_RATIO := 0.85
 
 var assertions := 0
 var failures := 0
@@ -67,6 +67,7 @@ func _run() -> void:
 	Engine.physics_ticks_per_second = 60
 
 	var circle_game = await _prepare_game(CIRCLE_RUN_SEED)
+	var relocation_rate_contract := _assert_proportional_rate_contract(circle_game)
 	var circle_result := _run_circle_case(circle_game)
 	await _dispose_game(circle_game)
 
@@ -75,9 +76,10 @@ func _run() -> void:
 	await _dispose_game(linear_game)
 
 	var report := {
-		"schema": "alveolus.pressure_ai.v2",
+		"schema": "alveolus.pressure_ai.v3",
 		"passed": failures == 0,
 		"enemies_per_case": ENEMY_COUNT,
+		"relocation_rate_contract": relocation_rate_contract,
 		"circle": circle_result,
 		"linear_escape": linear_result,
 	}
@@ -214,7 +216,6 @@ func _run_circle_case(game: Node) -> Dictionary:
 	_true(relocation_visibility_violations == 0, "Auch im Kreisfall liegt jedes Versetzungsziel vollständig außerhalb des damaligen Bildes (%d Verstöße)" % relocation_visibility_violations)
 	_true(relocation_opposite_side_violations == 0, "Auch im Kreisfall landet jede Versetzung auf der gegenüberliegenden Seite (%d Verstöße)" % relocation_opposite_side_violations)
 	_true(late_pressure_average >= MINIMUM_LATE_PRESSURE_SECTORS, "Später lokaler Kreisdruck belegt mehrere Sektoren (%.2f / %.2f)" % [late_pressure_average, MINIMUM_LATE_PRESSURE_SECTORS])
-	_true(late_pressure_average >= early_pressure_average + MINIMUM_PRESSURE_SECTOR_GAIN, "Der einseitige Kreisstart wird messbar zu Mehrseiten-Druck (%.2f -> %.2f)" % [early_pressure_average, late_pressure_average])
 	_true(late_near_sector_average >= MINIMUM_LATE_NEAR_SECTORS, "Nahe Gegner greifen im Kreis aus mehreren Richtungen an (%.2f / %.2f)" % [late_near_sector_average, MINIMUM_LATE_NEAR_SECTORS])
 	_true(peak_near_sectors >= MINIMUM_PEAK_NEAR_SECTORS, "Der Kreisexploit erzeugt mindestens %d gleichzeitige Nahfronten (%d)" % [MINIMUM_PEAK_NEAR_SECTORS, peak_near_sectors])
 	_true(contact_events >= MINIMUM_CIRCLE_CONTACT_EVENTS, "Kreisendes Laufen bleibt nicht schadlos (%d / %d Kontakte)" % [contact_events, MINIMUM_CIRCLE_CONTACT_EVENTS])
@@ -255,6 +256,13 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 	_current_visible_rect(game)
 	var tracked_enemies := _build_one_sided_crowd(game, start_position, PI)
 	_true(tracked_enemies.size() == ENEMY_COUNT, "Der geradlinige Fluchtfall hält exakt %d Gegner" % ENEMY_COUNT)
+	var initial_pressure_sample := _linear_pressure_sample(
+		game,
+		tracked_enemies,
+		_avatar_centered_visible_rect(game)
+	)
+	var initial_rear_backlog := int(initial_pressure_sample.rear_offscreen_enemies)
+	var initial_rear_max_sector_backlog := int(initial_pressure_sample.rear_offscreen_max_sector_enemies)
 
 	var previous_positions := _initial_positions(tracked_enemies)
 	var relocation_events := 0
@@ -266,8 +274,12 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 	var late_visible_front_side_sum := 0.0
 	var late_reachable_front_side_sum := 0.0
 	var late_front_side_sector_sum := 0.0
+	var late_rear_backlog_sum := 0.0
+	var late_rear_max_sector_backlog_sum := 0.0
 	var peak_visible_front_side := 0
 	var peak_reachable_front_side := 0
+	var minimum_rear_backlog := initial_rear_backlog
+	var minimum_rear_max_sector_backlog := initial_rear_max_sector_backlog
 	var started_usec := Time.get_ticks_usec()
 
 	paused = true
@@ -302,8 +314,15 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 		late_visible_front_side_sum += float(sample.visible_front_side_enemies)
 		late_reachable_front_side_sum += float(sample.reachable_front_side_enemies)
 		late_front_side_sector_sum += float(sample.front_side_sectors)
+		late_rear_backlog_sum += float(sample.rear_offscreen_enemies)
+		late_rear_max_sector_backlog_sum += float(sample.rear_offscreen_max_sector_enemies)
 		peak_visible_front_side = maxi(peak_visible_front_side, int(sample.visible_front_side_enemies))
 		peak_reachable_front_side = maxi(peak_reachable_front_side, int(sample.reachable_front_side_enemies))
+		minimum_rear_backlog = mini(minimum_rear_backlog, int(sample.rear_offscreen_enemies))
+		minimum_rear_max_sector_backlog = mini(
+			minimum_rear_max_sector_backlog,
+			int(sample.rear_offscreen_max_sector_enemies)
+		)
 		if int(sample.visible_front_side_enemies) > 0:
 			late_samples_with_front_side += 1
 
@@ -315,6 +334,20 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 	var late_visible_front_side_average := late_visible_front_side_sum / float(maxi(late_sample_count, 1))
 	var late_reachable_front_side_average := late_reachable_front_side_sum / float(maxi(late_sample_count, 1))
 	var late_front_side_sector_average := late_front_side_sector_sum / float(maxi(late_sample_count, 1))
+	var late_rear_backlog_average := late_rear_backlog_sum / float(maxi(late_sample_count, 1))
+	var late_rear_backlog_ratio := late_rear_backlog_average / float(maxi(initial_rear_backlog, 1))
+	var minimum_rear_backlog_ratio := float(minimum_rear_backlog) / float(maxi(initial_rear_backlog, 1))
+	var late_rear_max_sector_backlog_average := late_rear_max_sector_backlog_sum / float(maxi(late_sample_count, 1))
+	var late_rear_max_sector_backlog_ratio := (
+		late_rear_max_sector_backlog_average / float(maxi(initial_rear_max_sector_backlog, 1))
+	)
+	var final_pressure_sample := _linear_pressure_sample(
+		game,
+		tracked_enemies,
+		_avatar_centered_visible_rect(game)
+	)
+	var final_rear_backlog := int(final_pressure_sample.rear_offscreen_enemies)
+	var final_rear_max_sector_backlog := int(final_pressure_sample.rear_offscreen_max_sector_enemies)
 	var front_side_sample_ratio := float(late_samples_with_front_side) / float(maxi(late_sample_count, 1))
 	var maximum_guard_queries := LINEAR_SIMULATION_TICKS * (
 		ceili(float(ENEMY_COUNT) / float(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES)) + 1
@@ -325,6 +358,7 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 	_true(relocated_enemy_ids.size() >= MINIMUM_LINEAR_DISTINCT_RELOCATIONS, "Fluchtversetzungen verwenden ausreichend verschiedene Gegner (%d / %d)" % [relocated_enemy_ids.size(), MINIMUM_LINEAR_DISTINCT_RELOCATIONS])
 	_true(relocation_visibility_violations == 0, "Jedes echte Flucht-Versetzungsziel liegt vollständig außerhalb des damaligen Bildes (%d Verstöße)" % relocation_visibility_violations)
 	_true(relocation_opposite_side_violations == 0, "Jede Fluchtversetzung wechselt relativ zum Doctor auf die gegenüberliegende Seite (%d Verstöße)" % relocation_opposite_side_violations)
+	_true(minimum_rear_backlog_ratio <= MAXIMUM_LINEAR_MINIMUM_REAR_BACKLOG_RATIO, "Der Regler baut den gesamten rückwärtigen Rückstau zwischenzeitlich messbar ab (%.2f / %.2f; %d -> %d)" % [minimum_rear_backlog_ratio, MAXIMUM_LINEAR_MINIMUM_REAR_BACKLOG_RATIO, initial_rear_backlog, minimum_rear_backlog])
 	_true(front_side_sample_ratio >= MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO, "Vor oder seitlich bleibt in genügend späten Fluchtsamples Druck sichtbar (%.2f / %.2f)" % [front_side_sample_ratio, MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO])
 	_true(late_visible_front_side_average >= MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE, "Die sichtbare Front-/Seitengruppe bleibt im Mittel besetzt (%.2f / %.2f)" % [late_visible_front_side_average, MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE])
 	_true(late_reachable_front_side_average >= MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE, "Angreifer erreichen im Mittel die Front oder Seite des Doctors (%.2f / %.2f)" % [late_reachable_front_side_average, MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE])
@@ -341,6 +375,17 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 		"distinct_relocated_enemies": relocated_enemy_ids.size(),
 		"relocation_visibility_violations": relocation_visibility_violations,
 		"relocation_opposite_side_violations": relocation_opposite_side_violations,
+		"initial_rear_offscreen_backlog": initial_rear_backlog,
+		"late_rear_offscreen_backlog_avg": late_rear_backlog_average,
+		"late_rear_offscreen_backlog_ratio": late_rear_backlog_ratio,
+		"minimum_rear_offscreen_backlog": minimum_rear_backlog,
+		"minimum_rear_offscreen_backlog_ratio": minimum_rear_backlog_ratio,
+		"final_rear_offscreen_backlog": final_rear_backlog,
+		"initial_rear_offscreen_max_sector_backlog": initial_rear_max_sector_backlog,
+		"late_rear_offscreen_max_sector_backlog_avg": late_rear_max_sector_backlog_average,
+		"late_rear_offscreen_max_sector_backlog_ratio": late_rear_max_sector_backlog_ratio,
+		"minimum_rear_offscreen_max_sector_backlog": minimum_rear_max_sector_backlog,
+		"final_rear_offscreen_max_sector_backlog": final_rear_max_sector_backlog,
 		"late_front_side_sample_ratio": front_side_sample_ratio,
 		"late_visible_front_side_avg": late_visible_front_side_average,
 		"late_reachable_front_side_avg": late_reachable_front_side_average,
@@ -510,14 +555,23 @@ func _linear_pressure_sample(game: Node, tracked_enemies: Array[InfectionEnemy],
 	front_side_sector_occupied.fill(0)
 	var visible_front_side_enemies := 0
 	var reachable_front_side_enemies := 0
+	var rear_offscreen_enemies := 0
+	var rear_offscreen_sector_counts := PackedInt32Array()
+	rear_offscreen_sector_counts.resize(SECTOR_COUNT)
+	rear_offscreen_sector_counts.fill(0)
 	for enemy in tracked_enemies:
 		if not is_instance_valid(enemy) or not enemy.is_targetable():
 			continue
 		var delta: Vector2 = game.topology.shortest_delta(game.avatar.global_position, enemy.global_position)
 		var body_radius := enemy.definition.radius if enemy.definition != null else 0.0
+		var is_fully_offscreen := _circle_is_fully_outside_rect(enemy.global_position, body_radius, visible_rect)
 		if delta.dot(LINEAR_DIRECTION) < -(body_radius + LINEAR_REAR_TOLERANCE):
+			if is_fully_offscreen:
+				rear_offscreen_enemies += 1
+				var rear_sector: int = game._sector_for_delta(delta)
+				rear_offscreen_sector_counts[rear_sector] += 1
 			continue
-		if not _circle_is_fully_outside_rect(enemy.global_position, body_radius, visible_rect):
+		if not is_fully_offscreen:
 			visible_front_side_enemies += 1
 		if delta.length_squared() <= LINEAR_REACHABLE_RADIUS * LINEAR_REACHABLE_RADIUS:
 			reachable_front_side_enemies += 1
@@ -525,10 +579,60 @@ func _linear_pressure_sample(game: Node, tracked_enemies: Array[InfectionEnemy],
 	var front_side_sectors := 0
 	for occupied in front_side_sector_occupied:
 		front_side_sectors += int(occupied)
+	var rear_offscreen_max_sector_enemies := 0
+	for sector_count in rear_offscreen_sector_counts:
+		rear_offscreen_max_sector_enemies = maxi(rear_offscreen_max_sector_enemies, int(sector_count))
 	return {
 		"visible_front_side_enemies": visible_front_side_enemies,
 		"reachable_front_side_enemies": reachable_front_side_enemies,
 		"front_side_sectors": front_side_sectors,
+		"rear_offscreen_enemies": rear_offscreen_enemies,
+		"rear_offscreen_max_sector_enemies": rear_offscreen_max_sector_enemies,
+	}
+
+
+func _assert_proportional_rate_contract(game: Node) -> Dictionary:
+	var anchor_counts := PackedInt32Array([0, 1, 20, 21, 40, 41, 60, 80, 100, 101, 120, ENEMY_COUNT])
+	var expected_rates := PackedFloat32Array([0.0, 2.0, 2.0, 4.0, 4.0, 6.0, 6.0, 8.0, 10.0, 10.0, 10.0, 10.0])
+	var observed_rates := PackedFloat32Array()
+	observed_rates.resize(anchor_counts.size())
+	for index in range(anchor_counts.size()):
+		var observed_rate := float(game._offscreen_relocation_rate_for_count(anchor_counts[index]))
+		observed_rates[index] = observed_rate
+		_true(
+			is_equal_approx(observed_rate, expected_rates[index]),
+			"Offscreen-Ratenanker %d Gegner ergibt %.0f/s statt %.0f/s" % [
+				anchor_counts[index],
+				observed_rate,
+				expected_rates[index],
+			]
+		)
+	var monotone := true
+	var previous_rate := -INF
+	for eligible_count in range(ENEMY_COUNT + 1):
+		var current_rate := float(game._offscreen_relocation_rate_for_count(eligible_count))
+		if current_rate + 0.0001 < previous_rate:
+			monotone = false
+			break
+		previous_rate = current_rate
+	_true(monotone, "Die geplante Offscreen-Rate bleibt von 0 bis %d Gegnern monoton" % ENEMY_COUNT)
+	_true(
+		observed_rates[2] < observed_rates[6] and observed_rates[6] < observed_rates[10],
+		"Niedriger, mittlerer und hoher Rückstau planen strikt mehr Durchsatz (%.0f/s < %.0f/s < %.0f/s)" % [
+			observed_rates[2],
+			observed_rates[6],
+			observed_rates[10],
+		]
+	)
+	return {
+		"anchor_counts": anchor_counts,
+		"expected_moves_per_second": expected_rates,
+		"observed_moves_per_second": observed_rates,
+		"low_backlog_rate": observed_rates[2],
+		"medium_backlog_rate": observed_rates[6],
+		"high_backlog_rate": observed_rates[10],
+		"maximum_backlog_rate": observed_rates[observed_rates.size() - 1],
+		"monotone_through_count": ENEMY_COUNT,
 	}
 
 

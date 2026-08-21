@@ -31,9 +31,8 @@ const WAVE_SPAWN_SCREEN_MARGIN := 110.0
 const WAVE_PRESSURE_NEAR_MARGIN := 300.0
 const WAVE_PRESSURE_NEIGHBOR_SHARE := 0.22
 const OFFSCREEN_RELOCATION_INTERVAL := 0.5
-const OFFSCREEN_RELOCATION_MOVE_INTERVAL := 0.25
-const OFFSCREEN_RELOCATION_FIRST_MOVE_DELAY := 0.125
-const OFFSCREEN_RELOCATION_MAXIMUM := 2
+const OFFSCREEN_RELOCATION_ENEMIES_PER_BUDGET_STEP := 20
+const OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT := 5
 const OFFSCREEN_RELOCATION_SOURCE_MARGIN := 72.0
 const OFFSCREEN_RELOCATION_HIDDEN_MARGIN := 24.0
 const OFFSCREEN_RELOCATION_MINIMUM_SECTOR_DISTANCE := 4
@@ -152,7 +151,10 @@ var treatment_beam_return_visualized: Dictionary = {}
 var spawn_accumulator: float = 0.0
 var offscreen_relocation_timer: float = OFFSCREEN_RELOCATION_INTERVAL
 var offscreen_relocation_move_timer: float = 0.0
+var offscreen_relocation_move_interval: float = OFFSCREEN_RELOCATION_INTERVAL
 var offscreen_relocation_pending: int = 0
+var offscreen_relocation_last_eligible_count: int = 0
+var offscreen_relocation_last_planned_count: int = 0
 var therapy_timer: float = 0.0
 var immune_timer: float = 0.0
 var support_timer: float = 0.0
@@ -1371,7 +1373,10 @@ func start_run(run_context: RunContext = null) -> void:
 	spawn_accumulator = config.initial_spawn_interval
 	offscreen_relocation_timer = OFFSCREEN_RELOCATION_INTERVAL
 	offscreen_relocation_move_timer = 0.0
+	offscreen_relocation_move_interval = OFFSCREEN_RELOCATION_INTERVAL
 	offscreen_relocation_pending = 0
+	offscreen_relocation_last_eligible_count = 0
+	offscreen_relocation_last_planned_count = 0
 	therapy_timer = 0.18
 	immune_timer = 0.75
 	support_timer = 6.0
@@ -4034,7 +4039,7 @@ func _offscreen_relocation_step(delta: float) -> void:
 		_prepare_offscreen_relocation_snapshot()
 	if offscreen_relocation_pending <= 0 or offscreen_relocation_move_timer > 0.0:
 		return
-	offscreen_relocation_move_timer += OFFSCREEN_RELOCATION_MOVE_INTERVAL
+	offscreen_relocation_move_timer += offscreen_relocation_move_interval
 	var candidate_index := _offscreen_relocation_candidate_cursor
 	_offscreen_relocation_candidate_cursor += 1
 	offscreen_relocation_pending = maxi(0, offscreen_relocation_pending - 1)
@@ -4093,17 +4098,19 @@ func _offscreen_relocation_step(delta: float) -> void:
 func _prepare_offscreen_relocation_snapshot() -> void:
 	offscreen_relocation_pending = 0
 	_offscreen_relocation_candidate_cursor = 0
-	_offscreen_relocation_candidate_handles.resize(OFFSCREEN_RELOCATION_MAXIMUM)
+	offscreen_relocation_last_eligible_count = 0
+	offscreen_relocation_last_planned_count = 0
+	_offscreen_relocation_candidate_handles.resize(OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT)
 	_offscreen_relocation_candidate_handles.fill(EntityHandle.INVALID)
-	_offscreen_relocation_candidate_sectors.resize(OFFSCREEN_RELOCATION_MAXIMUM)
+	_offscreen_relocation_candidate_sectors.resize(OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT)
 	_offscreen_relocation_candidate_sectors.fill(-1)
-	_offscreen_relocation_candidate_depths.resize(OFFSCREEN_RELOCATION_MAXIMUM)
+	_offscreen_relocation_candidate_depths.resize(OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT)
 	_offscreen_relocation_candidate_depths.fill(-INF)
 	_offscreen_relocation_source_backlog.resize(WAVE_SPAWN_SECTOR_COUNT)
 	_offscreen_relocation_source_backlog.fill(0.0)
 	_offscreen_relocation_target_pressure.resize(WAVE_SPAWN_SECTOR_COUNT)
 	_offscreen_relocation_target_pressure.fill(0.0)
-	var sector_candidate_capacity := WAVE_SPAWN_SECTOR_COUNT * OFFSCREEN_RELOCATION_MAXIMUM
+	var sector_candidate_capacity := WAVE_SPAWN_SECTOR_COUNT * OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT
 	_offscreen_relocation_sector_candidate_handles.resize(sector_candidate_capacity)
 	_offscreen_relocation_sector_candidate_handles.fill(EntityHandle.INVALID)
 	_offscreen_relocation_sector_candidate_depths.resize(sector_candidate_capacity)
@@ -4132,12 +4139,13 @@ func _prepare_offscreen_relocation_snapshot() -> void:
 		var handle := enemy_world.handle_for(enemy)
 		if not EntityHandle.is_valid(handle):
 			continue
+		offscreen_relocation_last_eligible_count += 1
 		_offscreen_relocation_source_backlog[source_sector] += weight
 		var outside_depth := _distance_outside_rect(enemy.global_position, source_exclusion_rect)
 		_insert_offscreen_sector_candidate(handle, source_sector, outside_depth)
 	for sector in range(WAVE_SPAWN_SECTOR_COUNT):
-		var sector_offset := sector * OFFSCREEN_RELOCATION_MAXIMUM
-		for candidate_offset in range(OFFSCREEN_RELOCATION_MAXIMUM):
+		var sector_offset := sector * OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT
+		for candidate_offset in range(OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT):
 			var candidate_index := sector_offset + candidate_offset
 			var handle := int(_offscreen_relocation_sector_candidate_handles[candidate_index])
 			if not EntityHandle.is_valid(handle):
@@ -4147,19 +4155,41 @@ func _prepare_offscreen_relocation_snapshot() -> void:
 				sector,
 				float(_offscreen_relocation_sector_candidate_depths[candidate_index])
 			)
-	var candidate_count := 0
+	var available_candidate_count := 0
 	for handle_value in _offscreen_relocation_candidate_handles:
 		if EntityHandle.is_valid(int(handle_value)):
-			candidate_count += 1
-	offscreen_relocation_pending = candidate_count
-	if candidate_count > 0:
-		offscreen_relocation_move_timer = OFFSCREEN_RELOCATION_FIRST_MOVE_DELAY
+			available_candidate_count += 1
+	var planned_count := mini(
+		available_candidate_count,
+		_offscreen_relocation_budget_for_count(offscreen_relocation_last_eligible_count)
+	)
+	offscreen_relocation_last_planned_count = planned_count
+	offscreen_relocation_pending = planned_count
+	if planned_count > 0:
+		offscreen_relocation_move_interval = OFFSCREEN_RELOCATION_INTERVAL / float(planned_count)
+		offscreen_relocation_move_timer = offscreen_relocation_move_interval * 0.5
+	else:
+		offscreen_relocation_move_interval = OFFSCREEN_RELOCATION_INTERVAL
+
+
+func _offscreen_relocation_budget_for_count(eligible_count: int) -> int:
+	if eligible_count <= 0:
+		return 0
+	return clampi(
+		ceili(float(eligible_count) / float(OFFSCREEN_RELOCATION_ENEMIES_PER_BUDGET_STEP)),
+		1,
+		OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT
+	)
+
+
+func _offscreen_relocation_rate_for_count(eligible_count: int) -> float:
+	return float(_offscreen_relocation_budget_for_count(eligible_count)) / OFFSCREEN_RELOCATION_INTERVAL
 
 
 func _insert_offscreen_sector_candidate(handle: int, source_sector: int, outside_depth: float) -> void:
-	var sector_offset := source_sector * OFFSCREEN_RELOCATION_MAXIMUM
+	var sector_offset := source_sector * OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT
 	var insert_offset := -1
-	for candidate_offset in range(OFFSCREEN_RELOCATION_MAXIMUM):
+	for candidate_offset in range(OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT):
 		var candidate_index := sector_offset + candidate_offset
 		var stored_handle := int(_offscreen_relocation_sector_candidate_handles[candidate_index])
 		var stored_depth := float(_offscreen_relocation_sector_candidate_depths[candidate_index])
@@ -4172,7 +4202,7 @@ func _insert_offscreen_sector_candidate(handle: int, source_sector: int, outside
 			break
 	if insert_offset < 0:
 		return
-	for shift_offset in range(OFFSCREEN_RELOCATION_MAXIMUM - 1, insert_offset, -1):
+	for shift_offset in range(OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT - 1, insert_offset, -1):
 		var target_index := sector_offset + shift_offset
 		var source_index := target_index - 1
 		_offscreen_relocation_sector_candidate_handles[target_index] = _offscreen_relocation_sector_candidate_handles[source_index]
@@ -4185,7 +4215,7 @@ func _insert_offscreen_sector_candidate(handle: int, source_sector: int, outside
 func _insert_offscreen_relocation_candidate(handle: int, source_sector: int, outside_depth: float) -> void:
 	var insert_index := -1
 	var candidate_backlog := float(_offscreen_relocation_source_backlog[source_sector])
-	for index in range(OFFSCREEN_RELOCATION_MAXIMUM):
+	for index in range(OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT):
 		var stored_handle := int(_offscreen_relocation_candidate_handles[index])
 		if not EntityHandle.is_valid(stored_handle):
 			insert_index = index
@@ -4206,7 +4236,7 @@ func _insert_offscreen_relocation_candidate(handle: int, source_sector: int, out
 			break
 	if insert_index < 0:
 		return
-	for shift_index in range(OFFSCREEN_RELOCATION_MAXIMUM - 1, insert_index, -1):
+	for shift_index in range(OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT - 1, insert_index, -1):
 		_offscreen_relocation_candidate_handles[shift_index] = _offscreen_relocation_candidate_handles[shift_index - 1]
 		_offscreen_relocation_candidate_sectors[shift_index] = _offscreen_relocation_candidate_sectors[shift_index - 1]
 		_offscreen_relocation_candidate_depths[shift_index] = _offscreen_relocation_candidate_depths[shift_index - 1]
