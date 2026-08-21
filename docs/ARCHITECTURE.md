@@ -258,15 +258,26 @@ follower waits without an intentional lateral component. If one is open, the
 generation-safe blocker lease binds that side. If both are open, greater
 clearance wins and slot parity resolves an exact tie deterministically.
 
+A new side lease is valid only when that complete corridor sample was produced
+in the current fixed tick. If a body reaches the activation envelope between
+its distributed refresh phases, it waits instead of deriving a route from stale
+geometry. The ordinary disc projection is only a safety boundary: without a
+valid lease it may never preserve a tangential remainder. This makes the three
+runtime outcomes explicit without adding per-entity objects: direct pursuit,
+one verified bypass side, or stationary wait.
+
 An active lease never switches sides directly. A phased refresh may close its
 route, which clears the lease and leaves the follower waiting until a later
 refresh can acquire a valid corridor; otherwise ten consecutive free fixed
-ticks release the lease. Handles and the current blocking body
-are validated every tick, while spatial guard/corridor queries are distributed
-over 24 slot phases. A closed queued corridor additionally retains the exact
-generation-safe body closing each side. If both still intersect their sweeps at
-the next phase, the full neighborhood query is unnecessary; either body moving
-or invalidating immediately restores the complete query.
+ticks release the lease. Between full samples the selected side is checked
+cheaply against the hard arena, its generation-safe side blocker and the fixed
+nearest-contact guard set. A second body entering the leased route stalls the
+tick and cannot trigger an immediate opposite-side switch. Handles and the
+current blocking body are validated every tick, while spatial guard/corridor
+queries are distributed over 24 slot phases. A closed queued corridor retains
+the exact generation-safe body closing each side. If both still intersect their
+sweeps at the next phase, the full neighborhood query is unnecessary; either
+body moving or invalidating immediately restores the complete query.
 
 Registration, release, ordinary movement, avatar push and explicit relocation
 update the same grid incrementally; a full rebuild is only the recovery path

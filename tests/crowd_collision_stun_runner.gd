@@ -265,6 +265,11 @@ func _run() -> void:
 		"Der frühe Test besitzt genau einen freien Körperkorridor"
 	)
 	_true(early_world._crowd_lane_signs[early_slot] == -1, "Der freie Seitenkorridor wird bereits vor Körperkontakt geleast")
+	_true(
+		int(early_world._direct_collision_corridor_epochs[early_slot])
+			== early_world._direct_collision_prepare_epoch,
+		"Eine neue Seitenlease beruht auf dem Corridor-Snapshot desselben Fixed Ticks"
+	)
 	_true(absf(early_step.cross(early_chase_direction)) > 0.5, "Der frühe Bypass erzeugt im ersten Tick sichtbare Seitenbewegung")
 	_true(early_step.dot(early_chase_direction) > 0.0, "Der frühe Bypass behält Vorwärtsfortschritt zum Doctor")
 	for blocker in [early_front, early_gate]:
@@ -507,12 +512,13 @@ func _run() -> void:
 	_true(closing_world.mark_enemy_relocated(corridor_gate_handle, gate_previous_position), "Das geschlossene Tor aktualisiert seinen Spatial-Cache")
 	closing_world.step_fixed(1.0 / 60.0)
 	_true(closing_world._crowd_lane_signs[closing_slot] == 0, "Eine Relocation invalidiert benachbarte Guards sofort und gibt den geschlossenen Korridor frei")
+	_true(closing_world._direct_collision_queued[closing_slot] != 0, "Ein geschlossener Randkorridor wechselt im selben Tick in den Wartezustand")
 	var closed_position := closing_follower.global_position
 	for _tick in range(4):
 		closing_world.step_fixed(1.0 / 60.0)
 		_true(closing_world._crowd_lane_signs[closing_slot] != -closing_sign, "Der geschlossene Korridor erzeugt keinen direkten Links-Rechts-Wechsel")
 	var closed_drift := topology.distance(closed_position, closing_follower.global_position)
-	_true(closed_drift <= 0.5, "Mit beiden Seiten geschlossen bleibt nur eine subpixelige geometrische Korrektur (Drift %.3f)" % closed_drift)
+	_true(closed_drift <= 0.001, "Mit beiden Seiten geschlossen bleibt der Gegner ohne seitliches Rutschen stehen (Drift %.5f)" % closed_drift)
 	gate_previous_position = corridor_gate.global_position
 	corridor_gate.global_position = Vector2(520.0, 320.0)
 	corridor_gate.reset_visual_motion()
