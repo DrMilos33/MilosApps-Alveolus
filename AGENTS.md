@@ -37,11 +37,26 @@ diese Quellen, ersetzen sie aber nicht.
 - Entwicklung bleibt lokal. Nicht veröffentlichen, Hosting aktualisieren,
   Spielstände löschen oder den PC herunterfahren, sofern der Nutzer das nicht
   ausdrücklich in seinem aktuellen Auftrag verlangt.
+- Wiederholbare Änderungen folgen dem Repository-Skill
+  `.agents/skills/alveolus-change-workflow/SKILL.md`. Ein Task besitzt genau
+  ein überprüfbares Ergebnis; Plan und Umsetzung bleiben zusammen, solange der
+  lokale Transcript-Warnwert keinen textbasierten Rollover verlangt.
+- Rohlogs, Capturelisten und Messdateien gehören unter
+  `.codex-temp/reports/`, nicht in den Task. Animierte GIFs niemals direkt in
+  einen Task einbetten; der Workflow-Skill erzeugt höchstens sechs PNG-Frames,
+  ein Kontaktblatt und ein Textmanifest unter `.codex-temp/evidence/`.
+- Die projektlokalen Hooks unter `.codex/` sperren Remote-Schreibvorgänge und
+  übergroße Tasks. Sie sind ein Unfall-Guardrail; eine Veröffentlichung
+  benötigt einen eigenen Releaseauftrag und eine bewusst aktivierte
+  Releasekonfiguration.
 
 ## Delegation und Parallelität
 
 - Der Hauptagent integriert. Unteragenten erhalten eine konkrete, unabhängige
   Teilaufgabe und eine explizite Liste eigener Dateien.
+- Gleichzeitig laufen höchstens zwei Unteragenten. Sie starten mit
+  `fork_turns="none"` und einem vollständigen Kurzbriefing; Vollhistorie-Forks
+  sind in diesem Repository verboten.
 - Pro Datei gibt es gleichzeitig genau einen schreibenden Besitzer.
 - Read-only-Audits, Assetrecherche und getrennte Module dürfen parallel laufen.
   Godot-Editor, Importe, Exporte und automatisierte Godot-Tests laufen im
