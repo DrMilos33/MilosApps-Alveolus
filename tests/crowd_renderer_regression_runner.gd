@@ -7,6 +7,7 @@ extends SceneTree
 const EXPECTED_REGULAR_EXTENT := 18.0 * 2.35
 const ENEMY_CAPACITY := 640
 const PICKUP_CAPACITY := 360
+const MULTIMESH_STRIDE_2D_COLOR := 12
 const EPSILON := 0.001
 
 var assertions := 0
@@ -30,6 +31,7 @@ func _run() -> void:
 	var pickups: Array[AnalysisPickup] = []
 
 	_test_zero_path(renderer, enemies, pickups)
+	_test_entity_owned_cluster_materialization_and_relocation()
 	_test_batched_health_bar_lifecycle()
 	_append_enemies(enemies, 119)
 	_test_count_path(renderer, enemies, pickups, 119)
@@ -66,6 +68,83 @@ func _test_zero_path(renderer: CrowdRenderer, enemies: Array[InfectionEnemy], pi
 	renderer.sync(enemies, pickups)
 	_assert_true(not renderer.is_batching(), "0 entities produce no active batch representation")
 	_assert_equal(renderer.active_telegraph_count(), 0, "0 entities produce no spawn telegraphs")
+
+
+## Production keeps debug snapshots disabled and uploads the visual endpoints
+## owned by InfectionEnemy directly. Reproduce that exact path for the cluster
+## which previously became opaque in the materialization callback and was then
+## overwritten by its still-transparent previous endpoint on the next flush.
+func _test_entity_owned_cluster_materialization_and_relocation() -> void:
+	var cluster_definition: EnemyDefinition = ContentCatalog.enemy_definitions()[&"bacterial_cluster"]
+	var renderer := CrowdRenderer.new()
+	get_root().add_child(renderer)
+	renderer.configure(4, 1)
+
+	var cluster := InfectionEnemy.new()
+	get_root().add_child(cluster)
+	var spawn_position := Vector2(-241.0, 137.0)
+	cluster.global_position = spawn_position
+	cluster.configure(cluster_definition, null, topology)
+	var record := renderer.register_enemy(cluster)
+	var slot := int(record.get("slot", CrowdRenderer.INVALID_SLOT))
+	var batch := renderer.batch_for_visual_id(cluster_definition.visual_id)
+	_assert_true(slot >= 0 and batch != null, "Bacterial cluster leases the production MultiMesh path")
+
+	cluster.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	_assert_vector(cluster.visual_previous_size, cluster.visual_current_size, "Materialization atomically collapses cluster size endpoints")
+	_assert_near(cluster.visual_previous_color.a, 1.0, "Materialization atomically makes the previous cluster endpoint opaque")
+	_assert_near(cluster.visual_current_color.a, 1.0, "Materialization makes the current cluster endpoint opaque")
+	_assert_cluster_multimesh_state(batch, slot, spawn_position, cluster.visual_extent(), "Immediate materialization")
+
+	# A normal render-rate flush at fraction zero is the critical regression:
+	# before the fix it restored the transparent/undersized pre-spawn endpoint.
+	renderer.publish_snapshot()
+	renderer.flush_render_state(0.0)
+	_assert_cluster_multimesh_state(batch, slot, spawn_position, cluster.visual_extent(), "First runtime flush after materialization")
+
+	var relocated_position := Vector2(318.0, -204.0)
+	_assert_true(cluster.relocate_preserving_state(relocated_position), "Materialized cluster accepts an eligible offscreen relocation")
+	renderer.flush_render_state(0.0)
+	_assert_cluster_multimesh_state(batch, slot, relocated_position, cluster.visual_extent(), "Relocation flush")
+
+	cluster.step_fixed(1.0 / 60.0)
+	renderer.publish_snapshot()
+	renderer.flush_render_state(0.0)
+	_assert_cluster_multimesh_state(batch, slot, relocated_position, cluster.visual_extent(), "Normal runtime flush after relocation")
+
+	renderer.release_enemy(cluster, cluster.activation_generation)
+	cluster.queue_free()
+	renderer.queue_free()
+
+
+func _assert_cluster_multimesh_state(
+	batch: MultiMeshInstance2D,
+	slot: int,
+	expected_position: Vector2,
+	expected_extent: float,
+	context: String
+) -> void:
+	# CrowdRenderer uploads complete packed buffers. Godot's headless
+	# Compatibility path does not synchronously populate the separate
+	# get_instance_* accessors after set_buffer(), so those accessors report an
+	# identity transform even though the production buffer contains the draw
+	# command. Decode the actual uploaded slot instead of enabling the renderer's
+	# optional debug mirror.
+	var buffer := batch.multimesh.get_buffer()
+	var offset := slot * MULTIMESH_STRIDE_2D_COLOR
+	_assert_true(buffer.size() >= offset + MULTIMESH_STRIDE_2D_COLOR, "%s uploads a complete cluster slot" % context)
+	if buffer.size() < offset + MULTIMESH_STRIDE_2D_COLOR:
+		return
+	var transform := Transform2D(
+		Vector2(buffer[offset], buffer[offset + 4]),
+		Vector2(buffer[offset + 1], buffer[offset + 5]),
+		Vector2(buffer[offset + 3], buffer[offset + 7])
+	)
+	var color := Color(buffer[offset + 8], buffer[offset + 9], buffer[offset + 10], buffer[offset + 11])
+	_assert_vector(transform.origin, expected_position, "%s preserves the cluster position" % context)
+	_assert_near(transform.x.length(), expected_extent, "%s preserves the cluster width" % context)
+	_assert_near(transform.y.length(), expected_extent, "%s preserves the cluster height" % context)
+	_assert_near(color.a, 1.0, "%s keeps the cluster visible" % context)
 
 func _test_batched_health_bar_lifecycle() -> void:
 	var renderer := CrowdRenderer.new()

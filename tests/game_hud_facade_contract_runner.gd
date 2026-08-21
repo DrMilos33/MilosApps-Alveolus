@@ -159,6 +159,10 @@ func _run() -> void:
 			actual == expected,
 			"GameHUD method %s keeps '%s'; actual '%s'" % [name, expected, actual]
 		)
+	_check(
+		actual_methods.get("set_boss_direction_indicator", "<missing>") == "visible:bool,direction:Vector2->void",
+		"GameHUD exposes the additive process-free boss direction indicator contract"
+	)
 
 	_finish(
 		maxi(0, actual_signals.size() - BASELINE_SIGNALS.size()),

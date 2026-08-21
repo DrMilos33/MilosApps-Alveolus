@@ -345,20 +345,28 @@ a separate stable `ProjectileRenderer` batch with a distinct texture. Release
 clears both possible render owners before a projectile node returns to its
 pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
-second phase.
+second phase. Projectile geometry is data-driven: the later special boss emits
+its two phased diamond shots, while the intro boss emits one ordinary hostile
+projectile per attack interval. Boss locomotion remains direct and ignores all
+enemy-enemy contact circles in both directions; Doctor contact, damage, stun,
+knockback and bounded-arena constraints remain unchanged. The HUD resolves at
+most the active boss handles once per fixed snapshot and drives one process-free
+edge arrow only while a boss body is fully outside the actual camera rectangle.
 
 The relocation director snapshots the complete eligible offscreen backlog every
 0.5 seconds instead of deriving sources from the local target-pressure window.
-The same single pass also determines the adaptive budget: every 20 eligible
-bodies add one move to the half-second snapshot, capped at five moves or ten
+The same single pass also determines the adaptive budget: every 15 eligible
+bodies add one move to the half-second snapshot, capped at seven moves or 14
 moves per second. Those generation-safe handles are executed at evenly spaced
 times inside the snapshot window, at most one per fixed tick; the director does
 not increase its full-world scan frequency as pressure rises. The most distant
-body in the strongest backlog sector is preferred. Its target is selected only
-from sectors at least 120 degrees away, using the three calmest values from the
-existing local pressure model. The full body plus a 24-world-unit safety margin
-must remain outside the actual camera
-rectangle; there is no visible or same-side fallback. A source still lies at
+body in the strongest backlog sector is preferred. A dedicated deterministic
+RNG stream chooses among several calm target sectors outside the source sector
+and its direct neighbors, then jitters angle and one of three offscreen depth
+bands. At most two targets reserve one sector per snapshot, and target search
+uses a bounded local broad-phase attempt window. The full body plus a
+24-world-unit safety margin must remain outside the actual camera
+rectangle; there is no visible fallback. A source still lies at
 least 72 world units beyond the camera and the same entity cannot move again for
 three seconds. Relocation preserves generation, health and status and
 atomically snaps renderer history. It is denied for bosses, minor foci, ranged

@@ -9,6 +9,7 @@ var blocked_hits := 0
 var offset_hits := 0
 var mixed_small_hits := 0
 var mixed_cluster_hits := 0
+var boss_hits := 0
 
 
 func _init() -> void:
@@ -75,6 +76,49 @@ func _run() -> void:
 	world.clear()
 	small.free()
 	cluster.free()
+
+	# Bosses share Doctor-contact and arena geometry, but ordinary enemy bodies
+	# never delay or redirect their direct pursuit.
+	var boss_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	var boss_definition := EnemyDefinition.create(
+		&"localized_boss", "Testboss", 900.0, 90.0, 6.0, 20, 60.0, Color.WHITE, true
+	).configure_contact_radius(47.0)
+	var boss_blocker_definition := EnemyDefinition.create(
+		&"pneumococcus", "Statischer Blocker", 22.0, 0.0, 0.0, 0, 18.0, Color.WHITE
+	).configure_contact_radius(17.0)
+	boss_world.configure_crowd_collision(topology, avatar, boss_definition.radius)
+	var boss_blockers: Array[InfectionEnemy] = []
+	for y in [-35.0, 0.0, 35.0]:
+		var blocker := _enemy(boss_blocker_definition, avatar, topology, Vector2(105.0, y))
+		boss_blockers.append(blocker)
+		_true(EntityHandle.is_valid(boss_world.register_enemy(blocker)), "Bossbarriere erhält einen Handle")
+	var direct_boss := _enemy(boss_definition, avatar, topology, Vector2(210.0, 0.0))
+	direct_boss.pressure_applied.connect(_on_boss_pressure)
+	_true(EntityHandle.is_valid(boss_world.register_enemy(direct_boss, true)), "Boss erhält einen kritischen Handle")
+	var boss_maximum_lateral := 0.0
+	var boss_maximum_retreat := 0.0
+	for _tick in range(180):
+		var before := direct_boss.global_position
+		var before_distance := topology.distance(before, avatar.global_position)
+		boss_world.step_fixed(1.0 / 60.0)
+		boss_maximum_lateral = maxf(boss_maximum_lateral, absf(direct_boss.global_position.y))
+		boss_maximum_retreat = maxf(
+			boss_maximum_retreat,
+			topology.distance(direct_boss.global_position, avatar.global_position) - before_distance
+		)
+	_true(boss_maximum_lateral <= 0.001, "Der Boss läuft geradlinig durch andere Monster (%.5f lateral)" % boss_maximum_lateral)
+	_true(boss_maximum_retreat <= 0.001, "Andere Monster drücken den Boss niemals zurück (%.5f)" % boss_maximum_retreat)
+	_assert_at_contact(direct_boss, avatar, topology, "Boss")
+	_true(boss_hits > 0, "Der Boss erreicht den Doctor durch die Monsterbarriere und greift an")
+	for index in range(boss_blockers.size()):
+		_true(
+			boss_blockers[index].global_position.is_equal_approx(Vector2(105.0, [-35.0, 0.0, 35.0][index])),
+			"Bossdurchgang verschiebt normalen Blocker %d nicht" % (index + 1)
+		)
+	boss_world.clear()
+	direct_boss.free()
+	for blocker in boss_blockers:
+		blocker.free()
 
 	# One real front body is enough to start a stable obstacle bypass. The rear
 	# attacker chooses one side, never retreats and eventually reaches contact.
@@ -699,3 +743,7 @@ func _on_mixed_small_pressure(_amount: float) -> void:
 
 func _on_mixed_cluster_pressure(_amount: float) -> void:
 	mixed_cluster_hits += 1
+
+
+func _on_boss_pressure(_amount: float) -> void:
+	boss_hits += 1

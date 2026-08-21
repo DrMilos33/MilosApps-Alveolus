@@ -85,7 +85,7 @@ func _test_boss_and_finding_contract() -> void:
 	var levels := ContentCatalog.level_definitions()
 	_equal(levels[0].boss_enemy_id, &"intro_focus", "Intro behält einen eigenen einfachen Boss")
 	_near(levels[0].boss_health_multiplier, 0.18, "Intro-Boss behält die alte kurze Lebensskalierung")
-	_true(not levels[0].boss_ranged_enabled, "Intro-Boss bleibt ohne Spezialprojektile")
+	_true(levels[0].boss_ranged_enabled, "Intro-Boss feuert ein normales Projektil statt einer Spezialbahn")
 	_equal(levels[1].boss_enemy_id, &"localized_boss", "Fall 1 verwendet den neuen Bakterienkern")
 	_true(not levels[1].boss_ranged_enabled, "Neuer erster Boss bleibt zunächst einfach")
 	_equal(levels[2].boss_enemy_id, &"infection_focus", "Der bisherige Spezialboss lebt jetzt in Fall 2")

@@ -122,7 +122,7 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 		if _shot_timers[slot] <= 0.0:
 			var interval := _shot_interval(enemy, int(_roles[slot]))
 			_shot_timers[slot] += maxf(interval, 0.1)
-			_emit_attack(handle, int(_roles[slot]))
+			_emit_attack(handle, int(_roles[slot]), enemy)
 		if _roles[slot] == Role.BOSS and _boss_phases[slot] >= 2:
 			_reinforcement_timers[slot] -= delta
 			if _reinforcement_timers[slot] <= 0.0:
@@ -141,8 +141,9 @@ func clear() -> void:
 	_active_slots.clear()
 
 
-func _emit_attack(handle: int, role: int) -> void:
-	if role == Role.BOSS:
+func _emit_attack(handle: int, role: int, enemy: InfectionEnemy) -> void:
+	var pattern := enemy.definition.projectile_pattern if enemy != null and enemy.definition != null else &""
+	if role == Role.BOSS and pattern == &"diamond":
 		projectile_requested.emit(handle, Pattern.DIAMOND, 0.25, role)
 		projectile_requested.emit(handle, Pattern.DIAMOND, 0.75, role)
 		return

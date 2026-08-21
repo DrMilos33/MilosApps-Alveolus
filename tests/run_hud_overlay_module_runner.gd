@@ -152,6 +152,20 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	)
 	_check(hud.timer_value_label().text == "03:36", "Freistehende Rundendauer besitzt keine eigene Fortschrittslogik")
 	_check(not hud.boss_panel().visible and hud.boss_value_label().text == "64 %", "Die frühere Bosskarte bleibt dormant, während der Kompatibilitätssnapshot gebunden bleibt")
+	var boss_indicator := hud.boss_direction_indicator()
+	_check(not boss_indicator.visible and boss_indicator.kind == &"back", "Boss-Randpfeil bleibt ohne explizite Richtungsübergabe verborgen")
+	_check(boss_indicator.mouse_filter == Control.MOUSE_FILTER_IGNORE and boss_indicator.get_meta(&"alveolus_component", &"") == &"boss_direction_indicator", "Boss-Randpfeil blockiert keine Gameplayeingabe und besitzt eine stabile semantische Kennung")
+	hud.set_boss_direction_indicator(true, Vector2.RIGHT)
+	await _settle()
+	_check(boss_indicator.visible and _transformed_control_inside_viewport(boss_indicator, Vector2i(1280, 720)), "Boss-Randpfeil bleibt vollständig im sicheren Viewport")
+	_check(boss_indicator.global_position.x >= 1280.0 - RunHUDOverlay.BOSS_DIRECTION_SIDE_INSET - RunHUDOverlay.BOSS_DIRECTION_INDICATOR_EXTENT - 0.5, "Rechter Boss setzt den Pfeil an den rechten Bildrand")
+	_check(is_equal_approx(wrapf(boss_indicator.rotation, -PI, PI), -PI), "Gezeichneter Linkspfeil wird prozessfrei nach rechts gedreht")
+	hud.set_boss_direction_indicator(true, Vector2.UP)
+	await _settle()
+	_check(boss_indicator.global_position.y >= RunHUDOverlay.BOSS_DIRECTION_TOP_INSET - 0.5 and boss_indicator.global_position.y <= RunHUDOverlay.BOSS_DIRECTION_TOP_INSET + 0.5, "Boss oberhalb des Bildes setzt den Pfeil unter die obere HUD-Sicherheitszone")
+	_check(is_equal_approx(wrapf(boss_indicator.rotation, -PI, PI), PI * 0.5), "Pfeilrotation folgt der aktualisierten Bildschirmrichtung")
+	hud.set_boss_direction_indicator(false, Vector2.UP)
+	_check(not boss_indicator.visible, "Boss-Randpfeil verschwindet ohne verbleibenden Prozesszustand")
 	_check(hud.analysis_value_label().text == "Lv 3 · 7/12" and hud.analysis_bar().value == 7.0, "Proben und Analyse bleiben als kompakte Zielanzeige sichtbar")
 	_check(hud.stability_panel().size.y <= 30.0 and hud.stability_panel().size.x >= 360.0 and hud.stability_panel().find_child("StabilityIcon", true, false) == null, "Leben nutzt einen niedrigen, breiten und zentrierten Balken ohne redundantes Vital-Icon")
 	_check(hud.stability_panel().get_meta(&"alveolus_component", &"") == &"transparent_hud_vital" and is_zero_approx(hud.stability_panel().self_modulate.a), "Leben schwebt ohne Kartenfläche über dem Run")
@@ -471,6 +485,28 @@ func _inside_viewport(control: Control, viewport_size: Vector2i) -> bool:
 		and rect.end.x <= float(viewport_size.x) + 0.5
 		and rect.end.y <= float(viewport_size.y) + 0.5
 	)
+
+
+func _transformed_control_inside_viewport(control: Control, viewport_size: Vector2i) -> bool:
+	# Control.get_global_rect() does not describe the visual bounds after pivot
+	# rotation. Check all transformed corners so the directional icon's actual
+	# footprint, rather than its shifted transform origin, owns this contract.
+	var transform := control.get_global_transform()
+	for local_point in [
+		Vector2.ZERO,
+		Vector2(control.size.x, 0.0),
+		control.size,
+		Vector2(0.0, control.size.y),
+	]:
+		var point: Vector2 = transform * local_point
+		if (
+			point.x < -0.5
+			or point.y < -0.5
+			or point.x > float(viewport_size.x) + 0.5
+			or point.y > float(viewport_size.y) + 0.5
+		):
+			return false
+	return true
 
 
 func _focus_target_inside(source: Control, path: NodePath, root_control: Control) -> bool:

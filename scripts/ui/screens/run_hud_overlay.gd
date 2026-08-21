@@ -21,6 +21,10 @@ const DEFEAT_REWARD_WIDTH := 62.0
 const ABILITY_WIDTH := 146.0
 const ABILITY_HEIGHT := 38.0
 const ABILITY_GAP := 6.0
+const BOSS_DIRECTION_INDICATOR_EXTENT := 32.0
+const BOSS_DIRECTION_SIDE_INSET := 18.0
+const BOSS_DIRECTION_TOP_INSET := 54.0
+const BOSS_DIRECTION_BOTTOM_INSET := 50.0
 
 var _view_model: RunHUDViewModel
 var _applied_revision := -1
@@ -44,6 +48,8 @@ var _boss_title: Label
 var _boss_value: Label
 var _boss_phase: Label
 var _boss_bar: ProgressBar
+var _boss_direction_indicator: SimpleIcon
+var _boss_direction := Vector2.ZERO
 var _analysis_panel: Panel
 var _analysis_bar: ProgressBar
 var _analysis_value: Label
@@ -172,6 +178,18 @@ func boss_phase_label() -> Label:
 	return _boss_phase
 
 
+func boss_direction_indicator() -> SimpleIcon:
+	return _boss_direction_indicator
+
+
+func set_boss_direction_indicator(visible: bool, direction: Vector2) -> void:
+	var has_direction := direction.length_squared() > 0.000001
+	_boss_direction = direction.normalized() if visible and has_direction else Vector2.ZERO
+	_boss_direction_indicator.visible = visible and has_direction
+	if _boss_direction_indicator.visible:
+		_layout_boss_direction_indicator()
+
+
 func analysis_panel() -> Panel:
 	return _analysis_panel
 
@@ -290,6 +308,7 @@ func _build() -> void:
 	_build_defeat_reward()
 	_build_timer()
 	_build_boss()
+	_build_boss_direction_indicator()
 	_build_analysis()
 	_build_stats()
 	_build_abilities()
@@ -408,6 +427,20 @@ func _build_boss() -> void:
 	_boss_bar.custom_minimum_size.y = 8.0
 	stack.add_child(_boss_bar)
 	_boss_panel.hide()
+
+
+func _build_boss_direction_indicator() -> void:
+	_boss_direction_indicator = _hud_icon(
+		"BossDirectionIndicator",
+		&"back",
+		AlveolusVisualTheme.CORAL,
+		BOSS_DIRECTION_INDICATOR_EXTENT
+	)
+	_boss_direction_indicator.set_meta(&"alveolus_component", &"boss_direction_indicator")
+	_boss_direction_indicator.set_meta(&"alveolus_accessible_name", "Boss außerhalb des Bildschirms")
+	_boss_direction_indicator.z_index = 2
+	_boss_direction_indicator.hide()
+	add_child(_boss_direction_indicator)
 
 
 func _build_analysis() -> void:
@@ -787,6 +820,8 @@ func _update_responsive_layout() -> void:
 		_apply_wide_layout()
 	else:
 		_apply_compact_layout()
+	if _boss_direction_indicator.visible:
+		_layout_boss_direction_indicator()
 
 
 func _apply_wide_layout() -> void:
@@ -848,6 +883,41 @@ func _place(control: Control, rect: Rect2) -> void:
 	control.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
 	control.position = rect.position.floor()
 	control.size = rect.size.floor()
+
+
+func _layout_boss_direction_indicator() -> void:
+	if _boss_direction_indicator == null or _boss_direction.is_zero_approx():
+		return
+	var half_extent := BOSS_DIRECTION_INDICATOR_EXTENT * 0.5
+	var minimum_center := Vector2(
+		BOSS_DIRECTION_SIDE_INSET + half_extent,
+		BOSS_DIRECTION_TOP_INSET + half_extent
+	)
+	var maximum_center := Vector2(
+		maxf(minimum_center.x, size.x - BOSS_DIRECTION_SIDE_INSET - half_extent),
+		maxf(minimum_center.y, size.y - BOSS_DIRECTION_BOTTOM_INSET - half_extent)
+	)
+	var viewport_center := size * 0.5
+	var ray_extent := Vector2(
+		maxf(0.0, minf(viewport_center.x - minimum_center.x, maximum_center.x - viewport_center.x)),
+		maxf(0.0, minf(viewport_center.y - minimum_center.y, maximum_center.y - viewport_center.y))
+	)
+	var distance_to_edge := INF
+	if absf(_boss_direction.x) > 0.000001:
+		distance_to_edge = minf(distance_to_edge, ray_extent.x / absf(_boss_direction.x))
+	if absf(_boss_direction.y) > 0.000001:
+		distance_to_edge = minf(distance_to_edge, ray_extent.y / absf(_boss_direction.y))
+	if not is_finite(distance_to_edge):
+		distance_to_edge = 0.0
+	var indicator_center := (viewport_center + _boss_direction * distance_to_edge).clamp(minimum_center, maximum_center)
+	_place(
+		_boss_direction_indicator,
+		Rect2(indicator_center - Vector2.ONE * half_extent, Vector2.ONE * BOSS_DIRECTION_INDICATOR_EXTENT)
+	)
+	_boss_direction_indicator.pivot_offset = Vector2.ONE * half_extent
+	# The drawn back glyph points left; rotate that axis toward the supplied
+	# screen-space direction without advancing an animation loop.
+	_boss_direction_indicator.rotation = _boss_direction.angle() + PI
 
 
 func _visible_ability_count() -> int:

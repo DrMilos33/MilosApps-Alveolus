@@ -377,7 +377,12 @@ func step_fixed(delta: float, defer_contact_check: bool = false) -> void:
 		spawn_timer = maxf(0.0, spawn_timer - delta)
 		_sync_visual_appearance()
 		if is_zero_approx(spawn_timer):
-			reset_visual_motion()
+			# Materialization is one atomic visual state change. The runtime
+			# MultiMesh path reads the entity-owned endpoints directly, so leaving
+			# the previous endpoint transparent would let the next ordinary render
+			# flush overwrite the fully opaque slot published by the materialized
+			# signal. Collapse position, size and color together before emitting.
+			reset_visual_snapshot()
 			queue_redraw()
 			if not materialized_emitted:
 				materialized_emitted = true

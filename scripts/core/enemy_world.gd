@@ -795,6 +795,14 @@ func _prepare_direct_collision_guards() -> void:
 		var enemy := _typed_enemies[slot]
 		if _direct_collision_active[slot] == 0:
 			continue
+		# Bosses retain the shared collision registry for Doctor blocking, damage
+		# contact and arena bounds, but never acquire an enemy-body queue or lane.
+		if enemy != null and enemy.definition != null and enemy.definition.is_boss:
+			_clear_direct_collision_bypass(slot)
+			_crowd_motion_guard_counts[slot] = 0
+			_crowd_motion_guards[slot] = 1
+			_direct_collision_queued[slot] = 0
+			continue
 		if (
 			_crowd_motion_guards[slot] == 0
 			or posmod(slot, DIRECT_COLLISION_UPDATE_PHASES) == _crowd_phase
@@ -937,7 +945,12 @@ func _refresh_direct_collision_guards(slot: int, enemy: InfectionEnemy) -> void:
 		):
 			continue
 		var other := _typed_enemies[other_slot]
-		if other == null or _direct_collision_active[other_slot] == 0:
+		if (
+			other == null
+			or _direct_collision_active[other_slot] == 0
+			or other.definition == null
+			or other.definition.is_boss
+		):
 			continue
 		var center_delta := (
 			other.global_position - enemy.global_position
@@ -1087,7 +1100,12 @@ func _refresh_direct_collision_corridor_cache(
 		):
 			continue
 		var other := _typed_enemies[other_slot]
-		if other == null or _direct_collision_active[other_slot] == 0:
+		if (
+			other == null
+			or _direct_collision_active[other_slot] == 0
+			or other.definition == null
+			or other.definition.is_boss
+		):
 			continue
 		var to_other := (
 			other.global_position - enemy.global_position
@@ -1158,6 +1176,8 @@ func _direct_collision_guard_limit(contact_radius: float) -> int:
 ## component opposite to the original movement direction.
 func _resolve_direct_collision(slot: int, enemy: InfectionEnemy, movement_origin: Vector2) -> void:
 	if _crowd_topology == null or enemy == null or enemy.definition == null:
+		return
+	if enemy.definition.is_boss:
 		return
 	var requested_delta := (
 		enemy.global_position - movement_origin
@@ -1246,7 +1266,12 @@ func _resolve_direct_collision(slot: int, enemy: InfectionEnemy, movement_origin
 			):
 				continue
 			var other := _typed_enemies[other_slot]
-			if other == null or _direct_collision_active[other_slot] == 0:
+			if (
+				other == null
+				or _direct_collision_active[other_slot] == 0
+				or other.definition == null
+				or other.definition.is_boss
+			):
 				continue
 			var to_other := (
 				other.global_position - movement_origin
@@ -1299,7 +1324,12 @@ func _resolve_direct_collision(slot: int, enemy: InfectionEnemy, movement_origin
 			):
 				continue
 			var other := _typed_enemies[other_slot]
-			if other == null or _direct_collision_active[other_slot] == 0:
+			if (
+				other == null
+				or _direct_collision_active[other_slot] == 0
+				or other.definition == null
+				or other.definition.is_boss
+			):
 				continue
 			var final_to_other := (
 				other.global_position - (movement_origin + resolved_delta)

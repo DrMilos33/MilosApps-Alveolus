@@ -27,7 +27,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Lerne Galopp, Behandlung, Erfahrung und Abwehrzellen kennen.",
 			"Das erste Lungenmodell ist stabilisiert. Die regulären Patientenfälle stehen nun bereit.",
 			"Das Modell blieb instabil. Wiederhole die Einführung in deinem eigenen Tempo."
-		).configure_case_variation([], [], 0).configure_boss(&"intro_focus", false),
+		).configure_case_variation([], [], 0).configure_boss(&"intro_focus", true),
 		LevelDefinition.create(
 			&"localized_focus", 1, "lol - name fehlt", "Fall 01 · lokalisierter Pneumokokkenherd", false,
 			-1.0, 180.0, 50.0, 0.827, 0.187, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
@@ -82,7 +82,7 @@ static func enemy_definitions() -> Dictionary:
 		).configure_contact_radius(47.0),
 		&"intro_focus": EnemyDefinition.create(
 			&"intro_focus", "Infektionsherd", 2200.0, 30.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
-		).configure_contact_radius(56.0)
+		).configure_contact_radius(56.0).configure_projectile_attack(2.0, 2.6, &"normal", true)
 	}
 	return result
 

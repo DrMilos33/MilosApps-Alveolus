@@ -10,6 +10,7 @@ func _init() -> void:
 
 func _run() -> void:
 	_test_case_two_boss_contract()
+	await _test_intro_boss_normal_attack()
 	await _test_generation_safe_attack_director()
 	await _test_hostile_projectile_geometry()
 	if failures == 0:
@@ -30,11 +31,44 @@ func _test_case_two_boss_contract() -> void:
 	var enemies := ContentCatalog.enemy_definitions()
 	var boss := enemies[&"infection_focus"] as EnemyDefinition
 	var nest := enemies[&"minor_focus"] as EnemyDefinition
+	var intro_boss := enemies[&"intro_focus"] as EnemyDefinition
 	_near(boss.projectile_damage, 4.0, "Der Boss besitzt Projektilschaden")
 	_near(boss.projectile_interval, 1.6, "Der Boss feuert fortlaufend")
 	_equal(boss.projectile_pattern, &"diamond", "Der Boss verwendet das Rautenmuster")
 	_near(nest.projectile_damage, 2.0, "Der kleine Herd besitzt Projektilschaden")
 	_equal(nest.projectile_pattern, &"normal", "Der kleine Herd verwendet normale Projektile")
+	_near(intro_boss.projectile_damage, 2.0, "Der Intro-Boss besitzt zurückhaltenden Projektilschaden")
+	_near(intro_boss.projectile_interval, 2.6, "Der Intro-Boss feuert im ruhigen Normaltakt")
+	_equal(intro_boss.projectile_pattern, &"normal", "Der Intro-Boss verwendet ausdrücklich das normale Projektil")
+
+
+func _test_intro_boss_normal_attack() -> void:
+	var topology := ArenaTopology.new(Rect2(-600.0, -400.0, 1200.0, 800.0))
+	var avatar := TherapyAvatar.new()
+	avatar.global_position = Vector2(260.0, 0.0)
+	get_root().add_child(avatar)
+	var world := EnemyWorld.new().configure_enemy_world()
+	var intro_boss := InfectionEnemy.new()
+	get_root().add_child(intro_boss)
+	intro_boss.global_position = Vector2.ZERO
+	intro_boss.configure(ContentCatalog.enemy_definitions()[&"intro_focus"], avatar, topology)
+	intro_boss.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	var handle := world.register_enemy(intro_boss, true)
+	var director := EnemyAttackDirector.new().configure(CombatCapacity.defaults().max_enemies, world.resolve)
+	var shots: Array[Dictionary] = []
+	director.projectile_requested.connect(func(source: int, pattern: int, phase: float, role: int) -> void:
+		shots.append({"source": source, "pattern": pattern, "phase": phase, "role": role})
+	)
+	_true(director.register_enemy(handle, EnemyAttackDirector.Role.BOSS), "Intro-Boss wird generationensicher als Schütze registriert")
+	director.step_fixed(0.65)
+	_equal(shots.size(), 1, "Der Intro-Boss feuert pro Angriff exakt ein Projektil")
+	if shots.size() == 1:
+		_equal(int(shots[0]["pattern"]), EnemyAttackDirector.Pattern.NORMAL, "Der Intro-Boss feuert kein Rautenprojektil")
+		_near(float(shots[0]["phase"]), 0.0, "Das normale Introprojektil besitzt keine Rautenphase")
+	world.clear()
+	intro_boss.queue_free()
+	avatar.queue_free()
+	await process_frame
 
 
 func _test_generation_safe_attack_director() -> void:

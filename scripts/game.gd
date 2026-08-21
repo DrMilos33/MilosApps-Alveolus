@@ -31,12 +31,15 @@ const WAVE_SPAWN_SCREEN_MARGIN := 110.0
 const WAVE_PRESSURE_NEAR_MARGIN := 300.0
 const WAVE_PRESSURE_NEIGHBOR_SHARE := 0.22
 const OFFSCREEN_RELOCATION_INTERVAL := 0.5
-const OFFSCREEN_RELOCATION_ENEMIES_PER_BUDGET_STEP := 20
-const OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT := 5
+const OFFSCREEN_RELOCATION_ENEMIES_PER_BUDGET_STEP := 15
+const OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT := 7
 const OFFSCREEN_RELOCATION_SOURCE_MARGIN := 72.0
 const OFFSCREEN_RELOCATION_HIDDEN_MARGIN := 24.0
-const OFFSCREEN_RELOCATION_MINIMUM_SECTOR_DISTANCE := 4
-const OFFSCREEN_RELOCATION_MAXIMUM_DIRECTION_DOT := -0.60
+const OFFSCREEN_RELOCATION_MINIMUM_SECTOR_DISTANCE := 2
+const OFFSCREEN_RELOCATION_RANDOM_SECTOR_CHOICES := 6
+const OFFSCREEN_RELOCATION_TARGET_SECTOR_ATTEMPTS := 4
+const OFFSCREEN_RELOCATION_POINT_ATTEMPTS_PER_SECTOR := 2
+const OFFSCREEN_RELOCATION_MAXIMUM_TARGETS_PER_SECTOR := 2
 const OFFSCREEN_PLACEMENT_ANGLE_OFFSETS: Array[float] = [0.0, -0.14, 0.14, -0.24, 0.24]
 const OFFSCREEN_PLACEMENT_RADIAL_OFFSETS: Array[float] = [0.0, 42.0, 84.0]
 const OFFSCREEN_PLACEMENT_BODY_GAP := 4.0
@@ -51,6 +54,7 @@ var state: RunState
 var stats: PlayerStats
 var rng := RandomNumberGenerator.new()
 var spawn_rng := RandomNumberGenerator.new()
+var relocation_rng := RandomNumberGenerator.new()
 var spawn_attempt_index: int = 0
 var spawn_angle_cursor: float = 0.0
 var enemy_definitions: Dictionary
@@ -196,6 +200,7 @@ var _offscreen_relocation_candidate_sectors: PackedInt32Array = PackedInt32Array
 var _offscreen_relocation_candidate_depths: PackedFloat32Array = PackedFloat32Array()
 var _offscreen_relocation_source_backlog: PackedFloat32Array = PackedFloat32Array()
 var _offscreen_relocation_target_pressure: PackedFloat32Array = PackedFloat32Array()
+var _offscreen_relocation_target_reservations: PackedInt32Array = PackedInt32Array()
 var _offscreen_relocation_sector_candidate_handles: PackedInt64Array = PackedInt64Array()
 var _offscreen_relocation_sector_candidate_depths: PackedFloat32Array = PackedFloat32Array()
 var _offscreen_selected_target_sector: int = -1
@@ -1370,6 +1375,7 @@ func start_run(run_context: RunContext = null) -> void:
 	avatar.queue_redraw()
 	rng.seed = config.random_seed
 	_reset_spawn_position_sequence()
+	relocation_rng.seed = int(config.random_seed) ^ 0x52454C4F43415445
 	spawn_accumulator = config.initial_spawn_interval
 	offscreen_relocation_timer = OFFSCREEN_RELOCATION_INTERVAL
 	offscreen_relocation_move_timer = 0.0
@@ -2910,6 +2916,7 @@ func _finalize_fixed_step() -> void:
 	_flush_deferred_world_releases()
 	_flush_combat_events()
 	_flush_deferred_world_releases()
+	_update_boss_direction_indicator()
 	_profile_phase(&"event_queue_flush", phase_started)
 	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
 	if crowd_renderer != null:
@@ -2937,6 +2944,40 @@ func _store_projectile(projectile: TherapyProjectile) -> void:
 			projectile_pool.append(projectile)
 	else:
 		projectile.queue_free()
+
+
+func _update_boss_direction_indicator() -> void:
+	if hud == null or topology == null or enemy_world == null or active_boss_handles.is_empty():
+		if hud != null:
+			hud.set_boss_direction_indicator(false, Vector2.ZERO)
+		return
+	var visible_rect := _visible_world_rect()
+	var camera_center := visible_rect.get_center()
+	var selected_direction := Vector2.ZERO
+	var selected_distance_squared := INF
+	var selected_handle := EntityHandle.INVALID
+	for handle_value in active_boss_handles:
+		var handle := int(handle_value)
+		var boss := enemy_world.resolve(handle) as InfectionEnemy
+		if not is_instance_valid(boss) or boss.definition == null or not boss.is_targetable():
+			continue
+		var visible_radius := maxf(boss.definition.radius, boss.visual_extent() * 0.5)
+		var closest := Vector2(
+			clampf(boss.global_position.x, visible_rect.position.x, visible_rect.end.x),
+			clampf(boss.global_position.y, visible_rect.position.y, visible_rect.end.y)
+		)
+		if boss.global_position.distance_squared_to(closest) <= visible_radius * visible_radius:
+			continue
+		var direction := topology.shortest_delta(camera_center, boss.global_position)
+		var distance_squared := direction.length_squared()
+		if (
+			distance_squared < selected_distance_squared
+			or (is_equal_approx(distance_squared, selected_distance_squared) and handle < selected_handle)
+		):
+			selected_direction = direction.normalized()
+			selected_distance_squared = distance_squared
+			selected_handle = handle
+	hud.set_boss_direction_indicator(not selected_direction.is_zero_approx(), selected_direction)
 
 
 func _release_projectile_visual(projectile: TherapyProjectile, handle: int) -> void:
@@ -4110,6 +4151,8 @@ func _prepare_offscreen_relocation_snapshot() -> void:
 	_offscreen_relocation_source_backlog.fill(0.0)
 	_offscreen_relocation_target_pressure.resize(WAVE_SPAWN_SECTOR_COUNT)
 	_offscreen_relocation_target_pressure.fill(0.0)
+	_offscreen_relocation_target_reservations.resize(WAVE_SPAWN_SECTOR_COUNT)
+	_offscreen_relocation_target_reservations.fill(0)
 	var sector_candidate_capacity := WAVE_SPAWN_SECTOR_COUNT * OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT
 	_offscreen_relocation_sector_candidate_handles.resize(sector_candidate_capacity)
 	_offscreen_relocation_sector_candidate_handles.fill(EntityHandle.INVALID)
@@ -4247,51 +4290,82 @@ func _insert_offscreen_relocation_candidate(handle: int, source_sector: int, out
 
 func _offscreen_relocation_target(
 	source_sector: int,
-	source_direction: Vector2,
+	_source_direction: Vector2,
 	body_radius: float,
 	ignored_enemy: InfectionEnemy
 ) -> Vector2:
 	_offscreen_selected_target_sector = -1
 	_rank_offscreen_sectors(_offscreen_relocation_target_pressure)
 	_offscreen_opposite_sectors.resize(WAVE_SPAWN_SECTOR_COUNT)
-	var opposite_count := 0
+	var eligible_count := 0
 	for ranked_sector_value in _offscreen_ranked_sectors:
 		var ranked_sector := int(ranked_sector_value)
 		if _sector_ring_distance(source_sector, ranked_sector) < OFFSCREEN_RELOCATION_MINIMUM_SECTOR_DISTANCE:
 			continue
-		_offscreen_opposite_sectors[opposite_count] = ranked_sector
-		opposite_count += 1
-	if opposite_count <= 0:
+		if int(_offscreen_relocation_target_reservations[ranked_sector]) >= OFFSCREEN_RELOCATION_MAXIMUM_TARGETS_PER_SECTOR:
+			continue
+		_offscreen_opposite_sectors[eligible_count] = ranked_sector
+		eligible_count += 1
+	if eligible_count <= 0:
 		return Vector2.INF
-	var random_rank_limit := mini(WAVE_SPAWN_EMPTY_SECTOR_CHOICES, opposite_count)
-	var preferred_rank := spawn_rng.randi_range(0, random_rank_limit - 1)
+	# Relocation owns a deterministic RNG stream separate from ordinary spawns.
+	# Pick among several calm sectors, then jitter angle and depth inside that
+	# sector. The Director therefore creates broad, unpredictable fronts without
+	# guessing where the player will run or changing later content RNG draws.
+	var random_rank_limit := mini(OFFSCREEN_RELOCATION_RANDOM_SECTOR_CHOICES, eligible_count)
+	var preferred_rank := relocation_rng.randi_range(0, random_rank_limit - 1)
 	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
-	for sector_attempt in range(opposite_count):
-		var ranked_index := preferred_rank
-		if sector_attempt > 0:
-			ranked_index = sector_attempt - 1
-			if ranked_index >= preferred_rank:
-				ranked_index += 1
+	for sector_attempt in range(mini(eligible_count, OFFSCREEN_RELOCATION_TARGET_SECTOR_ATTEMPTS)):
+		var ranked_index := (preferred_rank + sector_attempt) % eligible_count
 		var target_sector := int(_offscreen_opposite_sectors[ranked_index])
-		var target_position := _offscreen_spawn_position(
-			(float(target_sector) + 0.5) * sector_width,
+		var angle_jitter := relocation_rng.randf_range(-sector_width * 0.34, sector_width * 0.34)
+		var target_position := _offscreen_random_relocation_position(
+			(float(target_sector) + 0.5) * sector_width + angle_jitter,
 			body_radius,
-			ignored_enemy,
-			false,
-			true
+			ignored_enemy
 		)
 		if target_position == Vector2.INF:
 			continue
 		var target_delta := topology.shortest_delta(avatar.global_position, target_position)
+		if target_delta.length_squared() <= 0.0001:
+			continue
+		var actual_target_sector := _sector_for_delta(target_delta)
 		if (
-			target_delta.length_squared() <= 0.0001
-			or source_direction.dot(target_delta.normalized()) > OFFSCREEN_RELOCATION_MAXIMUM_DIRECTION_DOT
+			_sector_ring_distance(source_sector, actual_target_sector) < OFFSCREEN_RELOCATION_MINIMUM_SECTOR_DISTANCE
+			or int(_offscreen_relocation_target_reservations[actual_target_sector]) >= OFFSCREEN_RELOCATION_MAXIMUM_TARGETS_PER_SECTOR
 		):
 			continue
 		if not _offscreen_position_is_fully_hidden(target_position, body_radius):
 			continue
-		_offscreen_selected_target_sector = target_sector
+		_offscreen_selected_target_sector = actual_target_sector
+		_offscreen_relocation_target_reservations[actual_target_sector] += 1
 		return target_position
+	return Vector2.INF
+
+
+func _offscreen_random_relocation_position(
+	angle: float,
+	body_radius: float,
+	ignored_enemy: InfectionEnemy
+) -> Vector2:
+	var candidate_count := OFFSCREEN_PLACEMENT_RADIAL_OFFSETS.size() * OFFSCREEN_PLACEMENT_ANGLE_OFFSETS.size()
+	if candidate_count <= 0:
+		return Vector2.INF
+	var start_index := relocation_rng.randi_range(0, candidate_count - 1)
+	# Seven is coprime with the 15 authored angle/depth combinations, so the
+	# bounded attempt window samples different bands without allocations.
+	for attempt in range(mini(OFFSCREEN_RELOCATION_POINT_ATTEMPTS_PER_SECTOR, candidate_count)):
+		var candidate_index := (start_index + attempt * 7) % candidate_count
+		var position := _offscreen_spawn_candidate(
+			angle,
+			body_radius,
+			candidate_index,
+			false,
+			ignored_enemy,
+			true
+		)
+		if position != Vector2.INF:
+			return position
 	return Vector2.INF
 
 
@@ -4394,6 +4468,7 @@ func _cleanup_run_nodes() -> void:
 		hud.hide_finding()
 		hud.hide_finding_progress()
 		hud.clear_active_abilities()
+		hud.set_boss_direction_indicator(false, Vector2.ZERO)
 		hud.update_shield(0.0, 0.0)
 	if treatment_controller != null:
 		treatment_controller.enabled = false

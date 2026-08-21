@@ -2904,6 +2904,7 @@ func show_running_hud() -> void:
 	set_process(false)
 	boss_hud_active = false
 	run_hud_vitals["boss_visible"] = false
+	set_boss_direction_indicator(false, Vector2.ZERO)
 	_apply_run_hud_model()
 	_refresh_run_stats()
 
@@ -3344,6 +3345,12 @@ func update_boss_health(current: float, maximum: float) -> void:
 	run_hud_vitals["boss_current"] = current
 	run_hud_vitals["boss_maximum"] = maximum
 	_apply_run_hud_model()
+
+
+func set_boss_direction_indicator(visible: bool, direction: Vector2) -> void:
+	if run_hud_screen != null:
+		run_hud_screen.set_boss_direction_indicator(visible, direction)
+
 
 func show_boss_phase(phase: int) -> void:
 	run_hud_vitals["boss_phase"] = "Phase %d aktiv" % (phase + 1)
