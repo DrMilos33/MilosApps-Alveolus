@@ -347,15 +347,20 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase.
 
-At most three ordinary melee enemies per 1.5-second relocation window may move
-from an overloaded offscreen sector to one of the three calmest sectors. A
-source must lie at least 72 world units beyond the current camera rectangle;
-the destination is the nearest free offscreen ring and the same entity cannot
-be moved again for three seconds. Relocation preserves generation, health and
-status and atomically snaps renderer history. It is denied for bosses, minor
-foci, ranged roles, tutorial roles, stunned or recently damaged/knocked bodies.
-Runtime locomotion still performs only the bounded local contact-circle query
-described above; it never gains a global steering target.
+The relocation director snapshots the complete eligible offscreen backlog every
+0.5 seconds instead of deriving sources from the local target-pressure window.
+It schedules at most two distinct handles from that snapshot and executes them
+0.25 seconds apart. The most distant body in the strongest backlog sector is
+preferred. Its target is selected only from sectors at least 120 degrees away,
+using the three calmest values from the existing local pressure model. The full
+body plus a 24-world-unit safety margin must remain outside the actual camera
+rectangle; there is no visible or same-side fallback. A source still lies at
+least 72 world units beyond the camera and the same entity cannot move again for
+three seconds. Relocation preserves generation, health and status and
+atomically snaps renderer history. It is denied for bosses, minor foci, ranged
+roles, tutorial roles, stunned or recently damaged/knocked bodies. Runtime
+locomotion still performs only the bounded local contact-circle query described
+above; it never gains a global steering target.
 
 Knockback state lives on `InfectionEnemy` and advances inside the existing
 typed EnemyWorld loop. `Stoß` supplies a distance, short eased travel duration

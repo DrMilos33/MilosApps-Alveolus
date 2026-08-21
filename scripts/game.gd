@@ -30,10 +30,14 @@ const WAVE_SPAWN_EMPTY_SECTOR_CHOICES := 3
 const WAVE_SPAWN_SCREEN_MARGIN := 110.0
 const WAVE_PRESSURE_NEAR_MARGIN := 300.0
 const WAVE_PRESSURE_NEIGHBOR_SHARE := 0.22
-const OFFSCREEN_RELOCATION_INTERVAL := 1.5
-const OFFSCREEN_RELOCATION_MAXIMUM := 3
+const OFFSCREEN_RELOCATION_INTERVAL := 0.5
+const OFFSCREEN_RELOCATION_MOVE_INTERVAL := 0.25
+const OFFSCREEN_RELOCATION_FIRST_MOVE_DELAY := 0.125
+const OFFSCREEN_RELOCATION_MAXIMUM := 2
 const OFFSCREEN_RELOCATION_SOURCE_MARGIN := 72.0
-const OFFSCREEN_RELOCATION_PRESSURE_ADVANTAGE := 0.10
+const OFFSCREEN_RELOCATION_HIDDEN_MARGIN := 24.0
+const OFFSCREEN_RELOCATION_MINIMUM_SECTOR_DISTANCE := 4
+const OFFSCREEN_RELOCATION_MAXIMUM_DIRECTION_DOT := -0.60
 const OFFSCREEN_PLACEMENT_ANGLE_OFFSETS: Array[float] = [0.0, -0.14, 0.14, -0.24, 0.24]
 const OFFSCREEN_PLACEMENT_RADIAL_OFFSETS: Array[float] = [0.0, 42.0, 84.0]
 const OFFSCREEN_PLACEMENT_BODY_GAP := 4.0
@@ -147,6 +151,7 @@ var treatment_beam_return_visualized: Dictionary = {}
 
 var spawn_accumulator: float = 0.0
 var offscreen_relocation_timer: float = OFFSCREEN_RELOCATION_INTERVAL
+var offscreen_relocation_move_timer: float = 0.0
 var offscreen_relocation_pending: int = 0
 var therapy_timer: float = 0.0
 var immune_timer: float = 0.0
@@ -183,7 +188,16 @@ var _combat_query_dirty: bool = true
 var _combat_query_handles: PackedInt64Array = PackedInt64Array()
 var _offscreen_clearance_candidates: PackedInt64Array = PackedInt64Array()
 var _offscreen_ranked_sectors: PackedInt32Array = PackedInt32Array()
-var _offscreen_relocated_handles: PackedInt64Array = PackedInt64Array()
+var _offscreen_opposite_sectors: PackedInt32Array = PackedInt32Array()
+var _offscreen_relocation_candidate_handles: PackedInt64Array = PackedInt64Array()
+var _offscreen_relocation_candidate_sectors: PackedInt32Array = PackedInt32Array()
+var _offscreen_relocation_candidate_depths: PackedFloat32Array = PackedFloat32Array()
+var _offscreen_relocation_source_backlog: PackedFloat32Array = PackedFloat32Array()
+var _offscreen_relocation_target_pressure: PackedFloat32Array = PackedFloat32Array()
+var _offscreen_relocation_sector_candidate_handles: PackedInt64Array = PackedInt64Array()
+var _offscreen_relocation_sector_candidate_depths: PackedFloat32Array = PackedFloat32Array()
+var _offscreen_selected_target_sector: int = -1
+var _offscreen_relocation_candidate_cursor: int = 0
 var _pickup_query_dirty: bool = true
 var _pickup_query_handles: PackedInt64Array = PackedInt64Array()
 
@@ -1356,6 +1370,7 @@ func start_run(run_context: RunContext = null) -> void:
 	_reset_spawn_position_sequence()
 	spawn_accumulator = config.initial_spawn_interval
 	offscreen_relocation_timer = OFFSCREEN_RELOCATION_INTERVAL
+	offscreen_relocation_move_timer = 0.0
 	offscreen_relocation_pending = 0
 	therapy_timer = 0.18
 	immune_timer = 0.75
@@ -3933,11 +3948,18 @@ func _offscreen_spawn_candidate(
 	if topology.is_bounded() and not topology.contains_position(position, body_radius):
 		return Vector2.INF
 	position = topology.resolve_position(position, body_radius)
+	if not _offscreen_position_is_fully_hidden(position, body_radius):
+		return Vector2.INF
 	return (
 		position
 		if _offscreen_position_is_clear(position, body_radius, ignored_enemy, use_enemy_world_index)
 		else Vector2.INF
 	)
+
+
+func _offscreen_position_is_fully_hidden(position: Vector2, body_radius: float) -> bool:
+	var hidden_rect := _visible_world_rect().grow(body_radius + OFFSCREEN_RELOCATION_HIDDEN_MARGIN)
+	return not hidden_rect.has_point(position)
 
 
 func _ray_distance_to_visible_edge(origin: Vector2, direction: Vector2) -> float:
@@ -4002,75 +4024,42 @@ func _sector_for_delta(delta: Vector2) -> int:
 
 func _offscreen_relocation_step(delta: float) -> void:
 	offscreen_relocation_timer -= delta
-	if offscreen_relocation_pending <= 0:
-		if offscreen_relocation_timer > 0.0:
-			return
-		offscreen_relocation_timer += OFFSCREEN_RELOCATION_INTERVAL
-		offscreen_relocation_pending = OFFSCREEN_RELOCATION_MAXIMUM
-		_offscreen_relocated_handles.resize(OFFSCREEN_RELOCATION_MAXIMUM)
-		_offscreen_relocated_handles.fill(EntityHandle.INVALID)
+	offscreen_relocation_move_timer = maxf(0.0, offscreen_relocation_move_timer - delta)
 	if not is_instance_valid(avatar) or topology == null or enemy_world == null:
 		offscreen_relocation_pending = 0
 		return
-	var pressure := _local_wave_sector_pressure()
+	if offscreen_relocation_timer <= 0.0:
+		while offscreen_relocation_timer <= 0.0:
+			offscreen_relocation_timer += OFFSCREEN_RELOCATION_INTERVAL
+		_prepare_offscreen_relocation_snapshot()
+	if offscreen_relocation_pending <= 0 or offscreen_relocation_move_timer > 0.0:
+		return
+	offscreen_relocation_move_timer += OFFSCREEN_RELOCATION_MOVE_INTERVAL
+	var candidate_index := _offscreen_relocation_candidate_cursor
+	_offscreen_relocation_candidate_cursor += 1
+	offscreen_relocation_pending = maxi(0, offscreen_relocation_pending - 1)
+	if candidate_index < 0 or candidate_index >= _offscreen_relocation_candidate_handles.size():
+		return
+	var selected_handle := int(_offscreen_relocation_candidate_handles[candidate_index])
+	var selected_enemy := enemy_world.resolve(selected_handle) as InfectionEnemy
 	var source_exclusion_rect := _visible_world_rect().grow(OFFSCREEN_RELOCATION_SOURCE_MARGIN)
-	var relocated_before := OFFSCREEN_RELOCATION_MAXIMUM - offscreen_relocation_pending
-	_rank_offscreen_sectors(pressure)
-	var random_rank_limit := mini(WAVE_SPAWN_EMPTY_SECTOR_CHOICES, WAVE_SPAWN_SECTOR_COUNT)
-	var preferred_rank := spawn_rng.randi_range(0, random_rank_limit - 1)
-	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
-	var target_sector := -1
-	var target_position := Vector2.INF
-	for sector_attempt in range(WAVE_SPAWN_SECTOR_COUNT):
-		var ranked_index := preferred_rank
-		if sector_attempt > 0:
-			ranked_index = sector_attempt - 1
-			if ranked_index >= preferred_rank:
-				ranked_index += 1
-		target_sector = int(_offscreen_ranked_sectors[ranked_index])
-		target_position = _offscreen_spawn_position(
-			(float(target_sector) + 0.5) * sector_width,
-			18.0,
-			null,
-			false,
-			true
-		)
-		if target_position != Vector2.INF:
-			break
-	if target_position == Vector2.INF:
-		offscreen_relocation_pending = 0
+	if not _enemy_can_relocate_offscreen(selected_enemy, source_exclusion_rect):
 		return
-
-	var selected_enemy: InfectionEnemy = null
-	var selected_source_pressure := float(pressure[target_sector])
-	for enemy in enemies:
-		var candidate_handle := enemy_world.handle_for(enemy) if is_instance_valid(enemy) else EntityHandle.INVALID
-		if _offscreen_handle_was_relocated(candidate_handle, relocated_before) or not _enemy_can_relocate_offscreen(enemy, source_exclusion_rect):
-			continue
-		var source_delta := topology.shortest_delta(avatar.global_position, enemy.global_position)
-		var source_sector := _sector_for_delta(source_delta)
-		var source_pressure := float(pressure[source_sector])
-		if source_pressure <= selected_source_pressure + OFFSCREEN_RELOCATION_PRESSURE_ADVANTAGE:
-			continue
-		selected_enemy = enemy
-		selected_source_pressure = source_pressure
-	if selected_enemy == null:
-		offscreen_relocation_pending = 0
-		return
-	var selected_radius := selected_enemy.definition.radius if selected_enemy.definition != null else 18.0
-	if not is_equal_approx(selected_radius, 18.0):
-		target_position = _offscreen_spawn_position(
-			(float(target_sector) + 0.5) * sector_width,
-			selected_radius,
-			selected_enemy,
-			false,
-			true
-		)
-		if target_position == Vector2.INF:
-			offscreen_relocation_pending = 0
-			return
 	var source_delta := topology.shortest_delta(avatar.global_position, selected_enemy.global_position)
+	if source_delta.length_squared() <= 0.0001:
+		return
 	var source_sector := _sector_for_delta(source_delta)
+	var selected_radius := selected_enemy.definition.radius if selected_enemy.definition != null else 18.0
+	var target_position := _offscreen_relocation_target(
+		source_sector,
+		source_delta.normalized(),
+		selected_radius,
+		selected_enemy
+	)
+	if target_position == Vector2.INF:
+		return
+	if not _offscreen_position_is_fully_hidden(target_position, selected_radius):
+		return
 	var weight := 2.0 if selected_enemy.definition != null and selected_enemy.definition.id == &"bacterial_cluster" else 1.0
 	var relocation_applied := false
 	var previous_position := selected_enemy.global_position
@@ -4081,10 +4070,8 @@ func _offscreen_relocation_step(delta: float) -> void:
 		selected_enemy.reset_visual_motion()
 		relocation_applied = true
 	if not relocation_applied:
-		offscreen_relocation_pending = 0
 		return
 	var handle := enemy_world.handle_for(selected_enemy)
-	_offscreen_relocated_handles[relocated_before] = handle
 	if EntityHandle.is_valid(handle) and enemy_world.has_method(&"mark_enemy_relocated"):
 		enemy_world.call(&"mark_enemy_relocated", handle, previous_position)
 		if not _combat_query_dirty:
@@ -4095,10 +4082,206 @@ func _offscreen_relocation_step(delta: float) -> void:
 		_combat_query_dirty = true
 	if crowd_renderer != null and crowd_renderer.has_method(&"mark_enemy_teleported"):
 		crowd_renderer.call(&"mark_enemy_teleported", selected_enemy)
-	pressure[source_sector] = maxf(0.0, pressure[source_sector] - weight)
-	pressure[target_sector] += weight
-	offscreen_relocation_pending = maxi(0, offscreen_relocation_pending - 1)
+	if _offscreen_selected_target_sector >= 0:
+		var target_sector := _offscreen_selected_target_sector
+		_offscreen_relocation_target_pressure[target_sector] += weight
+		_offscreen_relocation_target_pressure[posmod(target_sector - 1, WAVE_SPAWN_SECTOR_COUNT)] += weight * WAVE_PRESSURE_NEIGHBOR_SHARE
+		_offscreen_relocation_target_pressure[posmod(target_sector + 1, WAVE_SPAWN_SECTOR_COUNT)] += weight * WAVE_PRESSURE_NEIGHBOR_SHARE
 	_combat_query_dirty = true
+
+
+func _prepare_offscreen_relocation_snapshot() -> void:
+	offscreen_relocation_pending = 0
+	_offscreen_relocation_candidate_cursor = 0
+	_offscreen_relocation_candidate_handles.resize(OFFSCREEN_RELOCATION_MAXIMUM)
+	_offscreen_relocation_candidate_handles.fill(EntityHandle.INVALID)
+	_offscreen_relocation_candidate_sectors.resize(OFFSCREEN_RELOCATION_MAXIMUM)
+	_offscreen_relocation_candidate_sectors.fill(-1)
+	_offscreen_relocation_candidate_depths.resize(OFFSCREEN_RELOCATION_MAXIMUM)
+	_offscreen_relocation_candidate_depths.fill(-INF)
+	_offscreen_relocation_source_backlog.resize(WAVE_SPAWN_SECTOR_COUNT)
+	_offscreen_relocation_source_backlog.fill(0.0)
+	_offscreen_relocation_target_pressure.resize(WAVE_SPAWN_SECTOR_COUNT)
+	_offscreen_relocation_target_pressure.fill(0.0)
+	var sector_candidate_capacity := WAVE_SPAWN_SECTOR_COUNT * OFFSCREEN_RELOCATION_MAXIMUM
+	_offscreen_relocation_sector_candidate_handles.resize(sector_candidate_capacity)
+	_offscreen_relocation_sector_candidate_handles.fill(EntityHandle.INVALID)
+	_offscreen_relocation_sector_candidate_depths.resize(sector_candidate_capacity)
+	_offscreen_relocation_sector_candidate_depths.fill(-INF)
+	var source_exclusion_rect := _visible_world_rect().grow(OFFSCREEN_RELOCATION_SOURCE_MARGIN)
+	var local_rect := _visible_world_rect().grow(WAVE_PRESSURE_NEAR_MARGIN)
+	var local_radius := local_rect.size.length() * 0.5 + avatar.global_position.distance_to(local_rect.get_center())
+	var local_radius_squared := local_radius * local_radius
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or enemy.definition == null or not enemy.activation_active or enemy.dying:
+			continue
+		var source_delta := topology.shortest_delta(avatar.global_position, enemy.global_position)
+		if source_delta.length_squared() <= 0.0001:
+			continue
+		var source_sector := _sector_for_delta(source_delta)
+		var weight := 2.0 if enemy.definition != null and enemy.definition.id == &"bacterial_cluster" else 1.0
+		var distance_squared := source_delta.length_squared()
+		if local_rect.has_point(enemy.global_position) and distance_squared <= local_radius_squared:
+			var distance_weight := 1.0 - clampf(sqrt(distance_squared) / local_radius, 0.0, 1.0)
+			var local_weight := weight * (0.35 + 1.65 * distance_weight * distance_weight)
+			_offscreen_relocation_target_pressure[source_sector] += local_weight
+			_offscreen_relocation_target_pressure[posmod(source_sector - 1, WAVE_SPAWN_SECTOR_COUNT)] += local_weight * WAVE_PRESSURE_NEIGHBOR_SHARE
+			_offscreen_relocation_target_pressure[posmod(source_sector + 1, WAVE_SPAWN_SECTOR_COUNT)] += local_weight * WAVE_PRESSURE_NEIGHBOR_SHARE
+		if not _enemy_can_relocate_offscreen(enemy, source_exclusion_rect):
+			continue
+		var handle := enemy_world.handle_for(enemy)
+		if not EntityHandle.is_valid(handle):
+			continue
+		_offscreen_relocation_source_backlog[source_sector] += weight
+		var outside_depth := _distance_outside_rect(enemy.global_position, source_exclusion_rect)
+		_insert_offscreen_sector_candidate(handle, source_sector, outside_depth)
+	for sector in range(WAVE_SPAWN_SECTOR_COUNT):
+		var sector_offset := sector * OFFSCREEN_RELOCATION_MAXIMUM
+		for candidate_offset in range(OFFSCREEN_RELOCATION_MAXIMUM):
+			var candidate_index := sector_offset + candidate_offset
+			var handle := int(_offscreen_relocation_sector_candidate_handles[candidate_index])
+			if not EntityHandle.is_valid(handle):
+				continue
+			_insert_offscreen_relocation_candidate(
+				handle,
+				sector,
+				float(_offscreen_relocation_sector_candidate_depths[candidate_index])
+			)
+	var candidate_count := 0
+	for handle_value in _offscreen_relocation_candidate_handles:
+		if EntityHandle.is_valid(int(handle_value)):
+			candidate_count += 1
+	offscreen_relocation_pending = candidate_count
+	if candidate_count > 0:
+		offscreen_relocation_move_timer = OFFSCREEN_RELOCATION_FIRST_MOVE_DELAY
+
+
+func _insert_offscreen_sector_candidate(handle: int, source_sector: int, outside_depth: float) -> void:
+	var sector_offset := source_sector * OFFSCREEN_RELOCATION_MAXIMUM
+	var insert_offset := -1
+	for candidate_offset in range(OFFSCREEN_RELOCATION_MAXIMUM):
+		var candidate_index := sector_offset + candidate_offset
+		var stored_handle := int(_offscreen_relocation_sector_candidate_handles[candidate_index])
+		var stored_depth := float(_offscreen_relocation_sector_candidate_depths[candidate_index])
+		if (
+			not EntityHandle.is_valid(stored_handle)
+			or outside_depth > stored_depth
+			or (is_equal_approx(outside_depth, stored_depth) and handle < stored_handle)
+		):
+			insert_offset = candidate_offset
+			break
+	if insert_offset < 0:
+		return
+	for shift_offset in range(OFFSCREEN_RELOCATION_MAXIMUM - 1, insert_offset, -1):
+		var target_index := sector_offset + shift_offset
+		var source_index := target_index - 1
+		_offscreen_relocation_sector_candidate_handles[target_index] = _offscreen_relocation_sector_candidate_handles[source_index]
+		_offscreen_relocation_sector_candidate_depths[target_index] = _offscreen_relocation_sector_candidate_depths[source_index]
+	var insert_index := sector_offset + insert_offset
+	_offscreen_relocation_sector_candidate_handles[insert_index] = handle
+	_offscreen_relocation_sector_candidate_depths[insert_index] = outside_depth
+
+
+func _insert_offscreen_relocation_candidate(handle: int, source_sector: int, outside_depth: float) -> void:
+	var insert_index := -1
+	var candidate_backlog := float(_offscreen_relocation_source_backlog[source_sector])
+	for index in range(OFFSCREEN_RELOCATION_MAXIMUM):
+		var stored_handle := int(_offscreen_relocation_candidate_handles[index])
+		if not EntityHandle.is_valid(stored_handle):
+			insert_index = index
+			break
+		var stored_sector := int(_offscreen_relocation_candidate_sectors[index])
+		var stored_backlog := float(_offscreen_relocation_source_backlog[stored_sector])
+		var stored_depth := float(_offscreen_relocation_candidate_depths[index])
+		if (
+			candidate_backlog > stored_backlog
+			or (is_equal_approx(candidate_backlog, stored_backlog) and outside_depth > stored_depth)
+			or (
+				is_equal_approx(candidate_backlog, stored_backlog)
+				and is_equal_approx(outside_depth, stored_depth)
+				and handle < stored_handle
+			)
+		):
+			insert_index = index
+			break
+	if insert_index < 0:
+		return
+	for shift_index in range(OFFSCREEN_RELOCATION_MAXIMUM - 1, insert_index, -1):
+		_offscreen_relocation_candidate_handles[shift_index] = _offscreen_relocation_candidate_handles[shift_index - 1]
+		_offscreen_relocation_candidate_sectors[shift_index] = _offscreen_relocation_candidate_sectors[shift_index - 1]
+		_offscreen_relocation_candidate_depths[shift_index] = _offscreen_relocation_candidate_depths[shift_index - 1]
+	_offscreen_relocation_candidate_handles[insert_index] = handle
+	_offscreen_relocation_candidate_sectors[insert_index] = source_sector
+	_offscreen_relocation_candidate_depths[insert_index] = outside_depth
+
+
+func _offscreen_relocation_target(
+	source_sector: int,
+	source_direction: Vector2,
+	body_radius: float,
+	ignored_enemy: InfectionEnemy
+) -> Vector2:
+	_offscreen_selected_target_sector = -1
+	_rank_offscreen_sectors(_offscreen_relocation_target_pressure)
+	_offscreen_opposite_sectors.resize(WAVE_SPAWN_SECTOR_COUNT)
+	var opposite_count := 0
+	for ranked_sector_value in _offscreen_ranked_sectors:
+		var ranked_sector := int(ranked_sector_value)
+		if _sector_ring_distance(source_sector, ranked_sector) < OFFSCREEN_RELOCATION_MINIMUM_SECTOR_DISTANCE:
+			continue
+		_offscreen_opposite_sectors[opposite_count] = ranked_sector
+		opposite_count += 1
+	if opposite_count <= 0:
+		return Vector2.INF
+	var random_rank_limit := mini(WAVE_SPAWN_EMPTY_SECTOR_CHOICES, opposite_count)
+	var preferred_rank := spawn_rng.randi_range(0, random_rank_limit - 1)
+	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
+	for sector_attempt in range(opposite_count):
+		var ranked_index := preferred_rank
+		if sector_attempt > 0:
+			ranked_index = sector_attempt - 1
+			if ranked_index >= preferred_rank:
+				ranked_index += 1
+		var target_sector := int(_offscreen_opposite_sectors[ranked_index])
+		var target_position := _offscreen_spawn_position(
+			(float(target_sector) + 0.5) * sector_width,
+			body_radius,
+			ignored_enemy,
+			false,
+			true
+		)
+		if target_position == Vector2.INF:
+			continue
+		var target_delta := topology.shortest_delta(avatar.global_position, target_position)
+		if (
+			target_delta.length_squared() <= 0.0001
+			or source_direction.dot(target_delta.normalized()) > OFFSCREEN_RELOCATION_MAXIMUM_DIRECTION_DOT
+		):
+			continue
+		if not _offscreen_position_is_fully_hidden(target_position, body_radius):
+			continue
+		_offscreen_selected_target_sector = target_sector
+		return target_position
+	return Vector2.INF
+
+
+func _sector_ring_distance(first_sector: int, second_sector: int) -> int:
+	var direct_distance := absi(first_sector - second_sector)
+	return mini(direct_distance, WAVE_SPAWN_SECTOR_COUNT - direct_distance)
+
+
+func _distance_outside_rect(position: Vector2, rect: Rect2) -> float:
+	var horizontal := 0.0
+	if position.x < rect.position.x:
+		horizontal = rect.position.x - position.x
+	elif position.x > rect.end.x:
+		horizontal = position.x - rect.end.x
+	var vertical := 0.0
+	if position.y < rect.position.y:
+		vertical = rect.position.y - position.y
+	elif position.y > rect.end.y:
+		vertical = position.y - rect.end.y
+	return Vector2(horizontal, vertical).length()
 
 
 func _rank_offscreen_sectors(pressure: PackedFloat32Array) -> void:
@@ -4120,13 +4303,6 @@ func _rank_offscreen_sectors(pressure: PackedFloat32Array) -> void:
 			_offscreen_ranked_sectors[insert_index + 1] = stored_sector
 			insert_index -= 1
 		_offscreen_ranked_sectors[insert_index + 1] = candidate_sector
-
-
-func _offscreen_handle_was_relocated(handle: int, relocated_count: int) -> bool:
-	for index in range(relocated_count):
-		if int(_offscreen_relocated_handles[index]) == handle:
-			return true
-	return false
 
 
 func _enemy_can_relocate_offscreen(enemy: InfectionEnemy, source_exclusion_rect: Rect2) -> bool:

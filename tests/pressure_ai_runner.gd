@@ -1,32 +1,57 @@
 extends SceneTree
 
-## Fixed-seed, graphics-free acceptance scenario for the circular-kiting
-## exploit. A one-sided 220-body crowd must be redistributed by the production
-## offscreen director and create several local attack fronts while Doctor Milos
-## keeps running in a circle. The runner reports wall time, but asserts only
-## deterministic gameplay results and bounded EnemyWorld work.
+## Fixed-seed, graphics-free acceptance scenarios for the two crowd-pressure
+## exploits that the offscreen director must close:
+##
+## 1. A one-sided 220-body crowd must become several local attack fronts while
+##    Doctor Milos keeps running in a circle.
+## 2. A gathered crowd must not remain entirely behind the camera while Doctor
+##    Milos escapes in one straight direction. Relocated bodies must always
+##    materialize fully outside both camera rectangles bracketing that tick.
+##
+## The runner reports wall time, but asserts only deterministic gameplay
+## results and bounded EnemyWorld work.
 
-const RUN_SEED := 0x5052455353555245
+const CIRCLE_RUN_SEED := 0x5052455353555245
+const LINEAR_RUN_SEED := 0x4C494E4541525052
 const FIXED_DELTA := 1.0 / 60.0
 const ENEMY_COUNT := 220
 const SECTOR_COUNT := 12
-const SIMULATION_TICKS := 2700
 const SAMPLE_INTERVAL_TICKS := 15
-const EARLY_WINDOW_TICKS := 360
-const LATE_WINDOW_START_TICK := 1350
-const ORBIT_RADIUS := 230.0
-const NEAR_PRESSURE_RADIUS := 330.0
 const PRESSURE_SECTOR_THRESHOLD := 0.35
 const RELOCATION_DISTANCE_THRESHOLD := 120.0
 
-const MINIMUM_RELOCATION_EVENTS := 24
-const MINIMUM_DISTINCT_RELOCATIONS := 14
+const CIRCLE_SIMULATION_TICKS := 2700
+const CIRCLE_EARLY_WINDOW_TICKS := 360
+const CIRCLE_LATE_WINDOW_START_TICK := 1350
+const ORBIT_RADIUS := 230.0
+const NEAR_PRESSURE_RADIUS := 330.0
+
+const MINIMUM_CIRCLE_RELOCATION_EVENTS := 24
+const MINIMUM_CIRCLE_DISTINCT_RELOCATIONS := 14
 const MINIMUM_LATE_PRESSURE_SECTORS := 5.0
 const MINIMUM_PRESSURE_SECTOR_GAIN := 1.25
 const MINIMUM_LATE_NEAR_SECTORS := 2.0
 const MINIMUM_PEAK_NEAR_SECTORS := 4
-const MINIMUM_CONTACT_EVENTS := 4
-const MINIMUM_DISTINCT_CONTACTORS := 2
+const MINIMUM_CIRCLE_CONTACT_EVENTS := 4
+const MINIMUM_CIRCLE_DISTINCT_CONTACTORS := 2
+
+const LINEAR_SIMULATION_TICKS := 1800
+const LINEAR_LATE_WINDOW_START_TICK := 600
+const LINEAR_START_OFFSET := Vector2(-1600.0, 0.0)
+const LINEAR_DIRECTION := Vector2.RIGHT
+const LINEAR_REACHABLE_RADIUS := 360.0
+const LINEAR_REAR_TOLERANCE := 20.0
+
+const MINIMUM_LINEAR_TRAVEL_DISTANCE := 2500.0
+const MINIMUM_LINEAR_RELOCATION_EVENTS := 36
+const MINIMUM_LINEAR_DISTINCT_RELOCATIONS := 22
+const MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO := 0.55
+const MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE := 1.5
+const MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE := 0.65
+const MINIMUM_LINEAR_FRONT_SIDE_SECTOR_AVERAGE := 1.0
+const MINIMUM_LINEAR_CONTACT_EVENTS := 4
+const MINIMUM_LINEAR_DISTINCT_CONTACTORS := 2
 
 var assertions := 0
 var failures := 0
@@ -40,6 +65,31 @@ func _init() -> void:
 
 func _run() -> void:
 	Engine.physics_ticks_per_second = 60
+
+	var circle_game = await _prepare_game(CIRCLE_RUN_SEED)
+	var circle_result := _run_circle_case(circle_game)
+	await _dispose_game(circle_game)
+
+	var linear_game = await _prepare_game(LINEAR_RUN_SEED)
+	var linear_result := _run_linear_escape_case(linear_game)
+	await _dispose_game(linear_game)
+
+	var report := {
+		"schema": "alveolus.pressure_ai.v2",
+		"passed": failures == 0,
+		"enemies_per_case": ENEMY_COUNT,
+		"circle": circle_result,
+		"linear_escape": linear_result,
+	}
+	print("ALVEOLUS_PRESSURE_AI_JSON=%s" % JSON.stringify(report))
+	if failures == 0:
+		print("ALVEOLUS_PRESSURE_AI_OK assertions=%d" % assertions)
+	else:
+		push_error("ALVEOLUS_PRESSURE_AI_FAILED failures=%d assertions=%d" % [failures, assertions])
+	quit(0 if failures == 0 else 1)
+
+
+func _prepare_game(run_seed: int) -> Node:
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	var game = packed.instantiate()
 	get_root().add_child(game)
@@ -55,7 +105,7 @@ func _run() -> void:
 	game.selected_level = game.levels[1]
 	var context := RunContext.create(
 		game.selected_level.id,
-		RUN_SEED,
+		run_seed,
 		PreparedLoadout.default_loadout(),
 		{},
 		&"",
@@ -72,21 +122,32 @@ func _run() -> void:
 	game.state.max_stability = 1000000000.0
 	game.state.stability = game.state.max_stability
 	game.enemy_world.set_crowd_profile_enabled(true)
+	return game
 
+
+func _dispose_game(game: Node) -> void:
+	_release_movement_input()
+	paused = false
+	if is_instance_valid(game):
+		game.queue_free()
+	await process_frame
+
+
+func _run_circle_case(game: Node) -> Dictionary:
+	contact_events = 0
+	contact_enemy_ids.clear()
 	var orbit_center: Vector2 = game.topology.bounds.get_center()
 	game.avatar.global_position = orbit_center + Vector2(ORBIT_RADIUS, 0.0)
 	game.avatar.reset_physics_interpolation()
 	game.avatar.input_enabled = true
-	var tracked_enemies := _build_one_sided_crowd(game, orbit_center)
-	_true(tracked_enemies.size() == ENEMY_COUNT, "Der Szenariolauf hält exakt %d Gegner" % ENEMY_COUNT)
+	var tracked_enemies := _build_one_sided_crowd(game, orbit_center, 0.0)
+	_true(tracked_enemies.size() == ENEMY_COUNT, "Der Kreisfall hält exakt %d Gegner" % ENEMY_COUNT)
 
-	var previous_positions := PackedVector2Array()
-	previous_positions.resize(tracked_enemies.size())
-	for index in range(tracked_enemies.size()):
-		previous_positions[index] = tracked_enemies[index].global_position
-
+	var previous_positions := _initial_positions(tracked_enemies)
 	var relocation_events := 0
 	var relocated_enemy_ids: Dictionary = {}
+	var relocation_visibility_violations := 0
+	var relocation_opposite_side_violations := 0
 	var early_pressure_sector_sum := 0.0
 	var early_sample_count := 0
 	var late_pressure_sector_sum := 0.0
@@ -97,15 +158,13 @@ func _run() -> void:
 	var peak_near_enemies := 0
 	var started_usec := Time.get_ticks_usec()
 
-	# Direct RunSession stepping is the same authoritative fixed-tick path used
-	# by Game. SceneTree time stays paused so no render frame or second clock can
-	# mutate the sample.
 	paused = true
-	for tick in range(SIMULATION_TICKS):
+	for tick in range(CIRCLE_SIMULATION_TICKS):
+		var avatar_before_tick: Vector2 = game.avatar.global_position
 		_apply_circular_input(game, orbit_center)
-		if is_instance_valid(game.avatar.camera):
-			game.avatar.camera.force_update_scroll()
-		_true(game.run_session.step_fixed(FIXED_DELTA), "RunSession bleibt in Tick %d aktiv" % tick, false)
+		var visible_before := _current_visible_rect(game)
+		_true(game.run_session.step_fixed(FIXED_DELTA), "Kreis-RunSession bleibt in Tick %d aktiv" % tick, false)
+		var visible_after := _current_visible_rect(game)
 
 		for index in range(tracked_enemies.size()):
 			var enemy: InfectionEnemy = tracked_enemies[index]
@@ -113,6 +172,15 @@ func _run() -> void:
 			if travelled >= RELOCATION_DISTANCE_THRESHOLD:
 				relocation_events += 1
 				relocated_enemy_ids[enemy.get_instance_id()] = true
+				if not _relocation_target_is_offscreen(enemy, visible_before, visible_after):
+					relocation_visibility_violations += 1
+				if not _relocation_target_is_opposite_source(
+					game,
+					avatar_before_tick,
+					previous_positions[index],
+					enemy.global_position
+				):
+					relocation_opposite_side_violations += 1
 			previous_positions[index] = enemy.global_position
 
 		if tick % SAMPLE_INTERVAL_TICKS != 0:
@@ -120,10 +188,10 @@ func _run() -> void:
 		var sample := _pressure_sample(game, tracked_enemies)
 		peak_near_sectors = maxi(peak_near_sectors, int(sample.near_sectors))
 		peak_near_enemies = maxi(peak_near_enemies, int(sample.near_enemies))
-		if tick < EARLY_WINDOW_TICKS:
+		if tick < CIRCLE_EARLY_WINDOW_TICKS:
 			early_pressure_sector_sum += float(sample.pressure_sectors)
 			early_sample_count += 1
-		elif tick >= LATE_WINDOW_START_TICK:
+		elif tick >= CIRCLE_LATE_WINDOW_START_TICK:
 			late_pressure_sector_sum += float(sample.pressure_sectors)
 			late_near_sector_sum += float(sample.near_sectors)
 			late_near_enemy_sum += float(sample.near_enemies)
@@ -131,35 +199,35 @@ func _run() -> void:
 
 	var elapsed_ms := float(Time.get_ticks_usec() - started_usec) / 1000.0
 	_release_movement_input()
+	paused = false
 	var profile: PackedInt64Array = game.enemy_world.crowd_profile_snapshot()
 	var early_pressure_average := early_pressure_sector_sum / float(maxi(early_sample_count, 1))
 	var late_pressure_average := late_pressure_sector_sum / float(maxi(late_sample_count, 1))
 	var late_near_sector_average := late_near_sector_sum / float(maxi(late_sample_count, 1))
 	var late_near_enemy_average := late_near_enemy_sum / float(maxi(late_sample_count, 1))
-	var maximum_guard_queries := SIMULATION_TICKS * (
+	var maximum_guard_queries := CIRCLE_SIMULATION_TICKS * (
 		ceili(float(ENEMY_COUNT) / float(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES)) + 1
 	)
 
-	_true(relocation_events >= MINIMUM_RELOCATION_EVENTS, "Offscreen-Director versetzt ausreichend oft (%d / %d)" % [relocation_events, MINIMUM_RELOCATION_EVENTS])
-	_true(relocated_enemy_ids.size() >= MINIMUM_DISTINCT_RELOCATIONS, "Versetzungen verteilen sich auf mehrere Gegner (%d / %d)" % [relocated_enemy_ids.size(), MINIMUM_DISTINCT_RELOCATIONS])
-	_true(late_pressure_average >= MINIMUM_LATE_PRESSURE_SECTORS, "Später lokaler Druck belegt im Mittel mehrere Sektoren (%.2f / %.2f)" % [late_pressure_average, MINIMUM_LATE_PRESSURE_SECTORS])
-	_true(late_pressure_average >= early_pressure_average + MINIMUM_PRESSURE_SECTOR_GAIN, "Der einseitige Start wird messbar zu Mehrseiten-Druck (%.2f -> %.2f)" % [early_pressure_average, late_pressure_average])
-	_true(late_near_sector_average >= MINIMUM_LATE_NEAR_SECTORS, "Nahe Gegner greifen im Mittel aus mehreren Richtungen an (%.2f / %.2f)" % [late_near_sector_average, MINIMUM_LATE_NEAR_SECTORS])
+	_true(relocation_events >= MINIMUM_CIRCLE_RELOCATION_EVENTS, "Kreisfall versetzt ausreichend oft (%d / %d)" % [relocation_events, MINIMUM_CIRCLE_RELOCATION_EVENTS])
+	_true(relocated_enemy_ids.size() >= MINIMUM_CIRCLE_DISTINCT_RELOCATIONS, "Kreisversetzungen verteilen sich auf mehrere Gegner (%d / %d)" % [relocated_enemy_ids.size(), MINIMUM_CIRCLE_DISTINCT_RELOCATIONS])
+	_true(relocation_visibility_violations == 0, "Auch im Kreisfall liegt jedes Versetzungsziel vollständig außerhalb des damaligen Bildes (%d Verstöße)" % relocation_visibility_violations)
+	_true(relocation_opposite_side_violations == 0, "Auch im Kreisfall landet jede Versetzung auf der gegenüberliegenden Seite (%d Verstöße)" % relocation_opposite_side_violations)
+	_true(late_pressure_average >= MINIMUM_LATE_PRESSURE_SECTORS, "Später lokaler Kreisdruck belegt mehrere Sektoren (%.2f / %.2f)" % [late_pressure_average, MINIMUM_LATE_PRESSURE_SECTORS])
+	_true(late_pressure_average >= early_pressure_average + MINIMUM_PRESSURE_SECTOR_GAIN, "Der einseitige Kreisstart wird messbar zu Mehrseiten-Druck (%.2f -> %.2f)" % [early_pressure_average, late_pressure_average])
+	_true(late_near_sector_average >= MINIMUM_LATE_NEAR_SECTORS, "Nahe Gegner greifen im Kreis aus mehreren Richtungen an (%.2f / %.2f)" % [late_near_sector_average, MINIMUM_LATE_NEAR_SECTORS])
 	_true(peak_near_sectors >= MINIMUM_PEAK_NEAR_SECTORS, "Der Kreisexploit erzeugt mindestens %d gleichzeitige Nahfronten (%d)" % [MINIMUM_PEAK_NEAR_SECTORS, peak_near_sectors])
-	_true(contact_events >= MINIMUM_CONTACT_EVENTS, "Kreisendes Laufen bleibt nicht schadlos (%d / %d Kontakte)" % [contact_events, MINIMUM_CONTACT_EVENTS])
-	_true(contact_enemy_ids.size() >= MINIMUM_DISTINCT_CONTACTORS, "Mehr als ein Gegner erreicht den Doctor (%d / %d)" % [contact_enemy_ids.size(), MINIMUM_DISTINCT_CONTACTORS])
-	_true(profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILDS] <= 1, "Der Crowd-Index wird nach dem einmaligen Szenarioaufbau nur inkrementell gepflegt")
-	_true(profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES] <= maximum_guard_queries, "Lokale Guard-Abfragen bleiben phasenbegrenzt (%d / %d)" % [profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES], maximum_guard_queries])
-	_true(profile[EnemyWorld.CrowdProfileCounter.CORRIDOR_EVALUATIONS] <= profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES], "Korridorprüfungen verwenden den lokalen Guard-Cache")
+	_true(contact_events >= MINIMUM_CIRCLE_CONTACT_EVENTS, "Kreisendes Laufen bleibt nicht schadlos (%d / %d Kontakte)" % [contact_events, MINIMUM_CIRCLE_CONTACT_EVENTS])
+	_true(contact_enemy_ids.size() >= MINIMUM_CIRCLE_DISTINCT_CONTACTORS, "Mehr als ein Gegner erreicht den kreisenden Doctor (%d / %d)" % [contact_enemy_ids.size(), MINIMUM_CIRCLE_DISTINCT_CONTACTORS])
+	_assert_bounded_crowd_work(profile, maximum_guard_queries, "Kreisfall")
 
-	var report := {
-		"schema": "alveolus.pressure_ai.v1",
-		"passed": failures == 0,
-		"ticks": SIMULATION_TICKS,
-		"enemies": tracked_enemies.size(),
+	return {
+		"ticks": CIRCLE_SIMULATION_TICKS,
 		"elapsed_ms_informational": elapsed_ms,
 		"relocation_events": relocation_events,
 		"distinct_relocated_enemies": relocated_enemy_ids.size(),
+		"relocation_visibility_violations": relocation_visibility_violations,
+		"relocation_opposite_side_violations": relocation_opposite_side_violations,
 		"early_pressure_sectors_avg": early_pressure_average,
 		"late_pressure_sectors_avg": late_pressure_average,
 		"late_near_sectors_avg": late_near_sector_average,
@@ -168,30 +236,124 @@ func _run() -> void:
 		"peak_near_enemies": peak_near_enemies,
 		"contact_events": contact_events,
 		"distinct_contactors": contact_enemy_ids.size(),
-		"crowd_profile": {
-			"grid_rebuilds": profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILDS],
-			"guard_queries": profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES],
-			"guard_candidates": profile[EnemyWorld.CrowdProfileCounter.GUARD_CANDIDATES],
-			"corridor_evaluations": profile[EnemyWorld.CrowdProfileCounter.CORRIDOR_EVALUATIONS],
-			"bypass_starts": profile[EnemyWorld.CrowdProfileCounter.BYPASS_STARTS],
-			"active_bypass_ticks": profile[EnemyWorld.CrowdProfileCounter.ACTIVE_BYPASS_TICKS],
-			"queued_no_corridor": profile[EnemyWorld.CrowdProfileCounter.QUEUED_NO_CORRIDOR],
-			"side_switches": profile[EnemyWorld.CrowdProfileCounter.SIDE_SWITCHES],
-		},
+		"crowd_profile": _crowd_profile_report(profile),
 	}
-	print("ALVEOLUS_PRESSURE_AI_JSON=%s" % JSON.stringify(report))
-	if failures == 0:
-		print("ALVEOLUS_PRESSURE_AI_OK assertions=%d" % assertions)
-	else:
-		push_error("ALVEOLUS_PRESSURE_AI_FAILED failures=%d assertions=%d" % [failures, assertions])
 
+
+func _run_linear_escape_case(game: Node) -> Dictionary:
+	contact_events = 0
+	contact_enemy_ids.clear()
+	var start_position: Vector2 = game.topology.bounds.get_center() + LINEAR_START_OFFSET
+	game.avatar.global_position = start_position
+	game.avatar.reset_physics_interpolation()
+	# CharacterBody2D.move_and_slide() is intentionally not the subject of this
+	# graphics-free harness. Under a paused SceneTree it integrates only a tiny
+	# fraction of the requested motion on this target platform. Drive the avatar
+	# by the same deterministic 3 px fixed-step request so this case isolates the
+	# camera-relative spawn and relocation director.
+	game.avatar.input_enabled = false
+	_current_visible_rect(game)
+	var tracked_enemies := _build_one_sided_crowd(game, start_position, PI)
+	_true(tracked_enemies.size() == ENEMY_COUNT, "Der geradlinige Fluchtfall hält exakt %d Gegner" % ENEMY_COUNT)
+
+	var previous_positions := _initial_positions(tracked_enemies)
+	var relocation_events := 0
+	var relocated_enemy_ids: Dictionary = {}
+	var relocation_visibility_violations := 0
+	var relocation_opposite_side_violations := 0
+	var late_sample_count := 0
+	var late_samples_with_front_side := 0
+	var late_visible_front_side_sum := 0.0
+	var late_reachable_front_side_sum := 0.0
+	var late_front_side_sector_sum := 0.0
+	var peak_visible_front_side := 0
+	var peak_reachable_front_side := 0
+	var started_usec := Time.get_ticks_usec()
+
+	paused = true
+	for tick in range(LINEAR_SIMULATION_TICKS):
+		var avatar_before_tick: Vector2 = game.avatar.global_position
+		_advance_linear_avatar(game)
+		var visible_before := _current_visible_rect(game)
+		_true(game.run_session.step_fixed(FIXED_DELTA), "Flucht-RunSession bleibt in Tick %d aktiv" % tick, false)
+		var visible_after := _current_visible_rect(game)
+
+		for index in range(tracked_enemies.size()):
+			var enemy: InfectionEnemy = tracked_enemies[index]
+			var travelled: float = game.topology.distance(previous_positions[index], enemy.global_position)
+			if travelled >= RELOCATION_DISTANCE_THRESHOLD:
+				relocation_events += 1
+				relocated_enemy_ids[enemy.get_instance_id()] = true
+				if not _relocation_target_is_offscreen(enemy, visible_before, visible_after):
+					relocation_visibility_violations += 1
+				if not _relocation_target_is_opposite_source(
+					game,
+					avatar_before_tick,
+					previous_positions[index],
+					enemy.global_position
+				):
+					relocation_opposite_side_violations += 1
+			previous_positions[index] = enemy.global_position
+
+		if tick < LINEAR_LATE_WINDOW_START_TICK or tick % SAMPLE_INTERVAL_TICKS != 0:
+			continue
+		var sample := _linear_pressure_sample(game, tracked_enemies, _avatar_centered_visible_rect(game))
+		late_sample_count += 1
+		late_visible_front_side_sum += float(sample.visible_front_side_enemies)
+		late_reachable_front_side_sum += float(sample.reachable_front_side_enemies)
+		late_front_side_sector_sum += float(sample.front_side_sectors)
+		peak_visible_front_side = maxi(peak_visible_front_side, int(sample.visible_front_side_enemies))
+		peak_reachable_front_side = maxi(peak_reachable_front_side, int(sample.reachable_front_side_enemies))
+		if int(sample.visible_front_side_enemies) > 0:
+			late_samples_with_front_side += 1
+
+	var elapsed_ms := float(Time.get_ticks_usec() - started_usec) / 1000.0
+	_release_movement_input()
 	paused = false
-	game.queue_free()
-	await process_frame
-	quit(0 if failures == 0 else 1)
+	var profile: PackedInt64Array = game.enemy_world.crowd_profile_snapshot()
+	var travel_distance: float = game.topology.distance(start_position, game.avatar.global_position)
+	var late_visible_front_side_average := late_visible_front_side_sum / float(maxi(late_sample_count, 1))
+	var late_reachable_front_side_average := late_reachable_front_side_sum / float(maxi(late_sample_count, 1))
+	var late_front_side_sector_average := late_front_side_sector_sum / float(maxi(late_sample_count, 1))
+	var front_side_sample_ratio := float(late_samples_with_front_side) / float(maxi(late_sample_count, 1))
+	var maximum_guard_queries := LINEAR_SIMULATION_TICKS * (
+		ceili(float(ENEMY_COUNT) / float(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES)) + 1
+	)
+
+	_true(travel_distance >= MINIMUM_LINEAR_TRAVEL_DISTANCE, "Der Fluchtfall legt wirklich eine lange Gerade zurück (%.1f / %.1f)" % [travel_distance, MINIMUM_LINEAR_TRAVEL_DISTANCE])
+	_true(relocation_events >= MINIMUM_LINEAR_RELOCATION_EVENTS, "Geradlinige Flucht löst ausreichend Offscreen-Versetzungen aus (%d / %d)" % [relocation_events, MINIMUM_LINEAR_RELOCATION_EVENTS])
+	_true(relocated_enemy_ids.size() >= MINIMUM_LINEAR_DISTINCT_RELOCATIONS, "Fluchtversetzungen verwenden ausreichend verschiedene Gegner (%d / %d)" % [relocated_enemy_ids.size(), MINIMUM_LINEAR_DISTINCT_RELOCATIONS])
+	_true(relocation_visibility_violations == 0, "Jedes echte Flucht-Versetzungsziel liegt vollständig außerhalb des damaligen Bildes (%d Verstöße)" % relocation_visibility_violations)
+	_true(relocation_opposite_side_violations == 0, "Jede Fluchtversetzung wechselt relativ zum Doctor auf die gegenüberliegende Seite (%d Verstöße)" % relocation_opposite_side_violations)
+	_true(front_side_sample_ratio >= MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO, "Vor oder seitlich bleibt in genügend späten Fluchtsamples Druck sichtbar (%.2f / %.2f)" % [front_side_sample_ratio, MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO])
+	_true(late_visible_front_side_average >= MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE, "Die sichtbare Front-/Seitengruppe bleibt im Mittel besetzt (%.2f / %.2f)" % [late_visible_front_side_average, MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE])
+	_true(late_reachable_front_side_average >= MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE, "Angreifer erreichen im Mittel die Front oder Seite des Doctors (%.2f / %.2f)" % [late_reachable_front_side_average, MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE])
+	_true(late_front_side_sector_average >= MINIMUM_LINEAR_FRONT_SIDE_SECTOR_AVERAGE, "Fluchtdruck bleibt nicht nur in einem rückwärtigen Knubbel (%.2f / %.2f Sektoren)" % [late_front_side_sector_average, MINIMUM_LINEAR_FRONT_SIDE_SECTOR_AVERAGE])
+	_true(contact_events >= MINIMUM_LINEAR_CONTACT_EVENTS, "Geradliniges Weglaufen bleibt nicht vollständig sicher (%d / %d Kontakte)" % [contact_events, MINIMUM_LINEAR_CONTACT_EVENTS])
+	_true(contact_enemy_ids.size() >= MINIMUM_LINEAR_DISTINCT_CONTACTORS, "Mehrere versetzte Angreifer erreichen den fliehenden Doctor (%d / %d)" % [contact_enemy_ids.size(), MINIMUM_LINEAR_DISTINCT_CONTACTORS])
+	_assert_bounded_crowd_work(profile, maximum_guard_queries, "Fluchtfall")
+
+	return {
+		"ticks": LINEAR_SIMULATION_TICKS,
+		"elapsed_ms_informational": elapsed_ms,
+		"travel_distance": travel_distance,
+		"relocation_events": relocation_events,
+		"distinct_relocated_enemies": relocated_enemy_ids.size(),
+		"relocation_visibility_violations": relocation_visibility_violations,
+		"relocation_opposite_side_violations": relocation_opposite_side_violations,
+		"late_front_side_sample_ratio": front_side_sample_ratio,
+		"late_visible_front_side_avg": late_visible_front_side_average,
+		"late_reachable_front_side_avg": late_reachable_front_side_average,
+		"late_front_side_sectors_avg": late_front_side_sector_average,
+		"peak_visible_front_side": peak_visible_front_side,
+		"peak_reachable_front_side": peak_reachable_front_side,
+		"contact_events": contact_events,
+		"distinct_contactors": contact_enemy_ids.size(),
+		"crowd_profile": _crowd_profile_report(profile),
+	}
 
 
-func _build_one_sided_crowd(game: Node, center: Vector2) -> Array[InfectionEnemy]:
+func _build_one_sided_crowd(game: Node, center: Vector2, wedge_center_angle: float) -> Array[InfectionEnemy]:
 	var result: Array[InfectionEnemy] = []
 	var columns := 22
 	var wedge_radians := 1.46
@@ -202,7 +364,7 @@ func _build_one_sided_crowd(game: Node, center: Vector2) -> Array[InfectionEnemy
 		var column := index % columns
 		var ring_phase := 0.5 if ring % 2 != 0 else 0.0
 		var angle_fraction := (float(column) + 0.5 + ring_phase) / float(columns)
-		var angle := -wedge_radians * 0.5 + angle_fraction * wedge_radians
+		var angle := wedge_center_angle - wedge_radians * 0.5 + angle_fraction * wedge_radians
 		var radius := base_radius + float(ring) * 58.0
 		var definition_id: StringName = &"bacterial_cluster" if index >= 3 and index % 5 == 0 else &"pneumococcus"
 		var position: Vector2 = game.topology.resolve_position(
@@ -227,6 +389,14 @@ func _build_one_sided_crowd(game: Node, center: Vector2) -> Array[InfectionEnemy
 	return result
 
 
+func _initial_positions(tracked_enemies: Array[InfectionEnemy]) -> PackedVector2Array:
+	var result := PackedVector2Array()
+	result.resize(tracked_enemies.size())
+	for index in range(tracked_enemies.size()):
+		result[index] = tracked_enemies[index].global_position
+	return result
+
+
 func _apply_circular_input(game: Node, center: Vector2) -> void:
 	var radial: Vector2 = game.topology.shortest_delta(center, game.avatar.global_position)
 	if radial.length_squared() <= 0.001:
@@ -237,6 +407,24 @@ func _apply_circular_input(game: Node, center: Vector2) -> void:
 		radial_direction.orthogonal()
 		+ radial_direction * clampf(radius_error * 2.2, -0.38, 0.38)
 	).normalized()
+	_apply_directional_input(desired_direction)
+
+
+func _advance_linear_avatar(game: Node) -> void:
+	var movement_step: Vector2 = LINEAR_DIRECTION * game.stats.movement_speed * FIXED_DELTA
+	game.avatar.global_position = game.topology.resolve_position(
+		game.avatar.global_position + movement_step,
+		TherapyAvatar.BODY_RADIUS
+	)
+	game.avatar.velocity = Vector2.ZERO
+	if is_instance_valid(game.avatar.camera):
+		game.avatar.camera.reset_smoothing()
+		game.avatar.camera.align()
+		game.avatar.camera.notification(Node.NOTIFICATION_INTERNAL_PHYSICS_PROCESS)
+		game.avatar.camera.force_update_scroll()
+
+
+func _apply_directional_input(desired_direction: Vector2) -> void:
 	_release_movement_input()
 	if desired_direction.x > 0.0:
 		Input.action_press(&"move_right", desired_direction.x)
@@ -246,6 +434,46 @@ func _apply_circular_input(game: Node, center: Vector2) -> void:
 		Input.action_press(&"move_down", desired_direction.y)
 	elif desired_direction.y < 0.0:
 		Input.action_press(&"move_up", -desired_direction.y)
+
+
+func _current_visible_rect(game: Node) -> Rect2:
+	if is_instance_valid(game.avatar.camera):
+		game.avatar.camera.force_update_scroll()
+	return game._visible_world_rect()
+
+
+func _avatar_centered_visible_rect(game: Node) -> Rect2:
+	var half_extents: Vector2 = game._visible_world_half_extents()
+	return Rect2(game.avatar.global_position - half_extents, half_extents * 2.0)
+
+
+func _relocation_target_is_offscreen(enemy: InfectionEnemy, visible_before: Rect2, visible_after: Rect2) -> bool:
+	var body_radius := enemy.definition.radius if enemy.definition != null else 0.0
+	return (
+		_circle_is_fully_outside_rect(enemy.global_position, body_radius, visible_before)
+		and _circle_is_fully_outside_rect(enemy.global_position, body_radius, visible_after)
+	)
+
+
+func _relocation_target_is_opposite_source(
+	game: Node,
+	avatar_before_tick: Vector2,
+	source_position: Vector2,
+	target_position: Vector2
+) -> bool:
+	var source_direction: Vector2 = game.topology.shortest_delta(avatar_before_tick, source_position)
+	var target_direction: Vector2 = game.topology.shortest_delta(avatar_before_tick, target_position)
+	if source_direction.length_squared() <= 0.000001 or target_direction.length_squared() <= 0.000001:
+		return false
+	return source_direction.normalized().dot(target_direction.normalized()) <= -0.5
+
+
+func _circle_is_fully_outside_rect(center: Vector2, radius: float, rect: Rect2) -> bool:
+	var closest := Vector2(
+		clampf(center.x, rect.position.x, rect.end.x),
+		clampf(center.y, rect.position.y, rect.end.y)
+	)
+	return center.distance_squared_to(closest) > radius * radius
 
 
 func _pressure_sample(game: Node, tracked_enemies: Array[InfectionEnemy]) -> Dictionary:
@@ -273,6 +501,53 @@ func _pressure_sample(game: Node, tracked_enemies: Array[InfectionEnemy]) -> Dic
 		"pressure_sectors": pressure_sectors,
 		"near_sectors": near_sectors,
 		"near_enemies": near_enemies,
+	}
+
+
+func _linear_pressure_sample(game: Node, tracked_enemies: Array[InfectionEnemy], visible_rect: Rect2) -> Dictionary:
+	var front_side_sector_occupied := PackedByteArray()
+	front_side_sector_occupied.resize(SECTOR_COUNT)
+	front_side_sector_occupied.fill(0)
+	var visible_front_side_enemies := 0
+	var reachable_front_side_enemies := 0
+	for enemy in tracked_enemies:
+		if not is_instance_valid(enemy) or not enemy.is_targetable():
+			continue
+		var delta: Vector2 = game.topology.shortest_delta(game.avatar.global_position, enemy.global_position)
+		var body_radius := enemy.definition.radius if enemy.definition != null else 0.0
+		if delta.dot(LINEAR_DIRECTION) < -(body_radius + LINEAR_REAR_TOLERANCE):
+			continue
+		if not _circle_is_fully_outside_rect(enemy.global_position, body_radius, visible_rect):
+			visible_front_side_enemies += 1
+		if delta.length_squared() <= LINEAR_REACHABLE_RADIUS * LINEAR_REACHABLE_RADIUS:
+			reachable_front_side_enemies += 1
+			front_side_sector_occupied[game._sector_for_delta(delta)] = 1
+	var front_side_sectors := 0
+	for occupied in front_side_sector_occupied:
+		front_side_sectors += int(occupied)
+	return {
+		"visible_front_side_enemies": visible_front_side_enemies,
+		"reachable_front_side_enemies": reachable_front_side_enemies,
+		"front_side_sectors": front_side_sectors,
+	}
+
+
+func _assert_bounded_crowd_work(profile: PackedInt64Array, maximum_guard_queries: int, case_label: String) -> void:
+	_true(profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILDS] <= 1, "%s baut den Crowd-Index nach dem Szenarioaufbau nur inkrementell" % case_label)
+	_true(profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES] <= maximum_guard_queries, "%s hält lokale Guard-Abfragen phasenbegrenzt (%d / %d)" % [case_label, profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES], maximum_guard_queries])
+	_true(profile[EnemyWorld.CrowdProfileCounter.CORRIDOR_EVALUATIONS] <= profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES], "%s verwendet für Korridorprüfungen den lokalen Guard-Cache" % case_label)
+
+
+func _crowd_profile_report(profile: PackedInt64Array) -> Dictionary:
+	return {
+		"grid_rebuilds": profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILDS],
+		"guard_queries": profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES],
+		"guard_candidates": profile[EnemyWorld.CrowdProfileCounter.GUARD_CANDIDATES],
+		"corridor_evaluations": profile[EnemyWorld.CrowdProfileCounter.CORRIDOR_EVALUATIONS],
+		"bypass_starts": profile[EnemyWorld.CrowdProfileCounter.BYPASS_STARTS],
+		"active_bypass_ticks": profile[EnemyWorld.CrowdProfileCounter.ACTIVE_BYPASS_TICKS],
+		"queued_no_corridor": profile[EnemyWorld.CrowdProfileCounter.QUEUED_NO_CORRIDOR],
+		"side_switches": profile[EnemyWorld.CrowdProfileCounter.SIDE_SWITCHES],
 	}
 
 
