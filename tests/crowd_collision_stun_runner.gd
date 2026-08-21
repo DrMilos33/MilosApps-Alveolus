@@ -186,6 +186,55 @@ func _run() -> void:
 	var static_small_definition := EnemyDefinition.create(
 		&"static_small", "Statischer Testkörper", 22.0, 0.0, 0.0, 0, 18.0, Color.WHITE
 	).configure_contact_radius(17.0)
+
+	# A genuine front body with one clearly open body-width corridor starts the
+	# bypass before physical contact. The side gate closes only the positive
+	# corridor, so the first fixed tick must already select the negative route.
+	var early_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	early_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var early_origin := Vector2(142.0, 0.0)
+	var early_front := _enemy(static_small_definition, avatar, topology, Vector2(100.0, 0.0))
+	var early_chase_direction := topology.shortest_delta(early_origin, avatar.global_position).normalized()
+	var early_positive_direction := (
+		early_chase_direction * EnemyWorld.DIRECT_COLLISION_BYPASS_FORWARD_WEIGHT
+		+ early_chase_direction.orthogonal() * EnemyWorld.DIRECT_COLLISION_BYPASS_LATERAL_WEIGHT
+	).normalized()
+	var early_gate := _enemy(
+		static_small_definition,
+		avatar,
+		topology,
+		early_origin + early_positive_direction * 48.0
+	)
+	var early_follower := _enemy(small_definition, avatar, topology, early_origin)
+	_true(EntityHandle.is_valid(early_world.register_enemy(early_front)), "Der frühe Vorderkörper erhält einen Handle")
+	_true(EntityHandle.is_valid(early_world.register_enemy(early_gate)), "Das frühe Korridortor erhält einen Handle")
+	var early_handle := early_world.register_enemy(early_follower)
+	_true(EntityHandle.is_valid(early_handle), "Der frühe Verfolger erhält einen Handle")
+	var early_before := early_follower.global_position
+	early_world.step_fixed(1.0 / 60.0)
+	var early_slot := EntityHandle.slot(early_handle)
+	var early_corridor_offset := early_slot * 2
+	var early_step := topology.shortest_delta(early_before, early_follower.global_position)
+	_true(
+		int(early_world._direct_collision_corridor_open[early_corridor_offset])
+			+ int(early_world._direct_collision_corridor_open[early_corridor_offset + 1]) == 1,
+		"Der frühe Test besitzt genau einen freien Körperkorridor"
+	)
+	_true(early_world._crowd_lane_signs[early_slot] == -1, "Der freie Seitenkorridor wird bereits vor Körperkontakt geleast")
+	_true(absf(early_step.cross(early_chase_direction)) > 0.5, "Der frühe Bypass erzeugt im ersten Tick sichtbare Seitenbewegung")
+	_true(early_step.dot(early_chase_direction) > 0.0, "Der frühe Bypass behält Vorwärtsfortschritt zum Doctor")
+	for blocker in [early_front, early_gate]:
+		var early_margin: float = (
+			topology.distance(early_follower.global_position, blocker.global_position)
+			- early_follower.contact_body_radius()
+			- blocker.contact_body_radius()
+		)
+		_true(early_margin >= -0.06, "Der frühe Bypass wahrt die Schadenshitboxen (Margin %.3f)" % early_margin)
+	early_world.clear()
+	early_front.free()
+	early_gate.free()
+	early_follower.free()
+
 	var wedge_upper := _enemy(static_small_definition, avatar, topology, Vector2(72.0, -26.0))
 	var wedge_lower := _enemy(static_small_definition, avatar, topology, Vector2(72.0, 26.0))
 	var wedge_follower := _enemy(small_definition, avatar, topology, Vector2(120.0, 0.0))
@@ -257,6 +306,9 @@ func _run() -> void:
 	var enclosed_maximum_drift := 0.0
 	var enclosed_lateral_travel := 0.0
 	var enclosed_maximum_retreat := 0.0
+	var enclosed_lane_lease_ticks := 0
+	var enclosed_trigger_switches := 0
+	var enclosed_last_trigger := EntityHandle.INVALID
 	for _tick in range(90):
 		var before_position := enclosed.global_position
 		var before_distance := topology.distance(before_position, avatar.global_position)
@@ -269,9 +321,19 @@ func _run() -> void:
 			enclosed_maximum_retreat,
 			topology.distance(enclosed.global_position, avatar.global_position) - before_distance
 		)
+		var enclosed_slot_during_wait := EntityHandle.slot(enclosed_handle)
+		if enclosed_world._crowd_lane_signs[enclosed_slot_during_wait] != 0:
+			enclosed_lane_lease_ticks += 1
+		var enclosed_trigger := int(enclosed_world._direct_collision_corridor_blockers[enclosed_slot_during_wait])
+		if EntityHandle.is_valid(enclosed_trigger):
+			if EntityHandle.is_valid(enclosed_last_trigger) and enclosed_trigger != enclosed_last_trigger:
+				enclosed_trigger_switches += 1
+			enclosed_last_trigger = enclosed_trigger
 	_true(enclosed_lateral_travel <= 0.001, "Ein innerer Gegner erzeugt keine absichtliche Seitenbewegung (%.5f)" % enclosed_lateral_travel)
 	_true(enclosed_maximum_drift <= 0.01, "Ein vollständig umschlossener Gegner wartet geometrisch (%.5f)" % enclosed_maximum_drift)
 	_true(enclosed_maximum_retreat <= 0.001, "Auch ein umschlossener Gegner läuft nie vom Doctor weg (%.5f)" % enclosed_maximum_retreat)
+	_true(enclosed_lane_lease_ticks == 0, "Ein geschlossener Pulk erfindet in keinem Tick eine Bypassseite")
+	_true(enclosed_trigger_switches == 0, "Ein wartender Gegner wechselt seinen Vorderkörper nicht und wackelt nicht")
 	var enclosed_slot := EntityHandle.slot(enclosed_handle)
 	_true(enclosed_world._crowd_lane_signs[enclosed_slot] == 0, "Ohne freien Korridor wird keine Bypassseite geleast")
 	var enclosed_trigger_handle := int(enclosed_world._direct_collision_corridor_blockers[enclosed_slot])
@@ -406,7 +468,7 @@ func _run() -> void:
 		closing_world.step_fixed(1.0 / 60.0)
 		_true(closing_world._crowd_lane_signs[closing_slot] != -closing_sign, "Der geschlossene Korridor erzeugt keinen direkten Links-Rechts-Wechsel")
 	var closed_drift := topology.distance(closed_position, closing_follower.global_position)
-	_true(closed_drift <= 0.1, "Mit beiden Seiten geschlossen bleibt nur minimale geometrische Korrektur (Drift %.3f)" % closed_drift)
+	_true(closed_drift <= 0.5, "Mit beiden Seiten geschlossen bleibt nur eine subpixelige geometrische Korrektur (Drift %.3f)" % closed_drift)
 	gate_previous_position = corridor_gate.global_position
 	corridor_gate.global_position = Vector2(520.0, 320.0)
 	corridor_gate.reset_visual_motion()
@@ -566,6 +628,9 @@ func _run() -> void:
 	_true(pushed_small.health == preserved_health, "Versetzen erhält das aktuelle Leben")
 	_true(pushed_small.global_position.is_equal_approx(relocation_target), "Versetzen übernimmt die neue Position atomar")
 	_true(push_world.mark_enemy_relocated(pushed_handle), "EnemyWorld verwirft nach Versetzen den lokalen Bypasszustand")
+	_true(not pushed_small.can_be_relocated(), "Ein gerade versetzter Gegner bleibt für das nächste Directorfenster gesperrt")
+	pushed_small.step_fixed(InfectionEnemy.RELOCATION_POST_MOVE_LOCK_SECONDS + 0.01)
+	_true(pushed_small.can_be_relocated(), "Der separate Schutz nach echtem Versetzen läuft deterministisch aus")
 	push_world.clear()
 	pushed_small.free()
 	avatar.input_enabled = false

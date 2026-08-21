@@ -85,7 +85,7 @@ const MAX_AVATAR_NEIGHBORS := 12
 const SMALL_ENEMY_ID := &"pneumococcus"
 const CROWD_NEIGHBOR_MARGIN := 18.0
 const MAX_CROWD_RADIUS_FACTOR := 1.25
-const FRONT_PRIORITY_EPSILON := 8.0
+const FRONT_PRIORITY_EPSILON := 3.0
 const FRONT_ALIGNMENT_MINIMUM := 0.18
 const BYPASS_HOLD_UPDATES := 6
 const BYPASS_BIAS_MINIMUM := 0.28
@@ -104,10 +104,10 @@ const DIRECT_COLLISION_SKIN := 0.05
 const DIRECT_COLLISION_EPSILON := 0.0001
 const DIRECT_COLLISION_UPDATE_PHASES := 24
 const DIRECT_COLLISION_GUARD_LOOKAHEAD := 50.0
-const DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN := 0.75
+const DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN := 8.0
 const DIRECT_COLLISION_BYPASS_FORWARD_WEIGHT := 0.55
 const DIRECT_COLLISION_BYPASS_LATERAL_WEIGHT := 0.835
-const DIRECT_COLLISION_BYPASS_CLEAR_TICKS := 5
+const DIRECT_COLLISION_BYPASS_CLEAR_TICKS := 10
 const DIRECT_COLLISION_CORRIDOR_RADII := 3.0
 const DIRECT_COLLISION_CORRIDOR_DIRECTION_DOT := 0.98
 const AVATAR_BODY_COLLISION_PASSES := 3
@@ -950,15 +950,14 @@ func _refresh_direct_collision_guards(slot: int, enemy: InfectionEnemy) -> void:
 		if corridor_blocker == EntityHandle.INVALID and not requested_direction.is_zero_approx():
 			var forward_distance := center_delta.dot(requested_direction)
 			if forward_distance > 0.0:
-				var contact_distance := (
+				var collision_distance := (
 					own_contact_radius
 					+ float(_direct_collision_radii[other_slot])
 					+ DIRECT_COLLISION_SKIN
-					+ DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
 				)
 				var perpendicular_squared := maxf(center_delta.length_squared() - forward_distance * forward_distance, 0.0)
-				if perpendicular_squared < contact_distance * contact_distance:
-					var candidate_entry := forward_distance - sqrt(contact_distance * contact_distance - perpendicular_squared)
+				if perpendicular_squared < collision_distance * collision_distance:
+					var candidate_entry := forward_distance - sqrt(collision_distance * collision_distance - perpendicular_squared)
 					var other_target_distance_squared := _crowd_topology.distance_squared(
 						other.global_position,
 						_crowd_avatar.global_position
@@ -1351,7 +1350,7 @@ func _direct_collision_obstacle_bypass(
 			_crowd_profile_counters[CrowdProfileCounter.QUEUED_NO_CORRIDOR] += 1
 		return Vector2.ZERO
 	var selected_blocker := EntityHandle.INVALID
-	var selected_forward := INF
+	var selected_entry := INF
 	var stored_still_blocks := false
 	var own_target_distance := _crowd_topology.distance(movement_origin, _crowd_avatar.global_position)
 	for neighbor_index in range(neighbor_count):
@@ -1369,9 +1368,14 @@ func _direct_collision_obstacle_bypass(
 		var forward_distance := to_other.dot(requested_direction)
 		if forward_distance <= 0.0:
 			continue
-		var direct_end_to_other := to_other - requested_direction * requested_length
-		var contact_distance := minimum_distance + DIRECT_COLLISION_SKIN + DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
-		if direct_end_to_other.length_squared() >= contact_distance * contact_distance:
+		var collision_distance := minimum_distance + DIRECT_COLLISION_SKIN
+		var perpendicular_squared := maxf(to_other.length_squared() - forward_distance * forward_distance, 0.0)
+		if perpendicular_squared >= collision_distance * collision_distance:
+			continue
+		var candidate_entry := forward_distance - sqrt(
+			collision_distance * collision_distance - perpendicular_squared
+		)
+		if candidate_entry > requested_length + DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN:
 			continue
 		# Only a body which is genuinely ahead in the chase can initiate a bypass.
 		# Side-by-side peers therefore never invent opposing lateral forces.
@@ -1380,8 +1384,8 @@ func _direct_collision_obstacle_bypass(
 			continue
 		if candidate_handle == stored_handle:
 			stored_still_blocks = true
-		if forward_distance < selected_forward:
-			selected_forward = forward_distance
+		if candidate_entry < selected_entry:
+			selected_entry = candidate_entry
 			selected_blocker = candidate_handle
 
 	if stored_handle != EntityHandle.INVALID:

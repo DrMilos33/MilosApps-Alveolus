@@ -19,7 +19,8 @@ const DEATH_SECONDS := 0.0
 const HIT_REACTION_SECONDS := 0.09
 const DEFAULT_KNOCKBACK_SECONDS := 0.28
 const DEFAULT_STUN_SECONDS := 1.0
-const RELOCATION_INTERACTION_LOCK_SECONDS := 1.5
+const RELOCATION_INTERACTION_LOCK_SECONDS := 1.0
+const RELOCATION_POST_MOVE_LOCK_SECONDS := 3.0
 const SMALL_CROWD_RADIUS_FACTOR := 1.00
 const CLUSTER_CROWD_RADIUS_FACTOR := 1.05
 const NEST_CROWD_RADIUS_FACTOR := 1.18
@@ -218,6 +219,7 @@ func relocate_preserving_state(value: Vector2) -> bool:
 		return false
 	global_position = topology.resolve_position(value, definition.radius) if topology != null else value
 	_contact_check_pending = false
+	_relocation_interaction_lock = maxf(_relocation_interaction_lock, RELOCATION_POST_MOVE_LOCK_SECONDS)
 	reset_visual_motion()
 	return true
 

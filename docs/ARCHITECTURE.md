@@ -246,8 +246,9 @@ damage-contact shell. `EnemyWorld` then resolves the proposal against other
 targetable enemies. The minimum center distance is exactly the sum of both
 `contact_radius` values, and a free path remains perfectly direct.
 
-When a real body nearer to Doctor Milos blocks that proposal, the phased guard
-refresh evaluates both short side corridors from the complete local
+When the exact sweep identifies a real body nearer to Doctor Milos within an
+eight-world-unit activation envelope, the phased guard refresh evaluates both
+short side corridors from the complete local
 `CombatSpatialGrid` candidate buffer before reducing collision guards to the
 nearest fixed set. Each corridor sweeps the follower's contact circle for up
 to three own contact radii, capped by the existing guard lookahead. The
@@ -259,7 +260,8 @@ clearance wins and slot parity resolves an exact tie deterministically.
 
 An active lease never switches sides directly. A phased refresh may close its
 route, which clears the lease and leaves the follower waiting until a later
-refresh can acquire a valid corridor. Handles and the current blocking body
+refresh can acquire a valid corridor; otherwise ten consecutive free fixed
+ticks release the lease. Handles and the current blocking body
 are validated every tick, while spatial guard/corridor queries are distributed
 over 24 slot phases. A closed queued corridor additionally retains the exact
 generation-safe body closing each side. If both still intersect their sweeps at
@@ -345,12 +347,15 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase.
 
-At most two ordinary melee enemies per two-second relocation window may move
-from an overloaded offscreen sector to a calm one. Relocation preserves the
-generation, health and status and atomically snaps renderer history. It is
-denied for bosses, minor foci, ranged roles, tutorial roles, stunned or recently
-damaged/knocked bodies. Runtime locomotion still performs only the bounded local
-contact-circle query described above; it never gains a global steering target.
+At most three ordinary melee enemies per 1.5-second relocation window may move
+from an overloaded offscreen sector to one of the three calmest sectors. A
+source must lie at least 72 world units beyond the current camera rectangle;
+the destination is the nearest free offscreen ring and the same entity cannot
+be moved again for three seconds. Relocation preserves generation, health and
+status and atomically snaps renderer history. It is denied for bosses, minor
+foci, ranged roles, tutorial roles, stunned or recently damaged/knocked bodies.
+Runtime locomotion still performs only the bounded local contact-circle query
+described above; it never gains a global steering target.
 
 Knockback state lives on `InfectionEnemy` and advances inside the existing
 typed EnemyWorld loop. `Stoß` supplies a distance, short eased travel duration

@@ -30,9 +30,10 @@ const WAVE_SPAWN_EMPTY_SECTOR_CHOICES := 3
 const WAVE_SPAWN_SCREEN_MARGIN := 110.0
 const WAVE_PRESSURE_NEAR_MARGIN := 300.0
 const WAVE_PRESSURE_NEIGHBOR_SHARE := 0.22
-const OFFSCREEN_RELOCATION_INTERVAL := 2.0
-const OFFSCREEN_RELOCATION_MAXIMUM := 2
-const OFFSCREEN_RELOCATION_SOURCE_MARGIN := 130.0
+const OFFSCREEN_RELOCATION_INTERVAL := 1.5
+const OFFSCREEN_RELOCATION_MAXIMUM := 3
+const OFFSCREEN_RELOCATION_SOURCE_MARGIN := 72.0
+const OFFSCREEN_RELOCATION_PRESSURE_ADVANTAGE := 0.10
 const OFFSCREEN_PLACEMENT_ANGLE_OFFSETS: Array[float] = [0.0, -0.14, 0.14, -0.24, 0.24]
 const OFFSCREEN_PLACEMENT_RADIAL_OFFSETS: Array[float] = [0.0, 42.0, 84.0]
 const OFFSCREEN_PLACEMENT_BODY_GAP := 4.0
@@ -4031,7 +4032,7 @@ func _offscreen_relocation_step(delta: float) -> void:
 			(float(target_sector) + 0.5) * sector_width,
 			18.0,
 			null,
-			true,
+			false,
 			true
 		)
 		if target_position != Vector2.INF:
@@ -4049,7 +4050,7 @@ func _offscreen_relocation_step(delta: float) -> void:
 		var source_delta := topology.shortest_delta(avatar.global_position, enemy.global_position)
 		var source_sector := _sector_for_delta(source_delta)
 		var source_pressure := float(pressure[source_sector])
-		if source_pressure <= selected_source_pressure + 0.25:
+		if source_pressure <= selected_source_pressure + OFFSCREEN_RELOCATION_PRESSURE_ADVANTAGE:
 			continue
 		selected_enemy = enemy
 		selected_source_pressure = source_pressure
@@ -4062,7 +4063,7 @@ func _offscreen_relocation_step(delta: float) -> void:
 			(float(target_sector) + 0.5) * sector_width,
 			selected_radius,
 			selected_enemy,
-			true,
+			false,
 			true
 		)
 		if target_position == Vector2.INF:
