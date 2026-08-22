@@ -56,6 +56,9 @@ var _maximum_contact_radius: float = 1.0
 var _crowd_phase: int = 0
 var _direct_collision_prepare_epoch: int = 0
 var _direct_collision_grid_dirty: bool = true
+var _crowd_avatar_previous_position := Vector2.ZERO
+var _crowd_avatar_position_valid: bool = false
+var _crowd_avatar_stationary_this_tick: bool = true
 var _contact_ring_active: bool = false
 var _contact_ring_assignments_dirty: bool = false
 var _contact_ring_saturated: bool = false
@@ -206,6 +209,9 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_crowd_phase = 0
 	_direct_collision_prepare_epoch = 0
 	_direct_collision_grid_dirty = true
+	_crowd_avatar_previous_position = Vector2.ZERO
+	_crowd_avatar_position_valid = false
+	_crowd_avatar_stationary_this_tick = true
 	_contact_ring_active = false
 	_contact_ring_assignments_dirty = false
 	_contact_ring_saturated = false
@@ -244,6 +250,9 @@ func configure_crowd_collision(
 	_crowd_topology = arena_topology
 	_crowd_bounded = arena_topology != null and arena_topology.is_bounded()
 	_crowd_avatar = avatar_node
+	_crowd_avatar_position_valid = is_instance_valid(avatar_node)
+	_crowd_avatar_previous_position = avatar_node.global_position if _crowd_avatar_position_valid else Vector2.ZERO
+	_crowd_avatar_stationary_this_tick = true
 	_maximum_body_radius = maxf(maximum_body_radius, 1.0)
 	_maximum_crowd_radius = _maximum_body_radius * MAX_CROWD_RADIUS_FACTOR
 	_crowd_grid.configure(arena_topology, CROWD_GRID_CELL_SIZE)
@@ -510,7 +519,7 @@ func _insert_direct_collision_guard(slot: int, guard_handle: int) -> void:
 	)
 	if surface_clearance > DIRECT_COLLISION_GUARD_LOOKAHEAD:
 		return
-	var guard_limit := _direct_collision_guard_limit(float(_direct_collision_radii[slot]))
+	var guard_limit := _direct_collision_guard_limit(slot, float(_direct_collision_radii[slot]))
 	var destination_index := guard_count
 	if guard_count < guard_limit:
 		guard_count += 1
@@ -698,6 +707,7 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 	# no open corridor suppresses only its chase displacement; there are no
 	# position slots, lane targets or self-generated retreat vectors.
 	var profile_started_usec := Time.get_ticks_usec() if _crowd_profile_enabled else 0
+	_update_crowd_avatar_motion_state()
 	var grid_was_dirty := _direct_collision_grid_dirty
 	if grid_was_dirty:
 		_rebuild_direct_collision_grid()
@@ -757,6 +767,24 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 		_crowd_profile_counters[CrowdProfileCounter.MOVEMENT_USEC] += Time.get_ticks_usec() - profile_started_usec
 	_crowd_phase = (_crowd_phase + 1) % DIRECT_COLLISION_UPDATE_PHASES
 	flush_deferred()
+
+
+func _update_crowd_avatar_motion_state() -> void:
+	if not is_instance_valid(_crowd_avatar) or _crowd_topology == null:
+		_crowd_avatar_position_valid = false
+		_crowd_avatar_stationary_this_tick = true
+		return
+	var current_position := _crowd_avatar.global_position
+	if not _crowd_avatar_position_valid:
+		_crowd_avatar_previous_position = current_position
+		_crowd_avatar_position_valid = true
+		_crowd_avatar_stationary_this_tick = true
+		return
+	_crowd_avatar_stationary_this_tick = (
+		_crowd_topology.distance_squared(_crowd_avatar_previous_position, current_position)
+		<= DIRECT_COLLISION_EPSILON * DIRECT_COLLISION_EPSILON
+	)
+	_crowd_avatar_previous_position = current_position
 
 
 func _queued_blocker_still_at_contact(slot: int, enemy: InfectionEnemy) -> bool:
@@ -908,7 +936,7 @@ func _prepare_direct_collision_guards() -> void:
 func _refresh_direct_collision_guards(slot: int, enemy: InfectionEnemy) -> void:
 	var own_contact_radius := float(_direct_collision_radii[slot])
 	var query_radius := own_contact_radius + _maximum_contact_radius + DIRECT_COLLISION_GUARD_LOOKAHEAD
-	var guard_limit := _direct_collision_guard_limit(own_contact_radius)
+	var guard_limit := _direct_collision_guard_limit(slot, own_contact_radius)
 	_crowd_candidates = _crowd_grid.query_circle_candidates(
 		enemy.global_position,
 		query_radius,
@@ -963,6 +991,13 @@ func _refresh_direct_collision_guards(slot: int, enemy: InfectionEnemy) -> void:
 		var surface_clearance := center_delta.length() - own_contact_radius - float(_direct_collision_radii[other_slot])
 		if surface_clearance > DIRECT_COLLISION_GUARD_LOOKAHEAD:
 			continue
+		var guard_priority := _direct_collision_guard_priority(
+			center_delta,
+			surface_clearance,
+			own_contact_radius,
+			float(_direct_collision_radii[other_slot]),
+			requested_direction
+		)
 		if corridor_blocker == EntityHandle.INVALID and not requested_direction.is_zero_approx():
 			var forward_distance := center_delta.dot(requested_direction)
 			if forward_distance > 0.0:
@@ -1002,11 +1037,11 @@ func _refresh_direct_collision_guards(slot: int, enemy: InfectionEnemy) -> void:
 					worst_index = guard_index
 			var stored_worst_distance := float(_crowd_motion_guard_distances[guard_offset + worst_index])
 			var stored_worst_handle := int(_crowd_motion_guard_neighbors[guard_offset + worst_index])
-			if surface_clearance > stored_worst_distance or (is_equal_approx(surface_clearance, stored_worst_distance) and candidate_handle >= stored_worst_handle):
+			if guard_priority > stored_worst_distance or (is_equal_approx(guard_priority, stored_worst_distance) and candidate_handle >= stored_worst_handle):
 				continue
 			destination_index = worst_index
 		_crowd_motion_guard_neighbors[guard_offset + destination_index] = candidate_handle
-		_crowd_motion_guard_distances[guard_offset + destination_index] = surface_clearance
+		_crowd_motion_guard_distances[guard_offset + destination_index] = guard_priority
 	# An active bypass leases its generation-safe blocker until release hysteresis
 	# completes. Keep that exact body in the fresh guard set even if a dense cell
 	# temporarily contributes three slightly nearer neighbors.
@@ -1191,10 +1226,36 @@ func _refresh_direct_collision_corridor_cache(
 	_direct_collision_corridor_epochs[slot] = _direct_collision_prepare_epoch
 
 
-func _direct_collision_guard_limit(contact_radius: float) -> int:
-	# Three nearest contact bodies cover the multi-contact wedge while keeping
-	# the fixed-step hot path bounded for the 600-enemy target.
-	return 3
+func _direct_collision_guard_limit(slot: int, _contact_radius: float) -> int:
+	# Free/direct pursuit needs only the three earliest bodies in the forward
+	# half-plane. A stationary active boundary lease may touch several bodies
+	# along its short arc, while the established moving path remains at three.
+	return 5 if _crowd_avatar_stationary_this_tick and _crowd_lane_signs[slot] != 0 else 3
+
+
+func _direct_collision_guard_priority(
+	center_delta: Vector2,
+	surface_clearance: float,
+	own_contact_radius: float,
+	other_contact_radius: float,
+	requested_direction: Vector2
+) -> float:
+	if not _crowd_avatar_stationary_this_tick or requested_direction.is_zero_approx():
+		return surface_clearance
+	var forward_distance := center_delta.dot(requested_direction)
+	if forward_distance > 0.0:
+		var collision_distance := own_contact_radius + other_contact_radius + DIRECT_COLLISION_SKIN
+		var perpendicular_squared := maxf(
+			center_delta.length_squared() - forward_distance * forward_distance,
+			0.0
+		)
+		if perpendicular_squared < collision_distance * collision_distance:
+			var entry_distance := forward_distance - sqrt(
+				collision_distance * collision_distance - perpendicular_squared
+			)
+			if entry_distance <= DIRECT_COLLISION_GUARD_LOOKAHEAD:
+				return maxf(entry_distance, 0.0)
+	return DIRECT_COLLISION_GUARD_LOOKAHEAD + maxf(surface_clearance, 0.0)
 
 
 ## Clips one proposed fixed-tick displacement against nearby enemy contact
@@ -1237,6 +1298,16 @@ func _resolve_direct_collision(slot: int, enemy: InfectionEnemy, movement_origin
 			neighbor_offset,
 			neighbor_count
 		)
+		if _crowd_avatar_stationary_this_tick and _crowd_lane_signs[slot] != 0:
+			var boundary_delta := _direct_collision_boundary_follow_delta(
+				slot,
+				movement_origin,
+				requested_direction,
+				requested_length,
+				own_contact_radius
+			)
+			if boundary_delta.length_squared() > DIRECT_COLLISION_EPSILON:
+				bypass_delta = boundary_delta
 	# Without a verified bypass the move remains perfectly radial. Clip that one
 	# segment at the first real contact body instead of letting an old closed
 	# corridor cache cancel the whole tick before contact.
@@ -1352,7 +1423,8 @@ func _resolve_direct_collision(slot: int, enemy: InfectionEnemy, movement_origin
 			+ float(_direct_collision_radii[other_slot])
 			+ DIRECT_COLLISION_SKIN
 		)
-		if final_to_other.length_squared() < minimum_distance * minimum_distance:
+		var validation_distance := minimum_distance - DIRECT_COLLISION_EPSILON
+		if final_to_other.length_squared() < validation_distance * validation_distance:
 			resolved_delta = Vector2.ZERO
 			route_became_blocked = true
 			break
@@ -1446,6 +1518,62 @@ func _direct_collision_clipped_direct_delta(
 	return requested_direction * allowed_length
 
 
+func _direct_collision_boundary_follow_delta(
+	slot: int,
+	movement_origin: Vector2,
+	requested_direction: Vector2,
+	requested_length: float,
+	own_contact_radius: float
+) -> Vector2:
+	var sign_value := int(_crowd_lane_signs[slot])
+	if sign_value == 0 or requested_length <= DIRECT_COLLISION_EPSILON:
+		return Vector2.ZERO
+	var blocker_handle := int(_direct_collision_blocker_handles[slot])
+	var blocker := _active_collision_enemy(blocker_handle)
+	if blocker == null:
+		return Vector2.ZERO
+	var blocker_slot := EntityHandle.slot(blocker_handle)
+	var blocker_to_origin := (
+		movement_origin - blocker.global_position
+		if _crowd_bounded
+		else _crowd_topology.shortest_delta(blocker.global_position, movement_origin)
+	)
+	var boundary_radius := blocker_to_origin.length()
+	var minimum_radius := (
+		own_contact_radius
+		+ float(_direct_collision_radii[blocker_slot])
+		+ DIRECT_COLLISION_SKIN
+	)
+	if boundary_radius + DIRECT_COLLISION_EPSILON < minimum_radius:
+		return Vector2.ZERO
+	var leased_side := requested_direction.orthogonal() * float(sign_value)
+	var angle := minf(requested_length / maxf(boundary_radius, minimum_radius), 0.25)
+	var positive_delta := blocker_to_origin.rotated(angle) - blocker_to_origin
+	var negative_delta := blocker_to_origin.rotated(-angle) - blocker_to_origin
+	var boundary_delta := (
+		positive_delta
+		if positive_delta.dot(leased_side) >= negative_delta.dot(leased_side)
+		else negative_delta
+	)
+	if boundary_delta.dot(requested_direction) < -DIRECT_COLLISION_EPSILON:
+		return Vector2.ZERO
+	var resolved_position := movement_origin + boundary_delta
+	if _crowd_bounded and not _crowd_topology.contains_position(resolved_position, own_contact_radius):
+		return Vector2.ZERO
+	if is_instance_valid(_crowd_avatar):
+		var origin_distance_squared := _crowd_topology.distance_squared(
+			movement_origin,
+			_crowd_avatar.global_position
+		)
+		var resolved_distance_squared := _crowd_topology.distance_squared(
+			resolved_position,
+			_crowd_avatar.global_position
+		)
+		if resolved_distance_squared > origin_distance_squared + DIRECT_COLLISION_EPSILON:
+			return Vector2.ZERO
+	return boundary_delta
+
+
 func _direct_collision_obstacle_bypass(
 	slot: int,
 	movement_origin: Vector2,
@@ -1465,6 +1593,7 @@ func _direct_collision_obstacle_bypass(
 	var selected_blocker := EntityHandle.INVALID
 	var selected_entry := INF
 	var stored_still_blocks := false
+	var stored_blocks_direct_path := false
 	var own_target_distance := _crowd_topology.distance(movement_origin, _crowd_avatar.global_position)
 	var remaining_to_contact := maxf(
 		own_target_distance
@@ -1495,6 +1624,8 @@ func _direct_collision_obstacle_bypass(
 		var candidate_entry := forward_distance - sqrt(
 			collision_distance * collision_distance - perpendicular_squared
 		)
+		if candidate_handle == stored_handle and candidate_entry <= remaining_to_contact:
+			stored_blocks_direct_path = true
 		if (
 			candidate_entry > requested_length + DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
 			or candidate_entry > remaining_to_contact
@@ -1515,10 +1646,14 @@ func _direct_collision_obstacle_bypass(
 		if stored_still_blocks:
 			_direct_collision_clear_ticks[slot] = 0
 		else:
-			_direct_collision_clear_ticks[slot] += 1
-			if _direct_collision_clear_ticks[slot] >= DIRECT_COLLISION_BYPASS_CLEAR_TICKS:
-				_clear_direct_collision_bypass(slot)
-				return Vector2.ZERO
+			var may_release := not stored_blocks_direct_path
+			if may_release:
+				_direct_collision_clear_ticks[slot] += 1
+				if _direct_collision_clear_ticks[slot] >= DIRECT_COLLISION_BYPASS_CLEAR_TICKS:
+					_clear_direct_collision_bypass(slot)
+					return Vector2.ZERO
+			else:
+				_direct_collision_clear_ticks[slot] = 0
 
 	if stored_handle == EntityHandle.INVALID:
 		if selected_blocker == EntityHandle.INVALID:

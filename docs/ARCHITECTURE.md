@@ -287,6 +287,19 @@ still intersect, the full neighborhood query is unnecessary. Releasing the
 contact body wakes the follower in the next fixed tick; moving or invalidating
 a side body restores the complete query at the next distributed phase.
 
+When Doctor Milos has no actual displacement in the current fixed tick, an
+already verified lease may replace its straight tangent with one short chord
+along the leased body's contact boundary. The chord keeps the established side,
+must not increase distance to the Doctor, and is accepted only inside the arena
+and outside the cached contact bodies. That stationary lease selects at most
+five earliest forward-contact guards; direct pursuit and every moving-Doctor
+lease retain the established maximum of three. The extra stationary guards add
+no spatial query and disappear immediately when the Doctor moves. Final contact
+validation uses only a numerical epsilon below the authored radius sum, never a
+smaller gameplay body. A genuinely sealed contact shell therefore remains
+still, while a physically open edge can keep feeding attackers without a
+waypoint, push force or global path search.
+
 Registration, release, ordinary movement, avatar push and explicit relocation
 update the same grid incrementally; a full rebuild is only the recovery path
 after topology configuration or an unlocated relocation. A queued body uses a

@@ -92,8 +92,11 @@ and required status feedback are never degraded.
   phases. A queued follower validates only its exact generation-safe contact
   body per tick. On its scheduled phase it may retain the exact two side
   blockers and skip a full refresh only while both still close their sweeps.
-  An active lease resolves at most three cached guards in two projection passes;
-  neither queued nor leased bodies may restore one query per enemy and tick.
+  A moving or direct lease resolves at most three cached guards in two
+  projection passes. Only an already active lease against a stationary Doctor
+  may retain up to five guards for its short contact-boundary chord; it reuses
+  the same phased query and performs no additional grid lookup. Neither queued
+  nor leased bodies may restore one query per enemy and tick.
   Deferred contact is resolved from one local grid query per fixed tick, not
   one Doctor-distance check per distant enemy.
 - Offscreen relocation uses the incrementally maintained EnemyWorld broad

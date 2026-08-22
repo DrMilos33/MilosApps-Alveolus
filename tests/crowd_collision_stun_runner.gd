@@ -11,6 +11,7 @@ var mixed_small_hits := 0
 var mixed_cluster_hits := 0
 var boss_hits := 0
 var edge_hits := 0
+var stationary_contact_ids: Dictionary = {}
 
 
 func _init() -> void:
@@ -161,18 +162,8 @@ func _run() -> void:
 	_true(queue_lateral_sign_flips <= 1, "Der Verfolger behält beim Umlaufen seine gewählte Seite (%d Wechsel)" % queue_lateral_sign_flips)
 	_true(queue_maximum_retreat <= 0.001, "Der blockierte Verfolger läuft niemals zurück (%.5f)" % queue_maximum_retreat)
 	_true(front_hits > 0, "Der vordere Körper greift weiterhin an")
-	_true(blocked_hits == 0, "Ein physisch blockierter Hinterkörper verursacht keinen Phantomtreffer")
-	var blocked_before_release := blocked.global_position
-	queue_world.release(front_handle, false)
-	queue_world.step_fixed(1.0 / 60.0)
-	var released_step := topology.shortest_delta(blocked_before_release, blocked.global_position)
-	var released_direction := topology.shortest_delta(blocked_before_release, avatar.global_position).normalized()
-	_true(released_step.dot(released_direction) > 0.0, "Nach Freigabe wacht der Hinterkörper im nächsten Fixed Tick auf")
-	_true(absf(released_step.cross(released_direction)) <= 0.001, "Der freigegebene Weg kehrt sofort zur direkten Verfolgung zurück")
-	for _tick in range(180):
-		queue_world.step_fixed(1.0 / 60.0)
-	_assert_at_contact(blocked, avatar, topology, "Freigegebene rote Bakteriengruppe")
-	_true(blocked_hits > 0, "Nach Freigabe verfolgt und trifft der zuvor blockierte Körper")
+	_assert_at_contact(blocked, avatar, topology, "Umlaufende rote Bakteriengruppe")
+	_true(blocked_hits > 0, "Der Hinterkörper erreicht den Doctor ohne manuelle Freigabe")
 	queue_world.clear()
 	front.free()
 	blocked.free()
@@ -471,7 +462,7 @@ func _run() -> void:
 	var edge_first_lease_tick := -1
 	var edge_first_attack_tick := -1
 	var edge_minimum_margin := INF
-	for _tick in range(210):
+	for _tick in range(360):
 		var before_position := edge_follower.global_position
 		var before_distance := topology.distance(before_position, avatar.global_position)
 		edge_world.step_fixed(1.0 / 60.0)
@@ -507,24 +498,12 @@ func _run() -> void:
 	_true(edge_sign_flips == 0, "Die geleaste Randseite wechselt nicht direkt (%d Wechsel)" % edge_sign_flips)
 	_true(edge_minimum_margin >= -0.06, "Der Randbogen wahrt alle Schadenshitboxen (Margin %.3f)" % edge_minimum_margin)
 	_true(edge_maximum_retreat <= 0.001, "Der Randbogen erzeugt keine Fluchtbewegung (%.5f)" % edge_maximum_retreat)
+	_assert_at_contact(edge_follower, avatar, topology, "Randgegner mit freiem Korridor")
 	_true(
-		edge_first_attack_tick < 0,
-		"Ein weiterhin physisch blockierter Randgegner verursacht keinen Phantomtreffer"
+		edge_first_attack_tick >= 0 and edge_first_attack_tick <= 300,
+		"Der Randgegner erreicht den Doctor ohne manuelle Freigabe (Tick %d)" % edge_first_attack_tick
 	)
-	var edge_before_release := edge_follower.global_position
-	for blocker in edge_blockers:
-		var blocker_handle := edge_world.handle_for(blocker)
-		if EntityHandle.is_valid(blocker_handle):
-			_true(edge_world.release(blocker_handle, false), "Ein Randkörper wird generationssicher freigegeben")
-	edge_world.step_fixed(1.0 / 60.0)
-	var edge_release_direction := topology.shortest_delta(edge_before_release, avatar.global_position).normalized()
-	var edge_release_step := topology.shortest_delta(edge_before_release, edge_follower.global_position)
-	_true(edge_release_step.dot(edge_release_direction) > 0.0, "Der Randgegner setzt im nächsten Tick direkt nach")
-	_true(absf(edge_release_step.cross(edge_release_direction)) <= 0.001, "Der Randgegner beendet seine Seitenlease ohne Nachschwingen")
-	for _tick in range(240):
-		edge_world.step_fixed(1.0 / 60.0)
-	_assert_at_contact(edge_follower, avatar, topology, "Freigegebener Randgegner")
-	_true(edge_hits > 0, "Der freigegebene Randgegner greift den Doctor an")
+	_true(edge_hits > 0, "Der Randgegner greift nach seinem freien Bogen an")
 	edge_world.clear()
 	for blocker in edge_blockers:
 		blocker.free()
@@ -665,6 +644,125 @@ func _run() -> void:
 			"Jeder gemischte Verfolger beendet die Probe näher am Doctor (%d)" % index
 		)
 	_true(mixed_small_hits == 0 and mixed_cluster_hits == 0, "Ein geschlossener gemischter Ring verursacht keine Treffer durch Vorderkörper hindurch")
+
+	# A one-sided dense pack against a stationary Doctor must keep feeding its
+	# physically open frontier instead of freezing the complete rear mass.
+	stationary_contact_ids.clear()
+	var stationary_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	stationary_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	stationary_world.set_crowd_profile_enabled(true)
+	var stationary_enemies: Array[InfectionEnemy] = []
+	var stationary_initial_distances := PackedFloat32Array()
+	var stationary_late_travel := PackedFloat32Array()
+	var stationary_removed := PackedByteArray()
+	var lattice_spacing := 34.4
+	var lattice_column_spacing := lattice_spacing * 0.8660254
+	for column in range(10):
+		for row in range(8):
+			var position := Vector2(
+				110.0 + float(column) * lattice_column_spacing,
+				(float(row) - 3.5) * lattice_spacing + (0.5 * lattice_spacing if posmod(column, 2) != 0 else 0.0)
+			)
+			var enemy := _enemy(small_definition, avatar, topology, position)
+			enemy.pressure_applied.connect(_on_stationary_pressure.bind(enemy.get_instance_id()))
+			stationary_enemies.append(enemy)
+			stationary_initial_distances.append(topology.distance(position, avatar.global_position))
+			stationary_late_travel.append(0.0)
+			stationary_removed.append(0)
+			_true(EntityHandle.is_valid(stationary_world.register_enemy(enemy)), "Stationärer Verfolger %d erhält einen Handle" % stationary_enemies.size())
+	var stationary_minimum_margin := INF
+	var stationary_maximum_retreat := 0.0
+	var stationary_release_count := 0
+	for tick in range(720):
+		var before_positions := PackedVector2Array()
+		var before_distances := PackedFloat32Array()
+		for enemy in stationary_enemies:
+			before_positions.append(enemy.global_position)
+			before_distances.append(topology.distance(enemy.global_position, avatar.global_position))
+		stationary_world.step_fixed(1.0 / 60.0)
+		for index in range(stationary_enemies.size()):
+			if stationary_removed[index] != 0:
+				continue
+			var travelled := topology.distance(before_positions[index], stationary_enemies[index].global_position)
+			if tick >= 360:
+				stationary_late_travel[index] += travelled
+			stationary_maximum_retreat = maxf(
+				stationary_maximum_retreat,
+				topology.distance(stationary_enemies[index].global_position, avatar.global_position)
+					- float(before_distances[index])
+			)
+		for first_index in range(stationary_enemies.size()):
+			if stationary_removed[first_index] != 0:
+				continue
+			for second_index in range(first_index + 1, stationary_enemies.size()):
+				if stationary_removed[second_index] != 0:
+					continue
+				stationary_minimum_margin = minf(
+					stationary_minimum_margin,
+					topology.distance(
+						stationary_enemies[first_index].global_position,
+						stationary_enemies[second_index].global_position
+					)
+						- stationary_enemies[first_index].contact_body_radius()
+						- stationary_enemies[second_index].contact_body_radius()
+				)
+		# Simulate the normal combat loop removing roughly one front attacker per
+		# second. A physically full contact shell may wait, but each opened place
+		# must pull a new body out of the dense rear pack without manual repositioning.
+		if tick >= 120 and posmod(tick - 120, 60) == 0:
+			var release_index := -1
+			var release_distance := INF
+			for index in range(stationary_enemies.size()):
+				if stationary_removed[index] != 0:
+					continue
+				var handle := stationary_world.handle_for(stationary_enemies[index])
+				if not EntityHandle.is_valid(handle):
+					continue
+				var distance := topology.distance(
+					stationary_enemies[index].global_position,
+					avatar.global_position
+				)
+				var contact_distance := (
+					TherapyAvatar.CONTACT_RADIUS
+					+ stationary_enemies[index].contact_body_radius()
+				)
+				if distance <= contact_distance + 0.25 and distance < release_distance:
+					release_index = index
+					release_distance = distance
+			if release_index >= 0:
+				var release_handle := stationary_world.handle_for(stationary_enemies[release_index])
+				if stationary_world.release(release_handle, false):
+					stationary_removed[release_index] = 1
+					stationary_release_count += 1
+	var stationary_progressed := 0
+	var stationary_late_movers := 0
+	var stationary_sectors := PackedByteArray()
+	stationary_sectors.resize(12)
+	stationary_sectors.fill(0)
+	for index in range(stationary_enemies.size()):
+		var enemy := stationary_enemies[index]
+		var final_distance := topology.distance(enemy.global_position, avatar.global_position)
+		if final_distance <= float(stationary_initial_distances[index]) - 20.0:
+			stationary_progressed += 1
+		if float(stationary_late_travel[index]) >= 8.0:
+			stationary_late_movers += 1
+		if stationary_removed[index] == 0 and final_distance <= 240.0:
+			var angle := topology.shortest_delta(avatar.global_position, enemy.global_position).angle()
+			var sector := posmod(int(floor((angle + PI) / TAU * 12.0)), 12)
+			stationary_sectors[sector] = 1
+	var stationary_sector_count := 0
+	for occupied in stationary_sectors:
+		stationary_sector_count += int(occupied)
+	_true(stationary_minimum_margin >= -0.06, "Der stationäre dichte Pulk wahrt alle Schadenskontakthitboxen (Margin %.3f)" % stationary_minimum_margin)
+	_true(stationary_maximum_retreat <= 0.001, "Der stationäre dichte Pulk erzeugt keine Fluchtbewegung (%.5f)" % stationary_maximum_retreat)
+	_true(stationary_release_count >= 6, "Der Kampfersatz öffnet wiederholt echte Plätze am Doctor (%d)" % stationary_release_count)
+	_true(stationary_progressed >= 10, "Der einseitige Pulk führt wiederholt neue Körper deutlich nach (%d / 80)" % stationary_progressed)
+	_true(stationary_late_movers >= 3, "Auch spät fließen mehrere Verfolger aus dem Pulk weiter (%d)" % stationary_late_movers)
+	_true(stationary_contact_ids.size() >= 8, "Mehrere unterschiedliche Verfolger erreichen den stehenden Doctor (%d)" % stationary_contact_ids.size())
+	_true(stationary_sector_count >= 3, "Der einseitige Pulk hält mehrere Angriffssektoren am Doctor aktiv (%d / 12)" % stationary_sector_count)
+	stationary_world.clear()
+	for enemy in stationary_enemies:
+		enemy.free()
 
 	# Explicit knockback remains the only intentional distance increase.
 	mixed_world.clear()
@@ -835,3 +933,7 @@ func _on_boss_pressure(_amount: float) -> void:
 
 func _on_edge_pressure(_amount: float) -> void:
 	edge_hits += 1
+
+
+func _on_stationary_pressure(_amount: float, enemy_id: int) -> void:
+	stationary_contact_ids[enemy_id] = true
