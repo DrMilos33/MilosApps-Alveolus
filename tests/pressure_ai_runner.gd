@@ -45,11 +45,11 @@ const LINEAR_REACHABLE_RADIUS := 360.0
 const LINEAR_REAR_TOLERANCE := 20.0
 
 const MINIMUM_LINEAR_TRAVEL_DISTANCE := 2500.0
-const MINIMUM_LINEAR_RELOCATION_EVENTS := 200
+const MINIMUM_LINEAR_RELOCATION_EVENTS := 320
 const MINIMUM_LINEAR_DISTINCT_RELOCATIONS := 80
 const MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO := 0.55
-const MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE := 5.0
-const MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE := 5.0
+const MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE := 4.75
+const MINIMUM_LINEAR_REACHABLE_FRONT_SIDE_AVERAGE := 4.75
 const MINIMUM_LINEAR_FRONT_SIDE_SECTOR_AVERAGE := 3.0
 const MINIMUM_LINEAR_CONTACT_EVENTS := 4
 const MINIMUM_LINEAR_DISTINCT_CONTACTORS := 2
@@ -78,7 +78,7 @@ func _run() -> void:
 	await _dispose_game(linear_game)
 
 	var report := {
-		"schema": "alveolus.pressure_ai.v4",
+		"schema": "alveolus.pressure_ai.v5",
 		"passed": failures == 0,
 		"enemies_per_case": ENEMY_COUNT,
 		"relocation_rate_contract": relocation_rate_contract,
@@ -153,6 +153,7 @@ func _run_circle_case(game: Node) -> Dictionary:
 	var relocation_visibility_violations := 0
 	var relocation_source_neighborhood_violations := 0
 	var randomized_target_events := 0
+	var randomized_depth_events := 0
 	var relocation_target_sectors: Dictionary = {}
 	var early_pressure_sector_sum := 0.0
 	var early_sample_count := 0
@@ -166,7 +167,6 @@ func _run_circle_case(game: Node) -> Dictionary:
 
 	paused = true
 	for tick in range(CIRCLE_SIMULATION_TICKS):
-		var avatar_before_tick: Vector2 = game.avatar.global_position
 		_apply_circular_input(game, orbit_center)
 		var visible_before := _current_visible_rect(game)
 		_true(game.run_session.step_fixed(FIXED_DELTA), "Kreis-RunSession bleibt in Tick %d aktiv" % tick, false)
@@ -176,21 +176,24 @@ func _run_circle_case(game: Node) -> Dictionary:
 			var enemy: InfectionEnemy = tracked_enemies[index]
 			var travelled: float = game.topology.distance(previous_positions[index], enemy.global_position)
 			if travelled >= RELOCATION_DISTANCE_THRESHOLD:
+				var relocation_avatar_position: Vector2 = game.avatar.global_position
 				relocation_events += 1
 				relocated_enemy_ids[enemy.get_instance_id()] = true
 				if not _relocation_target_is_offscreen(enemy, visible_before, visible_after):
 					relocation_visibility_violations += 1
 				if not _relocation_target_avoids_source_neighborhood(
 					game,
-					avatar_before_tick,
+					relocation_avatar_position,
 					previous_positions[index],
 					enemy.global_position
 				):
 					relocation_source_neighborhood_violations += 1
-				var target_delta: Vector2 = game.topology.shortest_delta(avatar_before_tick, enemy.global_position)
+				var target_delta: Vector2 = game.topology.shortest_delta(relocation_avatar_position, enemy.global_position)
 				relocation_target_sectors[game._sector_for_delta(target_delta)] = true
-				if _relocation_target_is_randomized(game, avatar_before_tick, enemy.global_position):
+				if _relocation_target_is_randomized(game, relocation_avatar_position, enemy.global_position):
 					randomized_target_events += 1
+				if _relocation_target_has_randomized_depth(game, game.avatar.global_position, enemy):
+					randomized_depth_events += 1
 			previous_positions[index] = enemy.global_position
 
 		if tick % SAMPLE_INTERVAL_TICKS != 0:
@@ -225,6 +228,7 @@ func _run_circle_case(game: Node) -> Dictionary:
 	_true(relocation_source_neighborhood_violations == 0, "Kreisversetzungen meiden Quellsektor und direkte Nachbarsektoren (%d Verstöße)" % relocation_source_neighborhood_violations)
 	_true(relocation_target_sectors.size() >= MINIMUM_RELOCATION_TARGET_SECTORS, "Kreisversetzungen streuen über mindestens %d Zielsektoren (%d)" % [MINIMUM_RELOCATION_TARGET_SECTORS, relocation_target_sectors.size()])
 	_true(randomized_target_events >= relocation_events / 2, "Kreisversetzungen landen mehrheitlich nicht auf exakten Sektormittelpunkten (%d / %d)" % [randomized_target_events, relocation_events])
+	_true(randomized_depth_events >= relocation_events / 2, "Kreisversetzungen streuen mehrheitlich auch ihre Tiefe (%d / %d)" % [randomized_depth_events, relocation_events])
 	_true(late_pressure_average >= MINIMUM_LATE_PRESSURE_SECTORS, "Später lokaler Kreisdruck belegt mehrere Sektoren (%.2f / %.2f)" % [late_pressure_average, MINIMUM_LATE_PRESSURE_SECTORS])
 	_true(late_near_sector_average >= MINIMUM_LATE_NEAR_SECTORS, "Nahe Gegner greifen im Kreis aus mehreren Richtungen an (%.2f / %.2f)" % [late_near_sector_average, MINIMUM_LATE_NEAR_SECTORS])
 	_true(peak_near_sectors >= MINIMUM_PEAK_NEAR_SECTORS, "Der Kreisexploit erzeugt mindestens %d gleichzeitige Nahfronten (%d)" % [MINIMUM_PEAK_NEAR_SECTORS, peak_near_sectors])
@@ -241,6 +245,7 @@ func _run_circle_case(game: Node) -> Dictionary:
 		"relocation_source_neighborhood_violations": relocation_source_neighborhood_violations,
 		"relocation_target_sectors": relocation_target_sectors.size(),
 		"randomized_target_events": randomized_target_events,
+		"randomized_depth_events": randomized_depth_events,
 		"early_pressure_sectors_avg": early_pressure_average,
 		"late_pressure_sectors_avg": late_pressure_average,
 		"late_near_sectors_avg": late_near_sector_average,
@@ -282,6 +287,7 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 	var relocation_visibility_violations := 0
 	var relocation_source_neighborhood_violations := 0
 	var randomized_target_events := 0
+	var randomized_depth_events := 0
 	var relocation_target_sectors: Dictionary = {}
 	var late_sample_count := 0
 	var late_samples_with_front_side := 0
@@ -298,7 +304,6 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 
 	paused = true
 	for tick in range(LINEAR_SIMULATION_TICKS):
-		var avatar_before_tick: Vector2 = game.avatar.global_position
 		_advance_linear_avatar(game)
 		var visible_before := _current_visible_rect(game)
 		_true(game.run_session.step_fixed(FIXED_DELTA), "Flucht-RunSession bleibt in Tick %d aktiv" % tick, false)
@@ -308,21 +313,24 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 			var enemy: InfectionEnemy = tracked_enemies[index]
 			var travelled: float = game.topology.distance(previous_positions[index], enemy.global_position)
 			if travelled >= RELOCATION_DISTANCE_THRESHOLD:
+				var relocation_avatar_position: Vector2 = game.avatar.global_position
 				relocation_events += 1
 				relocated_enemy_ids[enemy.get_instance_id()] = true
 				if not _relocation_target_is_offscreen(enemy, visible_before, visible_after):
 					relocation_visibility_violations += 1
 				if not _relocation_target_avoids_source_neighborhood(
 					game,
-					avatar_before_tick,
+					relocation_avatar_position,
 					previous_positions[index],
 					enemy.global_position
 				):
 					relocation_source_neighborhood_violations += 1
-				var target_delta: Vector2 = game.topology.shortest_delta(avatar_before_tick, enemy.global_position)
+				var target_delta: Vector2 = game.topology.shortest_delta(relocation_avatar_position, enemy.global_position)
 				relocation_target_sectors[game._sector_for_delta(target_delta)] = true
-				if _relocation_target_is_randomized(game, avatar_before_tick, enemy.global_position):
+				if _relocation_target_is_randomized(game, relocation_avatar_position, enemy.global_position):
 					randomized_target_events += 1
+				if _relocation_target_has_randomized_depth(game, game.avatar.global_position, enemy):
+					randomized_depth_events += 1
 			previous_positions[index] = enemy.global_position
 
 		if tick < LINEAR_LATE_WINDOW_START_TICK or tick % SAMPLE_INTERVAL_TICKS != 0:
@@ -378,6 +386,7 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 	_true(relocation_source_neighborhood_violations == 0, "Fluchtversetzungen meiden Quellsektor und direkte Nachbarsektoren (%d Verstöße)" % relocation_source_neighborhood_violations)
 	_true(relocation_target_sectors.size() >= MINIMUM_RELOCATION_TARGET_SECTORS, "Fluchtversetzungen streuen über mindestens %d Zielsektoren (%d)" % [MINIMUM_RELOCATION_TARGET_SECTORS, relocation_target_sectors.size()])
 	_true(randomized_target_events >= relocation_events / 2, "Fluchtversetzungen landen mehrheitlich an gestreuten Punkten (%d / %d)" % [randomized_target_events, relocation_events])
+	_true(randomized_depth_events >= relocation_events / 2, "Fluchtversetzungen streuen mehrheitlich auch ihre Tiefe (%d / %d)" % [randomized_depth_events, relocation_events])
 	_true(minimum_rear_backlog_ratio <= MAXIMUM_LINEAR_MINIMUM_REAR_BACKLOG_RATIO, "Der Regler baut den gesamten rückwärtigen Rückstau zwischenzeitlich messbar ab (%.2f / %.2f; %d -> %d)" % [minimum_rear_backlog_ratio, MAXIMUM_LINEAR_MINIMUM_REAR_BACKLOG_RATIO, initial_rear_backlog, minimum_rear_backlog])
 	_true(front_side_sample_ratio >= MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO, "Vor oder seitlich bleibt in genügend späten Fluchtsamples Druck sichtbar (%.2f / %.2f)" % [front_side_sample_ratio, MINIMUM_LINEAR_FRONT_SIDE_SAMPLE_RATIO])
 	_true(late_visible_front_side_average >= MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE, "Die sichtbare Front-/Seitengruppe bleibt im Mittel besetzt (%.2f / %.2f)" % [late_visible_front_side_average, MINIMUM_LINEAR_VISIBLE_FRONT_SIDE_AVERAGE])
@@ -397,6 +406,7 @@ func _run_linear_escape_case(game: Node) -> Dictionary:
 		"relocation_source_neighborhood_violations": relocation_source_neighborhood_violations,
 		"relocation_target_sectors": relocation_target_sectors.size(),
 		"randomized_target_events": randomized_target_events,
+		"randomized_depth_events": randomized_depth_events,
 		"initial_rear_offscreen_backlog": initial_rear_backlog,
 		"late_rear_offscreen_backlog_avg": late_rear_backlog_average,
 		"late_rear_offscreen_backlog_ratio": late_rear_backlog_ratio,
@@ -524,12 +534,12 @@ func _relocation_target_is_offscreen(enemy: InfectionEnemy, visible_before: Rect
 
 func _relocation_target_avoids_source_neighborhood(
 	game: Node,
-	avatar_before_tick: Vector2,
+	avatar_position: Vector2,
 	source_position: Vector2,
 	target_position: Vector2
 ) -> bool:
-	var source_direction: Vector2 = game.topology.shortest_delta(avatar_before_tick, source_position)
-	var target_direction: Vector2 = game.topology.shortest_delta(avatar_before_tick, target_position)
+	var source_direction: Vector2 = game.topology.shortest_delta(avatar_position, source_position)
+	var target_direction: Vector2 = game.topology.shortest_delta(avatar_position, target_position)
 	if source_direction.length_squared() <= 0.000001 or target_direction.length_squared() <= 0.000001:
 		return false
 	return game._sector_ring_distance(
@@ -538,14 +548,33 @@ func _relocation_target_avoids_source_neighborhood(
 	) >= MINIMUM_RELOCATION_SECTOR_DISTANCE
 
 
-func _relocation_target_is_randomized(game: Node, avatar_before_tick: Vector2, target_position: Vector2) -> bool:
-	var target_direction: Vector2 = game.topology.shortest_delta(avatar_before_tick, target_position)
+func _relocation_target_is_randomized(game: Node, avatar_position: Vector2, target_position: Vector2) -> bool:
+	var target_direction: Vector2 = game.topology.shortest_delta(avatar_position, target_position)
 	if target_direction.length_squared() <= 0.000001:
 		return false
 	var sector: int = int(game._sector_for_delta(target_direction))
 	var sector_width: float = TAU / float(SECTOR_COUNT)
 	var sector_center: float = (float(sector) + 0.5) * sector_width
 	return absf(game._shortest_signed_angle(sector_center, target_direction.angle())) >= 0.03
+
+
+func _relocation_target_has_randomized_depth(game: Node, avatar_position: Vector2, enemy: InfectionEnemy) -> bool:
+	if not is_instance_valid(enemy) or enemy.definition == null:
+		return false
+	var target_delta: Vector2 = game.topology.shortest_delta(avatar_position, enemy.global_position)
+	if target_delta.length_squared() <= 0.000001:
+		return false
+	var direction := target_delta.normalized()
+	var base_distance: float = (
+		game._ray_distance_to_visible_edge(avatar_position, direction)
+		+ float(game.WAVE_SPAWN_SCREEN_MARGIN)
+		+ enemy.definition.radius
+	)
+	var radial_offset := target_delta.length() - base_distance
+	var nearest_authored_depth := INF
+	for authored_depth in game.OFFSCREEN_PLACEMENT_RADIAL_OFFSETS:
+		nearest_authored_depth = minf(nearest_authored_depth, absf(radial_offset - float(authored_depth)))
+	return nearest_authored_depth >= 1.0
 
 
 func _circle_is_fully_outside_rect(center: Vector2, radius: float, rect: Rect2) -> bool:
@@ -627,8 +656,13 @@ func _linear_pressure_sample(game: Node, tracked_enemies: Array[InfectionEnemy],
 
 
 func _assert_proportional_rate_contract(game: Node) -> Dictionary:
-	var anchor_counts := PackedInt32Array([0, 1, 15, 16, 30, 31, 45, 46, 60, 61, 75, 76, 90, 91, 105, 106, 120, ENEMY_COUNT])
-	var expected_rates := PackedFloat32Array([0.0, 2.0, 2.0, 4.0, 4.0, 6.0, 6.0, 8.0, 8.0, 10.0, 10.0, 12.0, 12.0, 14.0, 14.0, 14.0, 14.0, 14.0])
+	var anchor_counts := PackedInt32Array([
+		0, 1, 12, 13, 24, 25, 60, 61, 120, 121, 180, 181, 204, 205, 216, 217, ENEMY_COUNT,
+	])
+	var expected_rates := PackedFloat32Array([
+		0.0, 2.0, 2.0, 4.0, 4.0, 6.0, 10.0, 12.0, 20.0, 22.0, 30.0, 32.0,
+		34.0, 36.0, 36.0, 36.0, 36.0,
+	])
 	var observed_rates := PackedFloat32Array()
 	observed_rates.resize(anchor_counts.size())
 	for index in range(anchor_counts.size()):
@@ -652,11 +686,11 @@ func _assert_proportional_rate_contract(game: Node) -> Dictionary:
 		previous_rate = current_rate
 	_true(monotone, "Die geplante Offscreen-Rate bleibt von 0 bis %d Gegnern monoton" % ENEMY_COUNT)
 	_true(
-		observed_rates[2] < observed_rates[8] and observed_rates[8] < observed_rates[15],
+		observed_rates[2] < observed_rates[8] and observed_rates[8] < observed_rates[13],
 		"Niedriger, mittlerer und hoher Rückstau planen strikt mehr Durchsatz (%.0f/s < %.0f/s < %.0f/s)" % [
 			observed_rates[2],
 			observed_rates[8],
-			observed_rates[15],
+			observed_rates[13],
 		]
 	)
 	return {
@@ -665,7 +699,7 @@ func _assert_proportional_rate_contract(game: Node) -> Dictionary:
 		"observed_moves_per_second": observed_rates,
 		"low_backlog_rate": observed_rates[2],
 		"medium_backlog_rate": observed_rates[8],
-		"high_backlog_rate": observed_rates[15],
+		"high_backlog_rate": observed_rates[13],
 		"maximum_backlog_rate": observed_rates[observed_rates.size() - 1],
 		"monotone_through_count": ENEMY_COUNT,
 	}

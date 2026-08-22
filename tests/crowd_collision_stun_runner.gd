@@ -161,8 +161,14 @@ func _run() -> void:
 	_true(queue_lateral_sign_flips <= 1, "Der Verfolger behält beim Umlaufen seine gewählte Seite (%d Wechsel)" % queue_lateral_sign_flips)
 	_true(queue_maximum_retreat <= 0.001, "Der blockierte Verfolger läuft niemals zurück (%.5f)" % queue_maximum_retreat)
 	_true(front_hits > 0, "Der vordere Körper greift weiterhin an")
-	_true(blocked_hits > 0, "Der umlaufende Körper erreicht den Doctor und greift an")
+	_true(blocked_hits == 0, "Ein physisch blockierter Hinterkörper verursacht keinen Phantomtreffer")
+	var blocked_before_release := blocked.global_position
 	queue_world.release(front_handle, false)
+	queue_world.step_fixed(1.0 / 60.0)
+	var released_step := topology.shortest_delta(blocked_before_release, blocked.global_position)
+	var released_direction := topology.shortest_delta(blocked_before_release, avatar.global_position).normalized()
+	_true(released_step.dot(released_direction) > 0.0, "Nach Freigabe wacht der Hinterkörper im nächsten Fixed Tick auf")
+	_true(absf(released_step.cross(released_direction)) <= 0.001, "Der freigegebene Weg kehrt sofort zur direkten Verfolgung zurück")
 	for _tick in range(180):
 		queue_world.step_fixed(1.0 / 60.0)
 	_assert_at_contact(blocked, avatar, topology, "Freigegebene rote Bakteriengruppe")
@@ -178,7 +184,8 @@ func _run() -> void:
 	var slide_front := _enemy(small_definition, avatar, topology, Vector2(28.5, 0.0))
 	var slider := _enemy(small_definition, avatar, topology, Vector2(100.0, 12.0))
 	slider.pressure_applied.connect(_on_offset_pressure)
-	_true(EntityHandle.is_valid(slide_world.register_enemy(slide_front)), "Seitlicher Blocker erhält einen Handle")
+	var slide_front_handle := slide_world.register_enemy(slide_front)
+	_true(EntityHandle.is_valid(slide_front_handle), "Seitlicher Blocker erhält einen Handle")
 	_true(EntityHandle.is_valid(slide_world.register_enemy(slider)), "Seitlicher Verfolger erhält einen Handle")
 	var slide_minimum_spacing := INF
 	var slide_maximum_retreat := 0.0
@@ -220,7 +227,16 @@ func _run() -> void:
 	_true(blocked_lateral > 0.01, "Seitliche Bewegung entsteht, wenn ein echter Körper den Weg blockiert")
 	_true(clear_lateral <= 0.001, "Ohne Körperkontakt bleibt die Verfolgung geradlinig (%.5f)" % clear_lateral)
 	_true(slide_maximum_retreat <= 0.001, "Auch beim Gleiten entsteht keine Fluchtbewegung (%.5f)" % slide_maximum_retreat)
-	_true(offset_hits > 0, "Der seitlich geglittene Gegner erreicht danach den Doctor")
+	var slider_before_release := slider.global_position
+	_true(slide_world.release(slide_front_handle, false), "Der seitliche Vorderkörper wird generationssicher freigegeben")
+	slide_world.step_fixed(1.0 / 60.0)
+	var slider_release_direction := topology.shortest_delta(slider_before_release, avatar.global_position).normalized()
+	var slider_release_step := topology.shortest_delta(slider_before_release, slider.global_position)
+	_true(slider_release_step.dot(slider_release_direction) > 0.0, "Der seitlich blockierte Gegner wacht nach Freigabe direkt auf")
+	_true(absf(slider_release_step.cross(slider_release_direction)) <= 0.001, "Nach Freigabe endet der Bypass ohne Nachschwingen")
+	for _tick in range(180):
+		slide_world.step_fixed(1.0 / 60.0)
+	_true(offset_hits > 0, "Der freigegebene Gegner erreicht danach den Doctor")
 	slide_world.clear()
 	slide_front.free()
 	slider.free()
@@ -324,7 +340,7 @@ func _run() -> void:
 			)
 	_true(wedge_minimum_margin >= -0.06, "Der Mehrfachkontakt hält weiterhin exakt die Schadenshitboxen (Margin %.3f)" % wedge_minimum_margin)
 	_true(wedge_maximum_retreat <= 0.001, "Der geometrische Ausweg erzeugt keine Rückwärtsbewegung (%.5f)" % wedge_maximum_retreat)
-	_true(wedge_maximum_lateral > 1.0, "Der Keilverfolger nutzt einen sichtbaren, lokalen Bogen (%.2f)" % wedge_maximum_lateral)
+	_true(wedge_maximum_lateral <= 0.001, "Ohne vollständig verifizierten Seitenkorridor erfindet der Keilverfolger keinen Bogen (%.5f)" % wedge_maximum_lateral)
 	_true(wedge_lateral_sign_flips <= 1, "Ein bestehender Knubbel erzeugt kein wiederholtes Links-Rechts-Wackeln (%d Wechsel)" % wedge_lateral_sign_flips)
 	_true(
 		topology.distance(wedge_follower.global_position, avatar.global_position) <= wedge_start_distance - 20.0,
@@ -384,6 +400,18 @@ func _run() -> void:
 	_true(enclosed_maximum_retreat <= 0.001, "Auch ein umschlossener Gegner läuft nie vom Doctor weg (%.5f)" % enclosed_maximum_retreat)
 	_true(enclosed_lane_lease_ticks == 0, "Ein geschlossener Pulk erfindet in keinem Tick eine Bypassseite")
 	_true(enclosed_trigger_switches == 0, "Ein wartender Gegner wechselt seinen Vorderkörper nicht und wackelt nicht")
+	enclosed_world.set_crowd_profile_enabled(true)
+	enclosed_world.reset_crowd_profile_counters()
+	for _tick in range(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES):
+		enclosed_world.step_fixed(1.0 / 60.0)
+	var enclosed_profile := enclosed_world.crowd_profile_snapshot()
+	_true(
+		enclosed_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES] <= enclosed_blockers.size(),
+		"Der wartende Innenkörper verwendet seinen validierten Cache statt einer zusätzlichen Vollabfrage (%d / %d)" % [
+			enclosed_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES],
+			enclosed_blockers.size(),
+		]
+	)
 	var enclosed_slot := EntityHandle.slot(enclosed_handle)
 	_true(enclosed_world._crowd_lane_signs[enclosed_slot] == 0, "Ohne freien Korridor wird keine Bypassseite geleast")
 	var enclosed_trigger_handle := int(enclosed_world._direct_collision_corridor_blockers[enclosed_slot])
@@ -479,11 +507,24 @@ func _run() -> void:
 	_true(edge_sign_flips == 0, "Die geleaste Randseite wechselt nicht direkt (%d Wechsel)" % edge_sign_flips)
 	_true(edge_minimum_margin >= -0.06, "Der Randbogen wahrt alle Schadenshitboxen (Margin %.3f)" % edge_minimum_margin)
 	_true(edge_maximum_retreat <= 0.001, "Der Randbogen erzeugt keine Fluchtbewegung (%.5f)" % edge_maximum_retreat)
-	_assert_at_contact(edge_follower, avatar, topology, "Aggressiver Randgegner")
 	_true(
-		edge_first_attack_tick >= 0 and edge_first_attack_tick <= 190,
-		"Der Randgegner erreicht den Doctor in gut drei Sekunden und greift an (Tick %d)" % edge_first_attack_tick
+		edge_first_attack_tick < 0,
+		"Ein weiterhin physisch blockierter Randgegner verursacht keinen Phantomtreffer"
 	)
+	var edge_before_release := edge_follower.global_position
+	for blocker in edge_blockers:
+		var blocker_handle := edge_world.handle_for(blocker)
+		if EntityHandle.is_valid(blocker_handle):
+			_true(edge_world.release(blocker_handle, false), "Ein Randkörper wird generationssicher freigegeben")
+	edge_world.step_fixed(1.0 / 60.0)
+	var edge_release_direction := topology.shortest_delta(edge_before_release, avatar.global_position).normalized()
+	var edge_release_step := topology.shortest_delta(edge_before_release, edge_follower.global_position)
+	_true(edge_release_step.dot(edge_release_direction) > 0.0, "Der Randgegner setzt im nächsten Tick direkt nach")
+	_true(absf(edge_release_step.cross(edge_release_direction)) <= 0.001, "Der Randgegner beendet seine Seitenlease ohne Nachschwingen")
+	for _tick in range(240):
+		edge_world.step_fixed(1.0 / 60.0)
+	_assert_at_contact(edge_follower, avatar, topology, "Freigegebener Randgegner")
+	_true(edge_hits > 0, "Der freigegebene Randgegner greift den Doctor an")
 	edge_world.clear()
 	for blocker in edge_blockers:
 		blocker.free()
@@ -524,13 +565,30 @@ func _run() -> void:
 	_true(closing_world.mark_enemy_relocated(corridor_gate_handle, gate_previous_position), "Das geschlossene Tor aktualisiert seinen Spatial-Cache")
 	closing_world.step_fixed(1.0 / 60.0)
 	_true(closing_world._crowd_lane_signs[closing_slot] == 0, "Eine Relocation invalidiert benachbarte Guards sofort und gibt den geschlossenen Korridor frei")
-	_true(closing_world._direct_collision_queued[closing_slot] != 0, "Ein geschlossener Randkorridor wechselt im selben Tick in den Wartezustand")
 	var closed_position := closing_follower.global_position
+	var closed_start_distance := topology.distance(closed_position, avatar.global_position)
+	var closed_lateral_travel := 0.0
+	var closed_maximum_retreat := 0.0
 	for _tick in range(4):
+		var before_position := closing_follower.global_position
+		var before_distance := topology.distance(before_position, avatar.global_position)
+		var direct_direction := topology.shortest_delta(before_position, avatar.global_position).normalized()
 		closing_world.step_fixed(1.0 / 60.0)
+		var closed_step := topology.shortest_delta(before_position, closing_follower.global_position)
+		closed_lateral_travel += absf(closed_step.cross(direct_direction))
+		closed_maximum_retreat = maxf(
+			closed_maximum_retreat,
+			topology.distance(closing_follower.global_position, avatar.global_position) - before_distance
+		)
 		_true(closing_world._crowd_lane_signs[closing_slot] != -closing_sign, "Der geschlossene Korridor erzeugt keinen direkten Links-Rechts-Wechsel")
 	var closed_drift := topology.distance(closed_position, closing_follower.global_position)
-	_true(closed_drift <= 0.001, "Mit beiden Seiten geschlossen bleibt der Gegner ohne seitliches Rutschen stehen (Drift %.5f)" % closed_drift)
+	_true(closed_lateral_travel <= 0.001, "Mit beiden Seiten geschlossen bleibt die Verfolgung bis zum echten Körperkontakt geradlinig (seitlich %.5f)" % closed_lateral_travel)
+	_true(closed_maximum_retreat <= 0.001, "Ein geschlossener Korridor erzeugt keine Fluchtbewegung (%.5f)" % closed_maximum_retreat)
+	_true(
+		closed_drift > 0.1
+			and topology.distance(closing_follower.global_position, avatar.global_position) < closed_start_distance,
+		"Ein entfernter geschlossener Cache stoppt den Gegner nicht vor der echten Körpergrenze (Fortschritt %.3f)" % closed_drift
+	)
 	gate_previous_position = corridor_gate.global_position
 	corridor_gate.global_position = Vector2(520.0, 320.0)
 	corridor_gate.reset_visual_motion()
@@ -577,6 +635,9 @@ func _run() -> void:
 	var mixed_minimum_pair := Vector2i(-1, -1)
 	var mixed_minimum_tick := -1
 	var mixed_maximum_retreat := 0.0
+	var mixed_initial_distances := PackedFloat32Array()
+	for enemy in mixed_enemies:
+		mixed_initial_distances.append(topology.distance(enemy.global_position, avatar.global_position))
 	for tick in range(420):
 		var distances_before := PackedFloat32Array()
 		for enemy in mixed_enemies:
@@ -597,8 +658,13 @@ func _run() -> void:
 					mixed_minimum_tick = tick
 	_true(mixed_minimum_margin >= -0.06, "Gemischte Gegner überlappen ihre individuellen Schadenshitboxen nicht (Margin %.3f, Tick %d, Paar %s)" % [mixed_minimum_margin, mixed_minimum_tick, mixed_minimum_pair])
 	_true(mixed_maximum_retreat <= 0.001, "Der gemischte Pulk erzeugt keine Rückwärtsbewegung (%.5f)" % mixed_maximum_retreat)
-	_true(mixed_small_hits > 0, "Mindestens ein kleines Bakterium erreicht und trifft den Doctor")
-	_true(mixed_cluster_hits > 0, "Mindestens eine rote Bakteriengruppe erreicht und trifft den Doctor")
+	for index in range(mixed_enemies.size()):
+		_true(
+			topology.distance(mixed_enemies[index].global_position, avatar.global_position)
+				< float(mixed_initial_distances[index]),
+			"Jeder gemischte Verfolger beendet die Probe näher am Doctor (%d)" % index
+		)
+	_true(mixed_small_hits == 0 and mixed_cluster_hits == 0, "Ein geschlossener gemischter Ring verursacht keine Treffer durch Vorderkörper hindurch")
 
 	# Explicit knockback remains the only intentional distance increase.
 	mixed_world.clear()

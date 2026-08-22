@@ -262,11 +262,13 @@ clearance wins and slot parity resolves an exact tie deterministically.
 
 A new side lease is valid only when that complete corridor sample was produced
 in the current fixed tick. If a body reaches the activation envelope between
-its distributed refresh phases, it waits instead of deriving a route from stale
-geometry. The ordinary disc projection is only a safety boundary: without a
-valid lease it may never preserve a tangential remainder. This makes the three
-runtime outcomes explicit without adding per-entity objects: direct pursuit,
-one verified bypass side, or stationary wait.
+its distributed refresh phases, it keeps its exact direct pursuit until the
+first swept contact circle and waits only at that physical boundary. An old
+closed sample may therefore neither stop it early nor invent a lateral route.
+The ordinary disc projection is only a safety boundary: without a valid lease
+it may never preserve a tangential remainder. This makes the three runtime
+outcomes explicit without adding per-entity objects: direct pursuit, one
+verified bypass side, or stationary wait at real contact.
 
 An active lease never switches sides or front bodies directly. A phased refresh may close its
 route, which clears the lease and leaves the follower waiting until a later
@@ -277,10 +279,13 @@ cheaply against the hard arena, its generation-safe side blocker and the fixed
 nearest-contact guard set. A second body entering the leased route stalls the
 tick and cannot trigger an immediate opposite-side switch. Handles and the
 current blocking body are validated every tick, while spatial guard/corridor
-queries are distributed over 24 slot phases. A closed queued corridor retains
-the exact generation-safe body closing each side. If both still intersect their
-sweeps at the next phase, the full neighborhood query is unnecessary; either
-body moving or invalidating immediately restores the complete query.
+queries are distributed over 24 slot phases. A queued body retains the exact
+generation-safe contact body and validates only that physical contact in the
+per-tick hot path. Its closed corridor also retains the body closing each side;
+only at the slot's scheduled phase are those two sweeps revalidated. If both
+still intersect, the full neighborhood query is unnecessary. Releasing the
+contact body wakes the follower in the next fixed tick; moving or invalidating
+a side body restores the complete query at the next distributed phase.
 
 Registration, release, ordinary movement, avatar push and explicit relocation
 update the same grid incrementally; a full rebuild is only the recovery path
@@ -379,15 +384,16 @@ edge arrow only while a boss body is fully outside the actual camera rectangle.
 
 The relocation director snapshots the complete eligible offscreen backlog every
 0.5 seconds instead of deriving sources from the local target-pressure window.
-The same single pass also determines the adaptive budget: every 15 eligible
-bodies add one move to the half-second snapshot, capped at seven moves or 14
+The same single pass also determines the adaptive budget: every 12 eligible
+bodies add one move to the half-second snapshot, capped at eighteen moves or 36
 moves per second. Those generation-safe handles are executed at evenly spaced
 times inside the snapshot window, at most one per fixed tick; the director does
 not increase its full-world scan frequency as pressure rises. The most distant
 body in the strongest backlog sector is preferred. A dedicated deterministic
 RNG stream chooses among several calm target sectors outside the source sector
-and its direct neighbors, then jitters angle and one of three offscreen depth
-bands. At most two targets reserve one sector per snapshot, and target search
+and its direct neighbors, then jitters angle and adds a bounded continuous depth
+offset around one of three offscreen bands. At most two targets reserve one
+sector per snapshot, and target search
 uses a bounded local broad-phase attempt window. The full body plus a
 24-world-unit safety margin must remain outside the actual camera
 rectangle; there is no visible fallback. A source still lies at

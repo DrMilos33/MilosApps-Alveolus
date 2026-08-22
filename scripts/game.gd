@@ -31,8 +31,8 @@ const WAVE_SPAWN_SCREEN_MARGIN := 110.0
 const WAVE_PRESSURE_NEAR_MARGIN := 300.0
 const WAVE_PRESSURE_NEIGHBOR_SHARE := 0.22
 const OFFSCREEN_RELOCATION_INTERVAL := 0.5
-const OFFSCREEN_RELOCATION_ENEMIES_PER_BUDGET_STEP := 15
-const OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT := 7
+const OFFSCREEN_RELOCATION_ENEMIES_PER_BUDGET_STEP := 12
+const OFFSCREEN_RELOCATION_MAXIMUM_PER_SNAPSHOT := 18
 const OFFSCREEN_RELOCATION_SOURCE_MARGIN := 72.0
 const OFFSCREEN_RELOCATION_HIDDEN_MARGIN := 24.0
 const OFFSCREEN_RELOCATION_MINIMUM_SECTOR_DISTANCE := 2
@@ -43,6 +43,7 @@ const OFFSCREEN_RELOCATION_MAXIMUM_TARGETS_PER_SECTOR := 2
 const OFFSCREEN_PLACEMENT_ANGLE_OFFSETS: Array[float] = [0.0, -0.14, 0.14, -0.24, 0.24]
 const OFFSCREEN_PLACEMENT_RADIAL_OFFSETS: Array[float] = [0.0, 42.0, 84.0]
 const OFFSCREEN_PLACEMENT_BODY_GAP := 4.0
+const OFFSCREEN_RELOCATION_RADIAL_JITTER := 18.0
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := false
@@ -4001,7 +4002,8 @@ func _offscreen_spawn_candidate(
 	candidate_index: int,
 	prefer_outer: bool,
 	ignored_enemy: InfectionEnemy = null,
-	use_enemy_world_index: bool = false
+	use_enemy_world_index: bool = false,
+	radial_jitter: float = 0.0
 ) -> Vector2:
 	var angle_count := OFFSCREEN_PLACEMENT_ANGLE_OFFSETS.size()
 	var radial_count := OFFSCREEN_PLACEMENT_RADIAL_OFFSETS.size()
@@ -4010,7 +4012,10 @@ func _offscreen_spawn_candidate(
 	var radial_order_index := floori(float(candidate_index) / float(angle_count))
 	var angle_index := candidate_index % angle_count
 	var radial_index := radial_count - 1 - radial_order_index if prefer_outer else radial_order_index
-	var radial_offset := float(OFFSCREEN_PLACEMENT_RADIAL_OFFSETS[radial_index])
+	var radial_offset := maxf(
+		float(OFFSCREEN_PLACEMENT_RADIAL_OFFSETS[radial_index]) + radial_jitter,
+		0.0
+	)
 	var angle_offset := float(OFFSCREEN_PLACEMENT_ANGLE_OFFSETS[angle_index])
 	var direction := Vector2.from_angle(angle + angle_offset)
 	var distance := _ray_distance_to_visible_edge(avatar.global_position, direction)
@@ -4381,13 +4386,18 @@ func _offscreen_random_relocation_position(
 	# bounded attempt window samples different bands without allocations.
 	for attempt in range(mini(OFFSCREEN_RELOCATION_POINT_ATTEMPTS_PER_SECTOR, candidate_count)):
 		var candidate_index := (start_index + attempt * 7) % candidate_count
+		var radial_jitter := relocation_rng.randf_range(
+			-OFFSCREEN_RELOCATION_RADIAL_JITTER,
+			OFFSCREEN_RELOCATION_RADIAL_JITTER
+		)
 		var position := _offscreen_spawn_candidate(
 			angle,
 			body_radius,
 			candidate_index,
 			false,
 			ignored_enemy,
-			true
+			true,
+			radial_jitter
 		)
 		if position != Vector2.INF:
 			return position

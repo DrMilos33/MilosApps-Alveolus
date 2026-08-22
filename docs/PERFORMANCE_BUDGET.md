@@ -89,16 +89,20 @@ and required status feedback are never degraded.
   hit.
 - Dense-crowd guard and body-width corridor queries reuse the existing
   `CombatSpatialGrid`, a caller-owned packed candidate buffer and 24 slot
-  phases. A queued follower may retain the exact two side blockers and skip a
-  full refresh only while both generation-safe bodies still close their
-  sweeps. The number of spatial refreshes stays bounded by active slots divided
-  by the phase count; an active bypass must not restore one query per enemy and
-  tick. Deferred contact is resolved from one local grid query per fixed tick,
-  not one Doctor-distance check per distant enemy.
+  phases. A queued follower validates only its exact generation-safe contact
+  body per tick. On its scheduled phase it may retain the exact two side
+  blockers and skip a full refresh only while both still close their sweeps.
+  An active lease resolves at most three cached guards in two projection passes;
+  neither queued nor leased bodies may restore one query per enemy and tick.
+  Deferred contact is resolved from one local grid query per fixed tick, not
+  one Doctor-distance check per distant enemy.
 - Offscreen relocation uses the incrementally maintained EnemyWorld broad
   phase before its exact body-distance check and falls back to the complete
   `CombatQuery` registry while materializing bodies exist. Candidate placement
-  must not scan every enemy for every attempted sector position.
+  must not scan every enemy for every attempted sector position. Its snapshot
+  scan remains fixed at twice per second; a larger backlog may schedule at most
+  eighteen distributed moves per snapshot and still applies at most one move in
+  a fixed tick.
 
 ## Crowd measurement contract
 
