@@ -1816,16 +1816,15 @@ func _spawn_step(delta: float) -> void:
 	_offscreen_relocation_step(delta)
 	if state.boss_spawned or enemies.size() >= 220:
 		return
-	spawn_accumulator -= delta
+	spawn_accumulator -= config.regular_spawn_clock_delta(state.elapsed, delta)
 	if spawn_accumulator > 0.0:
 		return
-	var progress := clampf(state.elapsed / config.run_duration_seconds, 0.0, 1.0)
-	var interval := lerpf(config.initial_spawn_interval, config.final_spawn_interval, pow(progress, 0.82))
+	var progress := config.regular_spawn_progress(state.elapsed)
+	var interval := config.regular_spawn_interval(progress)
 	var finding := _active_finding()
 	if finding != null and finding.behavior == FindingDefinition.Behavior.ACCELERATION and progress >= 0.5:
 		var late_factor := inverse_lerp(0.5, 1.0, progress)
 		interval *= lerpf(1.0, 1.0 - finding.magnitude, late_factor)
-	interval /= maxf(config.spawn_rate_multiplier, 0.01)
 	spawn_accumulator += interval
 	var batch := 1
 	if progress > 0.58 and rng.randf() < 0.22:
@@ -1837,7 +1836,12 @@ func _spawn_step(delta: float) -> void:
 			cluster_chance = clampf(cluster_chance + finding.magnitude, 0.0, 0.85)
 		if discovery_manager.has_seen(&"pneumococcus") and rng.randf() < cluster_chance:
 			type = &"bacterial_cluster"
-		_spawn_enemy(type, _wave_spawn_position_around_avatar(rng.randf_range(500.0, 620.0), _enemy_body_radius(type)))
+		var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, progress)
+		_spawn_enemy(
+			type,
+			_wave_spawn_position_around_avatar(rng.randf_range(500.0, 620.0), _enemy_body_radius(type)),
+			health_scale
+		)
 
 func _drain_deferred_spawns(maximum_per_tick: int) -> void:
 	var emitted := 0

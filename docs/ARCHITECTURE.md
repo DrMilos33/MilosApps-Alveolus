@@ -39,6 +39,15 @@ content definitions do not depend on scene nodes.
 - Deaths, drops, phase spawns, and removals are queued and applied after the
   current system iteration. A system never removes from a collection that it
   is currently iterating.
+- `RunConfig` owns the standard-wave clock. Its default monotonic time warp
+  delays the established interval clock early and catches it up before the boss
+  horizon, so authored wave slots, batch decisions, enemy-type RNG and per-wave
+  health progression remain ordinally unchanged. Every enemy type selected by
+  the timed standard-wave path inherits this policy unless its level explicitly
+  overrides the cadence. Tutorial enemies, the three authored starting enemies,
+  bosses, phase reinforcements and finding spawns are event-authored exceptions
+  and never advance the standard-wave clock. Capacity backpressure freezes the
+  current accumulator without accruing spawn debt.
 - `CombatSpatialGrid` and `CombatQuery` are the sole broad-phase query path.
   Both use `ArenaTopology`. `WRAP` remains the explicit compatibility mode;
   playable runs select `BOUNDED`, whose direct distances, clamped cell ranges

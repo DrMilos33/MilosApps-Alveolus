@@ -1,12 +1,15 @@
 class_name RunConfig
 extends Resource
 
+const SPAWN_INTERVAL_CURVE_EXPONENT := 0.82
+
 @export var run_duration_seconds: float = 45.0
 @export var final_deadline_seconds: float = 60.0
 @export var initial_stability: float = 120.0
 @export var arena_size: Vector2 = Vector2(9600.0, 5400.0)
 @export var initial_spawn_interval: float = 1.10
 @export var final_spawn_interval: float = 0.55
+@export_range(0.0, 0.9, 0.01) var spawn_cadence_delay: float = LevelDefinition.DEFAULT_SPAWN_CADENCE_DELAY
 @export var random_seed: int = 20260809
 @export var level_id: StringName = &"intro"
 @export var enemy_health_start: float = 0.55
@@ -36,6 +39,47 @@ func arena_rect() -> Rect2:
 func has_deadline() -> bool:
 	return final_deadline_seconds > 0.0
 
+
+## Maps real run progress back onto the established spawn clock. The authored
+## interval curve, RNG order and total number of due standard waves therefore
+## stay unchanged, while a positive delay moves early waves later and compresses
+## the same clock smoothly near the boss horizon.
+func regular_spawn_progress(elapsed_seconds: float) -> float:
+	if run_duration_seconds <= 0.0:
+		return 0.0
+	return delayed_spawn_progress(
+		clampf(elapsed_seconds / run_duration_seconds, 0.0, 1.0),
+		spawn_cadence_delay
+	)
+
+
+func regular_spawn_clock_delta(current_elapsed: float, fixed_delta: float) -> float:
+	if run_duration_seconds <= 0.0:
+		return maxf(fixed_delta, 0.0)
+	var previous_elapsed := maxf(0.0, current_elapsed - maxf(fixed_delta, 0.0))
+	var current_clock := regular_spawn_progress(current_elapsed) * run_duration_seconds
+	var previous_clock := regular_spawn_progress(previous_elapsed) * run_duration_seconds
+	return maxf(0.0, current_clock - previous_clock)
+
+
+func regular_spawn_interval(spawn_progress: float) -> float:
+	var curved_progress := pow(clampf(spawn_progress, 0.0, 1.0), SPAWN_INTERVAL_CURVE_EXPONENT)
+	var interval := lerpf(initial_spawn_interval, final_spawn_interval, curved_progress)
+	return interval / maxf(spawn_rate_multiplier, 0.01)
+
+
+static func delayed_spawn_progress(real_progress: float, delay_strength: float) -> float:
+	var progress := clampf(real_progress, 0.0, 1.0)
+	var delay := clampf(delay_strength, 0.0, 0.9)
+	if delay <= 0.000001:
+		return progress
+	# real = legacy + delay * legacy * (1 - legacy). This stable form
+	# evaluates the smaller inverse root without subtractive cancellation.
+	var coefficient := 1.0 + delay
+	var discriminant := maxf(coefficient * coefficient - 4.0 * delay * progress, 0.0)
+	return clampf(2.0 * progress / (coefficient + sqrt(discriminant)), 0.0, 1.0)
+
+
 static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunConfig:
 	var config := RunConfig.new()
 	config.level_id = level.id
@@ -44,6 +88,7 @@ static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunCo
 	config.initial_stability = level.initial_stability
 	config.initial_spawn_interval = level.initial_spawn_interval
 	config.final_spawn_interval = level.final_spawn_interval
+	config.spawn_cadence_delay = level.spawn_cadence_delay
 	config.enemy_health_start = level.enemy_health_start
 	config.enemy_health_end = level.enemy_health_end
 	config.enemy_speed_multiplier = level.enemy_speed_multiplier

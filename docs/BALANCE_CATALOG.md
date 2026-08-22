@@ -320,7 +320,8 @@ danach auf ihrem Endwert. Es gibt keine Ablaufzeit.
 | Titel | lol - name fehlt | Die Ausbreitung | Schwerer Verlauf |
 | Startleben | 50 | 50 | 50 |
 | Boss erscheint | 180 s | 180 s | 180 s |
-| Normales Spawnintervall | 0,827 → 0,187 s | 0,624 → 0,132 s | 0,528 → 0,108 s |
+| Referenzintervall der Standardwelle | 0,827 → 0,187 s | 0,624 → 0,132 s | 0,528 → 0,108 s |
+| Effektive Kadenz, ungefähr | 1,075 → 0,131 s | 0,811 → 0,092 s | 0,686 → 0,076 s |
 | Gegnerleben-Faktor | 1,15 → 1,70 | 1,35 → 2,05 | 1,55 → 2,40 |
 | Gegnertempo-Faktor | 1,08 | 1,16 | 1,24 |
 | Gegnerschaden-Faktor | 1,25 | 1,45 | 1,65 |
@@ -331,6 +332,17 @@ danach auf ihrem Endwert. Es gibt keine Ablaufzeit.
 | Minions bei 70 / 40 % | 3 / – | 4 / 4 | 6 / 8 |
 | Forschungsbelohnung-Faktor | 1,00 | 1,35 | 1,70 |
 | Befundziel | 30 | 42 | 55 |
+
+Die zeitgesteuerte Standardwelle verwendet zentral eine Verzögerungsstärke von
+0,30. Ihre bestehende Spawnuhr wird anfangs gedehnt und zum Bosshorizont
+kontinuierlich verdichtet. Bei unveränderter Kapazität entstehen dadurch vor
+Sekunde 180 weiterhin exakt 444 / 605 / 725 Standardwellen; `Hohe Keimlast`
+liefert weiterhin 488 / 665 / 797. Für denselben Seed bleiben auch
+Doppelpakete und Gegnerfolge gleich. Die drei Startbakterien kommen wie bisher
+zusätzlich hinzu. Das Prinzip gilt automatisch für jeden Gegnertyp der
+Standardwelle. Introgegner, Bosse, Phasenverstärkungen, kleine Herde und deren
+geskriptete Freisetzungen behalten ihre ausdrücklich festgelegten Zeitpunkte.
+Das Aktivlimit von 220 Gegnern sammelt weiterhin keinen späteren Spawnrückstau.
 
 Das Intro ist ereignisgesteuert, beginnt ebenfalls mit 50 Leben und besitzt
 weder Zeitlimit noch zufällige Fallparameter. Der erste Erreger bleibt nach

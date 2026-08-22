@@ -73,6 +73,7 @@ $tests = [ordered]@{
     enemy_reuse = @{ script = 'res://tests/enemy_deferred_reuse_regression_runner.gd'; args = @() }
     hidden_nest_spawn = @{ script = 'res://tests/hidden_nest_spawn_contract_runner.gd'; args = @() }
     spawn_lifecycle = @{ script = 'res://tests/spawn_lifecycle_regression_runner.gd'; args = @('--quick-run') }
+    enemy_spawn_cadence = @{ script = 'res://tests/enemy_spawn_cadence_runner.gd'; args = @() }
     crowd_renderer = @{ script = 'res://tests/crowd_renderer_regression_runner.gd'; args = @('--quick-run') }
     projectile_renderer = @{ script = 'res://tests/projectile_renderer_regression_runner.gd'; args = @('--quick-run') }
     feedback_renderer = @{ script = 'res://tests/feedback_renderer_regression_runner.gd'; args = @('--quick-run') }
@@ -90,7 +91,7 @@ $groups = [ordered]@{
     Flow = @('core', 'flow', 'intro', 'intro_runtime_contract', 'tactical_flow', 'save_v6_progression', 'endless_cases', 'loadout_navigation', 'loadout_availability', 'ui_audio_settings')
     UI = @('game_hud_facade_contract', 'ui_screen_dependency', 'style_gallery', 'context_detail', 'ui_screen_host', 'story_screen', 'practice_screen', 'case_archive_screen', 'settings_screen', 'progression_screen', 'pause_overlay', 'confirmation_overlay', 'result_overlay', 'upgrade_overlay', 'finding_overlay', 'run_hud_overlay', 'plain_run_prompt', 'discovery_modal', 'ui_component_churn', 'ui_polish', 'ui_accessibility', 'campus', 'campus_building_chrome', 'lexicon_catalog', 'lexicon_stats', 'lexicon_view', 'tactical_ui', 'loadout_navigation', 'ui_audio_settings', 'ui_settings_hud')
     Combat = @('core', 'combat', 'upgrades', 'damage_types', 'case_modifiers', 'feedback_architecture', 'lexicon_presentation', 'combat_progression', 'latest_progression_balance', 'enemy_ranged_attack', 'crowd_collision_stun', 'treatment_aim', 'treatment_beam', 'ability_pipeline', 'tactical_flow', 'loadout_availability', 'determinism')
-    Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'hidden_nest_spawn', 'spawn_lifecycle', 'crowd_collision_stun', 'bounded_arena', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
+    Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'hidden_nest_spawn', 'spawn_lifecycle', 'enemy_spawn_cadence', 'crowd_collision_stun', 'bounded_arena', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
     Performance = @('ability_stress', 'pressure_ai', 'performance', 'performance_soak')
 }
 

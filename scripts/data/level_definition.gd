@@ -1,6 +1,8 @@
 class_name LevelDefinition
 extends Resource
 
+const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
+
 @export var id: StringName
 @export var order: int
 @export var title: String
@@ -11,6 +13,7 @@ extends Resource
 @export var initial_stability: float
 @export var initial_spawn_interval: float
 @export var final_spawn_interval: float
+@export_range(0.0, 0.9, 0.01) var spawn_cadence_delay: float = DEFAULT_SPAWN_CADENCE_DELAY
 @export var enemy_health_start: float
 @export var enemy_health_end: float
 @export var enemy_speed_multiplier: float
@@ -89,6 +92,11 @@ func configure_case_variation(
 	visible_trait_ids = traits.duplicate()
 	hidden_finding_ids = findings.duplicate()
 	finding_progress_target = maxi(0, finding_target)
+	return self
+
+
+func configure_spawn_cadence(delay_strength: float) -> LevelDefinition:
+	spawn_cadence_delay = clampf(delay_strength, 0.0, 0.9)
 	return self
 
 
