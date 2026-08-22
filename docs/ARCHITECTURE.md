@@ -300,6 +300,14 @@ smaller gameplay body. A genuinely sealed contact shell therefore remains
 still, while a physically open edge can keep feeding attackers without a
 waypoint, push force or global path search.
 
+For a stationary Doctor, a complete local snapshot containing at least ten
+bodies may start that same verified edge lease anywhere inside the existing
+50-world-unit guard horizon. This only advances when an outside corridor is
+already certified open by the full candidate buffer; enclosed bodies still
+wait. Sparse groups and every moving-Doctor tick retain the ordinary
+eight-world-unit activation envelope. No additional grid query, guard, speed
+or steering direction is introduced.
+
 Registration, release, ordinary movement, avatar push and explicit relocation
 update the same grid incrementally; a full rebuild is only the recovery path
 after topology configuration or an unlocated relocation. A queued body uses a

@@ -673,6 +673,8 @@ func _run() -> void:
 	var stationary_minimum_margin := INF
 	var stationary_maximum_retreat := 0.0
 	var stationary_release_count := 0
+	var stationary_pre_release_progressed := 0
+	var stationary_pre_release_contactors := 0
 	for tick in range(720):
 		var before_positions := PackedVector2Array()
 		var before_distances := PackedFloat32Array()
@@ -706,10 +708,19 @@ func _run() -> void:
 						- stationary_enemies[first_index].contact_body_radius()
 						- stationary_enemies[second_index].contact_body_radius()
 				)
-		# Simulate the normal combat loop removing roughly one front attacker per
-		# second. A physically full contact shell may wait, but each opened place
-		# must pull a new body out of the dense rear pack without manual repositioning.
-		if tick >= 120 and posmod(tick - 120, 60) == 0:
+		if tick == 359:
+			for index in range(stationary_enemies.size()):
+				var distance_before_releases := topology.distance(
+					stationary_enemies[index].global_position,
+					avatar.global_position
+				)
+				if distance_before_releases <= float(stationary_initial_distances[index]) - 20.0:
+					stationary_pre_release_progressed += 1
+			stationary_pre_release_contactors = stationary_contact_ids.size()
+		# After the no-release window has filled the physical contact shell, simulate
+		# the normal combat loop removing roughly one front attacker per second. Each
+		# opened place must pull a new body out of the rear pack without repositioning.
+		if tick >= 360 and posmod(tick - 360, 60) == 0:
 			var release_index := -1
 			var release_distance := INF
 			for index in range(stationary_enemies.size()):
@@ -755,6 +766,8 @@ func _run() -> void:
 		stationary_sector_count += int(occupied)
 	_true(stationary_minimum_margin >= -0.06, "Der stationäre dichte Pulk wahrt alle Schadenskontakthitboxen (Margin %.3f)" % stationary_minimum_margin)
 	_true(stationary_maximum_retreat <= 0.001, "Der stationäre dichte Pulk erzeugt keine Fluchtbewegung (%.5f)" % stationary_maximum_retreat)
+	_true(stationary_pre_release_progressed >= 8, "Der stationäre Pulk führt vor dem ersten Kill mehrere Randkörper nach (%d / 80)" % stationary_pre_release_progressed)
+	_true(stationary_pre_release_contactors >= 4, "Die freie Außenkante füllt die physisch mögliche Kontaktschale vor dem ersten Kill (%d)" % stationary_pre_release_contactors)
 	_true(stationary_release_count >= 6, "Der Kampfersatz öffnet wiederholt echte Plätze am Doctor (%d)" % stationary_release_count)
 	_true(stationary_progressed >= 10, "Der einseitige Pulk führt wiederholt neue Körper deutlich nach (%d / 80)" % stationary_progressed)
 	_true(stationary_late_movers >= 3, "Auch spät fließen mehrere Verfolger aus dem Pulk weiter (%d)" % stationary_late_movers)

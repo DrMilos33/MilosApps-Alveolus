@@ -36,6 +36,7 @@ var _direct_collision_corridor_clearances := PackedFloat32Array()
 var _direct_collision_corridor_open := PackedByteArray()
 var _direct_collision_corridor_side_blockers := PackedInt64Array()
 var _direct_collision_corridor_epochs := PackedInt64Array()
+var _direct_collision_stationary_edge_open := PackedByteArray()
 var _direct_collision_queued := PackedByteArray()
 var _direct_collision_queue_blockers := PackedInt64Array()
 var _direct_collision_previous_lane_signs := PackedInt32Array()
@@ -116,6 +117,7 @@ const DIRECT_COLLISION_BYPASS_LATERAL_WEIGHT := 0.835
 const DIRECT_COLLISION_BYPASS_CLEAR_TICKS := 5
 const DIRECT_COLLISION_CORRIDOR_RADII := 3.0
 const DIRECT_COLLISION_CORRIDOR_DIRECTION_DOT := 0.98
+const DIRECT_COLLISION_STATIONARY_EDGE_CANDIDATES := 10
 const AVATAR_BODY_COLLISION_PASSES := 3
 const AVATAR_BODY_COLLISION_SKIN := 0.05
 const SMALL_AVATAR_PUSH_SPEED := 48.0
@@ -180,6 +182,8 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_direct_collision_corridor_side_blockers.fill(EntityHandle.INVALID)
 	_direct_collision_corridor_epochs.resize(combat_capacity.max_enemies)
 	_direct_collision_corridor_epochs.fill(-1)
+	_direct_collision_stationary_edge_open.resize(combat_capacity.max_enemies)
+	_direct_collision_stationary_edge_open.fill(0)
 	_direct_collision_queued.resize(combat_capacity.max_enemies)
 	_direct_collision_queued.fill(0)
 	_direct_collision_queue_blockers.resize(combat_capacity.max_enemies)
@@ -1224,6 +1228,13 @@ func _refresh_direct_collision_corridor_cache(
 	_direct_collision_corridor_side_blockers[corridor_offset] = positive_side_blocker
 	_direct_collision_corridor_side_blockers[corridor_offset + 1] = negative_side_blocker
 	_direct_collision_corridor_epochs[slot] = _direct_collision_prepare_epoch
+	# Only a genuinely dense stationary pack widens the start horizon. The same
+	# full-candidate corridor proof still decides whether either outside edge is free.
+	_direct_collision_stationary_edge_open[slot] = 1 if (
+		_crowd_avatar_stationary_this_tick
+		and _crowd_candidates.size() >= DIRECT_COLLISION_STATIONARY_EDGE_CANDIDATES
+		and (positive_open or negative_open)
+	) else 0
 
 
 func _direct_collision_guard_limit(slot: int, _contact_radius: float) -> int:
@@ -1595,6 +1606,9 @@ func _direct_collision_obstacle_bypass(
 	var stored_still_blocks := false
 	var stored_blocks_direct_path := false
 	var own_target_distance := _crowd_topology.distance(movement_origin, _crowd_avatar.global_position)
+	var bypass_activation_margin := DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
+	if _crowd_avatar_stationary_this_tick and _direct_collision_stationary_edge_open[slot] != 0:
+		bypass_activation_margin = DIRECT_COLLISION_GUARD_LOOKAHEAD
 	var remaining_to_contact := maxf(
 		own_target_distance
 			- TherapyAvatar.CONTACT_RADIUS
@@ -1627,7 +1641,7 @@ func _direct_collision_obstacle_bypass(
 		if candidate_handle == stored_handle and candidate_entry <= remaining_to_contact:
 			stored_blocks_direct_path = true
 		if (
-			candidate_entry > requested_length + DIRECT_COLLISION_BYPASS_ACTIVATION_MARGIN
+			candidate_entry > requested_length + bypass_activation_margin
 			or candidate_entry > remaining_to_contact
 		):
 			continue
@@ -1843,6 +1857,7 @@ func _invalidate_direct_collision_corridor(slot: int) -> void:
 	_direct_collision_corridor_side_blockers[corridor_offset] = EntityHandle.INVALID
 	_direct_collision_corridor_side_blockers[corridor_offset + 1] = EntityHandle.INVALID
 	_direct_collision_corridor_epochs[slot] = -1
+	_direct_collision_stationary_edge_open[slot] = 0
 
 
 func _resolve_crowd_motion(slot: int, enemy: InfectionEnemy, movement_origin: Vector2) -> void:
