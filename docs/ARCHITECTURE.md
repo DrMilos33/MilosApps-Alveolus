@@ -291,22 +291,20 @@ When Doctor Milos has no actual displacement in the current fixed tick, an
 already verified lease may replace its straight tangent with one short chord
 along the leased body's contact boundary. The chord keeps the established side,
 must not increase distance to the Doctor, and is accepted only inside the arena
-and outside the cached contact bodies. That stationary lease selects at most
-five earliest forward-contact guards; direct pursuit and every moving-Doctor
-lease retain the established maximum of three. The extra stationary guards add
-no spatial query and disappear immediately when the Doctor moves. Final contact
-validation uses only a numerical epsilon below the authored radius sum, never a
-smaller gameplay body. A genuinely sealed contact shell therefore remains
-still, while a physically open edge can keep feeding attackers without a
-waypoint, push force or global path search.
+and outside the cached contact bodies. A stationary collision solution retains
+at most eight earliest forward-contact guards so differently sized bodies at a
+mixed outer edge preserve every authored contact circle while continuing along
+a physically open boundary. The ordinary eight-world-unit activation envelope
+still applies; a distant body never starts a proactive side route. A genuinely
+sealed contact shell therefore remains still, while a physically open edge can
+keep feeding attackers without a waypoint, push force or global path search.
 
-For a stationary Doctor, a complete local snapshot containing at least ten
-bodies may start that same verified edge lease anywhere inside the existing
-50-world-unit guard horizon. This only advances when an outside corridor is
-already certified open by the full candidate buffer; enclosed bodies still
-wait. Sparse groups and every moving-Doctor tick retain the ordinary
-eight-world-unit activation envelope. No additional grid query, guard, speed
-or steering direction is introduced.
+Every moving-Doctor tick retains the established maximum of three guards. A
+stop-to-move transition forces an immediate local guard refresh before movement,
+and the stationary blocker hold no longer participates once the Doctor moves.
+The wider stationary cache adds no spatial query and cannot leak into the
+accepted moving path. Final contact validation uses only a numerical epsilon
+below the authored radius sum, never a smaller gameplay body.
 
 Registration, release, ordinary movement, avatar push and explicit relocation
 update the same grid incrementally; a full rebuild is only the recovery path

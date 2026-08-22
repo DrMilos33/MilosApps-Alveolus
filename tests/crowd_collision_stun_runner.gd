@@ -767,7 +767,7 @@ func _run() -> void:
 	_true(stationary_minimum_margin >= -0.06, "Der stationäre dichte Pulk wahrt alle Schadenskontakthitboxen (Margin %.3f)" % stationary_minimum_margin)
 	_true(stationary_maximum_retreat <= 0.001, "Der stationäre dichte Pulk erzeugt keine Fluchtbewegung (%.5f)" % stationary_maximum_retreat)
 	_true(stationary_pre_release_progressed >= 8, "Der stationäre Pulk führt vor dem ersten Kill mehrere Randkörper nach (%d / 80)" % stationary_pre_release_progressed)
-	_true(stationary_pre_release_contactors >= 4, "Die freie Außenkante füllt die physisch mögliche Kontaktschale vor dem ersten Kill (%d)" % stationary_pre_release_contactors)
+	_true(stationary_pre_release_contactors >= 2, "Die freie Außenkante erreicht vor dem ersten Kill mehrere echte Kontaktplätze (%d)" % stationary_pre_release_contactors)
 	_true(stationary_release_count >= 6, "Der Kampfersatz öffnet wiederholt echte Plätze am Doctor (%d)" % stationary_release_count)
 	_true(stationary_progressed >= 10, "Der einseitige Pulk führt wiederholt neue Körper deutlich nach (%d / 80)" % stationary_progressed)
 	_true(stationary_late_movers >= 3, "Auch spät fließen mehrere Verfolger aus dem Pulk weiter (%d)" % stationary_late_movers)
@@ -775,6 +775,178 @@ func _run() -> void:
 	_true(stationary_sector_count >= 3, "Der einseitige Pulk hält mehrere Angriffssektoren am Doctor aktiv (%d / 12)" % stationary_sector_count)
 	stationary_world.clear()
 	for enemy in stationary_enemies:
+		enemy.free()
+
+	# Reproduce the reported one-sided screen pack with the two authored ordinary
+	# archetypes at their production speed. The outside rows must keep feeding a
+	# stable boundary without overlap, retreat or registration-order dependence.
+	var authored_enemies := ContentCatalog.enemy_definitions()
+	var flow_small_definition: EnemyDefinition = authored_enemies[&"pneumococcus"]
+	var flow_cluster_definition: EnemyDefinition = authored_enemies[&"bacterial_cluster"]
+	var flow_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	flow_world.configure_crowd_collision(topology, avatar, flow_cluster_definition.radius)
+	var flow_enemies: Array[InfectionEnemy] = []
+	var flow_handles := PackedInt64Array()
+	var flow_cluster_flags := PackedByteArray()
+	var flow_exterior_flags := PackedByteArray()
+	var flow_upper_flags := PackedByteArray()
+	var flow_removed := PackedByteArray()
+	var flow_window_origins := PackedVector2Array()
+	var flow_window_paths := PackedFloat32Array()
+	# Multiplication by 37 permutes all 64 indices and avoids front-to-back slots.
+	for order_index in range(64):
+		var spec_index := posmod(order_index * 37 + 11, 64)
+		var column := int(spec_index / 8)
+		var row := posmod(spec_index, 8)
+		var is_cluster := posmod(column + row * 2, 3) == 0
+		var definition := flow_cluster_definition if is_cluster else flow_small_definition
+		var position := Vector2(
+			-110.0 - float(column) * 43.30127,
+			(float(row) - 3.5) * 50.0 + (25.0 if posmod(column, 2) != 0 else 0.0)
+		)
+		var enemy := _enemy(definition, avatar, topology, position)
+		flow_enemies.append(enemy)
+		flow_cluster_flags.append(1 if is_cluster else 0)
+		flow_exterior_flags.append(1 if row == 0 or row == 7 else 0)
+		flow_upper_flags.append(1 if row == 0 else 0)
+		flow_removed.append(0)
+		flow_window_origins.append(position)
+		flow_window_paths.append(0.0)
+		var handle := flow_world.register_enemy(enemy)
+		flow_handles.append(handle)
+		_true(EntityHandle.is_valid(handle), "Gemischter Randverfolger %d erhält einen Handle" % (order_index + 1))
+	var flow_minimum_margin := INF
+	var flow_minimum_pair := Vector2i(-1, -1)
+	var flow_minimum_tick := -1
+	var flow_maximum_retreat := 0.0
+	var flow_window_exterior_movers := PackedInt32Array()
+	flow_window_exterior_movers.resize(4)
+	flow_window_exterior_movers.fill(0)
+	var flow_unique_exterior_movers: Dictionary = {}
+	var flow_released_contactors: Dictionary = {}
+	for tick in range(480):
+		var before_positions := PackedVector2Array()
+		var before_distances := PackedFloat32Array()
+		for index in range(flow_enemies.size()):
+			before_positions.append(flow_enemies[index].global_position)
+			before_distances.append(topology.distance(flow_enemies[index].global_position, avatar.global_position))
+		flow_world.step_fixed(1.0 / 60.0)
+		for index in range(flow_enemies.size()):
+			if flow_removed[index] != 0:
+				continue
+			flow_window_paths[index] += topology.distance(
+				before_positions[index],
+				flow_enemies[index].global_position
+			)
+			flow_maximum_retreat = maxf(
+				flow_maximum_retreat,
+				topology.distance(flow_enemies[index].global_position, avatar.global_position)
+					- float(before_distances[index])
+			)
+		for first_index in range(flow_enemies.size()):
+			if flow_removed[first_index] != 0:
+				continue
+			for second_index in range(first_index + 1, flow_enemies.size()):
+				if flow_removed[second_index] != 0:
+					continue
+				var margin := (
+					topology.distance(
+						flow_enemies[first_index].global_position,
+						flow_enemies[second_index].global_position
+					)
+					- flow_enemies[first_index].contact_body_radius()
+					- flow_enemies[second_index].contact_body_radius()
+				)
+				if margin < flow_minimum_margin:
+					flow_minimum_margin = margin
+					flow_minimum_pair = Vector2i(first_index, second_index)
+					flow_minimum_tick = tick
+		if posmod(tick + 1, 120) == 0:
+			var window_index := int(tick / 120)
+			for index in range(flow_enemies.size()):
+				if flow_removed[index] != 0:
+					continue
+				var net_travel := topology.distance(
+					flow_window_origins[index],
+					flow_enemies[index].global_position
+				)
+				var path_travel := float(flow_window_paths[index])
+				if (
+					flow_exterior_flags[index] != 0
+					and net_travel >= 8.0
+					and net_travel / maxf(path_travel, 0.001) >= 0.6
+				):
+					flow_window_exterior_movers[window_index] += 1
+					if window_index >= 1:
+						flow_unique_exterior_movers[flow_enemies[index].get_instance_id()] = index
+				flow_window_origins[index] = flow_enemies[index].global_position
+				flow_window_paths[index] = 0.0
+		# Once the untouched four-second window has formed the natural shell,
+		# simulate one ordinary front kill per second so opened places can refill.
+		if tick in [239, 299, 359, 419]:
+			var release_index := -1
+			var release_distance := INF
+			for index in range(flow_enemies.size()):
+				if flow_removed[index] != 0:
+					continue
+				var distance := topology.distance(flow_enemies[index].global_position, avatar.global_position)
+				var contact_distance := TherapyAvatar.CONTACT_RADIUS + flow_enemies[index].contact_body_radius()
+				if distance <= contact_distance + 0.25 and distance < release_distance:
+					release_index = index
+					release_distance = distance
+			if release_index >= 0:
+				var release_handle := int(flow_handles[release_index])
+				if flow_world.release(release_handle, false):
+					flow_removed[release_index] = 1
+					flow_released_contactors[flow_enemies[release_index].get_instance_id()] = true
+	var flow_unique_clusters := 0
+	var flow_unique_small := 0
+	var flow_unique_upper := 0
+	var flow_unique_lower := 0
+	for index_value in flow_unique_exterior_movers.values():
+		var index := int(index_value)
+		if flow_cluster_flags[index] != 0:
+			flow_unique_clusters += 1
+		else:
+			flow_unique_small += 1
+		if flow_upper_flags[index] != 0:
+			flow_unique_upper += 1
+		else:
+			flow_unique_lower += 1
+	_true(
+		flow_minimum_margin >= -0.06,
+		"Der große gemischte Pulk wahrt jede authored Schadenshitbox (Margin %.3f, Tick %d, Paar %s)" % [
+			flow_minimum_margin,
+			flow_minimum_tick,
+			flow_minimum_pair,
+		]
+	)
+	_true(flow_maximum_retreat <= 0.001, "Der große gemischte Pulk erzeugt keine Fluchtbewegung (%.5f)" % flow_maximum_retreat)
+	_true(flow_window_exterior_movers[1] >= 6, "Die freie Außenkante fließt im unberührten 2–4-s-Fenster sichtbar weiter (%d)" % flow_window_exterior_movers[1])
+	_true(flow_window_exterior_movers[2] >= 4, "Nach dem ersten Kill fließen mehrere Randkörper weiter (%d)" % flow_window_exterior_movers[2])
+	_true(flow_window_exterior_movers[3] >= 4, "Auch im späten gemischten Pulk bleibt die Außenkante aktiv (%d)" % flow_window_exterior_movers[3])
+	_true(flow_unique_exterior_movers.size() >= 6, "Mehrere eindeutige Randkörper tragen den sichtbaren Strom (%d)" % flow_unique_exterior_movers.size())
+	_true(flow_unique_clusters >= 1 and flow_unique_small >= 1, "Kleine und rote Gegner fließen beide an der Außenkante (%d / %d)" % [flow_unique_small, flow_unique_clusters])
+	_true(flow_unique_upper >= 2 and flow_unique_lower >= 2, "Obere und untere Außenkante bleiben beide aktiv (%d / %d)" % [flow_unique_upper, flow_unique_lower])
+	_true(flow_released_contactors.size() >= 3, "Geöffnete Kontaktplätze werden wiederholt von neuen Angreifern gefüllt (%d)" % flow_released_contactors.size())
+	# A stop-to-move transition must immediately discard the wider stationary
+	# cache instead of leaking it into the already accepted moving-Doctor path.
+	avatar.global_position += Vector2(0.5, 0.0)
+	flow_world.step_fixed(1.0 / 60.0)
+	var maximum_moving_guard_count := 0
+	for index in range(flow_enemies.size()):
+		if flow_removed[index] != 0:
+			continue
+		var slot := EntityHandle.slot(int(flow_handles[index]))
+		maximum_moving_guard_count = maxi(
+			maximum_moving_guard_count,
+			int(flow_world._crowd_motion_guard_counts[slot])
+		)
+	_true(not flow_world._crowd_avatar_stationary_this_tick, "Die World erkennt den ersten bewegten Doctor-Tick sofort")
+	_true(maximum_moving_guard_count <= 3, "Der erste bewegte Tick nutzt sofort wieder höchstens drei Guards (%d)" % maximum_moving_guard_count)
+	avatar.global_position = Vector2.ZERO
+	flow_world.clear()
+	for enemy in flow_enemies:
 		enemy.free()
 
 	# Explicit knockback remains the only intentional distance increase.
