@@ -592,6 +592,102 @@ func _run() -> void:
 	corridor_gate.free()
 	closing_follower.free()
 
+	# A queued rear follower may acquire a new physical front body while its last
+	# closed corridor sample still belongs to another living body. That stale
+	# identity must wake the scheduled refresh instead of sleeping forever.
+	var cache_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	cache_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var cache_follower_position := Vector2(180.0, 0.0)
+	var cache_follower := _enemy(small_definition, avatar, topology, cache_follower_position)
+	var cache_queue_blocker := _enemy(
+		static_small_definition,
+		avatar,
+		topology,
+		cache_follower_position + Vector2.LEFT * (
+			small_definition.contact_radius
+			+ static_small_definition.contact_radius
+			+ EnemyWorld.DIRECT_COLLISION_SKIN
+		)
+	)
+	var cache_corridor_blocker := _enemy(
+		static_small_definition,
+		avatar,
+		topology,
+		Vector2(520.0, 320.0)
+	)
+	var cache_positive_direction := (
+		Vector2.LEFT * EnemyWorld.DIRECT_COLLISION_BYPASS_FORWARD_WEIGHT
+		+ Vector2.LEFT.orthogonal() * EnemyWorld.DIRECT_COLLISION_BYPASS_LATERAL_WEIGHT
+	).normalized()
+	var cache_negative_direction := (
+		Vector2.LEFT * EnemyWorld.DIRECT_COLLISION_BYPASS_FORWARD_WEIGHT
+		- Vector2.LEFT.orthogonal() * EnemyWorld.DIRECT_COLLISION_BYPASS_LATERAL_WEIGHT
+	).normalized()
+	var cache_positive_side := _enemy(
+		static_small_definition,
+		avatar,
+		topology,
+		cache_follower_position + cache_positive_direction * 18.0
+	)
+	var cache_negative_side := _enemy(
+		static_small_definition,
+		avatar,
+		topology,
+		cache_follower_position + cache_negative_direction * 18.0
+	)
+	var cache_queue_handle := cache_world.register_enemy(cache_queue_blocker)
+	var cache_corridor_handle := cache_world.register_enemy(cache_corridor_blocker)
+	var cache_positive_handle := cache_world.register_enemy(cache_positive_side)
+	var cache_negative_handle := cache_world.register_enemy(cache_negative_side)
+	var cache_follower_handle := cache_world.register_enemy(cache_follower)
+	_true(EntityHandle.is_valid(cache_queue_handle), "Der aktuelle Queue-Blocker erhält einen Handle")
+	_true(EntityHandle.is_valid(cache_corridor_handle), "Der veraltete Korridor-Blocker bleibt als lebender Handle reproduzierbar")
+	_true(EntityHandle.is_valid(cache_positive_handle) and EntityHandle.is_valid(cache_negative_handle), "Beide geschlossenen Cache-Seiten besitzen lebende Blocker")
+	_true(EntityHandle.is_valid(cache_follower_handle), "Der Cachewechsel-Verfolger erhält einen Handle")
+	var cache_follower_slot := EntityHandle.slot(cache_follower_handle)
+	var cache_corridor_offset := cache_follower_slot * 2
+	cache_world._direct_collision_queue_blockers[cache_follower_slot] = cache_queue_handle
+	cache_world._direct_collision_corridor_blockers[cache_follower_slot] = cache_corridor_handle
+	cache_world._direct_collision_corridor_directions[cache_follower_slot] = Vector2.LEFT
+	cache_world._direct_collision_corridor_open[cache_corridor_offset] = 0
+	cache_world._direct_collision_corridor_open[cache_corridor_offset + 1] = 0
+	cache_world._direct_collision_corridor_side_blockers[cache_corridor_offset] = cache_positive_handle
+	cache_world._direct_collision_corridor_side_blockers[cache_corridor_offset + 1] = cache_negative_handle
+	_true(
+		cache_world._queued_blocker_still_at_contact(cache_follower_slot, cache_follower),
+		"Der neue direkte Queue-Blocker liegt tatsächlich an der Körpergrenze"
+	)
+	_true(
+		not cache_world._cached_closed_queue_still_blocked(cache_follower_slot, cache_follower),
+		"Ein geschlossener Cache für einen anderen Körper darf den verteilten Refresh nicht überspringen"
+	)
+	for cache_handle in [
+		cache_queue_handle,
+		cache_corridor_handle,
+		cache_positive_handle,
+		cache_negative_handle,
+		cache_follower_handle,
+	]:
+		cache_world._crowd_motion_guards[EntityHandle.slot(int(cache_handle))] = 1
+	cache_world._direct_collision_queued[cache_follower_slot] = 1
+	cache_world._crowd_lane_signs[cache_follower_slot] = 0
+	cache_world._crowd_phase = posmod(
+		cache_follower_slot,
+		EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES
+	)
+	cache_world._prepare_direct_collision_guards()
+	_true(
+		int(cache_world._direct_collision_corridor_blockers[cache_follower_slot])
+			!= int(cache_corridor_handle),
+		"Der vorgesehene Slot-Takt ersetzt den lebenden, aber veralteten Korridor-Blocker"
+	)
+	cache_world.clear()
+	cache_follower.free()
+	cache_queue_blocker.free()
+	cache_corridor_blocker.free()
+	cache_positive_side.free()
+	cache_negative_side.free()
+
 	# A mixed pack preserves every pair's own contact boundary. Rear bodies may
 	# stop, while both enemy classes still produce visible front attackers.
 	var mixed_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
@@ -947,6 +1043,172 @@ func _run() -> void:
 	avatar.global_position = Vector2.ZERO
 	flow_world.clear()
 	for enemy in flow_enemies:
+		enemy.free()
+
+	# The reported failure is not a rectangular edge: it is a dense rear island
+	# connected to an already active front by a narrow diagonal neck. Track bodies
+	# by their initial depth so a handful of moving front/outer-row bodies cannot
+	# hide a sleeping rear reservoir.
+	var rear_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	rear_world.configure_crowd_collision(topology, avatar, flow_cluster_definition.radius)
+	var rear_specs: Array[Dictionary] = []
+	for column in range(4):
+		for row in range(7):
+			rear_specs.append({"column": column, "row": row, "region": 0})
+	for column in range(4, 6):
+		for row in range(1, 5):
+			rear_specs.append({"column": column, "row": row, "region": 1})
+	for column in range(6, 11):
+		var row_start := 1 if column == 10 else 0
+		var row_end := 5 if column == 10 else 6
+		for row in range(row_start, row_end):
+			rear_specs.append({"column": column, "row": row, "region": 2})
+	_true(rear_specs.size() == 64, "Die zweilappige Rückpulk-Fixture besitzt exakt 64 Körper")
+	var rear_enemies: Array[InfectionEnemy] = []
+	var rear_flags := PackedByteArray()
+	var rear_cluster_flags := PackedByteArray()
+	var rear_deep_flags := PackedByteArray()
+	var rear_post_warmup_distances := PackedFloat32Array()
+	var rear_window_start_distances := PackedFloat32Array()
+	var rear_window_paths := PackedFloat32Array()
+	for order_index in range(rear_specs.size()):
+		var spec_index := posmod(order_index * 37 + 11, rear_specs.size())
+		var spec: Dictionary = rear_specs[spec_index]
+		var column := int(spec["column"])
+		var row := int(spec["row"])
+		var region := int(spec["region"])
+		var position := Vector2.ZERO
+		if region == 0:
+			position = Vector2(
+				-90.0 - float(column) * 43.30127,
+				(float(row) - 3.0) * 50.0 + (25.0 if posmod(column, 2) != 0 else 0.0)
+			)
+		elif region == 1:
+			position = Vector2(
+				-90.0 - float(column) * 43.30127,
+				(float(row) - 3.0) * 50.0 + (25.0 if posmod(column, 2) != 0 else 0.0)
+			)
+		else:
+			position = Vector2(
+				-90.0 - float(column) * 43.30127,
+				(float(row) - 2.5) * 50.0 - 75.0 + (25.0 if posmod(column, 2) != 0 else 0.0)
+			)
+		var is_cluster := posmod(column * 2 + row, 4) == 0
+		var definition := flow_cluster_definition if is_cluster else flow_small_definition
+		var enemy := _enemy(definition, avatar, topology, position)
+		rear_enemies.append(enemy)
+		rear_flags.append(1 if region == 2 else 0)
+		rear_cluster_flags.append(1 if is_cluster else 0)
+		rear_deep_flags.append(1 if region == 2 and column >= 8 else 0)
+		var initial_distance := topology.distance(position, avatar.global_position)
+		rear_post_warmup_distances.append(initial_distance)
+		rear_window_start_distances.append(initial_distance)
+		rear_window_paths.append(0.0)
+		_true(
+			EntityHandle.is_valid(rear_world.register_enemy(enemy)),
+			"Zweilappiger Rückpulk-Körper %d erhält einen Handle" % (order_index + 1)
+		)
+	var rear_window_movers := PackedInt32Array()
+	rear_window_movers.resize(4)
+	rear_window_movers.fill(0)
+	var rear_entered_neck: Dictionary = {}
+	var rear_minimum_margin := INF
+	var rear_maximum_retreat := 0.0
+	var rear_neck_plane_x := -315.0
+	for tick in range(240):
+		var before_positions := PackedVector2Array()
+		var before_distances := PackedFloat32Array()
+		for enemy in rear_enemies:
+			before_positions.append(enemy.global_position)
+			before_distances.append(topology.distance(enemy.global_position, avatar.global_position))
+		rear_world.step_fixed(1.0 / 60.0)
+		for index in range(rear_enemies.size()):
+			var current_distance := topology.distance(rear_enemies[index].global_position, avatar.global_position)
+			rear_window_paths[index] += topology.distance(
+				before_positions[index],
+				rear_enemies[index].global_position
+			)
+			rear_maximum_retreat = maxf(
+				rear_maximum_retreat,
+				current_distance - float(before_distances[index])
+			)
+			if (
+				rear_flags[index] != 0
+				and rear_enemies[index].global_position.x >= rear_neck_plane_x
+				and rear_enemies[index].global_position.y >= -105.0
+				and rear_enemies[index].global_position.y <= 80.0
+			):
+				rear_entered_neck[rear_enemies[index].get_instance_id()] = true
+		for first_index in range(rear_enemies.size()):
+			for second_index in range(first_index + 1, rear_enemies.size()):
+				rear_minimum_margin = minf(
+					rear_minimum_margin,
+					topology.distance(
+						rear_enemies[first_index].global_position,
+						rear_enemies[second_index].global_position
+					)
+						- rear_enemies[first_index].contact_body_radius()
+						- rear_enemies[second_index].contact_body_radius()
+				)
+		if posmod(tick + 1, 60) == 0:
+			var window_index := int(tick / 60)
+			for index in range(rear_enemies.size()):
+				var current_distance := topology.distance(rear_enemies[index].global_position, avatar.global_position)
+				if window_index == 0:
+					rear_post_warmup_distances[index] = current_distance
+				var window_progress := float(rear_window_start_distances[index]) - current_distance
+				if (
+					rear_flags[index] != 0
+					and window_progress >= 4.0
+					and float(rear_window_paths[index]) >= 6.0
+				):
+					rear_window_movers[window_index] += 1
+				rear_window_start_distances[index] = current_distance
+				rear_window_paths[index] = 0.0
+	var rear_progress_values := PackedFloat32Array()
+	var rear_progressed_sixteen := 0
+	var rear_small_progressed_sixteen := 0
+	var rear_cluster_progressed_sixteen := 0
+	var rear_deep_progressed_eight := 0
+	for index in range(rear_enemies.size()):
+		if rear_flags[index] == 0:
+			continue
+		var forward_progress := (
+			float(rear_post_warmup_distances[index])
+			- topology.distance(rear_enemies[index].global_position, avatar.global_position)
+		)
+		rear_progress_values.append(forward_progress)
+		if forward_progress >= 16.0:
+			rear_progressed_sixteen += 1
+			if rear_cluster_flags[index] != 0:
+				rear_cluster_progressed_sixteen += 1
+			else:
+				rear_small_progressed_sixteen += 1
+		if rear_deep_flags[index] != 0 and forward_progress >= 8.0:
+			rear_deep_progressed_eight += 1
+	rear_progress_values.sort()
+	var rear_median_progress := float(rear_progress_values[int(rear_progress_values.size() / 2)])
+	_true(rear_minimum_margin >= -0.06, "Der zweilappige Rückpulk wahrt alle Schadenshitboxen (Margin %.3f)" % rear_minimum_margin)
+	_true(rear_maximum_retreat <= 0.001, "Der zweilappige Rückpulk erzeugt keine Fluchtbewegung (%.5f)" % rear_maximum_retreat)
+	_true(rear_window_movers[1] >= 8, "Im 1–2-s-Fenster laufen mehrere echte Rückkörper nach (%d / 28)" % rear_window_movers[1])
+	_true(rear_window_movers[2] >= 8, "Im 2–3-s-Fenster bleibt der hintere Pulk in Bewegung (%d / 28)" % rear_window_movers[2])
+	_true(rear_window_movers[3] >= 8, "Im 3–4-s-Fenster schläft der hintere Pulk nicht ein (%d / 28)" % rear_window_movers[3])
+	_true(rear_progressed_sixteen >= 10, "Mindestens zehn Rückkörper nähern sich in vier Sekunden deutlich (%d / 28)" % rear_progressed_sixteen)
+	_true(
+		rear_small_progressed_sixteen >= 6 and rear_cluster_progressed_sixteen >= 2,
+		"Kleine und rote Rückkörper fließen beide sichtbar nach (%d klein / %d rot)" % [
+			rear_small_progressed_sixteen,
+			rear_cluster_progressed_sixteen,
+		]
+	)
+	_true(
+		rear_deep_progressed_eight >= 4,
+		"Auch die tiefen Rückreihen laufen nach der freien Startsekunde sichtbar nach (%d)" % rear_deep_progressed_eight
+	)
+	_true(rear_median_progress >= 8.0, "Der mediane Rückpulk-Fortschritt bleibt sichtbar (%.2f)" % rear_median_progress)
+	_true(rear_entered_neck.size() >= 3, "Mehrere ursprüngliche Rückkörper fließen in den schmalen Hals (%d)" % rear_entered_neck.size())
+	rear_world.clear()
+	for enemy in rear_enemies:
 		enemy.free()
 
 	# Explicit knockback remains the only intentional distance increase.

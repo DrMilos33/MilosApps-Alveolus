@@ -838,6 +838,14 @@ func _cached_closed_queue_still_blocked(slot: int, enemy: InfectionEnemy) -> boo
 	# This more expensive live-side validation runs only on the slot's distributed
 	# refresh phase. The per-tick queue fast path checks only its one real contact
 	# body and therefore remains O(1) for dense rear rows.
+	# A new direct queue blocker cannot reuse the closed side corridors sampled
+	# for an older body. Without this identity check a living stale corridor can
+	# keep the scheduled refresh asleep forever while the front pack rearranges.
+	if (
+		int(_direct_collision_queue_blockers[slot])
+		!= int(_direct_collision_corridor_blockers[slot])
+	):
+		return false
 	if not _queued_blocker_still_at_contact(slot, enemy):
 		return false
 	var toward_avatar := _crowd_topology.shortest_delta(enemy.global_position, _crowd_avatar.global_position)
