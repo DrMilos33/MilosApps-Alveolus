@@ -90,22 +90,22 @@ static func tutorial_hint_definitions() -> Dictionary:
 static func enemy_definitions() -> Dictionary:
 	var result := {
 		&"pneumococcus": EnemyDefinition.create(
-			&"pneumococcus", "Bakterium", 22.0, 62.0, 2.0, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
+			&"pneumococcus", "Bakterium", 22.0, 71.0, 2.0, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
 		).configure_contact_radius(17.0),
 		&"bacterial_cluster": EnemyDefinition.create(
-			&"bacterial_cluster", "Bakteriengruppe", 74.0, 62.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"
+			&"bacterial_cluster", "Bakteriengruppe", 74.0, 71.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"
 		).configure_contact_radius(23.0),
 		&"minor_focus": EnemyDefinition.create(
-			&"minor_focus", "Kleiner Herd", 180.0, 28.0, 0.0, 8, 38.0, Color("9a5bbb"), false, &"minor_focus", &"infection_focus", "Kleiner Infektionsherd"
+			&"minor_focus", "Kleiner Herd", 180.0, 32.0, 0.0, 8, 38.0, Color("9a5bbb"), false, &"minor_focus", &"infection_focus", "Kleiner Infektionsherd"
 		).configure_contact_radius(31.0).configure_projectile_attack(2.0, 2.6, &"normal", false),
 		&"infection_focus": EnemyDefinition.create(
-			&"infection_focus", "Infektionsherd", 2200.0, 52.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
+			&"infection_focus", "Infektionsherd", 2200.0, 60.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
 		).configure_contact_radius(56.0).configure_projectile_attack(4.0, 1.6, &"diamond", true),
 		&"localized_boss": EnemyDefinition.create(
-			&"localized_boss", "Bakterienkern", 900.0, 48.0, 6.0, 20, 60.0, Color("d45d64"), true, &"localized_boss", &"infection_focus", "Lokaler Bakterienkern"
+			&"localized_boss", "Bakterienkern", 900.0, 55.0, 6.0, 20, 60.0, Color("d45d64"), true, &"localized_boss", &"infection_focus", "Lokaler Bakterienkern"
 		).configure_contact_radius(47.0),
 		&"intro_focus": EnemyDefinition.create(
-			&"intro_focus", "Infektionsherd", 2200.0, 52.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
+			&"intro_focus", "Infektionsherd", 2200.0, 60.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
 		).configure_contact_radius(56.0).configure_projectile_attack(6.0, 2.6, &"normal", true)
 	}
 	return result

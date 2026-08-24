@@ -355,6 +355,11 @@ this prevents the faster component from becoming a closed nonattacking shell.
 Stun and knockback
 transitions invalidate only the affected slot and cached local neighbors; a
 stale closed-corridor fast path may never survive the transition back to chase.
+Final bulk and bypass validation distinguishes a new or deepening contact-circle
+penetration from a rare pre-existing one. A fixed step that preserves or
+increases separation is allowed to drain that old overlap; rejecting it would
+recommit the same origin and could freeze the slot indefinitely after knockback
+or a phased guard update. The check is allocation-free and adds no query.
 
 The topology snapshot is built into a double buffer over four fixed ticks. Its
 limited broad-phase query retains the nearest six exact bodies per member;
@@ -425,6 +430,11 @@ member finishes, enforcing one incoming hit per wall without per-projectile
 process state. Boss start cancels pending schedule/gates. Offscreen target HUD
 state is published with the render snapshot; a visible boss arrow always has
 priority.
+The plan also owns optional per-target movement, attack-rate and projectile-width
+multipliers. Fall 1 uses those fields for its mobile event focus; the activation
+stores the resolved rate and width on `InfectionEnemy`, and the existing attack
+director, projectile simulation and renderer consume them without changing the
+shared `EnemyDefinition` used by hidden nests or later target foci.
 
 Before the avatar step, `EnemyWorld.prepare_avatar_body_interaction()` resolves
 the same authored contact circles from the player's side. Ordinary mobile
@@ -520,7 +530,7 @@ from the saved case seed. That seed advances only after a successful non-intro
 result, so failure and cancellation cannot silently reroll the case.
 
 `minor_focus` participates in the normal centralized enemy movement path with
-base speed 24 before case modifiers. It remains a detailed,
+base speed 32 before case modifiers. It remains a detailed,
 generation-safe spawning objective and releases four bacteria after its
 20-second lifecycle if it survives; mobility does not authorize a per-entity
 process loop or a second renderer.

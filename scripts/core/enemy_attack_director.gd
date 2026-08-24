@@ -202,7 +202,7 @@ func _shot_interval(enemy: InfectionEnemy, role: int) -> float:
 	if role == Role.PHASE_ADD:
 		return PHASE_ADD_INTERVAL
 	if enemy.definition != null and enemy.definition.projectile_interval > 0.0:
-		return enemy.definition.projectile_interval
+		return enemy.resolved_projectile_interval()
 	return PHASE_ADD_INTERVAL
 
 

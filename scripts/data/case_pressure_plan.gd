@@ -10,6 +10,9 @@ extends Resource
 @export var target_focus_times: PackedFloat32Array = PackedFloat32Array()
 @export var projectile_gate_times: PackedFloat32Array = PackedFloat32Array()
 @export_range(0, 64, 1) var max_active_targets: int = 0
+@export_range(0.0, 4.0, 0.01) var target_movement_speed_multiplier: float = 1.0
+@export_range(0.01, 4.0, 0.01) var target_attack_speed_multiplier: float = 1.0
+@export_range(0.1, 4.0, 0.01) var target_projectile_width_multiplier: float = 1.0
 
 
 static func create(
@@ -24,6 +27,17 @@ static func create(
 	return plan
 
 
+func configure_target_combat(
+	movement_speed_multiplier: float,
+	attack_speed_multiplier: float,
+	projectile_width_multiplier: float
+) -> CasePressurePlan:
+	target_movement_speed_multiplier = maxf(movement_speed_multiplier, 0.0)
+	target_attack_speed_multiplier = maxf(attack_speed_multiplier, 0.01)
+	target_projectile_width_multiplier = maxf(projectile_width_multiplier, 0.1)
+	return self
+
+
 static func default_for_case_order(case_order: int) -> CasePressurePlan:
 	match case_order:
 		1:
@@ -31,7 +45,7 @@ static func default_for_case_order(case_order: int) -> CasePressurePlan:
 				PackedFloat32Array([60.0, 120.0]),
 				PackedFloat32Array(),
 				1
-			)
+			).configure_target_combat(46.0 / 32.0, 1.25, 1.5)
 		2:
 			return create(
 				PackedFloat32Array([25.0, 60.0, 95.0, 130.0]),

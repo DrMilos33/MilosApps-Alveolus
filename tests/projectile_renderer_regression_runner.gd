@@ -25,7 +25,10 @@ func _run() -> void:
 		var projectile := TherapyProjectile.new()
 		get_root().add_child(projectile)
 		projectile.global_position = Vector2(float(index * 7 - 900), float(index % 29) * 13.0 - 180.0)
-		projectile.configure(null, 18.0, topology, index == 7)
+		if index == 0:
+			projectile.configure_hostile(Vector2.RIGHT, 4.0, topology, null, null, TherapyProjectile.HOSTILE_NORMAL, 0.0, 205.0, 1050.0, 44.0, 180.0, 1.5)
+		else:
+			projectile.configure(null, 18.0, topology, index == 7)
 		projectile.rotation = float(index % 17) * 0.17
 		var handle := EntityHandle.make(index, 1)
 		_assert_true(renderer.register_projectile(projectile, handle, index == 7), "Slot %d registers exactly once" % index)
@@ -47,6 +50,11 @@ func _run() -> void:
 		_assert_true(bool(state.get("active", false)) and not bool(state.get("detailed", true)), "Normal projectile %d owns its batch slot" % index)
 		var transform: Transform2D = state.get("transform", Transform2D())
 		_assert_vector(transform.origin, projectile.global_position, "Normal projectile %d renders at the configured position" % index)
+	var wide_transform: Transform2D = renderer.render_state(handles[0]).get("transform", Transform2D())
+	var standard_transform: Transform2D = renderer.render_state(handles[119]).get("transform", Transform2D())
+	_assert_near(wide_transform.x.length(), ProjectileRenderer.PROJECTILE_EXTENT.x, "Wide hostile projectile keeps the standard visual length")
+	_assert_near(wide_transform.y.length(), ProjectileRenderer.PROJECTILE_EXTENT.y * 1.5, "Wide hostile projectile expands only its cross-axis by 50 percent")
+	_assert_near(standard_transform.y.length(), ProjectileRenderer.PROJECTILE_EXTENT.y, "Adjacent default projectile keeps the standard cross-axis")
 
 	var discovery := projectiles[7]
 	var discovery_state := renderer.render_state(handles[7])
@@ -127,6 +135,7 @@ func _test_generation_safe_reuse(renderer: ProjectileRenderer, projectile: Thera
 	var released_state := renderer.render_state(old_handle)
 	_assert_true(bool(released_state.get("hidden", false)), "Release clears the old render command before pool reuse")
 	projectile.recycle()
+	_assert_near(projectile.hostile_width_multiplier, 1.0, "Pool reuse clears hostile projectile width")
 	projectile.global_position = Vector2(731.0, -403.0)
 	projectile.configure(null, 24.0, topology)
 	projectile.rotation = 0.73

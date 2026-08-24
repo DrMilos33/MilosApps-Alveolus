@@ -32,6 +32,9 @@ func _test_default_schedules() -> void:
 	)
 	_equal(fall_one.projectile_gate_times, PackedFloat32Array(), "Fall 1 plant keine Projektiltore")
 	_equal(fall_one.max_active_targets, 1, "Fall 1 erlaubt höchstens einen aktiven Zielherd")
+	_near(fall_one.target_movement_speed_multiplier, 46.0 / 32.0, "Fall 1 löst den mobilen Eventherd auf ganzzahliges Basistempo 46 auf")
+	_near(fall_one.target_attack_speed_multiplier, 1.25, "Fall 1 erhöht nur die Schussrate seines Eventherds um 25 Prozent")
+	_near(fall_one.target_projectile_width_multiplier, 1.5, "Fall 1 verbreitert nur die Eventherdprojektile um 50 Prozent")
 
 	var fall_two := CasePressurePlanScript.default_for_case_order(2)
 	_equal(
@@ -41,6 +44,9 @@ func _test_default_schedules() -> void:
 	)
 	_equal(fall_two.projectile_gate_times, PackedFloat32Array(), "Fall 2 plant keine Projektiltore")
 	_equal(fall_two.max_active_targets, 2, "Fall 2 bewahrt höchstens zwei aktive Zielherde")
+	_near(fall_two.target_movement_speed_multiplier, 1.0, "Andere Zielherde erhalten keinen Fall-1-Tempofaktor")
+	_near(fall_two.target_attack_speed_multiplier, 1.0, "Andere Zielherde behalten ihre Schussrate")
+	_near(fall_two.target_projectile_width_multiplier, 1.0, "Andere Zielherde behalten ihre Projektilbreite")
 
 	var fall_three := CasePressurePlanScript.default_for_case_order(3)
 	_equal(
@@ -100,6 +106,9 @@ func _test_level_and_run_config_transfer() -> void:
 		_equal(level.case_pressure_plan.target_focus_times, expected.target_focus_times, "Fall %d übernimmt die Zielherdtermine" % order)
 		_equal(level.case_pressure_plan.projectile_gate_times, expected.projectile_gate_times, "Fall %d übernimmt die Projektiltortermine" % order)
 		_equal(level.case_pressure_plan.max_active_targets, expected.max_active_targets, "Fall %d übernimmt den Zielherddeckel" % order)
+		_near(level.case_pressure_plan.target_movement_speed_multiplier, expected.target_movement_speed_multiplier, "Fall %d übernimmt das Zielherdtempo" % order)
+		_near(level.case_pressure_plan.target_attack_speed_multiplier, expected.target_attack_speed_multiplier, "Fall %d übernimmt die Zielherd-Schussrate" % order)
+		_near(level.case_pressure_plan.target_projectile_width_multiplier, expected.target_projectile_width_multiplier, "Fall %d übernimmt die Zielherd-Projektilbreite" % order)
 
 	var source := levels[6] as LevelDefinition
 	var config := RunConfig.from_level(source)
@@ -278,6 +287,12 @@ func _equal(actual: Variant, expected: Variant, message: String) -> void:
 	assertions += 1
 	if actual != expected:
 		failures.append("%s (erwartet %s, erhalten %s)" % [message, str(expected), str(actual)])
+
+
+func _near(actual: float, expected: float, message: String) -> void:
+	assertions += 1
+	if not is_equal_approx(actual, expected):
+		failures.append("%s (erwartet %.4f, erhalten %.4f)" % [message, expected, actual])
 
 
 func _finish() -> void:

@@ -19,6 +19,7 @@ func _run() -> void:
 	_test_static_pressure_limits()
 	_test_pure_salvo_and_gate_seams()
 	await _test_live_target_and_gate_contract()
+	await _test_case_one_event_target_profile()
 	await _test_case_two_target_remains_mobile()
 	_finish()
 
@@ -116,7 +117,53 @@ func _test_case_two_target_remains_mobile() -> void:
 			_true(not target.is_static_flow_obstacle(), "Der kleine Fall-2-Herd wird kein stationäres Hindernis")
 			_equal(target.body_role, EnemySpawnRequest.BodyRole.MOBILE, "Fall 2 behält die normale mobile Körperrolle")
 			_true(target.speed_multiplier > 0.0, "Der Fall-2-Herd behält seine normale Bewegung")
+			_near(target.projectile_attack_speed_multiplier, 1.0, "Der Fall-2-Herd übernimmt nicht die schnellere Fall-1-Kadenz")
+			_near(target.projectile_width_multiplier, 1.0, "Der Fall-2-Herd übernimmt nicht die breiteren Fall-1-Projektile")
 			_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.MINOR_FOCUS, "Der bewegliche Fall-2-Herd schießt unverändert")
+	game.queue_free()
+	await process_frame
+
+
+func _test_case_one_event_target_profile() -> void:
+	var game := MAIN_SCENE.instantiate()
+	get_root().add_child(game)
+	await process_frame
+	await process_frame
+	game.persistence_enabled = false
+	for discovery_id in game.discovery_definitions:
+		game.discovery_manager.mark_seen(discovery_id)
+	game.selected_level = _level_by_id(game.levels, &"early_localized_focus")
+	_true(game.selected_level != null and game.selected_level.order == 1, "Eventherdtest verwendet Fall 1")
+	game.start_run()
+	game.set_physics_process(false)
+	game._spawn_case_pressure_target({&"spawn_sector": 3})
+	_equal(game.case_pressure_target_states.size(), 1, "Fall 1 erzeugt genau einen mobilen Eventherd")
+	if not game.case_pressure_target_states.is_empty():
+		var handle := int(game.case_pressure_target_states.keys()[0])
+		var target := game.enemy_world.resolve(handle) as InfectionEnemy
+		_true(is_instance_valid(target), "Der Fall-1-Eventherd besitzt einen gültigen Handle")
+		if is_instance_valid(target):
+			_near(
+				target.definition.speed * target.speed_multiplier,
+				46.0 * game.config.enemy_speed_multiplier,
+				"Der Fall-1-Eventherd besitzt nach diesem Patch ganzzahliges Basistempo 46"
+			)
+			_near(target.projectile_attack_speed_multiplier, 1.25, "Der Fall-1-Eventherd schießt 25 Prozent schneller")
+			_near(target.resolved_projectile_interval(), 2.08, "25 Prozent mehr Schussrate ergeben linear 2,08 Sekunden Intervall")
+			_near(target.projectile_width_multiplier, 1.5, "Der Fall-1-Eventherd veröffentlicht 50 Prozent breitere Projektile")
+			target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+			var projectiles_before: int = game.projectiles.size()
+			game.enemy_attack_director.step_fixed(0.899)
+			_equal(game.projectiles.size(), projectiles_before, "Der unveränderte erste Telegraph feuert nicht vor 0,9 Sekunden")
+			game.enemy_attack_director.step_fixed(0.002)
+			_equal(game.projectiles.size(), projectiles_before + 1, "Nach dem ersten Telegraphen entsteht genau ein Eventherdprojektil")
+			if game.projectiles.size() > projectiles_before:
+				var projectile := game.projectiles[-1] as TherapyProjectile
+				_near(projectile.hostile_width_multiplier, 1.5, "Das echte Eventherdprojektil übernimmt die breitere Darstellung und Trefferfläche")
+			game.enemy_attack_director.step_fixed(2.078)
+			_equal(game.projectiles.size(), projectiles_before + 1, "Die lineare Kadenz feuert nicht vor Ablauf von 2,08 Sekunden erneut")
+			game.enemy_attack_director.step_fixed(0.002)
+			_equal(game.projectiles.size(), projectiles_before + 2, "Der Eventherd feuert nach 2,08 Sekunden erneut")
 	game.queue_free()
 	await process_frame
 
@@ -273,6 +320,10 @@ func _true(condition: bool, message: String) -> void:
 
 func _equal(actual: Variant, expected: Variant, message: String) -> void:
 	_true(actual == expected, "%s (expected=%s actual=%s)" % [message, str(expected), str(actual)])
+
+
+func _near(actual: float, expected: float, message: String, tolerance: float = 0.001) -> void:
+	_true(absf(actual - expected) <= tolerance, "%s (expected=%.4f actual=%.4f)" % [message, expected, actual])
 
 
 func _finish() -> void:

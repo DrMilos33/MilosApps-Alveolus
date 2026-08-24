@@ -222,6 +222,23 @@ func _test_hostile_projectile_geometry() -> void:
 	normal.step_fixed(0.1)
 	_equal(hits, [7.0], "Ein normales Gegnerprojektil verursacht nur bei echter Avatarüberlappung Schaden")
 
+	avatar.global_position = Vector2(100.0, 37.0)
+	var default_width := TherapyProjectile.new()
+	var wide := TherapyProjectile.new()
+	get_root().add_child(default_width)
+	get_root().add_child(wide)
+	for projectile in [default_width, wide]:
+		projectile.global_position = Vector2.ZERO
+		projectile.hostile_hit.connect(func(_projectile: TherapyProjectile, amount: float, _profile: DamageProfile) -> void: hits.append(amount))
+	default_width.configure_hostile(Vector2.RIGHT, 8.0, topology, avatar, null, TherapyProjectile.HOSTILE_NORMAL, 0.0, 1000.0, 200.0)
+	default_width.step_fixed(0.1)
+	_equal(hits, [7.0], "Die normale Projektilbreite trifft 37 Weltpunkte seitlich versetzt noch nicht")
+	wide.configure_hostile(Vector2.RIGHT, 9.0, topology, avatar, null, TherapyProjectile.HOSTILE_NORMAL, 0.0, 1000.0, 200.0, 44.0, 180.0, 1.5)
+	wide.step_fixed(0.1)
+	_equal(hits, [7.0, 9.0], "Ein 50 Prozent breiteres Projektil erweitert die passende Trefferfläche von 33 auf 38")
+	wide.recycle()
+	_near(wide.hostile_width_multiplier, 1.0, "Pool-Recycling setzt die Projektilbreite auf Standard zurück")
+
 	avatar.global_position = Vector2(500.0, 0.0)
 	var upper := TherapyProjectile.new()
 	var lower := TherapyProjectile.new()
@@ -236,7 +253,7 @@ func _test_hostile_projectile_geometry() -> void:
 	_near(upper.global_position.x, lower.global_position.x, "Rautenprojektile besitzen denselben Vorwärtsfortschritt")
 	_near(upper.global_position.y, -lower.global_position.y, "Rautenprojektile bewegen sich sichtbar spiegelbildlich")
 	_true(absf(upper.global_position.y) > 1.0, "Das Rautenmuster besitzt eine erkennbare seitliche Auslenkung")
-	for node in [normal, upper, lower, avatar]:
+	for node in [normal, default_width, wide, upper, lower, avatar]:
 		node.queue_free()
 	await process_frame
 

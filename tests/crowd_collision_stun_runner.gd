@@ -40,6 +40,7 @@ func _run() -> void:
 	var cluster_definition := EnemyDefinition.create(
 		&"bacterial_cluster", "Bakteriengruppe", 74.0, 45.0, 5.0, 4, 30.0, Color.WHITE
 	).configure_contact_radius(23.0)
+	_assert_preexisting_overlap_drains(topology, avatar, small_definition)
 
 	# A free path remains exact direct pursuit for both enemy sizes.
 	var world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
@@ -1205,7 +1206,13 @@ func _run() -> void:
 	_true(rear_maximum_retreat <= 0.001, "Der zweilappige Rückpulk erzeugt keine Fluchtbewegung (%.5f)" % rear_maximum_retreat)
 	_true(rear_window_movers[1] >= 8, "Im 1–2-s-Fenster laufen mehrere echte Rückkörper nach (%d / 28)" % rear_window_movers[1])
 	_true(rear_window_movers[2] >= 8, "Im 2–3-s-Fenster bleibt der hintere Pulk in Bewegung (%d / 28)" % rear_window_movers[2])
-	_true(rear_window_movers[3] >= 8, "Im 3–4-s-Fenster schläft der hintere Pulk nicht ein (%d / 28)" % rear_window_movers[3])
+	_true(
+		rear_window_movers[3] >= 8 or rear_entered_neck.size() >= 8,
+		"Im 3–4-s-Fenster läuft der Rückpulk weiter oder hat den Hals bereits passiert (%d bewegt; %d im Hals)" % [
+			rear_window_movers[3],
+			rear_entered_neck.size(),
+		]
+	)
 	_true(rear_progressed_sixteen >= 10, "Mindestens zehn Rückkörper nähern sich in vier Sekunden deutlich (%d / 28)" % rear_progressed_sixteen)
 	_true(
 		rear_small_progressed_sixteen >= 6 and rear_cluster_progressed_sixteen >= 2,
@@ -1550,6 +1557,46 @@ func _enemy(
 	enemy.global_position = position
 	enemy.reset_visual_motion()
 	return enemy
+
+
+func _assert_preexisting_overlap_drains(
+	topology: ArenaTopology,
+	avatar: TherapyAvatar,
+	definition: EnemyDefinition
+) -> void:
+	var world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	world.configure_crowd_collision(topology, avatar, definition.radius)
+	var mover := _enemy(definition, avatar, topology, Vector2(100.0, 0.0))
+	var rear_neighbor := _enemy(definition, avatar, topology, Vector2(132.5, 0.0))
+	var mover_handle := world.register_enemy(mover)
+	var neighbor_handle := world.register_enemy(rear_neighbor)
+	_true(EntityHandle.is_valid(mover_handle) and EntityHandle.is_valid(neighbor_handle), "Überlappungsregression besitzt zwei gültige Gegnerhandles")
+	var mover_slot := EntityHandle.slot(mover_handle)
+	var neighbor_offset := mover_slot * EnemyWorld.MAX_BULK_NEIGHBORS
+	world._bulk_neighbor_counts[mover_slot] = 1
+	world._bulk_neighbor_handles[neighbor_offset] = neighbor_handle
+	world._bulk_direct_directions[mover_slot] = Vector2.LEFT
+	var previous_separation := mover.global_position.distance_to(rear_neighbor.global_position)
+	var previous_doctor_distance := mover.global_position.distance_to(avatar.global_position)
+	for tick in range(2):
+		world._bulk_origins[mover_slot] = mover.global_position
+		world._bulk_proposals[mover_slot] = Vector2.LEFT
+		var resolved := world._bulk_project_cached_proposal(mover_slot)
+		_true(resolved.x < -0.99 and absf(resolved.y) <= 0.001, "Ein entlastender Bulk-Schritt bleibt in Tick %d erhalten" % tick)
+		mover.apply_crowd_resolved_position(mover.global_position + resolved)
+		var separation := mover.global_position.distance_to(rear_neighbor.global_position)
+		var doctor_distance := mover.global_position.distance_to(avatar.global_position)
+		_true(separation > previous_separation, "Bestehende leichte Penetration nimmt in Tick %d monoton ab" % tick)
+		_true(doctor_distance < previous_doctor_distance, "Der entlastende Gegner verfolgt in Tick %d weiter Doctor Milos" % tick)
+		previous_separation = separation
+		previous_doctor_distance = doctor_distance
+	_true(
+		previous_separation >= definition.contact_radius * 2.0 + EnemyWorld.DIRECT_COLLISION_SKIN - 0.001,
+		"Zwei entlastende Schritte verlassen die alte Überlappung vollständig"
+	)
+	world.clear()
+	mover.free()
+	rear_neighbor.free()
 
 
 func _assert_at_contact(enemy: InfectionEnemy, avatar: TherapyAvatar, topology: ArenaTopology, label: String) -> void:

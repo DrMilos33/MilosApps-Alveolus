@@ -42,6 +42,7 @@ var hostile_forward: Vector2 = Vector2.RIGHT
 var hostile_right: Vector2 = Vector2.DOWN
 var hostile_wave_amplitude: float = 0.0
 var hostile_wave_length: float = 180.0
+var hostile_width_multiplier: float = 1.0
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -75,6 +76,8 @@ func configure(
 	direction = Vector2.RIGHT
 	directional_mode = false
 	hostile_mode = false
+	hostile_width_multiplier = 1.0
+	_apply_visual_width()
 	maximum_distance = INF
 	impact_distance = -1.0
 	if _target_is_current():
@@ -115,6 +118,8 @@ func configure_directional(
 	direction = heading.normalized() if heading.length_squared() > 0.0001 else Vector2.RIGHT
 	directional_mode = true
 	hostile_mode = false
+	hostile_width_multiplier = 1.0
+	_apply_visual_width()
 	maximum_distance = maxf(max_distance, 0.0)
 	impact_distance = clampf(resolved_impact_distance, 0.0, maximum_distance) if resolved_impact_distance >= 0.0 else -1.0
 	lifetime = maximum_distance / maxf(speed, 1.0) + 0.25
@@ -135,7 +140,8 @@ func configure_hostile(
 	move_speed: float = 230.0,
 	max_distance: float = 1050.0,
 	wave_amplitude: float = 44.0,
-	wave_length: float = 180.0
+	wave_length: float = 180.0,
+	width_multiplier: float = 1.0
 ) -> void:
 	target = null
 	damage = maxf(0.0, amount)
@@ -162,6 +168,8 @@ func configure_hostile(
 	hostile_right = Vector2(-direction.y, direction.x)
 	hostile_wave_amplitude = maxf(0.0, wave_amplitude) if pattern == HOSTILE_DIAMOND else 0.0
 	hostile_wave_length = maxf(32.0, wave_length)
+	hostile_width_multiplier = maxf(width_multiplier, 0.1)
+	_apply_visual_width()
 	rotation = direction.angle()
 	reset_visual_motion()
 	hide()
@@ -254,7 +262,7 @@ func _step_hostile(delta: float) -> void:
 		visual_current_position = global_position
 		visual_current_angle = rotation
 	if is_instance_valid(hostile_target):
-		var hit_radius := TherapyAvatar.BODY_RADIUS + HOSTILE_HIT_RADIUS
+		var hit_radius := TherapyAvatar.BODY_RADIUS + HOSTILE_HIT_RADIUS * hostile_width_multiplier
 		var distance_squared := topology.distance_squared(global_position, hostile_target.global_position) if topology != null else global_position.distance_squared_to(hostile_target.global_position)
 		if distance_squared <= hit_radius * hit_radius:
 			hostile_hit.emit(self, damage, hostile_damage_profile)
@@ -309,6 +317,13 @@ func recycle() -> void:
 	hostile_right = Vector2.DOWN
 	hostile_wave_amplitude = 0.0
 	hostile_wave_length = 180.0
+	hostile_width_multiplier = 1.0
+	_apply_visual_width()
+
+
+func _apply_visual_width() -> void:
+	if visual_body != null:
+		visual_body.scale = Vector2(1.0, hostile_width_multiplier if hostile_mode else 1.0)
 
 
 func reset_visual_motion() -> void:

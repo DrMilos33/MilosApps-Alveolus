@@ -2078,10 +2078,12 @@ func _bulk_project_cached_proposal(slot: int) -> Vector2:
 				+ DIRECT_COLLISION_SKIN
 				- DIRECT_COLLISION_EPSILON
 			)
-			if _crowd_topology.distance_squared(
+			if _endpoint_creates_or_deepens_overlap(
+				origin,
 				origin + resolved_delta,
-				obstacle.global_position
-			) < obstacle_spacing * obstacle_spacing:
+				obstacle.global_position,
+				obstacle_spacing
+			):
 				return Vector2.ZERO
 	# Projection against a later neighbor can re-enter an earlier one. Waiting at
 	# the already valid origin is the deterministic no-retreat fallback.
@@ -2096,12 +2098,33 @@ func _bulk_project_cached_proposal(slot: int) -> Vector2:
 			+ DIRECT_COLLISION_SKIN
 			- DIRECT_COLLISION_EPSILON
 		)
-		if _crowd_topology.distance_squared(
+		if _endpoint_creates_or_deepens_overlap(
+			origin,
 			origin + resolved_delta,
-			_typed_enemies[other_slot].global_position
-		) < minimum_distance * minimum_distance:
+			_typed_enemies[other_slot].global_position,
+			minimum_distance
+		):
 			return Vector2.ZERO
 	return resolved_delta
+
+
+func _endpoint_creates_or_deepens_overlap(
+	origin: Vector2,
+	endpoint: Vector2,
+	other_position: Vector2,
+	minimum_distance: float
+) -> bool:
+	var minimum_squared := minimum_distance * minimum_distance
+	var endpoint_squared := _crowd_topology.distance_squared(endpoint, other_position)
+	if endpoint_squared >= minimum_squared:
+		return false
+	var origin_squared := _crowd_topology.distance_squared(origin, other_position)
+	if origin_squared >= minimum_squared:
+		return true
+	# A rare pre-existing penetration may come from knockback or a phased guard
+	# snapshot. Allow only motion that holds or increases separation, so the next
+	# fixed ticks can drain it instead of repeatedly committing a zero step.
+	return endpoint_squared + DIRECT_COLLISION_EPSILON < origin_squared
 
 
 func _bulk_pair_is_current(handle: int, slot: int) -> bool:
@@ -3837,18 +3860,18 @@ func _resolve_direct_collision(
 			or other.definition.is_boss
 		):
 			continue
-		var final_to_other := (
-			other.global_position - (movement_origin + resolved_delta)
-			if _crowd_bounded
-			else _crowd_topology.shortest_delta(movement_origin + resolved_delta, other.global_position)
-		)
 		var minimum_distance := (
 			own_contact_radius
 			+ float(_direct_collision_radii[other_slot])
 			+ DIRECT_COLLISION_SKIN
 		)
 		var validation_distance := minimum_distance - DIRECT_COLLISION_EPSILON
-		if final_to_other.length_squared() < validation_distance * validation_distance:
+		if _endpoint_creates_or_deepens_overlap(
+			movement_origin,
+			movement_origin + resolved_delta,
+			other.global_position,
+			validation_distance
+		):
 			resolved_delta = Vector2.ZERO
 			route_became_blocked = true
 			break

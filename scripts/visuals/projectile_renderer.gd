@@ -209,18 +209,18 @@ func _upload_interpolated_buffer(fraction: float) -> void:
 		var slot := int(slot_value)
 		if _detailed[slot] != 0:
 			continue
+		var projectile := _projectiles[slot]
+		if projectile == null:
+			continue
 		var position: Vector2
 		var angle: float
 		if _debug_snapshots_enabled:
 			position = _previous_positions[slot].lerp(_current_positions[slot], fraction)
 			angle = lerp_angle(_previous_angles[slot], _current_angles[slot], fraction)
 		else:
-			var projectile := _projectiles[slot]
-			if projectile == null:
-				continue
 			position = projectile.visual_previous_position.lerp(projectile.visual_current_position, fraction)
 			angle = lerp_angle(projectile.visual_previous_angle, projectile.visual_current_angle, fraction)
-		_write_instance(_render_buffer, slot, position, angle + _texture_rotation)
+		_write_instance(_render_buffer, slot, position, angle + _texture_rotation, _projectile_extent(projectile))
 	_batch.multimesh.set_buffer(_render_buffer)
 
 
@@ -252,7 +252,7 @@ func _refresh_debug_snapshots(interpolation_fraction: float) -> void:
 			"detailed": false,
 			"handle": _handles[slot],
 			"slot": slot,
-			"transform": Transform2D(angle, PROJECTILE_EXTENT, 0.0, render_position),
+			"transform": Transform2D(angle, _projectile_extent(projectile), 0.0, render_position),
 			"color": Color.WHITE,
 		}
 
@@ -314,16 +314,28 @@ func _remove_active_slot(slot: int) -> void:
 	_dense_index_by_slot[slot] = -1
 
 
-func _write_instance(buffer: PackedFloat32Array, slot: int, origin: Vector2, angle: float) -> void:
+func _projectile_extent(projectile: TherapyProjectile) -> Vector2:
+	if projectile == null or not projectile.hostile_mode:
+		return PROJECTILE_EXTENT
+	return Vector2(PROJECTILE_EXTENT.x, PROJECTILE_EXTENT.y * projectile.hostile_width_multiplier)
+
+
+func _write_instance(
+	buffer: PackedFloat32Array,
+	slot: int,
+	origin: Vector2,
+	angle: float,
+	extent: Vector2 = PROJECTILE_EXTENT
+) -> void:
 	var offset := slot * MULTIMESH_STRIDE_2D
 	var cosine := cos(angle)
 	var sine := sin(angle)
-	buffer[offset] = cosine * PROJECTILE_EXTENT.x
-	buffer[offset + 1] = -sine * PROJECTILE_EXTENT.y
+	buffer[offset] = cosine * extent.x
+	buffer[offset + 1] = -sine * extent.y
 	buffer[offset + 2] = 0.0
 	buffer[offset + 3] = origin.x
-	buffer[offset + 4] = sine * PROJECTILE_EXTENT.x
-	buffer[offset + 5] = cosine * PROJECTILE_EXTENT.y
+	buffer[offset + 4] = sine * extent.x
+	buffer[offset + 5] = cosine * extent.y
 	buffer[offset + 6] = 0.0
 	buffer[offset + 7] = origin.y
 

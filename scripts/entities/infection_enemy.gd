@@ -43,6 +43,8 @@ var runtime_defense: float = 0.0
 var incoming_player_damage_multiplier: float = 1.0
 var body_role: int = EnemySpawnRequest.BodyRole.MOBILE
 var obstacle_traversal: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
+var projectile_attack_speed_multiplier: float = 1.0
+var projectile_width_multiplier: float = 1.0
 var phase_minions: PackedInt32Array = PackedInt32Array()
 var next_phase_index: int = 0
 var contact_cooldown: float = 0.0
@@ -125,6 +127,8 @@ func configure(
 	incoming_player_damage_multiplier = 1.0
 	body_role = body_role_value
 	obstacle_traversal = obstacle_traversal_value
+	projectile_attack_speed_multiplier = 1.0
+	projectile_width_multiplier = 1.0
 	phase_minions = boss_phases
 	next_phase_index = 0
 	contact_cooldown = 0.0
@@ -175,6 +179,8 @@ func recycle() -> void:
 	incoming_player_damage_multiplier = 1.0
 	body_role = EnemySpawnRequest.BodyRole.MOBILE
 	obstacle_traversal = EnemySpawnRequest.ObstacleTraversal.DEFAULT
+	projectile_attack_speed_multiplier = 1.0
+	projectile_width_multiplier = 1.0
 	phase_minions = PackedInt32Array()
 	status_speed_multipliers.clear()
 	status_contact_multipliers.clear()
@@ -215,6 +221,17 @@ func resolved_obstacle_traversal() -> int:
 	if definition != null and definition.is_boss:
 		return EnemySpawnRequest.ObstacleTraversal.PHASE_THROUGH
 	return EnemySpawnRequest.ObstacleTraversal.FLOW_AROUND
+
+
+func configure_projectile_modifiers(attack_speed_multiplier: float, width_multiplier: float) -> void:
+	projectile_attack_speed_multiplier = maxf(attack_speed_multiplier, 0.01)
+	projectile_width_multiplier = maxf(width_multiplier, 0.1)
+
+
+func resolved_projectile_interval() -> float:
+	if definition == null or definition.projectile_interval <= 0.0:
+		return 0.0
+	return definition.projectile_interval / projectile_attack_speed_multiplier
 
 
 func combat_resistance_profile() -> ResistanceProfile:

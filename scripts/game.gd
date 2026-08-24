@@ -2516,7 +2516,10 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 		phase,
 		move_speed,
 		1050.0,
-		config.boss_wave_amplitude if role == EnemyAttackDirector.Role.BOSS else 44.0
+		config.boss_wave_amplitude if role == EnemyAttackDirector.Role.BOSS else 44.0,
+		false,
+		-1,
+		source.projectile_width_multiplier
 	)
 
 
@@ -2531,7 +2534,8 @@ func _spawn_hostile_projectile(
 	max_distance: float = 1050.0,
 	wave_amplitude: float = 44.0,
 	critical_pressure: bool = false,
-	gate_id: int = -1
+	gate_id: int = -1,
+	projectile_width_multiplier: float = 1.0
 ) -> bool:
 	if projectile_world == null or hostile_projectile_renderer == null or not is_instance_valid(avatar):
 		return false
@@ -2560,7 +2564,9 @@ func _spawn_hostile_projectile(
 		phase,
 		move_speed,
 		max_distance,
-		wave_amplitude
+		wave_amplitude,
+		180.0,
+		projectile_width_multiplier
 	)
 	projectile.global_position = origin
 	projectile.reset_visual_motion()
@@ -2907,6 +2913,10 @@ func _spawn_enemy(
 func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnRequest) -> void:
 	if enemy == null or request == null:
 		return
+	enemy.configure_projectile_modifiers(
+		float(request.metadata.get("projectile_attack_speed_multiplier", 1.0)),
+		float(request.metadata.get("projectile_width_multiplier", 1.0))
+	)
 	if bool(request.metadata.get("case_pressure_target", false)):
 		_register_case_pressure_target(enemy, StringName(request.metadata.get("pressure_behavior", &"stationary_fan")))
 	if request.source_id == &"hidden_nest":
@@ -4113,12 +4123,16 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 	var planned_sector := int(event.get(&"spawn_sector", 0))
 	var spawn_position := _case_pressure_spawn_position(planned_sector, _enemy_body_radius(&"minor_focus"))
 	var stationary_fan := config.case_pressure_targets_stationary
+	var pressure_plan := config.case_pressure_plan
+	var target_movement_multiplier := (
+		pressure_plan.target_movement_speed_multiplier if pressure_plan != null else 1.0
+	)
 	var request := EnemySpawnRequest.create(
 		&"minor_focus",
 		spawn_position,
 		&"infection_focus",
 		config.case_pressure_target_health_multiplier,
-		0.0 if stationary_fan else config.enemy_speed_multiplier,
+		0.0 if stationary_fan else config.enemy_speed_multiplier * target_movement_multiplier,
 		config.contact_damage_multiplier,
 		PackedInt32Array(),
 		EnemySpawnRequest.Priority.CRITICAL,
@@ -4128,6 +4142,12 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 	request.metadata["pressure_behavior"] = &"stationary_fan" if stationary_fan else &"ambient_focus"
 	request.metadata["preserve_spawn_position"] = true
 	request.metadata["spawn_sector"] = case_pressure_last_spawn_sector
+	request.metadata["projectile_attack_speed_multiplier"] = (
+		pressure_plan.target_attack_speed_multiplier if pressure_plan != null else 1.0
+	)
+	request.metadata["projectile_width_multiplier"] = (
+		pressure_plan.target_projectile_width_multiplier if pressure_plan != null else 1.0
+	)
 	if stationary_fan:
 		request.configure_body_interaction(
 			EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE,

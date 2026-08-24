@@ -294,16 +294,20 @@ Attack-Speed-Ausbaupfade reserviert.
 
 | Gegner | Leben | Tempo | Berührungsschaden | Projektil | Schadenstyp | Erfahrung | Größenklasse | Resistenzen (Rating; positiv effektiv) |
 |---|---:|---:|---:|---:|---|---:|---:|---|
-| Bakterium | 22 | 62 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
-| Bakteriengruppe | 74 | 62 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
-| Kleiner Herd | 180 | 28 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
-| Bakterienkern | 900 | 48 | 6 | – | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
-| Infektionsherd | 2.200 | 52 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Bakterium | 22 | 71 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
+| Bakteriengruppe | 74 | 71 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
+| Kleiner Herd | 180 | 32 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
+| Bakterienkern | 900 | 55 | 6 | – | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Infektionsherd | 2.200 | 60 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
 erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
 sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
 Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
+Der geskriptete mobile Eventherd in Fall 1 bildet die einzige Ausnahme: Er
+verwendet ganzzahliges Basistempo 46, feuert alle 2,08 Sekunden und seine
+normalen Projektile besitzen 1,5-fache Querbreite und Trefferfläche. Andere
+kleine Herde behalten das Tabellenprofil.
 
 Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile mit 212,5 Tempo auf
 gespiegelten, gegenüber dem vorherigen Stand um 25 Prozent weiter ausgelenkten
