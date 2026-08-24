@@ -13,4 +13,3 @@ static func create(hint_id: StringName, trigger_id: StringName, display_title: S
 	definition.title = display_title
 	definition.text = body
 	return definition
-
