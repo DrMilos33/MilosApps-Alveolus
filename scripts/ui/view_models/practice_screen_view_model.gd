@@ -3,95 +3,104 @@ extends RefCounted
 
 ## Immutable presentation data for PracticeScreen.
 ##
-## Domain objects are deliberately converted before they reach this boundary.
-## Every child value is copied on construction and on read so callers cannot
-## mutate a model that has already been applied by the screen.
+## The integration layer decides whether local tests are visible and converts
+## practice definitions into these primitive offers. No save, progression or
+## platform/debug service crosses this boundary.
 
 
-class OfflineResearchViewModel extends RefCounted:
-	var _stored_text: String
-	var _capacity_text: String
-	var _claim_button_text: String
-	var _claimable_amount: int
-	var _claim_enabled: bool
+class ScenarioOfferViewModel extends RefCounted:
+	var _id: StringName
+	var _title: String
+	var _description: String
+	var _facts_text: String
+	var _enabled: bool
+	var _requires_boss_profile: bool
 
 
 	static func create(
-		stored_text_value: String,
-		capacity_text_value: String,
-		claim_button_text_value: String,
-		claimable_amount_value: int,
-		claim_enabled_value: bool
-	) -> OfflineResearchViewModel:
-		var model := OfflineResearchViewModel.new()
-		model._stored_text = stored_text_value
-		model._capacity_text = capacity_text_value
-		model._claim_button_text = claim_button_text_value
-		model._claimable_amount = maxi(0, claimable_amount_value)
-		model._claim_enabled = claim_enabled_value and model._claimable_amount > 0
+		id_value: StringName,
+		title_value: String,
+		description_value: String,
+		facts_text_value: String,
+		enabled_value: bool = true,
+		requires_boss_profile_value: bool = false
+	) -> ScenarioOfferViewModel:
+		var model := ScenarioOfferViewModel.new()
+		model._id = id_value
+		model._title = title_value
+		model._description = description_value
+		model._facts_text = facts_text_value
+		model._enabled = enabled_value and id_value != &""
+		model._requires_boss_profile = requires_boss_profile_value
 		return model
 
 
-	func stored_text() -> String:
-		return _stored_text
+	func id() -> StringName:
+		return _id
 
 
-	func capacity_text() -> String:
-		return _capacity_text
+	func title() -> String:
+		return _title
 
 
-	func claim_button_text() -> String:
-		return _claim_button_text
+	func description() -> String:
+		return _description
 
 
-	func claimable_amount() -> int:
-		return _claimable_amount
+	func facts_text() -> String:
+		return _facts_text
 
 
-	func claim_enabled() -> bool:
-		return _claim_enabled
+	func enabled() -> bool:
+		return _enabled
 
 
-	func duplicate_value() -> OfflineResearchViewModel:
+	func requires_boss_profile() -> bool:
+		return _requires_boss_profile
+
+
+	func duplicate_value() -> ScenarioOfferViewModel:
 		return create(
-			_stored_text,
-			_capacity_text,
-			_claim_button_text,
-			_claimable_amount,
-			_claim_enabled
+			_id,
+			_title,
+			_description,
+			_facts_text,
+			_enabled,
+			_requires_boss_profile
 		)
 
 
 	func content_signature() -> Array:
 		return [
-			_stored_text,
-			_capacity_text,
-			_claim_button_text,
-			_claimable_amount,
-			_claim_enabled,
+			_id,
+			_title,
+			_description,
+			_facts_text,
+			_enabled,
+			_requires_boss_profile,
 		]
 
 
-class ClinicJobOfferViewModel extends RefCounted:
+class BossProfileOfferViewModel extends RefCounted:
 	var _id: StringName
 	var _title: String
-	var _duration_text: String
-	var _reward_text: String
+	var _description: String
+	var _facts_text: String
 	var _enabled: bool
 
 
 	static func create(
 		id_value: StringName,
 		title_value: String,
-		duration_text_value: String,
-		reward_text_value: String,
+		description_value: String,
+		facts_text_value: String,
 		enabled_value: bool = true
-	) -> ClinicJobOfferViewModel:
-		var model := ClinicJobOfferViewModel.new()
+	) -> BossProfileOfferViewModel:
+		var model := BossProfileOfferViewModel.new()
 		model._id = id_value
 		model._title = title_value
-		model._duration_text = duration_text_value
-		model._reward_text = reward_text_value
+		model._description = description_value
+		model._facts_text = facts_text_value
 		model._enabled = enabled_value and id_value != &""
 		return model
 
@@ -104,172 +113,65 @@ class ClinicJobOfferViewModel extends RefCounted:
 		return _title
 
 
-	func duration_text() -> String:
-		return _duration_text
+	func description() -> String:
+		return _description
 
 
-	func reward_text() -> String:
-		return _reward_text
+	func facts_text() -> String:
+		return _facts_text
 
 
 	func enabled() -> bool:
 		return _enabled
 
 
-	func duplicate_value() -> ClinicJobOfferViewModel:
-		return create(_id, _title, _duration_text, _reward_text, _enabled)
+	func duplicate_value() -> BossProfileOfferViewModel:
+		return create(_id, _title, _description, _facts_text, _enabled)
 
 
 	func content_signature() -> Array:
-		return [_id, _title, _duration_text, _reward_text, _enabled]
-
-
-class ClinicStatusViewModel extends RefCounted:
-	var _has_active_job: bool
-	var _job_id: StringName
-	var _status_text: String
-	var _completed: bool
-	var _progress_value: float
-	var _progress_maximum: float
-	var _remaining_text: String
-	var _reward_text: String
-	var _finish_text: String
-
-
-	static func idle(status_text_value: String = "Wähle einen zeitgesteuerten Fall") -> ClinicStatusViewModel:
-		return create(
-			false,
-			&"",
-			status_text_value,
-			false,
-			0.0,
-			1.0,
-			"",
-			"",
-			""
-		)
-
-
-	static func create(
-		has_active_job_value: bool,
-		job_id_value: StringName,
-		status_text_value: String,
-		completed_value: bool,
-		progress_value_value: float,
-		progress_maximum_value: float,
-		remaining_text_value: String,
-		reward_text_value: String,
-		finish_text_value: String
-	) -> ClinicStatusViewModel:
-		var model := ClinicStatusViewModel.new()
-		model._has_active_job = has_active_job_value and job_id_value != &""
-		model._job_id = job_id_value if model._has_active_job else &""
-		model._status_text = status_text_value
-		model._completed = completed_value and model._has_active_job
-		model._progress_maximum = maxf(1.0, progress_maximum_value)
-		model._progress_value = clampf(progress_value_value, 0.0, model._progress_maximum)
-		model._remaining_text = remaining_text_value
-		model._reward_text = reward_text_value
-		model._finish_text = finish_text_value
-		return model
-
-
-	func has_active_job() -> bool:
-		return _has_active_job
-
-
-	func job_id() -> StringName:
-		return _job_id
-
-
-	func status_text() -> String:
-		return _status_text
-
-
-	func completed() -> bool:
-		return _completed
-
-
-	func progress_value() -> float:
-		return _progress_value
-
-
-	func progress_maximum() -> float:
-		return _progress_maximum
-
-
-	func remaining_text() -> String:
-		return _remaining_text
-
-
-	func reward_text() -> String:
-		return _reward_text
-
-
-	func finish_text() -> String:
-		return _finish_text
-
-
-	func duplicate_value() -> ClinicStatusViewModel:
-		return create(
-			_has_active_job,
-			_job_id,
-			_status_text,
-			_completed,
-			_progress_value,
-			_progress_maximum,
-			_remaining_text,
-			_reward_text,
-			_finish_text
-		)
-
-
-	func content_signature() -> Array:
-		return [
-			_has_active_job,
-			_job_id,
-			_status_text,
-			_completed,
-			_progress_value,
-			_progress_maximum,
-			_remaining_text,
-			_reward_text,
-			_finish_text,
-		]
+		return [_id, _title, _description, _facts_text, _enabled]
 
 
 var _revision: int
 var _content_hash: int
-var _job_offers_hash: int
-var _research_balance_text: String
-var _offline: OfflineResearchViewModel
-var _clinic: ClinicStatusViewModel
-var _job_offers: Array[ClinicJobOfferViewModel] = []
+var _scenario_offers_hash: int
+var _boss_profile_offers_hash: int
+var _tests_visible: bool
+var _selected_scenario_id: StringName
+var _selected_boss_profile_id: StringName
+var _scenario_offers: Array[ScenarioOfferViewModel] = []
+var _boss_profile_offers: Array[BossProfileOfferViewModel] = []
 
 
 func _init() -> void:
-	_offline = OfflineResearchViewModel.create("", "", "", 0, false)
-	_clinic = ClinicStatusViewModel.idle()
-	_job_offers_hash = hash([])
+	_scenario_offers_hash = hash([])
+	_boss_profile_offers_hash = hash([])
 	_content_hash = hash(_content_signature())
 
 
 static func create(
 	revision_value: int,
-	research_balance_text_value: String,
-	offline_value: OfflineResearchViewModel,
-	clinic_value: ClinicStatusViewModel,
-	job_offer_values: Array
+	tests_visible_value: bool,
+	selected_scenario_id_value: StringName,
+	selected_boss_profile_id_value: StringName,
+	scenario_offer_values: Array,
+	boss_profile_offer_values: Array
 ) -> PracticeScreenViewModel:
 	var model := PracticeScreenViewModel.new()
 	model._revision = maxi(0, revision_value)
-	model._research_balance_text = research_balance_text_value
-	model._offline = offline_value.duplicate_value() if offline_value != null else OfflineResearchViewModel.create("", "", "", 0, false)
-	model._clinic = clinic_value.duplicate_value() if clinic_value != null else ClinicStatusViewModel.idle()
-	for offer_value in job_offer_values:
-		if offer_value is ClinicJobOfferViewModel:
-			model._job_offers.append((offer_value as ClinicJobOfferViewModel).duplicate_value())
-	model._job_offers_hash = hash(model._job_offer_signatures())
+	model._tests_visible = tests_visible_value
+	for offer_value in scenario_offer_values:
+		if offer_value is ScenarioOfferViewModel:
+			model._scenario_offers.append((offer_value as ScenarioOfferViewModel).duplicate_value())
+	for profile_value in boss_profile_offer_values:
+		if profile_value is BossProfileOfferViewModel:
+			model._boss_profile_offers.append((profile_value as BossProfileOfferViewModel).duplicate_value())
+	model._selected_scenario_id = model._validated_scenario_id(selected_scenario_id_value)
+	if model.selected_scenario_requires_boss_profile():
+		model._selected_boss_profile_id = model._validated_boss_profile_id(selected_boss_profile_id_value)
+	model._scenario_offers_hash = hash(model._scenario_offer_signatures())
+	model._boss_profile_offers_hash = hash(model._boss_profile_offer_signatures())
 	model._content_hash = hash(model._content_signature())
 	return model
 
@@ -282,50 +184,102 @@ func content_hash() -> int:
 	return _content_hash
 
 
-func job_offers_hash() -> int:
-	return _job_offers_hash
+func scenario_offers_hash() -> int:
+	return _scenario_offers_hash
 
 
-func research_balance_text() -> String:
-	return _research_balance_text
+func boss_profile_offers_hash() -> int:
+	return _boss_profile_offers_hash
 
 
-func offline() -> OfflineResearchViewModel:
-	return _offline.duplicate_value()
+func tests_visible() -> bool:
+	return _tests_visible
 
 
-func clinic() -> ClinicStatusViewModel:
-	return _clinic.duplicate_value()
+func selected_scenario_id() -> StringName:
+	return _selected_scenario_id
 
 
-func job_offers() -> Array[ClinicJobOfferViewModel]:
-	var result: Array[ClinicJobOfferViewModel] = []
-	for offer in _job_offers:
+func selected_boss_profile_id() -> StringName:
+	return _selected_boss_profile_id
+
+
+func selected_scenario_requires_boss_profile() -> bool:
+	for offer in _scenario_offers:
+		if offer.id() == _selected_scenario_id:
+			return offer.requires_boss_profile()
+	return false
+
+
+func scenario_offers() -> Array[ScenarioOfferViewModel]:
+	var result: Array[ScenarioOfferViewModel] = []
+	for offer in _scenario_offers:
 		result.append(offer.duplicate_value())
 	return result
 
 
-func job_offer_count() -> int:
-	return _job_offers.size()
+func scenario_offer_count() -> int:
+	return _scenario_offers.size()
 
 
-func job_offer_at(index: int) -> ClinicJobOfferViewModel:
-	if index < 0 or index >= _job_offers.size():
+func scenario_offer_at(index: int) -> ScenarioOfferViewModel:
+	if index < 0 or index >= _scenario_offers.size():
 		return null
-	return _job_offers[index].duplicate_value()
+	return _scenario_offers[index].duplicate_value()
+
+
+func boss_profile_offers() -> Array[BossProfileOfferViewModel]:
+	var result: Array[BossProfileOfferViewModel] = []
+	for offer in _boss_profile_offers:
+		result.append(offer.duplicate_value())
+	return result
+
+
+func boss_profile_offer_count() -> int:
+	return _boss_profile_offers.size()
+
+
+func boss_profile_offer_at(index: int) -> BossProfileOfferViewModel:
+	if index < 0 or index >= _boss_profile_offers.size():
+		return null
+	return _boss_profile_offers[index].duplicate_value()
+
+
+func _validated_scenario_id(candidate: StringName) -> StringName:
+	if not _tests_visible:
+		return &""
+	for offer in _scenario_offers:
+		if offer.id() == candidate and offer.enabled():
+			return candidate
+	return &""
+
+
+func _validated_boss_profile_id(candidate: StringName) -> StringName:
+	for offer in _boss_profile_offers:
+		if offer.id() == candidate and offer.enabled():
+			return candidate
+	return &""
 
 
 func _content_signature() -> Array:
 	return [
-		_research_balance_text,
-		_offline.content_signature(),
-		_clinic.content_signature(),
-		_job_offer_signatures(),
+		_tests_visible,
+		_selected_scenario_id,
+		_selected_boss_profile_id,
+		_scenario_offer_signatures(),
+		_boss_profile_offer_signatures(),
 	]
 
 
-func _job_offer_signatures() -> Array:
-	var offer_signatures: Array = []
-	for offer in _job_offers:
-		offer_signatures.append(offer.content_signature())
-	return offer_signatures
+func _scenario_offer_signatures() -> Array:
+	var signatures: Array = []
+	for offer in _scenario_offers:
+		signatures.append(offer.content_signature())
+	return signatures
+
+
+func _boss_profile_offer_signatures() -> Array:
+	var signatures: Array = []
+	for offer in _boss_profile_offers:
+		signatures.append(offer.content_signature())
+	return signatures

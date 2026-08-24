@@ -4,47 +4,41 @@ extends Control
 ## Bio-Lumen Practice screen.
 ##
 ## The screen consumes immutable PracticeScreenViewModel values and emits only
-## user intent. GameHUD can therefore retain its current public facade while a
-## presenter converts runtime data outside this module.
+## local test selection intent. Visibility policy and run construction remain
+## outside this module so release/debug decisions never depend on OS state here.
 
-signal offline_claim_requested
-signal clinic_job_start_requested(id: StringName)
-signal clinic_job_claim_requested
+signal scenario_selected(id: StringName)
+signal boss_profile_selected(id: StringName)
 signal back_requested
 
 const PracticeScreenViewModelType := preload("res://scripts/ui/view_models/practice_screen_view_model.gd")
 const ROUTE_ID := &"practice"
 const WIDE_LAYOUT_MINIMUM := 920.0
+const TWO_COLUMN_MINIMUM := 620.0
+const BOSS_TWO_COLUMN_MINIMUM := 760.0
 
 var _page_shell: PanelContainer
 var _scroll: ScrollContainer
 var _body: VBoxContainer
-var _columns: GridContainer
-var _research_badge: PanelContainer
-var _research_balance: Label
+var _tests_content: VBoxContainer
+var _availability_notice: PanelContainer
+
+var _scenario_card: PanelContainer
+var _scenario_grid: GridContainer
+var _boss_card: PanelContainer
+var _boss_grid: GridContainer
 
 var _back_button: Button
-var _offline_card: PanelContainer
-var _offline_stored_value: Label
-var _offline_capacity_value: Label
-var _offline_claim_button: Button
-
-var _clinic_card: PanelContainer
-var _clinic_status: Label
-var _clinic_progress: ProgressBar
-var _clinic_active_details: VBoxContainer
-var _clinic_remaining_row: PanelContainer
-var _clinic_remaining_value: Label
-var _clinic_reward_value: Label
-var _clinic_finish_value: Label
-var _clinic_offers: VBoxContainer
-var _clinic_claim_button: Button
-var _job_buttons: Dictionary = {}
+var _scenario_buttons: Dictionary = {}
+var _boss_profile_buttons: Dictionary = {}
 
 var _has_applied_model := false
 var _applied_revision := -1
 var _applied_content_hash := 0
-var _applied_job_offers_hash := 0
+var _applied_scenario_offers_hash := 0
+var _applied_boss_profile_offers_hash := 0
+var _selected_scenario_id: StringName = &""
+var _selected_boss_profile_id: StringName = &""
 
 
 func _init() -> void:
@@ -76,35 +70,24 @@ func apply_view_model(view_model: PracticeScreenViewModelType) -> bool:
 		_applied_revision = next_revision
 		return false
 
-	_research_balance.text = view_model.research_balance_text()
-	var offline := view_model.offline()
-	_offline_stored_value.text = offline.stored_text()
-	_offline_capacity_value.text = offline.capacity_text()
-	_set_button_caption(_offline_claim_button, offline.claim_button_text())
-	_offline_claim_button.set_meta(&"claimable_amount", offline.claimable_amount())
-	AlveolusUIComponents.set_button_disabled(_offline_claim_button, not offline.claim_enabled())
+	if not _has_applied_model or view_model.scenario_offers_hash() != _applied_scenario_offers_hash:
+		_rebuild_scenario_offers(view_model.scenario_offers())
+	if not _has_applied_model or view_model.boss_profile_offers_hash() != _applied_boss_profile_offers_hash:
+		_rebuild_boss_profile_offers(view_model.boss_profile_offers())
 
-	var clinic := view_model.clinic()
-	var has_active_job := clinic.has_active_job()
-	var completed := clinic.completed()
-	_clinic_status.text = clinic.status_text()
-	_clinic_progress.visible = has_active_job and not completed
-	_clinic_progress.max_value = clinic.progress_maximum()
-	_clinic_progress.value = clinic.progress_value()
-	_clinic_active_details.visible = has_active_job
-	_clinic_remaining_row.visible = has_active_job and not completed
-	_clinic_remaining_value.text = clinic.remaining_text()
-	_clinic_reward_value.text = clinic.reward_text()
-	_clinic_finish_value.text = clinic.finish_text()
-	_clinic_offers.visible = not has_active_job
-	_clinic_claim_button.visible = completed
-	if not _has_applied_model or view_model.job_offers_hash() != _applied_job_offers_hash:
-		_rebuild_job_offers(view_model.job_offers())
+	_selected_scenario_id = view_model.selected_scenario_id()
+	_selected_boss_profile_id = view_model.selected_boss_profile_id()
+	var tests_are_visible := view_model.tests_visible()
+	_tests_content.visible = tests_are_visible
+	_availability_notice.visible = not tests_are_visible
+	_boss_card.visible = tests_are_visible and view_model.selected_scenario_requires_boss_profile()
+	_update_selected_states()
 
 	_has_applied_model = true
 	_applied_revision = next_revision
 	_applied_content_hash = view_model.content_hash()
-	_applied_job_offers_hash = view_model.job_offers_hash()
+	_applied_scenario_offers_hash = view_model.scenario_offers_hash()
+	_applied_boss_profile_offers_hash = view_model.boss_profile_offers_hash()
 	return true
 
 
@@ -116,18 +99,27 @@ func applied_content_hash() -> int:
 	return _applied_content_hash
 
 
+func tests_visible() -> bool:
+	return _tests_content.visible
+
+
+func boss_profile_selection_visible() -> bool:
+	return _boss_card.visible
+
+
 func layout_columns() -> int:
-	return _columns.columns
+	return _scenario_grid.columns
+
+
+func boss_layout_columns() -> int:
+	return _boss_grid.columns
 
 
 func default_focus_control() -> Control:
-	if _offline_claim_button.visible and not _offline_claim_button.disabled:
-		return _offline_claim_button
-	if _clinic_claim_button.visible and not _clinic_claim_button.disabled:
-		return _clinic_claim_button
-	for child in _clinic_offers.get_children():
-		if child is Button and not (child as Button).disabled:
-			return child as Button
+	if _tests_content.visible:
+		for child in _scenario_grid.get_children():
+			if child is Button and not (child as Button).disabled:
+				return child as Button
 	return _back_button
 
 
@@ -135,24 +127,12 @@ func back_action() -> Button:
 	return _back_button
 
 
-func offline_claim_action() -> Button:
-	return _offline_claim_button
+func scenario_action(id: StringName) -> Button:
+	return _scenario_buttons.get(id) as Button
 
 
-func clinic_claim_action() -> Button:
-	return _clinic_claim_button
-
-
-func clinic_job_action(id: StringName) -> Button:
-	return _job_buttons.get(id) as Button
-
-
-func clinic_progress_control() -> ProgressBar:
-	return _clinic_progress
-
-
-func clinic_offers_visible() -> bool:
-	return _clinic_offers.visible
+func boss_profile_action(id: StringName) -> Button:
+	return _boss_profile_buttons.get(id) as Button
 
 
 func _build() -> void:
@@ -179,7 +159,8 @@ func _build() -> void:
 	_body.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_body.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
 	_scroll.add_child(_body)
-	_build_columns()
+	_build_availability_notice()
+	_build_test_content()
 
 	var shell_parts := AlveolusUIComponents.page_shell(
 		header_parts["panel"] as Control,
@@ -191,170 +172,162 @@ func _build() -> void:
 	add_child(_page_shell)
 
 
-func _build_columns() -> void:
-	_columns = GridContainer.new()
-	_columns.name = "PracticeColumns"
-	_columns.columns = 2
-	_columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_columns.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_columns.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
-	_columns.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTENT_GAP)
-	_body.add_child(_columns)
-	_build_offline_card()
-	_build_clinic_card()
-
-
-func _build_offline_card() -> void:
-	_offline_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
-	_offline_card.name = "OfflineResearchCard"
-	_offline_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_offline_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_columns.add_child(_offline_card)
-
+func _build_availability_notice() -> void:
+	_availability_notice = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
+	_availability_notice.name = "PracticeAvailabilityNotice"
+	_availability_notice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var content := VBoxContainer.new()
-	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
-	var heading_row := HBoxContainer.new()
-	heading_row.name = "OfflineResearchHeading"
-	heading_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	var heading := AlveolusUIComponents.section_header(
-		"",
-		"Automatische Forschung",
-		"Gespeicherte Forschung kann jederzeit abgeholt werden."
-	)
-	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading_row.add_child(heading)
-	_research_badge = AlveolusUIComponents.badge("Forschung 0", AlveolusVisualTheme.GOLD)
-	_research_badge.name = "ResearchBalance"
-	_research_badge.size_flags_horizontal = Control.SIZE_SHRINK_END
-	_research_badge.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	heading_row.add_child(_research_badge)
-	_research_balance = _last_label(_research_badge)
-	content.add_child(heading_row)
-	var stored_row := AlveolusUIComponents.value_row("Gespeichert", "–", true)
-	content.add_child(stored_row)
-	_offline_stored_value = _last_label(stored_row)
-	var capacity_row := AlveolusUIComponents.value_row("Kapazität", "8 Stunden")
-	content.add_child(capacity_row)
-	_offline_capacity_value = _last_label(capacity_row)
-	_offline_claim_button = AlveolusUIComponents.action_button(
-		"Noch nichts abholbar",
-		AlveolusUIComponents.ACTION_PRIMARY,
-		&"research",
-		AlveolusVisualTheme.TEAL
-	)
-	_offline_claim_button.name = "OfflineClaimAction"
-	_offline_claim_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_offline_claim_button.pressed.connect(func() -> void: offline_claim_requested.emit())
-	content.add_child(_offline_claim_button)
-	_offline_card.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	content.add_child(AlveolusUIComponents.section_header(
+		"LOKALE TESTLÄUFE",
+		"In diesem Build nicht verfügbar",
+		"Die Sichtbarkeit wird von der Einsatzplanung vorgegeben."
+	))
+	_availability_notice.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	_body.add_child(_availability_notice)
 
 
-func _build_clinic_card() -> void:
-	_clinic_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
-	_clinic_card.name = "ClinicCard"
-	_clinic_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_clinic_card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_columns.add_child(_clinic_card)
+func _build_test_content() -> void:
+	_tests_content = VBoxContainer.new()
+	_tests_content.name = "PracticeTests"
+	_tests_content.visible = false
+	_tests_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tests_content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	_body.add_child(_tests_content)
+	_build_scenario_card()
+	_build_boss_card()
 
+
+func _build_scenario_card() -> void:
+	_scenario_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
+	_scenario_card.name = "ScenarioSelectionCard"
+	_scenario_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
 	content.add_child(AlveolusUIComponents.section_header(
-		"",
-		"Klinikfall",
-		"Ein aktiver Slot"
+		"LOKALE TESTLÄUFE",
+		"Testumgebung wählen",
+		"Diese Läufe erzeugen keinen Fortschritt und verändern keinen Spielstand."
 	))
-	_clinic_status = AlveolusUIComponents.label(
-		"Wähle einen zeitgesteuerten Fall.",
-		AlveolusVisualTheme.TYPE_BODY_LABEL
-	)
-	_clinic_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(_clinic_status)
-	_clinic_progress = AlveolusUIComponents.progress(0.0, 1.0, false)
-	_clinic_progress.name = "ClinicProgress"
-	_clinic_progress.visible = false
-	content.add_child(_clinic_progress)
-
-	_clinic_active_details = VBoxContainer.new()
-	_clinic_active_details.name = "ClinicActiveDetails"
-	_clinic_active_details.visible = false
-	_clinic_active_details.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	content.add_child(_clinic_active_details)
-	_clinic_remaining_row = AlveolusUIComponents.value_row("Verbleibend", "")
-	_clinic_active_details.add_child(_clinic_remaining_row)
-	_clinic_remaining_value = _last_label(_clinic_remaining_row)
-	var reward_row := AlveolusUIComponents.value_row("Belohnung", "", true)
-	_clinic_active_details.add_child(reward_row)
-	_clinic_reward_value = _last_label(reward_row)
-	var finish_row := AlveolusUIComponents.value_row("Abschluss", "")
-	_clinic_active_details.add_child(finish_row)
-	_clinic_finish_value = _last_label(finish_row)
-
-	_clinic_offers = VBoxContainer.new()
-	_clinic_offers.name = "ClinicOffers"
-	_clinic_offers.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	content.add_child(_clinic_offers)
-	_clinic_claim_button = AlveolusUIComponents.action_button(
-		"Belohnung abholen",
-		AlveolusUIComponents.ACTION_PRIMARY,
-		&"check",
-		AlveolusVisualTheme.TEAL
-	)
-	_clinic_claim_button.name = "ClinicClaimAction"
-	_clinic_claim_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_clinic_claim_button.visible = false
-	_clinic_claim_button.pressed.connect(func() -> void: clinic_job_claim_requested.emit())
-	content.add_child(_clinic_claim_button)
-	_clinic_card.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	_scenario_grid = GridContainer.new()
+	_scenario_grid.name = "ScenarioOffers"
+	_scenario_grid.columns = 3
+	_scenario_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scenario_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
+	_scenario_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTENT_GAP)
+	content.add_child(_scenario_grid)
+	_scenario_card.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	_tests_content.add_child(_scenario_card)
 
 
-func _rebuild_job_offers(offers: Array) -> void:
-	for child in _clinic_offers.get_children():
-		_clinic_offers.remove_child(child)
-		child.free()
-	_job_buttons.clear()
+func _build_boss_card() -> void:
+	_boss_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
+	_boss_card.name = "BossProfileSelectionCard"
+	_boss_card.visible = false
+	_boss_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	content.add_child(AlveolusUIComponents.section_header(
+		"BOSS-TEST",
+		"Bossprofil wählen",
+		"Jedes Profil übernimmt Leben, Tempo, Angriff und Phasen vollständig."
+	))
+	_boss_grid = GridContainer.new()
+	_boss_grid.name = "BossProfileOffers"
+	_boss_grid.columns = 2
+	_boss_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_boss_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
+	_boss_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	content.add_child(_boss_grid)
+	_boss_card.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	_tests_content.add_child(_boss_card)
+
+
+func _rebuild_scenario_offers(offers: Array) -> void:
+	_clear_offer_controls(_scenario_grid, _scenario_buttons)
 	for offer in offers:
-		var button := AlveolusUIComponents.choice_row(
+		var button := AlveolusUIComponents.choice_card(
 			offer.title(),
-			offer.duration_text(),
-			offer.reward_text(),
+			offer.description(),
+			offer.facts_text(),
 			false,
 			not offer.enabled()
 		)
-		button.name = "ClinicOffer_%s" % String(offer.id())
+		button.name = "Scenario_%s" % String(offer.id())
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.set_meta(&"clinic_job_id", offer.id())
-		button.pressed.connect(_emit_clinic_job_start.bind(offer.id()))
+		button.set_meta(&"practice_scenario_id", offer.id())
+		button.pressed.connect(_emit_scenario_selected.bind(offer.id()))
 		AlveolusUIComponents.set_button_disabled(button, not offer.enabled())
-		_clinic_offers.add_child(button)
-		_job_buttons[offer.id()] = button
+		_scenario_grid.add_child(button)
+		_scenario_buttons[offer.id()] = button
 
 
-func _emit_clinic_job_start(id: StringName) -> void:
-	clinic_job_start_requested.emit(id)
+func _rebuild_boss_profile_offers(offers: Array) -> void:
+	_clear_offer_controls(_boss_grid, _boss_profile_buttons)
+	for offer in offers:
+		var button := AlveolusUIComponents.choice_row(
+			offer.title(),
+			offer.description(),
+			offer.facts_text(),
+			false,
+			not offer.enabled()
+		)
+		button.name = "BossProfile_%s" % String(offer.id())
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.set_meta(&"practice_boss_profile_id", offer.id())
+		button.pressed.connect(_emit_boss_profile_selected.bind(offer.id()))
+		AlveolusUIComponents.set_button_disabled(button, not offer.enabled())
+		_boss_grid.add_child(button)
+		_boss_profile_buttons[offer.id()] = button
+
+
+func _clear_offer_controls(container: Container, controls: Dictionary) -> void:
+	for child in container.get_children():
+		container.remove_child(child)
+		child.free()
+	controls.clear()
+
+
+func _update_selected_states() -> void:
+	for id_value in _scenario_buttons:
+		var scenario_id := StringName(id_value)
+		var button := _scenario_buttons[scenario_id] as Button
+		button.theme_type_variation = (
+			AlveolusVisualTheme.TYPE_SELECTED_CARD
+			if scenario_id == _selected_scenario_id
+			else AlveolusVisualTheme.TYPE_SELECTION_CARD
+		)
+		button.set_pressed_no_signal(scenario_id == _selected_scenario_id)
+	for id_value in _boss_profile_buttons:
+		var profile_id := StringName(id_value)
+		var button := _boss_profile_buttons[profile_id] as Button
+		button.theme_type_variation = (
+			AlveolusVisualTheme.TYPE_SELECTED_CHOICE_ROW
+			if profile_id == _selected_boss_profile_id
+			else AlveolusVisualTheme.TYPE_CHOICE_ROW
+		)
+		button.set_pressed_no_signal(profile_id == _selected_boss_profile_id)
+
+
+func _emit_scenario_selected(id: StringName) -> void:
+	scenario_selected.emit(id)
+
+
+func _emit_boss_profile_selected(id: StringName) -> void:
+	boss_profile_selected.emit(id)
 
 
 func _update_responsive_layout() -> void:
-	if _columns == null:
+	if _scenario_grid == null:
 		return
 	var logical_width := size.x
 	if logical_width <= 0.0 and get_viewport() != null:
 		logical_width = get_viewport_rect().size.x
-	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, logical_width < 620.0)
-	_columns.columns = 2 if logical_width >= WIDE_LAYOUT_MINIMUM else 1
-
-
-func _set_button_caption(button: Button, value: String) -> void:
-	if button is IconTextButton:
-		(button as IconTextButton).set_caption(value)
+	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, logical_width < TWO_COLUMN_MINIMUM)
+	if logical_width >= WIDE_LAYOUT_MINIMUM:
+		_scenario_grid.columns = 3
+	elif logical_width >= TWO_COLUMN_MINIMUM:
+		_scenario_grid.columns = 2
 	else:
-		button.text = value
-	button.set_meta(&"alveolus_accessible_name", value)
-
-
-func _last_label(root: Node) -> Label:
-	var result: Label = root as Label
-	for child in root.get_children():
-		var nested := _last_label(child)
-		if nested != null:
-			result = nested
-	return result
+		_scenario_grid.columns = 1
+	_boss_grid.columns = 2 if logical_width >= BOSS_TWO_COLUMN_MINIMUM else 1

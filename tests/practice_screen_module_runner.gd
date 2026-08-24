@@ -22,113 +22,105 @@ func _run() -> void:
 	_check(not screen.is_processing(), "Praxis besitzt keine dauerhafte Prozessschleife")
 	_check(not screen.is_physics_processing(), "Praxis besitzt keine Physikschleife")
 	_check(screen.oversampling_with_scale == CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED, "Praxis aktiviert skalierungsabhängiges Font-Oversampling")
-	_check(screen.layout_columns() == 2, "Breite Praxis zeigt zwei inhaltshohe Spalten")
+	_check(screen.layout_columns() == 3, "Breite Praxis zeigt alle drei Tests nebeneinander")
+	_check(screen.boss_layout_columns() == 2, "Breite Praxis zeigt Bossprofile zweispaltig")
 
 	var shell := screen.get_node_or_null("PracticePageShell") as PanelContainer
 	_check(shell != null and shell.theme_type_variation == AlveolusVisualTheme.TYPE_PAGE_CANVAS, "Praxis verwendet den zentralen PageShell")
 	_check_page_header_contract(shell, "Praxis")
-	var offline_card := screen.find_child("OfflineResearchCard", true, false) as PanelContainer
-	var clinic_card := screen.find_child("ClinicCard", true, false) as PanelContainer
-	_check(offline_card != null and offline_card.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Offline-Forschung verwendet die zentrale ActionCard")
-	_check(clinic_card != null and clinic_card.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Klinikfall verwendet die zentrale ActionCard")
+	var scenario_card := screen.find_child("ScenarioSelectionCard", true, false) as PanelContainer
+	var boss_card := screen.find_child("BossProfileSelectionCard", true, false) as PanelContainer
+	_check(scenario_card != null and scenario_card.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Testauswahl verwendet die zentrale ActionCard")
+	_check(boss_card != null and boss_card.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Bossauswahl verwendet die zentrale ActionCard")
 	_check(screen.back_action().theme_type_variation == AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON, "Rückkehr verwendet die zentrale Navigation")
-	_check(screen.offline_claim_action().theme_type_variation == AlveolusVisualTheme.TYPE_PRIMARY_BUTTON, "Offline-Abholung verwendet die globale Primäraktion")
-	_check(screen.clinic_claim_action().theme_type_variation == AlveolusVisualTheme.TYPE_PRIMARY_BUTTON, "Klinikbelohnung verwendet die globale Primäraktion")
-	_check(screen.clinic_progress_control() is ProgressBar, "Klinikstatus verwendet den zentralen Fortschrittsbaustein")
 
-	var offline := PracticeViewModelScript.OfflineResearchViewModel.create(
-		"2 Std. 15 Min.",
-		"8 Stunden",
-		"4 Forschung abholen",
-		4,
-		true
-	)
-	var offers: Array = [
-		PracticeViewModelScript.ClinicJobOfferViewModel.create(&"short_review", "Kurzbefund", "10 Min.", "+6 Forschung"),
-		PracticeViewModelScript.ClinicJobOfferViewModel.create(&"follow_up", "Nachkontrolle", "30 Min.", "+14 Forschung"),
-	]
-	var idle := PracticeViewModelScript.ClinicStatusViewModel.idle()
-	var first := PracticeViewModelScript.create(1, "Forschung 12", offline, idle, offers)
-
+	var scenarios := _scenario_offers()
+	var profiles := _boss_profile_offers()
+	var first := PracticeViewModelScript.create(1, true, &"spawn_test", &"", scenarios, profiles)
 	_check(first.revision() == 1, "ViewModel bewahrt seine Revision")
 	_check(first.content_hash() != 0, "ViewModel liefert einen Inhalts-Hash")
-	_check(first.job_offer_count() == 2, "ViewModel bewahrt alle Klinikangebote")
-	var returned_offers: Array = first.job_offers()
-	returned_offers.clear()
-	_check(first.job_offer_count() == 2, "Ausgelesene Angebotsliste kann das ViewModel nicht verändern")
-	_check(first.job_offer_at(0) != offers[0], "Ausgelesene Kindeinträge sind tiefe Kopien")
+	_check(first.scenario_offer_count() == 3, "ViewModel bewahrt genau drei Testangebote")
+	_check(first.boss_profile_offer_count() == 4, "ViewModel bewahrt genau vier Bossprofile")
+	_check(first.selected_scenario_id() == &"spawn_test", "ViewModel bewahrt eine gültige Testauswahl")
+	_check(first.selected_boss_profile_id() == &"", "Nicht-Boss-Test verwirft eine Bossauswahl")
+	var returned_scenarios: Array = first.scenario_offers()
+	returned_scenarios.clear()
+	_check(first.scenario_offer_count() == 3, "Ausgelesene Testliste kann das ViewModel nicht verändern")
+	_check(first.scenario_offer_at(0) != scenarios[0], "Ausgelesene Testangebote sind tiefe Kopien")
+	var returned_profiles: Array = first.boss_profile_offers()
+	returned_profiles.clear()
+	_check(first.boss_profile_offer_count() == 4, "Ausgelesene Bossliste kann das ViewModel nicht verändern")
 
 	_check(screen.apply_view_model(first), "Erstes Praxis-ViewModel wird angewendet")
-	_check(screen.applied_revision() == 1 and screen.applied_content_hash() == first.content_hash(), "Screen quittiert Revision und Inhalts-Hash")
-	_check(screen.clinic_offers_visible(), "Ohne aktiven Fall bleiben Angebote sichtbar")
-	_check(screen.clinic_job_action(&"short_review") != null, "Angebot wird über stabile ID adressierbar")
-	_check(screen.default_focus_control() == screen.offline_claim_action(), "Erster sinnvoller Praxisfokus liegt auf einer verfügbaren Hauptaktion")
-	var first_offer_instance := screen.clinic_job_action(&"short_review").get_instance_id()
+	_check(screen.tests_visible(), "Integrator kann lokale Tests sichtbar schalten")
+	_check(not screen.boss_profile_selection_visible(), "Spawn-Test reserviert keinen Platz für Bossprofile")
+	_check(screen.scenario_action(&"spawn_test") != null, "Spawn-Test ist über stabile ID adressierbar")
+	_check(screen.scenario_action(&"obstacle_test") != null, "Hindernis-Test ist über stabile ID adressierbar")
+	_check(screen.scenario_action(&"boss_test") != null, "Boss-Test ist über stabile ID adressierbar")
+	_check(screen.scenario_action(&"spawn_test").theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD, "Gewählter Test verwendet die zentrale Auswahlvariante")
+	_check(screen.default_focus_control() == screen.scenario_action(&"spawn_test"), "Erster sinnvoller Praxisfokus liegt auf dem ersten Test")
+	var spawn_instance := screen.scenario_action(&"spawn_test").get_instance_id()
 
-	var second := PracticeViewModelScript.create(2, "Forschung 12", offline, idle, offers)
-	_check(second.content_hash() == first.content_hash(), "Revision gehört nicht zum Inhalts-Hash")
-	_check(not screen.apply_view_model(second), "Neue Revision mit identischem Inhalt erzeugt keinen UI-Neuaufbau")
+	var same_content := PracticeViewModelScript.create(2, true, &"spawn_test", &"", scenarios, profiles)
+	_check(same_content.content_hash() == first.content_hash(), "Revision gehört nicht zum Inhalts-Hash")
+	_check(not screen.apply_view_model(same_content), "Neue Revision mit identischem Inhalt erzeugt keinen UI-Neuaufbau")
 	_check(screen.applied_revision() == 2, "Inhaltsgleiche neue Revision wird dennoch quittiert")
-	_check(screen.clinic_job_action(&"short_review").get_instance_id() == first_offer_instance, "Idempotentes Apply bewahrt bestehende Controls")
+	_check(screen.scenario_action(&"spawn_test").get_instance_id() == spawn_instance, "Idempotentes Apply bewahrt bestehende Controls")
 	_check(not screen.apply_view_model(first), "Veraltete Revision wird verworfen")
 
-	var running := PracticeViewModelScript.ClinicStatusViewModel.create(
-		true,
-		&"short_review",
-		"Kurzbefund läuft",
-		false,
-		300.0,
-		600.0,
-		"5 Min. verbleibend",
-		"+6 Forschung",
-		"Voraussichtlich fertig um 14:30"
-	)
-	var third := PracticeViewModelScript.create(3, "Forschung 12", offline, running, offers)
-	_check(screen.apply_view_model(third), "Laufender Klinikfall aktualisiert sichtbare Werte")
-	_check(not screen.clinic_offers_visible(), "Laufender Klinikfall ersetzt Angebote ohne Leerraumreserve")
-	_check(screen.clinic_progress_control().visible, "Laufender Klinikfall zeigt Fortschritt")
-	_check(screen.clinic_job_action(&"short_review").get_instance_id() == first_offer_instance, "Reine Fortschrittsupdates bauen versteckte Angebote nicht neu")
+	var boss_selected := PracticeViewModelScript.create(3, true, &"boss_test", &"", scenarios, profiles)
+	_check(screen.apply_view_model(boss_selected), "Boss-Test-Auswahl wird angewendet")
+	_check(screen.boss_profile_selection_visible(), "Boss-Test blendet die zusätzliche Profilauswahl ein")
+	_check(screen.scenario_action(&"spawn_test").get_instance_id() == spawn_instance, "Reine Auswahländerung baut Testkarten nicht neu")
+	_check(screen.boss_profile_action(&"intro_boss") != null, "Intro-Bossprofil ist adressierbar")
+	_check(screen.boss_profile_action(&"bacterial_core") != null, "Bakterienkernprofil ist adressierbar")
+	_check(screen.boss_profile_action(&"diamond_infection_focus") != null, "Rautenprofil ist adressierbar")
+	_check(screen.boss_profile_action(&"standard_infection_focus") != null, "Standardprofil ist adressierbar")
 
-	var completed := PracticeViewModelScript.ClinicStatusViewModel.create(
+	var profile_selected := PracticeViewModelScript.create(
+		4,
 		true,
-		&"short_review",
-		"Kurzbefund abgeschlossen · Belohnung bereit",
-		true,
-		600.0,
-		600.0,
-		"",
-		"+6 Forschung",
-		"Abgeschlossen um 14:30"
+		&"boss_test",
+		&"diamond_infection_focus",
+		scenarios,
+		profiles
 	)
-	var fourth := PracticeViewModelScript.create(4, "Forschung 12", offline, completed, offers)
-	_check(screen.apply_view_model(fourth), "Abgeschlossener Klinikfall wird angewendet")
-	_check(screen.clinic_claim_action().visible, "Abgeschlossener Klinikfall zeigt genau seine Abholaktion")
-	_check(not screen.clinic_progress_control().visible, "Abgeschlossener Klinikfall reserviert keinen Fortschrittsleerraum")
+	_check(screen.apply_view_model(profile_selected), "Bossprofilauswahl wird angewendet")
+	_check(profile_selected.selected_scenario_requires_boss_profile(), "Boss-Test kennzeichnet seine Profilpflicht")
+	_check(screen.boss_profile_action(&"diamond_infection_focus").theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CHOICE_ROW, "Gewähltes Bossprofil verwendet die zentrale Auswahlvariante")
 
 	var intents := {
-		"offline": 0,
-		"start": StringName(),
-		"claim": 0,
+		"scenario": StringName(),
+		"profile": StringName(),
 		"back": 0,
 	}
-	screen.offline_claim_requested.connect(func() -> void: intents["offline"] = int(intents["offline"]) + 1)
-	screen.clinic_job_start_requested.connect(func(id: StringName) -> void: intents["start"] = id)
-	screen.clinic_job_claim_requested.connect(func() -> void: intents["claim"] = int(intents["claim"]) + 1)
+	screen.scenario_selected.connect(func(id: StringName) -> void: intents["scenario"] = id)
+	screen.boss_profile_selected.connect(func(id: StringName) -> void: intents["profile"] = id)
 	screen.back_requested.connect(func() -> void: intents["back"] = int(intents["back"]) + 1)
-	screen.offline_claim_action().pressed.emit()
-	screen.clinic_job_action(&"short_review").pressed.emit()
-	screen.clinic_claim_action().pressed.emit()
+	screen.scenario_action(&"obstacle_test").pressed.emit()
+	screen.boss_profile_action(&"bacterial_core").pressed.emit()
 	screen.back_action().pressed.emit()
-	_check(int(intents["offline"]) == 1, "Offline-Abholung emittiert genau eine Absicht")
-	_check(intents["start"] == &"short_review", "Klinikangebot emittiert ausschließlich seine stabile ID")
-	_check(int(intents["claim"]) == 1, "Klinikabholung emittiert genau eine Absicht")
+	_check(intents["scenario"] == &"obstacle_test", "Testauswahl emittiert ausschließlich ihre stabile ID")
+	_check(intents["profile"] == &"bacterial_core", "Bossauswahl emittiert ausschließlich ihre stabile Profil-ID")
 	_check(int(intents["back"]) == 1, "Rückkehr emittiert genau eine Absicht")
+
+	var hidden := PracticeViewModelScript.create(5, false, &"boss_test", &"intro_boss", scenarios, profiles)
+	_check(hidden.selected_scenario_id() == &"", "Ausgeblendetes Modell trägt keine versteckte Testauswahl")
+	_check(hidden.selected_boss_profile_id() == &"", "Ausgeblendetes Modell trägt keine versteckte Bossauswahl")
+	_check(screen.apply_view_model(hidden), "Integrator kann lokale Tests ausblenden")
+	_check(not screen.tests_visible(), "Release-Sichtbarkeit wird ausschließlich über das ViewModel angewendet")
+	_check(not screen.boss_profile_selection_visible(), "Ausgeblendete Tests zeigen keine Bossprofile")
+	_check(screen.default_focus_control() == screen.back_action(), "Ohne sichtbare Tests bleibt die Navigation der Standardfokus")
 
 	screen.size = Vector2(800.0, 720.0)
 	await process_frame
-	_check(screen.layout_columns() == 1, "Kompakte Praxis stapelt beide Karten in einer Spalte")
+	_check(screen.layout_columns() == 2, "Mittlere Praxis zeigt zwei Testspalten")
+	screen.size = Vector2(580.0, 720.0)
+	await process_frame
+	_check(screen.layout_columns() == 1, "Kompakte Praxis stapelt Testkarten")
+	_check(screen.boss_layout_columns() == 1, "Kompakte Praxis stapelt Bossprofile")
 	_check(screen.back_action().focus_mode == Control.FOCUS_ALL, "Navigation bleibt per Tastatur und Gamepad fokussierbar")
-	_check(screen.offline_claim_action().focus_mode == Control.FOCUS_ALL, "Hauptaktion bleibt per Tastatur und Gamepad fokussierbar")
+	_check(screen.scenario_action(&"spawn_test").focus_mode == Control.FOCUS_ALL, "Testauswahl bleibt per Tastatur und Gamepad fokussierbar")
 
 	get_root().size = Vector2i(480, 270)
 	screen.size = Vector2(480.0, 270.0)
@@ -143,17 +135,52 @@ func _run() -> void:
 	_finish()
 
 
+func _scenario_offers() -> Array:
+	return [
+		PracticeViewModelScript.ScenarioOfferViewModel.create(
+			&"spawn_test", "Spawn-Test", "Viele kleine und mittlere Gegner", "12 klein · 6 mittel"
+		),
+		PracticeViewModelScript.ScenarioOfferViewModel.create(
+			&"obstacle_test", "Hindernis-Test", "Viele Gegner und Hindernisse", "8 klein · 4 mittel · 3 Hindernisse"
+		),
+		PracticeViewModelScript.ScenarioOfferViewModel.create(
+			&"boss_test", "Boss-Test", "Ein Boss ohne Begleitwellen", "Bossprofil wählen", true, true
+		),
+	]
+
+
+func _boss_profile_offers() -> Array:
+	return [
+		PracticeViewModelScript.BossProfileOfferViewModel.create(
+			&"intro_boss", "Intro-Boss", "Intro-Infektionsherd", "Fernkampf · keine Phase"
+		),
+		PracticeViewModelScript.BossProfileOfferViewModel.create(
+			&"bacterial_core", "Bakterienkern", "Lokalisierter Boss", "Nahkampf · Phase 3"
+		),
+		PracticeViewModelScript.BossProfileOfferViewModel.create(
+			&"diamond_infection_focus", "Infektionsherd · Raute", "Schneller Fernkampf", "Phasen 4 + 4"
+		),
+		PracticeViewModelScript.BossProfileOfferViewModel.create(
+			&"standard_infection_focus", "Infektionsherd · Standard", "Robuster Nahkampf", "Phasen 6 + 8"
+		),
+	]
+
+
 func _check_source_contracts() -> void:
 	var screen_source := FileAccess.get_file_as_string("res://scripts/ui/screens/practice_screen.gd")
 	var model_source := FileAccess.get_file_as_string("res://scripts/ui/view_models/practice_screen_view_model.gd")
-	for forbidden in ["MetaProgressionState", "ContentCatalog", "SaveRepository", "PlayerStats", "RunState"]:
+	for forbidden in ["MetaProgressionState", "ContentCatalog", "SaveRepository", "PlayerStats", "RunState", "OS.is_debug_build"]:
 		_check(not screen_source.contains(forbidden), "Praxis-Screen greift nicht auf %s zu" % forbidden)
 		_check(not model_source.contains(forbidden), "Praxis-ViewModel greift nicht auf %s zu" % forbidden)
+	for retired in ["OfflineResearch", "ClinicJob", "offline_claim_requested", "clinic_job_start_requested", "clinic_job_claim_requested"]:
+		_check(not screen_source.contains(retired), "Praxis-Screen entfernt Altvertrag %s vollständig" % retired)
+		_check(not model_source.contains(retired), "Praxis-ViewModel entfernt Altvertrag %s vollständig" % retired)
 	_check(not screen_source.contains("StyleBox"), "Praxis erzeugt keine lokale StyleBox-Kopie")
 	_check(not screen_source.contains("Shader"), "Praxis erzeugt keinen lokalen Shader")
 	_check(not screen_source.contains("func _process("), "Praxis definiert keine Prozessschleife")
 	_check(not screen_source.contains("func _physics_process("), "Praxis definiert keine Physikschleife")
-	_check(model_source.contains("Array[ClinicJobOfferViewModel]"), "ViewModel hält Kindeinträge typisiert")
+	_check(model_source.contains("Array[ScenarioOfferViewModel]"), "ViewModel hält Tests typisiert")
+	_check(model_source.contains("Array[BossProfileOfferViewModel]"), "ViewModel hält Bossprofile typisiert")
 
 
 func _check_page_header_contract(shell: PanelContainer, expected_title: String) -> void:
