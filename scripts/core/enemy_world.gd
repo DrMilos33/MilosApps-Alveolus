@@ -68,6 +68,43 @@ var _contact_ring_moving_seconds: float = 0.0
 var _crowd_elapsed_seconds: float = 0.0
 var _crowd_profile_enabled: bool = false
 var _crowd_profile_counters := PackedInt64Array()
+var _bulk_eligible := PackedByteArray()
+var _bulk_allowed := PackedByteArray()
+var _bulk_pending := PackedByteArray()
+var _bulk_active := PackedByteArray()
+var _bulk_candidate_snapshots := PackedByteArray()
+var _bulk_release_snapshots := PackedByteArray()
+var _bulk_side_signs := PackedInt32Array()
+var _bulk_lease_epochs := PackedInt64Array()
+var _bulk_component_roots := PackedInt32Array()
+var _bulk_blends := PackedFloat32Array()
+var _bulk_origins := PackedVector2Array()
+var _bulk_proposals := PackedVector2Array()
+var _bulk_resolved := PackedVector2Array()
+var _bulk_direct_directions := PackedVector2Array()
+var _bulk_union_parents := PackedInt32Array()
+var _bulk_union_ranks := PackedByteArray()
+var _bulk_root_weights := PackedInt32Array()
+var _bulk_root_queued_weights := PackedInt32Array()
+var _bulk_root_min_handles := PackedInt64Array()
+var _bulk_root_candidate_snapshots := PackedByteArray()
+var _bulk_root_release_snapshots := PackedByteArray()
+var _bulk_root_side_signs := PackedInt32Array()
+var _bulk_root_lease_epochs := PackedInt64Array()
+var _bulk_root_active := PackedByteArray()
+var _bulk_neighbor_counts := PackedByteArray()
+var _bulk_neighbor_handles := PackedInt64Array()
+var _bulk_neighbor_distances := PackedFloat32Array()
+var _bulk_build_neighbor_counts := PackedByteArray()
+var _bulk_build_neighbor_handles := PackedInt64Array()
+var _bulk_build_neighbor_distances := PackedFloat32Array()
+var _bulk_ordered_slots := PackedInt32Array()
+var _bulk_refresh_handles := PackedInt64Array()
+var _bulk_snapshot_seconds: float = 0.0
+var _bulk_next_lease_epoch: int = 1
+var _bulk_refresh_cursor: int = 0
+var _bulk_refresh_chunk_size: int = 0
+var _bulk_refresh_in_progress: bool = false
 
 enum CrowdProfileCounter {
 	GRID_REBUILDS,
@@ -81,6 +118,10 @@ enum CrowdProfileCounter {
 	GRID_REBUILD_USEC,
 	GUARD_PREPARE_USEC,
 	MOVEMENT_USEC,
+	BULK_SNAPSHOTS,
+	BULK_ACTIVE_TICKS,
+	BULK_PROJECTION_CANDIDATES,
+	BULK_SOLVE_USEC,
 	COUNT,
 }
 
@@ -134,6 +175,23 @@ const CONTACT_RING_ATTACK_ARM_MARGIN := CONTACT_ENTRY_DEPTH + 0.1
 const CONTACT_RING_CLAIM_CLEARANCE := 1.0
 const CONTACT_RING_RECLAIM_HOLD_UPDATES := 6
 const CLUSTER_ENEMY_ID := &"bacterial_cluster"
+const BULK_CONTACT_MARGIN := 4.0
+const BULK_SNAPSHOT_SECONDS := 0.25
+const BULK_ENTER_WEIGHT := 18
+const BULK_EXIT_WEIGHT := 12
+const BULK_ENTER_QUEUED_RATIO := 0.45
+const BULK_EXIT_QUEUED_RATIO := 0.20
+const BULK_ENTER_SNAPSHOTS := 2
+const BULK_EXIT_SNAPSHOTS := 4
+const BULK_ARC_RADIANS := deg_to_rad(20.0)
+const BULK_BLEND_IN_SECONDS := 0.20
+const BULK_BLEND_OUT_SECONDS := 0.35
+const BULK_PROJECTION_PASSES := 1
+const BULK_BLEND_EPSILON := 0.001
+const BULK_PAIR_LOOKAHEAD := 34.0
+const MAX_BULK_NEIGHBORS := 8
+const MAX_BULK_SNAPSHOT_CANDIDATES := 24
+const BULK_SNAPSHOT_BUILD_PHASES := 4
 
 func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorld:
 	combat_capacity = runtime_capacity if runtime_capacity != null else CombatCapacity.defaults()
@@ -205,6 +263,68 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_contact_ring_attack_armed.fill(0)
 	_contact_ring_reclaim_holds.resize(combat_capacity.max_enemies)
 	_contact_ring_reclaim_holds.fill(0)
+	_bulk_eligible.resize(combat_capacity.max_enemies)
+	_bulk_eligible.fill(0)
+	_bulk_allowed.resize(combat_capacity.max_enemies)
+	_bulk_allowed.fill(0)
+	_bulk_pending.resize(combat_capacity.max_enemies)
+	_bulk_pending.fill(0)
+	_bulk_active.resize(combat_capacity.max_enemies)
+	_bulk_active.fill(0)
+	_bulk_candidate_snapshots.resize(combat_capacity.max_enemies)
+	_bulk_candidate_snapshots.fill(0)
+	_bulk_release_snapshots.resize(combat_capacity.max_enemies)
+	_bulk_release_snapshots.fill(0)
+	_bulk_side_signs.resize(combat_capacity.max_enemies)
+	_bulk_side_signs.fill(0)
+	_bulk_lease_epochs.resize(combat_capacity.max_enemies)
+	_bulk_lease_epochs.fill(0)
+	_bulk_component_roots.resize(combat_capacity.max_enemies)
+	_bulk_component_roots.fill(-1)
+	_bulk_blends.resize(combat_capacity.max_enemies)
+	_bulk_blends.fill(0.0)
+	_bulk_origins.resize(combat_capacity.max_enemies)
+	_bulk_origins.fill(Vector2.ZERO)
+	_bulk_proposals.resize(combat_capacity.max_enemies)
+	_bulk_proposals.fill(Vector2.ZERO)
+	_bulk_resolved.resize(combat_capacity.max_enemies)
+	_bulk_resolved.fill(Vector2.ZERO)
+	_bulk_direct_directions.resize(combat_capacity.max_enemies)
+	_bulk_direct_directions.fill(Vector2.ZERO)
+	_bulk_union_parents.resize(combat_capacity.max_enemies)
+	_bulk_union_parents.fill(-1)
+	_bulk_union_ranks.resize(combat_capacity.max_enemies)
+	_bulk_union_ranks.fill(0)
+	_bulk_root_weights.resize(combat_capacity.max_enemies)
+	_bulk_root_weights.fill(0)
+	_bulk_root_queued_weights.resize(combat_capacity.max_enemies)
+	_bulk_root_queued_weights.fill(0)
+	_bulk_root_min_handles.resize(combat_capacity.max_enemies)
+	_bulk_root_min_handles.fill(EntityHandle.INVALID)
+	_bulk_root_candidate_snapshots.resize(combat_capacity.max_enemies)
+	_bulk_root_candidate_snapshots.fill(0)
+	_bulk_root_release_snapshots.resize(combat_capacity.max_enemies)
+	_bulk_root_release_snapshots.fill(0)
+	_bulk_root_side_signs.resize(combat_capacity.max_enemies)
+	_bulk_root_side_signs.fill(0)
+	_bulk_root_lease_epochs.resize(combat_capacity.max_enemies)
+	_bulk_root_lease_epochs.fill(0)
+	_bulk_root_active.resize(combat_capacity.max_enemies)
+	_bulk_root_active.fill(0)
+	_bulk_neighbor_counts.resize(combat_capacity.max_enemies)
+	_bulk_neighbor_counts.fill(0)
+	_bulk_neighbor_handles.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
+	_bulk_neighbor_handles.fill(EntityHandle.INVALID)
+	_bulk_neighbor_distances.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
+	_bulk_neighbor_distances.fill(INF)
+	_bulk_build_neighbor_counts.resize(combat_capacity.max_enemies)
+	_bulk_build_neighbor_counts.fill(0)
+	_bulk_build_neighbor_handles.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
+	_bulk_build_neighbor_handles.fill(EntityHandle.INVALID)
+	_bulk_build_neighbor_distances.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
+	_bulk_build_neighbor_distances.fill(INF)
+	_bulk_ordered_slots.clear()
+	_bulk_refresh_handles.clear()
 	_typed_runtime_only = true
 	regular_count = 0
 	critical_count = 0
@@ -221,6 +341,11 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_contact_ring_stationary_seconds = 0.0
 	_contact_ring_moving_seconds = 0.0
 	_crowd_elapsed_seconds = 0.0
+	_bulk_snapshot_seconds = 0.0
+	_bulk_next_lease_epoch = 1
+	_bulk_refresh_cursor = 0
+	_bulk_refresh_chunk_size = 0
+	_bulk_refresh_in_progress = false
 	_crowd_profile_counters.resize(CrowdProfileCounter.COUNT)
 	_crowd_profile_counters.fill(0)
 	return self
@@ -312,6 +437,8 @@ func register_enemy(enemy: Node, critical: bool = false, disable_automatic_physi
 	_contact_ring_wait_ranks[slot] = 0
 	_contact_ring_attack_armed[slot] = 0
 	_contact_ring_reclaim_holds[slot] = 0
+	_clear_bulk_slot(slot)
+	_bulk_allowed[slot] = 1
 	if _contact_ring_active:
 		_contact_ring_assignments_dirty = true
 		_contact_ring_saturated = false
@@ -446,6 +573,9 @@ func mark_enemy_relocated(handle: int, previous_position: Vector2 = Vector2.INF)
 	if slot < 0 or slot >= _typed_enemies.size():
 		return false
 	_invalidate_direct_collision_guard_slot(slot)
+	var bulk_was_allowed := _bulk_allowed[slot] != 0
+	_clear_bulk_slot(slot)
+	_bulk_allowed[slot] = 1 if bulk_was_allowed else 0
 	var enemy := _typed_enemies[slot]
 	if (
 		previous_position.is_finite()
@@ -723,6 +853,7 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 		profile_started_usec = Time.get_ticks_usec()
 	_direct_collision_prepare_epoch += 1
 	_prepare_direct_collision_guards()
+	_update_bulk_flow_state(delta)
 	if _crowd_profile_enabled:
 		_crowd_profile_counters[CrowdProfileCounter.GUARD_PREPARE_USEC] += Time.get_ticks_usec() - profile_started_usec
 		profile_started_usec = Time.get_ticks_usec()
@@ -730,6 +861,7 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 	# renderer and pool are released before a slot can be reused, so this typed
 	# dense loop avoids 600 validity checks and dynamic Callable invocations per
 	# fixed tick while retaining deterministic slot order.
+	_bulk_pending.fill(0)
 	var count_at_start := _active_slots.size()
 	for dense_index in range(count_at_start):
 		var slot := int(_active_slots[dense_index])
@@ -740,8 +872,14 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 			var handle := EntityHandle.make(slot, _generations[slot])
 			var movement_origin := enemy.global_position
 			var occupied_before := _direct_collision_active[slot] != 0
+			var bulk_motion := (
+				occupied_before
+				and _bulk_blends[slot] > BULK_BLEND_EPSILON
+				and _bulk_enemy_eligible(enemy)
+			)
 			var suppress_direct_chase := (
 				occupied_before
+				and not bulk_motion
 				and _direct_collision_queued[slot] != 0
 				and _crowd_lane_signs[slot] == 0
 				and not enemy.is_stunned()
@@ -756,7 +894,15 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 				_direct_collision_active_count += 1 if occupied_after else -1
 			_direct_collision_active[slot] = 1 if occupied_after else 0
 			if occupied_before and occupied_after:
-				if suppress_direct_chase:
+				if bulk_motion:
+					_bulk_origins[slot] = movement_origin
+					_bulk_proposals[slot] = _bulk_desired_delta(slot, enemy, movement_origin, delta)
+					_bulk_resolved[slot] = _bulk_proposals[slot]
+					_bulk_pending[slot] = 1
+					_direct_collision_queued[slot] = 0
+					_direct_collision_queue_blockers[slot] = EntityHandle.INVALID
+					enemy.apply_crowd_resolved_position(movement_origin)
+				elif suppress_direct_chase:
 					if _crowd_profile_enabled:
 						_crowd_profile_counters[CrowdProfileCounter.QUEUED_NO_CORRIDOR] += 1
 				else:
@@ -767,6 +913,7 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 				_crowd_grid.remove(handle, movement_origin)
 			elif occupied_after:
 				_crowd_grid.insert_unique(handle, enemy.global_position)
+	_resolve_bulk_movements()
 	_resolve_deferred_enemy_contacts()
 	if _crowd_profile_enabled:
 		_crowd_profile_counters[CrowdProfileCounter.MOVEMENT_USEC] += Time.get_ticks_usec() - profile_started_usec
@@ -790,6 +937,654 @@ func _update_crowd_avatar_motion_state() -> void:
 		<= DIRECT_COLLISION_EPSILON * DIRECT_COLLISION_EPSILON
 	)
 	_crowd_avatar_previous_position = current_position
+
+
+func _update_bulk_flow_state(delta: float) -> void:
+	for slot_value in _active_slots:
+		var slot := int(slot_value)
+		var target_blend := 1.0 if _bulk_active[slot] != 0 else 0.0
+		var blend_seconds := BULK_BLEND_IN_SECONDS if target_blend > _bulk_blends[slot] else BULK_BLEND_OUT_SECONDS
+		_bulk_blends[slot] = move_toward(
+			float(_bulk_blends[slot]),
+			target_blend,
+			delta / maxf(blend_seconds, 0.001)
+		)
+		if _bulk_active[slot] == 0 and _bulk_blends[slot] <= BULK_BLEND_EPSILON:
+			_bulk_blends[slot] = 0.0
+			_bulk_side_signs[slot] = 0
+			_bulk_lease_epochs[slot] = 0
+	_bulk_snapshot_seconds += delta
+	if _bulk_refresh_in_progress:
+		_continue_bulk_component_refresh()
+		return
+	if _bulk_snapshot_seconds + 0.000001 < BULK_SNAPSHOT_SECONDS:
+		return
+	_bulk_snapshot_seconds = fmod(_bulk_snapshot_seconds, BULK_SNAPSHOT_SECONDS)
+	_start_bulk_component_refresh()
+	_continue_bulk_component_refresh()
+
+
+func _start_bulk_component_refresh() -> void:
+	_bulk_union_parents.fill(-1)
+	_bulk_union_ranks.fill(0)
+	_bulk_root_weights.fill(0)
+	_bulk_root_queued_weights.fill(0)
+	_bulk_root_min_handles.fill(EntityHandle.INVALID)
+	_bulk_root_candidate_snapshots.fill(0)
+	_bulk_root_release_snapshots.fill(0)
+	_bulk_root_side_signs.fill(0)
+	_bulk_root_lease_epochs.fill(0)
+	_bulk_root_active.fill(0)
+	_bulk_build_neighbor_counts.fill(0)
+	_bulk_refresh_handles.clear()
+	for slot_value in _active_slots:
+		var slot := int(slot_value)
+		var enemy := _typed_enemies[slot]
+		var eligible := (
+			_retiring[slot] == 0
+			and _bulk_allowed[slot] != 0
+			and _bulk_enemy_eligible(enemy)
+		)
+		_bulk_eligible[slot] = 1 if eligible else 0
+		if eligible:
+			_bulk_union_parents[slot] = slot
+			_bulk_refresh_handles.append(EntityHandle.make(slot, _generations[slot]))
+		else:
+			_bulk_active[slot] = 0
+			_bulk_candidate_snapshots[slot] = 0
+			_bulk_release_snapshots[slot] = 0
+	_bulk_refresh_cursor = 0
+	_bulk_refresh_chunk_size = maxi(
+		ceili(float(_bulk_refresh_handles.size()) / float(BULK_SNAPSHOT_BUILD_PHASES)),
+		1
+	)
+	_bulk_refresh_in_progress = true
+
+
+func _continue_bulk_component_refresh() -> void:
+	if not _bulk_refresh_in_progress:
+		return
+	if _crowd_topology == null or _bulk_refresh_handles.is_empty():
+		_finalize_bulk_component_refresh()
+		return
+	var end_index := mini(
+		_bulk_refresh_cursor + _bulk_refresh_chunk_size,
+		_bulk_refresh_handles.size()
+	)
+	for refresh_index in range(_bulk_refresh_cursor, end_index):
+		var own_handle := int(_bulk_refresh_handles[refresh_index])
+		var slot := EntityHandle.slot(own_handle)
+		if not is_active(own_handle) or _bulk_eligible[slot] == 0:
+			continue
+		var enemy := _typed_enemies[slot]
+		if enemy == null:
+			continue
+		var query_radius := (
+			float(_direct_collision_radii[slot])
+			+ _maximum_contact_radius
+			+ BULK_PAIR_LOOKAHEAD
+		)
+		_crowd_candidates = _crowd_grid.query_circle_candidates_limited(
+			enemy.global_position,
+			query_radius,
+			MAX_BULK_SNAPSHOT_CANDIDATES,
+			_crowd_candidates
+		)
+		for candidate_value in _crowd_candidates:
+			var candidate_handle := int(candidate_value)
+			if candidate_handle == own_handle:
+				continue
+			var other_slot := EntityHandle.slot(candidate_handle)
+			if (
+				other_slot < 0
+				or other_slot >= _bulk_eligible.size()
+				or _retiring[other_slot] != 0
+				or _generations[other_slot] != EntityHandle.generation(candidate_handle)
+				or _direct_collision_active[other_slot] == 0
+			):
+				continue
+			var other := _typed_enemies[other_slot]
+			if other == null or other.definition == null or other.definition.is_boss:
+				continue
+			var other_is_bulk_eligible := _bulk_eligible[other_slot] != 0
+			if other_is_bulk_eligible and candidate_handle < own_handle:
+				continue
+			var surface_gap := (
+				_crowd_topology.distance(enemy.global_position, other.global_position)
+				- float(_direct_collision_radii[slot])
+				- float(_direct_collision_radii[other_slot])
+			)
+			if surface_gap <= BULK_PAIR_LOOKAHEAD:
+				_insert_bulk_build_neighbor(slot, candidate_handle, surface_gap)
+				if other_is_bulk_eligible:
+					_insert_bulk_build_neighbor(other_slot, own_handle, surface_gap)
+			if other_is_bulk_eligible and surface_gap <= BULK_CONTACT_MARGIN:
+				_bulk_union(slot, other_slot)
+	_bulk_refresh_cursor = end_index
+	if _bulk_refresh_cursor >= _bulk_refresh_handles.size():
+		_finalize_bulk_component_refresh()
+
+
+func _finalize_bulk_component_refresh() -> void:
+	_bulk_component_roots.fill(-1)
+	var component_roots := PackedInt32Array()
+	for handle_value in _bulk_refresh_handles:
+		var handle := int(handle_value)
+		if not is_active(handle):
+			continue
+		var slot := EntityHandle.slot(handle)
+		if _bulk_eligible[slot] == 0:
+			continue
+		var root := _bulk_union_find(slot)
+		_bulk_component_roots[slot] = root
+		var weight := _bulk_enemy_weight(_typed_enemies[slot])
+		if _bulk_root_weights[root] == 0:
+			component_roots.append(root)
+		_bulk_root_weights[root] += weight
+		if _direct_collision_queued[slot] != 0:
+			_bulk_root_queued_weights[root] += weight
+		if _bulk_root_min_handles[root] == EntityHandle.INVALID or handle < int(_bulk_root_min_handles[root]):
+			_bulk_root_min_handles[root] = handle
+		_bulk_root_candidate_snapshots[root] = maxi(
+			int(_bulk_root_candidate_snapshots[root]),
+			int(_bulk_candidate_snapshots[slot])
+		)
+		_bulk_root_release_snapshots[root] = maxi(
+			int(_bulk_root_release_snapshots[root]),
+			int(_bulk_release_snapshots[slot])
+		)
+		if _bulk_active[slot] != 0:
+			_bulk_root_active[root] = 1
+		if _bulk_active[slot] != 0 or (_bulk_blends[slot] > BULK_BLEND_EPSILON and _bulk_lease_epochs[slot] > 0):
+			var lease_epoch := int(_bulk_lease_epochs[slot])
+			if _bulk_root_lease_epochs[root] == 0 or lease_epoch < int(_bulk_root_lease_epochs[root]):
+				_bulk_root_lease_epochs[root] = lease_epoch
+				_bulk_root_side_signs[root] = _bulk_side_signs[slot]
+	for root_value in component_roots:
+		var root := int(root_value)
+		var weight := int(_bulk_root_weights[root])
+		var queued_ratio := float(_bulk_root_queued_weights[root]) / float(weight) if weight > 0 else 0.0
+		var lease_epoch := int(_bulk_root_lease_epochs[root])
+		var active_component := _bulk_root_active[root] != 0
+		var candidate_snapshots := 0
+		var release_snapshots := 0
+		if active_component:
+			var below_exit := weight < BULK_EXIT_WEIGHT or queued_ratio < BULK_EXIT_QUEUED_RATIO
+			release_snapshots = mini(int(_bulk_root_release_snapshots[root]) + 1, BULK_EXIT_SNAPSHOTS) if below_exit else 0
+			if release_snapshots >= BULK_EXIT_SNAPSHOTS:
+				active_component = false
+		else:
+			var qualifies := weight >= BULK_ENTER_WEIGHT and queued_ratio >= BULK_ENTER_QUEUED_RATIO
+			candidate_snapshots = mini(int(_bulk_root_candidate_snapshots[root]) + 1, BULK_ENTER_SNAPSHOTS) if qualifies else 0
+			if candidate_snapshots >= BULK_ENTER_SNAPSHOTS:
+				active_component = true
+				lease_epoch = _bulk_next_lease_epoch
+				_bulk_next_lease_epoch += 1
+				_bulk_root_lease_epochs[root] = lease_epoch
+				_bulk_root_side_signs[root] = _bulk_choose_side(root)
+		_bulk_root_candidate_snapshots[root] = candidate_snapshots
+		_bulk_root_release_snapshots[root] = release_snapshots
+		_bulk_root_lease_epochs[root] = lease_epoch
+		_bulk_root_active[root] = 1 if active_component else 0
+		if not active_component and lease_epoch <= 0:
+			_bulk_root_side_signs[root] = 0
+	for handle_value in _bulk_refresh_handles:
+		var handle := int(handle_value)
+		if not is_active(handle):
+			continue
+		var slot := EntityHandle.slot(handle)
+		if _bulk_eligible[slot] == 0:
+			continue
+		var root := int(_bulk_component_roots[slot])
+		_bulk_candidate_snapshots[slot] = _bulk_root_candidate_snapshots[root]
+		_bulk_release_snapshots[slot] = _bulk_root_release_snapshots[root]
+		_bulk_active[slot] = _bulk_root_active[root]
+		_bulk_lease_epochs[slot] = _bulk_root_lease_epochs[root]
+		_bulk_side_signs[slot] = _bulk_root_side_signs[root]
+	var previous_counts := _bulk_neighbor_counts
+	_bulk_neighbor_counts = _bulk_build_neighbor_counts
+	_bulk_build_neighbor_counts = previous_counts
+	var previous_handles := _bulk_neighbor_handles
+	_bulk_neighbor_handles = _bulk_build_neighbor_handles
+	_bulk_build_neighbor_handles = previous_handles
+	var previous_distances := _bulk_neighbor_distances
+	_bulk_neighbor_distances = _bulk_build_neighbor_distances
+	_bulk_build_neighbor_distances = previous_distances
+	var ordered_slots: Array[int] = []
+	for handle_value in _bulk_refresh_handles:
+		var handle := int(handle_value)
+		if not is_active(handle):
+			continue
+		var slot := EntityHandle.slot(handle)
+		if _bulk_eligible[slot] != 0:
+			ordered_slots.append(slot)
+	ordered_slots.sort_custom(Callable(self, "_bulk_slot_precedes"))
+	_bulk_ordered_slots.clear()
+	for slot in ordered_slots:
+		_bulk_ordered_slots.append(slot)
+	_bulk_refresh_in_progress = false
+	_bulk_refresh_cursor = 0
+	if _crowd_profile_enabled:
+		_crowd_profile_counters[CrowdProfileCounter.BULK_SNAPSHOTS] += 1
+
+
+func _insert_bulk_build_neighbor(slot: int, handle: int, surface_gap: float) -> void:
+	var offset := slot * MAX_BULK_NEIGHBORS
+	var count := mini(int(_bulk_build_neighbor_counts[slot]), MAX_BULK_NEIGHBORS)
+	var insert_index := count
+	for index in range(count):
+		var existing_distance := float(_bulk_build_neighbor_distances[offset + index])
+		var existing_handle := int(_bulk_build_neighbor_handles[offset + index])
+		if surface_gap < existing_distance or (is_equal_approx(surface_gap, existing_distance) and handle < existing_handle):
+			insert_index = index
+			break
+	if insert_index >= MAX_BULK_NEIGHBORS:
+		return
+	var final_count := mini(count + 1, MAX_BULK_NEIGHBORS)
+	for index in range(final_count - 1, insert_index, -1):
+		_bulk_build_neighbor_handles[offset + index] = _bulk_build_neighbor_handles[offset + index - 1]
+		_bulk_build_neighbor_distances[offset + index] = _bulk_build_neighbor_distances[offset + index - 1]
+	_bulk_build_neighbor_handles[offset + insert_index] = handle
+	_bulk_build_neighbor_distances[offset + insert_index] = surface_gap
+	_bulk_build_neighbor_counts[slot] = final_count
+
+
+func _bulk_enemy_eligible(enemy: InfectionEnemy) -> bool:
+	if enemy == null or enemy.definition == null or not enemy.can_be_relocated():
+		return false
+	if not enemy.definition.contact_enabled or enemy.definition.speed <= 0.0:
+		return false
+	return enemy.definition.id == SMALL_ENEMY_ID or enemy.definition.id == CLUSTER_ENEMY_ID
+
+
+func _bulk_enemy_weight(enemy: InfectionEnemy) -> int:
+	return 2 if enemy != null and enemy.definition != null and enemy.definition.id == CLUSTER_ENEMY_ID else 1
+
+
+func _bulk_union(first_slot: int, second_slot: int) -> void:
+	var first_root := _bulk_union_find(first_slot)
+	var second_root := _bulk_union_find(second_slot)
+	if first_root == second_root:
+		return
+	var first_rank := int(_bulk_union_ranks[first_root])
+	var second_rank := int(_bulk_union_ranks[second_root])
+	if first_rank < second_rank or (first_rank == second_rank and first_root > second_root):
+		var swap_root := first_root
+		first_root = second_root
+		second_root = swap_root
+	_bulk_union_parents[second_root] = first_root
+	if first_rank == second_rank:
+		_bulk_union_ranks[first_root] = mini(first_rank + 1, 255)
+
+
+func _bulk_union_find(slot: int) -> int:
+	var root := slot
+	while _bulk_union_parents[root] != root:
+		root = int(_bulk_union_parents[root])
+	var cursor := slot
+	while _bulk_union_parents[cursor] != cursor:
+		var parent := int(_bulk_union_parents[cursor])
+		_bulk_union_parents[cursor] = root
+		cursor = parent
+	return root
+
+
+func _bulk_choose_side(root: int) -> int:
+	var positive_pressure := 0.0
+	var negative_pressure := 0.0
+	for slot_value in _active_slots:
+		var slot := int(slot_value)
+		if _bulk_eligible[slot] == 0 or _bulk_component_roots[slot] != root:
+			continue
+		var enemy := _typed_enemies[slot]
+		var toward_avatar := _crowd_topology.shortest_delta(
+			enemy.global_position,
+			_crowd_avatar.global_position
+		)
+		if toward_avatar.length_squared() <= DIRECT_COLLISION_EPSILON:
+			continue
+		var forward := toward_avatar.normalized()
+		var tangent := forward.orthogonal()
+		var sample_distance := float(_direct_collision_radii[slot]) + 48.0
+		for sign_value in [1, -1]:
+			var arc_direction := forward.rotated(BULK_ARC_RADIANS * float(sign_value))
+			var sample_position := enemy.global_position + arc_direction * sample_distance
+			var blocked := _crowd_bounded and not _crowd_topology.contains_position(
+				sample_position,
+				float(_direct_collision_radii[slot])
+			)
+			var side_pressure := 4.0 if blocked else 0.0
+			_crowd_candidates = _crowd_grid.query_circle_candidates(
+				sample_position,
+				float(_direct_collision_radii[slot]) + _maximum_contact_radius + 12.0,
+				_crowd_candidates
+			)
+			for candidate_value in _crowd_candidates:
+				var candidate_handle := int(candidate_value)
+				var other_slot := EntityHandle.slot(candidate_handle)
+				if (
+					other_slot < 0
+					or other_slot >= _typed_enemies.size()
+					or other_slot == slot
+					or _retiring[other_slot] != 0
+					or _generations[other_slot] != EntityHandle.generation(candidate_handle)
+					or _direct_collision_active[other_slot] == 0
+				):
+					continue
+				var other := _typed_enemies[other_slot]
+				if other == null or other.definition == null or other.definition.is_boss:
+					continue
+				if _bulk_eligible[other_slot] != 0 and _bulk_union_find(other_slot) == root:
+					continue
+				var local_delta := _crowd_topology.shortest_delta(enemy.global_position, other.global_position)
+				if local_delta.dot(forward) < -float(_direct_collision_radii[slot]):
+					continue
+				var lateral := local_delta.dot(tangent) * float(sign_value)
+				if lateral > 0.0:
+					side_pressure += 1.0 / maxf(lateral, 1.0)
+			if sign_value > 0:
+				positive_pressure += side_pressure
+			else:
+				negative_pressure += side_pressure
+	if absf(positive_pressure - negative_pressure) <= DIRECT_COLLISION_EPSILON:
+		return 1 if posmod(int(_bulk_root_min_handles[root]), 2) == 0 else -1
+	return 1 if positive_pressure < negative_pressure else -1
+
+
+func _bulk_desired_delta(
+	slot: int,
+	enemy: InfectionEnemy,
+	movement_origin: Vector2,
+	delta: float
+) -> Vector2:
+	if not is_instance_valid(_crowd_avatar) or _crowd_topology == null:
+		return Vector2.ZERO
+	var to_avatar := _crowd_topology.shortest_delta(movement_origin, _crowd_avatar.global_position)
+	var distance := to_avatar.length()
+	if distance <= DIRECT_COLLISION_EPSILON:
+		_bulk_direct_directions[slot] = Vector2.ZERO
+		return Vector2.ZERO
+	var direct_direction := to_avatar / distance
+	_bulk_direct_directions[slot] = direct_direction
+	var blend := clampf(float(_bulk_blends[slot]), 0.0, 1.0)
+	var side_sign := int(_bulk_side_signs[slot])
+	if side_sign == 0:
+		side_sign = 1 if posmod(int(_bulk_lease_epochs[slot]), 2) == 0 else -1
+	var desired_direction := direct_direction.rotated(BULK_ARC_RADIANS * blend * float(side_sign))
+	var step_length := maxf(
+		enemy.definition.speed * enemy.speed_multiplier * enemy.status_speed_multiplier() * delta,
+		0.0
+	)
+	var contact_radius := enemy.contact_body_radius() + TherapyAvatar.CONTACT_RADIUS
+	var stop_radius := maxf(contact_radius - InfectionEnemy.DIRECT_CHASE_CONTACT_DEPTH, 0.0)
+	var proposed_position := movement_origin + desired_direction * step_length
+	var from_avatar := _crowd_topology.shortest_delta(
+		_crowd_avatar.global_position,
+		proposed_position
+	)
+	var proposed_distance := from_avatar.length()
+	var clamped_distance := clampf(proposed_distance, stop_radius, distance)
+	if proposed_distance > DIRECT_COLLISION_EPSILON and not is_equal_approx(proposed_distance, clamped_distance):
+		proposed_position = _crowd_avatar.global_position + from_avatar * (clamped_distance / proposed_distance)
+	var proposed := _crowd_topology.shortest_delta(movement_origin, proposed_position)
+	# Numeric topology resolution may add a sub-pixel outward component. Clamp the
+	# final endpoint back to the origin-distance circle so bulk flow never reads as
+	# an enemy briefly fleeing from Doctor Milos.
+	var final_distance := _crowd_topology.distance(movement_origin + proposed, _crowd_avatar.global_position)
+	if final_distance > distance + DIRECT_COLLISION_EPSILON:
+		var corrected_from_avatar := _crowd_topology.shortest_delta(
+			_crowd_avatar.global_position,
+			movement_origin + proposed
+		)
+		if corrected_from_avatar.length_squared() > DIRECT_COLLISION_EPSILON:
+			proposed = (
+				_crowd_avatar.global_position
+				+ corrected_from_avatar.normalized() * distance
+				- movement_origin
+			)
+	return proposed.limit_length(step_length)
+
+
+func _resolve_bulk_movements() -> void:
+	if _bulk_ordered_slots.is_empty():
+		return
+	var solve_started_usec := Time.get_ticks_usec() if _crowd_profile_enabled else 0
+	var resolved_count := 0
+	# The order is refreshed only with the 0.25-s topology snapshot. Front bodies
+	# commit first, so the rear can inherit newly opened space in this same tick.
+	for slot_value in _bulk_ordered_slots:
+		var slot := int(slot_value)
+		if slot < 0 or slot >= _bulk_pending.size() or _bulk_pending[slot] == 0:
+			continue
+		var enemy := _typed_enemies[slot]
+		if enemy == null or not enemy.is_targetable():
+			continue
+		var handle := EntityHandle.make(slot, _generations[slot])
+		var origin := _bulk_origins[slot]
+		var resolved_delta := _bulk_project_cached_proposal(slot)
+		_bulk_resolved[slot] = resolved_delta
+		if resolved_delta.length_squared() + DIRECT_COLLISION_EPSILON < _bulk_proposals[slot].length_squared():
+			_direct_collision_queued[slot] = 1
+		enemy.apply_crowd_resolved_position(origin + resolved_delta)
+		if not enemy.global_position.is_equal_approx(origin):
+			_crowd_grid.move(handle, origin, enemy.global_position)
+		resolved_count += 1
+	if _crowd_profile_enabled and resolved_count > 0:
+		_crowd_profile_counters[CrowdProfileCounter.BULK_ACTIVE_TICKS] += 1
+		_crowd_profile_counters[CrowdProfileCounter.BULK_SOLVE_USEC] += Time.get_ticks_usec() - solve_started_usec
+
+
+func _bulk_slot_precedes(first_slot: int, second_slot: int) -> bool:
+	if not is_instance_valid(_crowd_avatar) or _crowd_topology == null:
+		return first_slot < second_slot
+	var first_enemy := _typed_enemies[first_slot]
+	var second_enemy := _typed_enemies[second_slot]
+	if first_enemy == null or second_enemy == null:
+		return first_slot < second_slot
+	var first_distance := _crowd_topology.distance_squared(
+		first_enemy.global_position,
+		_crowd_avatar.global_position
+	)
+	var second_distance := _crowd_topology.distance_squared(
+		second_enemy.global_position,
+		_crowd_avatar.global_position
+	)
+	if is_equal_approx(first_distance, second_distance):
+		return first_slot < second_slot
+	return first_distance < second_distance
+
+
+func _bulk_project_cached_proposal(slot: int) -> Vector2:
+	var origin := _bulk_origins[slot]
+	var resolved_delta := _bulk_proposals[slot]
+	var own_radius := float(_direct_collision_radii[slot])
+	var neighbor_count := mini(int(_bulk_neighbor_counts[slot]), MAX_BULK_NEIGHBORS)
+	var neighbor_offset := slot * MAX_BULK_NEIGHBORS
+	if _crowd_profile_enabled:
+		_crowd_profile_counters[CrowdProfileCounter.BULK_PROJECTION_CANDIDATES] += neighbor_count
+	for _pass_index in range(BULK_PROJECTION_PASSES):
+		for neighbor_index in range(neighbor_count):
+			var other_handle := int(_bulk_neighbor_handles[neighbor_offset + neighbor_index])
+			var other_slot := EntityHandle.slot(other_handle)
+			if not _bulk_pair_is_current(other_handle, other_slot):
+				continue
+			resolved_delta = _bulk_clip_delta_against_circle(
+				slot,
+				origin,
+				resolved_delta,
+				other_slot,
+				_typed_enemies[other_slot].global_position,
+				own_radius + float(_direct_collision_radii[other_slot]) + DIRECT_COLLISION_SKIN
+			)
+		resolved_delta = _bulk_limit_resolved_delta(slot, resolved_delta)
+	# Projection against a later neighbor can re-enter an earlier one. Waiting at
+	# the already valid origin is the deterministic no-retreat fallback.
+	for neighbor_index in range(neighbor_count):
+		var other_handle := int(_bulk_neighbor_handles[neighbor_offset + neighbor_index])
+		var other_slot := EntityHandle.slot(other_handle)
+		if not _bulk_pair_is_current(other_handle, other_slot):
+			continue
+		var minimum_distance := (
+			own_radius
+			+ float(_direct_collision_radii[other_slot])
+			+ DIRECT_COLLISION_SKIN
+			- DIRECT_COLLISION_EPSILON
+		)
+		if _crowd_topology.distance_squared(
+			origin + resolved_delta,
+			_typed_enemies[other_slot].global_position
+		) < minimum_distance * minimum_distance:
+			return Vector2.ZERO
+	return resolved_delta
+
+
+func _bulk_pair_is_current(handle: int, slot: int) -> bool:
+	if slot < 0 or slot >= _typed_enemies.size():
+		return false
+	if _retiring[slot] != 0 or _generations[slot] != EntityHandle.generation(handle):
+		return false
+	var enemy := _typed_enemies[slot]
+	return (
+		enemy != null
+		and enemy.definition != null
+		and not enemy.definition.is_boss
+		and _direct_collision_active[slot] != 0
+	)
+
+
+func _bulk_limit_resolved_delta(slot: int, value: Vector2) -> Vector2:
+	var enemy := _typed_enemies[slot]
+	if enemy == null:
+		return Vector2.ZERO
+	var origin := _bulk_origins[slot]
+	var resolved_delta := value.limit_length(_bulk_proposals[slot].length())
+	if _crowd_bounded:
+		var bounded_position := _crowd_topology.resolve_position(
+			origin + resolved_delta,
+			enemy.definition.radius
+		)
+		resolved_delta = bounded_position - origin
+	var direct_direction := _bulk_direct_directions[slot]
+	var forward := resolved_delta.dot(direct_direction)
+	if forward < 0.0:
+		resolved_delta -= direct_direction * forward
+	resolved_delta = resolved_delta.limit_length(_bulk_proposals[slot].length())
+	var origin_distance := _crowd_topology.distance(origin, _crowd_avatar.global_position)
+	var resolved_distance := _crowd_topology.distance(origin + resolved_delta, _crowd_avatar.global_position)
+	if resolved_distance > origin_distance + DIRECT_COLLISION_EPSILON:
+		return Vector2.ZERO
+	return resolved_delta
+
+
+func _bulk_clip_delta_against_circle(
+	slot: int,
+	origin: Vector2,
+	resolved_delta: Vector2,
+	other_slot: int,
+	other_position: Vector2,
+	minimum_distance: float
+) -> Vector2:
+	var to_other := (
+		other_position - origin
+		if _crowd_bounded
+		else _crowd_topology.shortest_delta(origin, other_position)
+	)
+	var end_to_other := to_other - resolved_delta
+	var minimum_squared := minimum_distance * minimum_distance
+	if end_to_other.length_squared() >= minimum_squared:
+		return resolved_delta
+	var distance_squared := to_other.length_squared()
+	if distance_squared < minimum_squared:
+		if end_to_other.length_squared() >= distance_squared - DIRECT_COLLISION_EPSILON:
+			return resolved_delta
+		var overlap_normal := (
+			to_other.normalized()
+			if distance_squared > DIRECT_COLLISION_EPSILON
+			else _overlap_axis(slot, other_slot)
+		)
+		var overlap_inward := resolved_delta.dot(overlap_normal)
+		return resolved_delta - overlap_normal * maxf(overlap_inward, 0.0)
+	var motion_squared := resolved_delta.length_squared()
+	if motion_squared <= DIRECT_COLLISION_EPSILON:
+		return Vector2.ZERO
+	var projection := to_other.dot(resolved_delta)
+	var radius_term := distance_squared - minimum_squared
+	var discriminant := projection * projection - motion_squared * radius_term
+	if discriminant < 0.0:
+		return resolved_delta
+	var hit_fraction := clampf(
+		(projection - sqrt(discriminant)) / motion_squared,
+		0.0,
+		1.0
+	)
+	var contact_delta := resolved_delta * maxf(hit_fraction - 0.001, 0.0)
+	var contact_normal := (to_other - contact_delta).normalized()
+	var remaining := resolved_delta - contact_delta
+	var inward := remaining.dot(contact_normal)
+	if inward > 0.0:
+		remaining -= contact_normal * inward
+	return contact_delta + remaining
+
+
+func bulk_active_weight() -> int:
+	var weight := 0
+	for slot_value in _active_slots:
+		var slot := int(slot_value)
+		if _retiring[slot] == 0 and _bulk_active[slot] != 0:
+			weight += _bulk_enemy_weight(_typed_enemies[slot])
+	return weight
+
+
+func bulk_active_component_count() -> int:
+	var leases: Dictionary = {}
+	for slot_value in _active_slots:
+		var slot := int(slot_value)
+		if _retiring[slot] == 0 and _bulk_active[slot] != 0:
+			leases[int(_bulk_lease_epochs[slot])] = true
+	return leases.size()
+
+
+func bulk_member_state(handle: int) -> Dictionary:
+	if not is_active(handle):
+		return {}
+	var slot := EntityHandle.slot(handle)
+	return {
+		"active": _bulk_active[slot] != 0,
+		"blend": float(_bulk_blends[slot]),
+		"side": int(_bulk_side_signs[slot]),
+		"lease_epoch": int(_bulk_lease_epochs[slot]),
+		"component_root": int(_bulk_component_roots[slot]),
+	}
+
+
+func set_bulk_flow_allowed(handle: int, allowed: bool) -> bool:
+	if not is_active(handle):
+		return false
+	var slot := EntityHandle.slot(handle)
+	if not allowed:
+		_clear_bulk_slot(slot)
+		return true
+	_bulk_allowed[slot] = 1
+	return true
+
+
+func _clear_bulk_slot(slot: int) -> void:
+	if slot < 0 or slot >= _bulk_active.size():
+		return
+	_bulk_eligible[slot] = 0
+	_bulk_allowed[slot] = 0
+	_bulk_pending[slot] = 0
+	_bulk_active[slot] = 0
+	_bulk_candidate_snapshots[slot] = 0
+	_bulk_release_snapshots[slot] = 0
+	_bulk_side_signs[slot] = 0
+	_bulk_lease_epochs[slot] = 0
+	_bulk_component_roots[slot] = -1
+	_bulk_blends[slot] = 0.0
+	_bulk_origins[slot] = Vector2.ZERO
+	_bulk_proposals[slot] = Vector2.ZERO
+	_bulk_resolved[slot] = Vector2.ZERO
+	_bulk_direct_directions[slot] = Vector2.ZERO
 
 
 func _queued_blocker_still_at_contact(slot: int, enemy: InfectionEnemy) -> bool:
@@ -932,6 +1727,15 @@ func _prepare_direct_collision_guards() -> void:
 			_crowd_motion_guards[slot] = 1
 			_direct_collision_queued[slot] = 0
 			_direct_collision_queue_blockers[slot] = EntityHandle.INVALID
+			continue
+		# Active bulk members use the topology snapshot's bounded neighbor cache.
+		# Keeping the legacy phase guards hot as well would duplicate the broad phase
+		# without contributing to their movement result. Mark them stale so the first
+		# ordinary chase tick after blend-out refreshes immediately.
+		if _bulk_blends[slot] > BULK_BLEND_EPSILON and _bulk_enemy_eligible(enemy):
+			_crowd_motion_guard_counts[slot] = 0
+			_direct_collision_mixed_guard_sets[slot] = 0
+			_crowd_motion_guards[slot] = 0
 			continue
 		var guard_limit := _direct_collision_guard_limit(
 			slot,
@@ -2937,6 +3741,7 @@ func _before_slot_released(slot: int, _entity: Node, handle: int) -> void:
 	_direct_collision_queued[slot] = 0
 	_direct_collision_queue_blockers[slot] = EntityHandle.INVALID
 	_direct_collision_previous_lane_signs[slot] = 0
+	_clear_bulk_slot(slot)
 	_crowd_contact_latched[slot] = 0
 	_crowd_resolved_directions[slot] = Vector2.ZERO
 	_crowd_resolved_speeds[slot] = 1.0

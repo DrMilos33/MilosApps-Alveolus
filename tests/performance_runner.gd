@@ -224,6 +224,10 @@ func _run_performance_test() -> void:
 			"grid_rebuild_usec": crowd_profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILD_USEC],
 			"guard_prepare_usec": crowd_profile[EnemyWorld.CrowdProfileCounter.GUARD_PREPARE_USEC],
 			"movement_usec": crowd_profile[EnemyWorld.CrowdProfileCounter.MOVEMENT_USEC],
+			"bulk_snapshots": crowd_profile[EnemyWorld.CrowdProfileCounter.BULK_SNAPSHOTS],
+			"bulk_active_ticks": crowd_profile[EnemyWorld.CrowdProfileCounter.BULK_ACTIVE_TICKS],
+			"bulk_projection_candidates": crowd_profile[EnemyWorld.CrowdProfileCounter.BULK_PROJECTION_CANDIDATES],
+			"bulk_solve_usec": crowd_profile[EnemyWorld.CrowdProfileCounter.BULK_SOLVE_USEC],
 		},
 		"subsystem_timing_ms": subsystem_timings,
 	}, true)

@@ -99,6 +99,12 @@ and required status feedback are never degraded.
   nor leased bodies may restore one query per enemy and tick.
   Deferred contact is resolved from one local grid query per fixed tick, not
   one Doctor-distance check per distant enemy.
+- The bulk-flow overlay snapshots connected ordinary melee components every
+  0.25 seconds into a double buffer spread over four fixed ticks. Each member
+  retains at most eight exact cached neighbors from a bounded 24-candidate
+  broad-phase query. Its movement hot path performs one projection pass plus
+  final validation over that cache; it must not restore a query, sort or dynamic
+  neighbor allocation per member and tick.
 - Offscreen relocation uses the incrementally maintained EnemyWorld broad
   phase before its exact body-distance check and falls back to the complete
   `CombatQuery` registry while materializing bodies exist. Candidate placement
@@ -109,19 +115,22 @@ and required status feedback are never degraded.
 
 ## Crowd measurement contract
 
-Crowd changes report two deterministic CPU scenarios with the same seed and
-fixture: 220 enemies as the currently reachable dense gameplay load and 600
-enemies as the technical capacity gate. Both retain 360 pickup stacks, 512
-moving gameplay projectiles and 80 feedback effects. Warm-up lasts eight
-simulated seconds and the measured interval at least fifteen simulated
+Crowd changes report deterministic CPU scenarios with the same seed and
+fixture: 145 enemies as the conservative gameplay-cap proxy, 220 enemies as a
+dense regression load, and 600 enemies as the technical capacity gate. The
+runtime gameplay cap is weighted rather than a raw count, so bacterial groups
+can make the real ambient body count lower. All scenarios retain 360 pickup
+stacks, 512 moving gameplay projectiles and 80 feedback effects. Warm-up lasts
+eight simulated seconds and the measured interval at least fifteen simulated
 seconds.
 
 The report includes total, `enemy_world`, `clock_spawn` and `crowd_renderer`
 p50/p95/p99/max plus exact entity counts, node/memory development and fixed
 crowd counters for grid rebuilds, guard queries, examined candidates, corridor
-evaluations, queued ticks, bypass starts and side switches. Counters are active
-only in the profiling run and are returned as one fixed `PackedInt64Array`
-snapshot; production movement creates no report dictionaries.
+evaluations, queued ticks, bypass starts, side switches, bulk snapshots,
+bulk-active ticks, bulk projection candidates and bulk solve time. Counters are
+active only in the profiling run and are returned as one fixed
+`PackedInt64Array` snapshot; production movement creates no report dictionaries.
 
 The 220-enemy scenario must satisfy the native frame budget and may not regress
 against its exact pre-change baseline. The 600-enemy scenario remains the

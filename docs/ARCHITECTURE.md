@@ -326,6 +326,30 @@ spatial index is introduced. Knockback and stun remain the only systems
 permitted to intentionally move an enemy away from the Doctor. `EnemyWorld`
 remains the single typed fixed-step owner; entities add no process loops.
 
+Large ordinary contact islands use an additive bulk-flow layer above that
+single-body contract. Every 0.25 seconds `EnemyWorld` derives connected
+components from the same authored contact circles with at most four world units
+of surface gap. A small bacterium contributes weight one and a bacterial cluster
+weight two. Two consecutive snapshots with weight at least 18 and at least 45
+percent queued weight activate one generation-safe lease; four snapshots below
+weight 12 or below 20 percent queued weight release it. The lease chooses the
+less occupied lateral side once and blends a maximum 20-degree arc into the
+unchanged direct-pursuit step. The accepted endpoint is still bounded by the
+arena, the Doctor-distance monotonicity check and the cached contact circles, so
+the layer cannot add speed, retreat, overlap, teleportation or combat state.
+
+The topology snapshot is built into a double buffer over four fixed ticks. Its
+limited broad-phase query retains the nearest eight exact bodies per member;
+front-to-back resolution consumes only that packed cache and commits through the
+existing spatial grid. Profiling counters expose snapshot count, active ticks,
+examined projection candidates and solve time without production dictionaries.
+Bosses, minor foci, ranged roles and tutorial enemies are disabled at
+registration. An explicit relocation invalidates only the current lease and
+cache while preserving whether an ordinary enemy may join a later island.
+Regular timed waves stop at 145 weighted melee units; critical, boss and
+case-pressure allocations remain governed by `CombatCapacity` and its reserved
+slots rather than this ambient gameplay cap.
+
 Before the avatar step, `EnemyWorld.prepare_avatar_body_interaction()` resolves
 the same authored contact circles from the player's side. Every non-small enemy
 hard-clips the proposed avatar displacement. Small bacteria instead receive a

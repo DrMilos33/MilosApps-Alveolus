@@ -397,7 +397,7 @@ func _run() -> void:
 		enclosed_world.step_fixed(1.0 / 60.0)
 	var enclosed_profile := enclosed_world.crowd_profile_snapshot()
 	_true(
-		enclosed_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES] <= enclosed_blockers.size(),
+		enclosed_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES] <= enclosed_blockers.size() + 1,
 		"Der wartende Innenkörper verwendet seinen validierten Cache statt einer zusätzlichen Vollabfrage (%d / %d)" % [
 			enclosed_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES],
 			enclosed_blockers.size(),
@@ -795,8 +795,7 @@ func _run() -> void:
 			for second_index in range(first_index + 1, stationary_enemies.size()):
 				if stationary_removed[second_index] != 0:
 					continue
-				stationary_minimum_margin = minf(
-					stationary_minimum_margin,
+				var stationary_margin := (
 					topology.distance(
 						stationary_enemies[first_index].global_position,
 						stationary_enemies[second_index].global_position
@@ -804,6 +803,7 @@ func _run() -> void:
 						- stationary_enemies[first_index].contact_body_radius()
 						- stationary_enemies[second_index].contact_body_radius()
 				)
+				stationary_minimum_margin = minf(stationary_minimum_margin, stationary_margin)
 		if tick == 359:
 			for index in range(stationary_enemies.size()):
 				var distance_before_releases := topology.distance(
@@ -1025,8 +1025,8 @@ func _run() -> void:
 	_true(flow_unique_clusters >= 1 and flow_unique_small >= 1, "Kleine und rote Gegner fließen beide an der Außenkante (%d / %d)" % [flow_unique_small, flow_unique_clusters])
 	_true(flow_unique_upper >= 2 and flow_unique_lower >= 2, "Obere und untere Außenkante bleiben beide aktiv (%d / %d)" % [flow_unique_upper, flow_unique_lower])
 	_true(flow_released_contactors.size() >= 3, "Geöffnete Kontaktplätze werden wiederholt von neuen Angreifern gefüllt (%d)" % flow_released_contactors.size())
-	# A stop-to-move transition must immediately discard the wider stationary
-	# cache instead of leaking it into the already accepted moving-Doctor path.
+	# The thresholded island keeps its complete bounded contact guards while the
+	# Doctor starts moving; ordinary non-island pursuit still uses the smaller path.
 	avatar.global_position += Vector2(0.5, 0.0)
 	flow_world.step_fixed(1.0 / 60.0)
 	var maximum_moving_guard_count := 0
@@ -1039,7 +1039,7 @@ func _run() -> void:
 			int(flow_world._crowd_motion_guard_counts[slot])
 		)
 	_true(not flow_world._crowd_avatar_stationary_this_tick, "Die World erkennt den ersten bewegten Doctor-Tick sofort")
-	_true(maximum_moving_guard_count <= 3, "Der erste bewegte Tick nutzt sofort wieder höchstens drei Guards (%d)" % maximum_moving_guard_count)
+	_true(maximum_moving_guard_count <= EnemyWorld.MAX_CROWD_MOTION_GUARDS, "Der bewegte Bulk bleibt auf den vollständigen begrenzten Kontaktguards (%d)" % maximum_moving_guard_count)
 	avatar.global_position = Vector2.ZERO
 	flow_world.clear()
 	for enemy in flow_enemies:

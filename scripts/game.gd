@@ -8,6 +8,7 @@ signal flow_changed(state: GameFlowState.State)
 
 const MAX_ACTIVE_PICKUPS := 360
 const MAX_ENEMY_POOL := 640
+const MAX_AMBIENT_MELEE_WEIGHT := 145
 const MAX_ACTIVE_PROJECTILES := 512
 const MAX_PROJECTILE_POOL := MAX_ACTIVE_PROJECTILES
 const MAX_PICKUP_POOL := MAX_ACTIVE_PICKUPS
@@ -1814,7 +1815,8 @@ func _spawn_step(delta: float) -> void:
 	if selected_level.is_tutorial or stress_test:
 		return
 	_offscreen_relocation_step(delta)
-	if state.boss_spawned or enemies.size() >= 220:
+	var ambient_melee_weight := _ambient_melee_weight()
+	if state.boss_spawned or ambient_melee_weight >= MAX_AMBIENT_MELEE_WEIGHT:
 		return
 	spawn_accumulator -= config.regular_spawn_clock_delta(state.elapsed, delta)
 	if spawn_accumulator > 0.0:
@@ -1836,12 +1838,31 @@ func _spawn_step(delta: float) -> void:
 			cluster_chance = clampf(cluster_chance + finding.magnitude, 0.0, 0.85)
 		if discovery_manager.has_seen(&"pneumococcus") and rng.randf() < cluster_chance:
 			type = &"bacterial_cluster"
+		var spawn_weight := 2 if type == &"bacterial_cluster" else 1
+		if ambient_melee_weight + spawn_weight > MAX_AMBIENT_MELEE_WEIGHT:
+			break
 		var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, progress)
-		_spawn_enemy(
+		var spawned := _spawn_enemy(
 			type,
 			_wave_spawn_position_around_avatar(rng.randf_range(500.0, 620.0), _enemy_body_radius(type)),
 			health_scale
 		)
+		if spawned != null:
+			ambient_melee_weight += spawn_weight
+
+
+func _ambient_melee_weight() -> int:
+	var weight := 0
+	for enemy in enemies:
+		if not is_instance_valid(enemy) or enemy.definition == null or not enemy.is_targetable():
+			continue
+		if enemy.definition.id not in [&"pneumococcus", &"bacterial_cluster"]:
+			continue
+		var handle := enemy_world.handle_for(enemy)
+		if enemy_attack_director != null and enemy_attack_director.role_for(handle) != EnemyAttackDirector.Role.NONE:
+			continue
+		weight += 2 if enemy.definition.id == &"bacterial_cluster" else 1
+	return weight
 
 func _drain_deferred_spawns(maximum_per_tick: int) -> void:
 	var emitted := 0
@@ -2386,6 +2407,12 @@ func _spawn_enemy(
 		if enemy_pool.size() < MAX_ENEMY_POOL:
 			enemy_pool.append(enemy)
 		return null
+	var bulk_flow_allowed := (
+		definition.id in [&"pneumococcus", &"bacterial_cluster"]
+		and not definition.is_boss
+		and (selected_level == null or not selected_level.is_tutorial)
+	)
+	enemy_world.set_bulk_flow_allowed(world_handle, bulk_flow_allowed)
 	_combat_query_dirty = true
 	enemies.append(enemy)
 	crowd_renderer.register_enemy(enemy, force_detailed_discovery)
@@ -2402,6 +2429,7 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 	if bool(request.metadata.get("ranged_shooter", false)) and enemy_attack_director != null and enemy_world != null:
 		var handle := enemy_world.handle_for(enemy)
 		if EntityHandle.is_valid(handle):
+			enemy_world.set_bulk_flow_allowed(handle, false)
 			enemy_attack_director.register_enemy(handle, EnemyAttackDirector.Role.PHASE_ADD)
 
 func _spawn_boss() -> void:
