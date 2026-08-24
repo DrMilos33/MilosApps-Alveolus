@@ -50,6 +50,7 @@ func _run() -> void:
 	_check(screen.control_for_setting(&"option.glyph_mode") == null, "Eingabemodus besitzt kein sichtbares oder fokussierbares Control")
 	_check(screen.control_for_setting(&"binding.ui_info.0") != null, "ui_info besitzt einen zugänglichen ersten Tastaturplatz")
 	_check(screen.control_for_setting(&"binding.ui_info.1") != null, "ui_info besitzt einen zugänglichen zweiten Tastaturplatz")
+	_check(screen.find_child("TestValuesSection", true, false) == null, "Testwerte fehlen ohne ausdrückliche Debug-Verfügbarkeit vollständig")
 	_assert_sections_are_content_driven(screen)
 	_assert_compact_labeled_rows(screen)
 	_assert_closed_focus_and_accessibility(screen)
@@ -82,6 +83,7 @@ func _run() -> void:
 	var restored_focus := get_root().gui_get_focus_owner()
 	_check(restored_focus == screen.control_for_setting(&"binding.ui_info.1"), "Apply stellt Fokus bis auf den konkreten Tastaturplatz wieder her")
 	_check(screen.get_scroll_container().scroll_vertical > 0, "Apply bewahrt die vorherige Scrollposition soweit möglich")
+	await _assert_test_values(screen)
 
 	_assert_dependency_contract()
 	host.queue_free()
@@ -129,6 +131,60 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	_check(bindings == [[&"ui_info", 1], [&"ui_info", 0]], "Binding-Intent enthält Aktion und den ausdrücklich gewählten Tastaturplatz")
 	_check(legacy_bindings == [&"ui_info"], "Der erste Tastaturplatz emittiert weiterhin den kompatiblen Ein-Slot-Intent")
 	_check(reset_count[0] == 1 and new_game_count[0] == 1 and quit_count[0] == 1 and back_count[0] == 1, "Reset, Neues Spiel, Beenden und Zurück bleiben getrennte Intents")
+
+
+func _assert_test_values(screen: SettingsScreen) -> void:
+	var test_settings := RunTestSettingsViewModel.new(true, false, 20, 105)
+	var model := SettingsScreenViewModel.new(
+		5,
+		_audio_fixture(),
+		_option_fixture(),
+		_toggle_fixture(),
+		_binding_fixture(),
+		"",
+		true,
+		null,
+		test_settings
+	)
+	_check(model.has_test_settings(), "Settings-DTO transportiert die explizite Debug-Verfügbarkeit")
+	_check(screen.apply(model), "Debug-Snapshot ergänzt die Testwerte")
+	await _settle()
+	var section := screen.find_child("TestValuesSection", true, false) as PanelContainer
+	_check(section != null and section.get_meta(&"test_only", false), "Testwerte besitzen eine klar markierte eigene Sektion")
+	var immunity := screen.control_for_setting(&"test.damage_immunity") as CheckButton
+	var damage := screen.control_for_setting(&"test.outgoing_damage_bonus_percent") as HSlider
+	var movement := screen.control_for_setting(&"test.movement_speed_percent") as HSlider
+	var reset := screen.control_for_setting(&"test.reset") as Button
+	_check(immunity != null and not immunity.button_pressed, "Schadensimmunität startet ausgeschaltet")
+	_check(damage != null and damage.min_value == 0.0 and damage.max_value == 300.0 and damage.step == 10.0 and damage.value == 20.0, "Schaden nutzt den festen 0–300-Prozent-Vertrag in Zehnerschritten")
+	_check(movement != null and movement.min_value == 50.0 and movement.max_value == 200.0 and movement.step == 5.0 and movement.value == 105.0, "Galopp nutzt den festen 50–200-Prozent-Vertrag in Fünferschritten")
+	var immunity_values: Array[bool] = []
+	var damage_values: Array[int] = []
+	var movement_values: Array[int] = []
+	var reset_count := [0]
+	screen.test_damage_immunity_changed.connect(func(value: bool) -> void: immunity_values.append(value))
+	screen.test_outgoing_damage_bonus_percent_changed.connect(func(value: int) -> void: damage_values.append(value))
+	screen.test_movement_speed_percent_changed.connect(func(value: int) -> void: movement_values.append(value))
+	screen.test_values_reset_requested.connect(func() -> void: reset_count[0] += 1)
+	immunity.toggled.emit(true)
+	damage.value = 40.0
+	movement.value = 115.0
+	reset.pressed.emit()
+	_check(immunity_values == [true], "Testimmunität emittiert einen eindeutigen Live-Intent")
+	_check(damage_values == [40] and movement_values == [115], "Beide Prozentregler emittieren gerasterte Live-Intents")
+	_check(reset_count[0] == 1, "Testwerte-Reset bleibt ein eigener Integrator-Intent")
+	var damage_label := screen.find_child("TestOutgoingDamageBonusValue", true, false) as Label
+	var movement_label := screen.find_child("TestMovementSpeedValue", true, false) as Label
+	_check(damage_label != null and damage_label.text == "+40 %", "Ausgehender Schaden zeigt den Bonus mit Pluszeichen")
+	_check(movement_label != null and movement_label.text == "115 %", "Galopp zeigt den absoluten Prozentwert")
+
+	var release_model := SettingsScreenViewModel.new(
+		6, _audio_fixture(), _option_fixture(), _toggle_fixture(), _binding_fixture(), "", true
+	)
+	_check(screen.apply(release_model), "Snapshot ohne Debug-Verfügbarkeit entfernt Testwerte wieder")
+	await _settle()
+	_check(screen.find_child("TestValuesSection", true, false) == null, "Release-Snapshot hinterlässt weder Sektion noch fokussierbare Testcontrols")
+	_check(screen.control_for_setting(&"test.damage_immunity") == null, "Release-Snapshot exportiert keinen Test-Control-Lookup")
 
 
 func _assert_conflict_modal(screen: SettingsScreen) -> void:
@@ -313,6 +369,7 @@ func _assert_dependency_contract() -> void:
 	for path in [
 		"res://scripts/ui/screens/settings_screen.gd",
 		"res://scripts/ui/view_models/settings_screen_view_model.gd",
+		"res://scripts/ui/view_models/run_test_settings_view_model.gd",
 	]:
 		var source := FileAccess.get_file_as_string(path)
 		for forbidden in ["ContentCatalog", "MetaProgressionState", "PlayerStats", "RunState", "UISettingsState", "InputMap", "AudioServer", "DisplayServer", "add_theme_stylebox_override", "ShaderMaterial", "func _process", "func _physics_process"]:

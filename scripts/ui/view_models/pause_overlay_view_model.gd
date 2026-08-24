@@ -124,16 +124,24 @@ var _rows: Array[StatValueViewModel] = []
 var _revision := 0
 var _content_hash := ""
 var _show_intro_skip := false
+var _test_settings: RunTestSettingsViewModel
 
 
 ## Preferred input is the presenter's stat_sections(...): getter-only DTOs exposing
 ## id(), title() and rows(). Dictionary payloads with the same fields are also
 ## accepted by focused UI runners. Legacy flat rows are grouped only as a
 ## compatibility bridge and should not be produced by new callers.
-static func create(stat_sections: Array, revision_value: int = 0, show_intro_skip_value: bool = false) -> PauseOverlayViewModel:
+static func create(
+	stat_sections: Array,
+	revision_value: int = 0,
+	show_intro_skip_value: bool = false,
+	test_settings_value: RunTestSettingsViewModel = null
+) -> PauseOverlayViewModel:
 	var result := PauseOverlayViewModel.new()
 	result._revision = maxi(0, revision_value)
 	result._show_intro_skip = show_intro_skip_value
+	if test_settings_value != null:
+		result._test_settings = test_settings_value.duplicate_immutable()
 	var copied_sources: Array = stat_sections.duplicate(true)
 	if _looks_like_legacy_rows(copied_sources):
 		copied_sources = _legacy_sections(copied_sources)
@@ -239,6 +247,14 @@ func show_intro_skip() -> bool:
 	return _show_intro_skip
 
 
+func has_test_settings() -> bool:
+	return _test_settings != null and _test_settings.is_available()
+
+
+func test_settings() -> RunTestSettingsViewModel:
+	return _test_settings.duplicate_immutable() if _test_settings != null else null
+
+
 func stat_at(index_value: int) -> StatValueViewModel:
 	if index_value < 0 or index_value >= _rows.size():
 		return null
@@ -253,6 +269,9 @@ func stats() -> Array[StatValueViewModel]:
 
 func _calculate_content_hash() -> String:
 	var canonical := PackedStringArray(["intro_skip:%s" % str(_show_intro_skip)])
+	canonical.append("test_settings:%s" % str(_test_settings != null))
+	if _test_settings != null:
+		_test_settings.append_signature(canonical)
 	for section in _sections:
 		canonical.append(_length_prefixed(String(section.id())))
 		canonical.append(_length_prefixed(section.title()))

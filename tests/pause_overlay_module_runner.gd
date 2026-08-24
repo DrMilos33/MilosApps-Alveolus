@@ -2,8 +2,10 @@ extends SceneTree
 
 const PAUSE_OVERLAY_PATH := "res://scripts/ui/screens/pause_overlay.gd"
 const PAUSE_VIEW_MODEL_PATH := "res://scripts/ui/view_models/pause_overlay_view_model.gd"
+const TEST_VIEW_MODEL_PATH := "res://scripts/ui/view_models/run_test_settings_view_model.gd"
 const PauseOverlayScript := preload(PAUSE_OVERLAY_PATH)
 const PauseOverlayViewModelScript := preload(PAUSE_VIEW_MODEL_PATH)
+const RunTestSettingsViewModelScript := preload(TEST_VIEW_MODEL_PATH)
 
 var assertions := 0
 var failures: Array[String] = []
@@ -21,7 +23,13 @@ func _run() -> void:
 
 
 func _test_source_boundaries() -> void:
-	var source := _read_source(PAUSE_OVERLAY_PATH) + "\n" + _read_source(PAUSE_VIEW_MODEL_PATH)
+	var source := (
+		_read_source(PAUSE_OVERLAY_PATH)
+		+ "\n"
+		+ _read_source(PAUSE_VIEW_MODEL_PATH)
+		+ "\n"
+		+ _read_source(TEST_VIEW_MODEL_PATH)
+	)
 	for forbidden in [
 		"MetaProgressionState",
 		"PlayerStats",
@@ -117,6 +125,9 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	_check(title_line != null and title_label != null and absf(title_label.get_global_rect().get_center().x - title_line.get_global_rect().get_center().x) <= 1.0, "Pausentitel liegt geometrisch in der horizontalen Modalmitte")
 	_check(overlay.body_scroll().follow_focus and overlay.body_scroll().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Der Inhaltsviewport folgt Fokus ohne horizontalen Scroll")
 	_check(overlay.menu_action_grid().columns == 3, "Breites Pausenmenü ordnet Nebenaktionen kompakt in einer Zeile an")
+	_check(not overlay.test_values_action().visible, "Testwerte-Aktion ist ohne ausdrückliche Debug-Verfügbarkeit vollständig ausgeblendet")
+	_check(overlay.find_child("TestValuesBody", true, false) == null, "Ohne Debug-Verfügbarkeit wird keine Testwerte-Sektion aufgebaut")
+	_check(not overlay.set_mode(PauseOverlay.Mode.TEST, false), "Ausgeblendete Testwerte können nicht per Modus-API geöffnet werden")
 	_check(overlay.resume_action().get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_PRIMARY, "Weiter ist die einzige Primäraktion")
 	_check(overlay.abort_action().get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_DANGER, "Runde abbrechen besitzt ausschließlich die Gefahrrolle")
 	_check(_primary_action_count(overlay) == 1, "Das gesamte Overlay enthält genau eine Primäraktion")
@@ -205,10 +216,84 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	var empty: PauseOverlayViewModel = PauseOverlayViewModelScript.create([], 16)
 	_check(overlay.apply_view_model(empty, PauseOverlay.Mode.MENU), "Leerer aktueller Snapshot wird angewendet")
 	_check(overlay.stats_action().disabled and overlay.stat_sections().is_empty(), "Charakterwerte sind ohne Sektionen eindeutig deaktiviert")
+	await _assert_test_values_mode(overlay)
 	overlay.hide()
 	_check(not overlay.handle_ui_cancel(), "Verdecktes Overlay konsumiert ui_cancel nicht")
 	host.queue_free()
 	await process_frame
+
+
+func _assert_test_values_mode(overlay: PauseOverlay) -> void:
+	var test_settings := RunTestSettingsViewModelScript.new(true, false, 30, 110)
+	var test_model: PauseOverlayViewModel = PauseOverlayViewModelScript.create(
+		_stat_sections(),
+		17,
+		false,
+		test_settings
+	)
+	_check(test_model.has_test_settings(), "Pause-DTO übernimmt die explizite Debug-Verfügbarkeit")
+	var copied_test_settings := test_model.test_settings()
+	_check(copied_test_settings != test_settings and copied_test_settings.outgoing_damage_bonus_percent() == 30, "Pause-DTO hält eine immutable Kopie der Testwerte")
+	_check(overlay.apply_view_model(test_model, PauseOverlay.Mode.MENU), "Debug-Snapshot ergänzt die Testwerte-Aktion")
+	await _settle()
+	_check(overlay.test_values_action().is_visible_in_tree(), "Testwerte erscheinen als eigene Pausenaktion")
+	_check(overlay.menu_action_grid().columns == 2, "Vier Pausenaktionen bleiben im breiten Testmodus als lesbares Zweispaltenraster")
+	var requests := [0]
+	overlay.test_values_requested.connect(func() -> void: requests[0] += 1)
+	overlay.test_values_action().pressed.emit()
+	_check(requests[0] == 1, "Testwerte-Button emittiert einen eigenen Routing-Intent")
+	_check(overlay.set_mode(PauseOverlay.Mode.TEST, false), "Pause öffnet den eigenen Testwerte-Modus")
+	await _settle()
+	_check(overlay.title_text() == "Testwerte", "Testwerte-Modus besitzt einen eindeutigen Titel")
+	_check(overlay.test_values_body().is_visible_in_tree(), "Testwerte-Modus zeigt ausschließlich seinen eingebetteten Body")
+	_check(not overlay.resume_action().visible and overlay.back_action().visible, "Testwerte behalten wie Charakterwerte einen festen Rückweg")
+	var immunity := overlay.test_control(&"damage_immunity") as CheckButton
+	var damage := overlay.test_control(&"outgoing_damage_bonus_percent") as HSlider
+	var movement := overlay.test_control(&"movement_speed_percent") as HSlider
+	var reset := overlay.test_control(&"reset") as Button
+	_check(immunity != null and not immunity.button_pressed, "Pause zeigt Schadensimmunität standardmäßig ausgeschaltet")
+	_check(damage != null and damage.min_value == 0.0 and damage.max_value == 300.0 and damage.step == 10.0 and damage.value == 30.0, "Pause bindet den 0–300-Schadensvertrag")
+	_check(movement != null and movement.min_value == 50.0 and movement.max_value == 200.0 and movement.step == 5.0 and movement.value == 110.0, "Pause bindet den 50–200-Galoppvertrag")
+	_check(overlay.grab_initial_focus(), "Testwerte-Modus kann den ersten Live-Schalter fokussieren")
+	await process_frame
+	_check(get_root().gui_get_focus_owner() == immunity, "Testwerte starten am ersten veränderbaren Wert")
+	var immunity_values: Array[bool] = []
+	var damage_values: Array[int] = []
+	var movement_values: Array[int] = []
+	var reset_count := [0]
+	overlay.test_damage_immunity_changed.connect(func(value: bool) -> void: immunity_values.append(value))
+	overlay.test_outgoing_damage_bonus_percent_changed.connect(func(value: int) -> void: damage_values.append(value))
+	overlay.test_movement_speed_percent_changed.connect(func(value: int) -> void: movement_values.append(value))
+	overlay.test_values_reset_requested.connect(func() -> void: reset_count[0] += 1)
+	immunity.toggled.emit(true)
+	damage.value = 50.0
+	movement.value = 120.0
+	reset.pressed.emit()
+	_check(immunity_values == [true], "Pause emittiert Immunitätsänderungen live")
+	_check(damage_values == [50] and movement_values == [120], "Pause emittiert beide gerasterten Prozentänderungen live")
+	_check(reset_count[0] == 1, "Pause emittiert Reset getrennt von Feldänderungen")
+	var damage_label := overlay.find_child("TestOutgoingDamageBonusValue", true, false) as Label
+	var movement_label := overlay.find_child("TestMovementSpeedValue", true, false) as Label
+	_check(damage_label != null and damage_label.text == "+50 %", "Pause formatiert ausgehenden Schaden als Bonus")
+	_check(movement_label != null and movement_label.text == "120 %", "Pause formatiert Galopp als absoluten Prozentwert")
+
+	var refreshed_settings := RunTestSettingsViewModelScript.new(true, true, 80, 135)
+	var refreshed: PauseOverlayViewModel = PauseOverlayViewModelScript.create(
+		_stat_sections(),
+		18,
+		false,
+		refreshed_settings
+	)
+	_check(overlay.apply_view_model(refreshed, PauseOverlay.Mode.TEST), "Live-Snapshot aktualisiert Testcontrols im offenen Modus")
+	await _settle()
+	_check(immunity.button_pressed and damage.value == 80.0 and movement.value == 135.0, "Integrator-Refresh synchronisiert alle offenen Testwerte")
+	_check(immunity_values == [true] and damage_values == [50] and movement_values == [120], "View-Model-Synchronisierung erzeugt keine doppelten Change-Intents")
+
+	var release_model: PauseOverlayViewModel = PauseOverlayViewModelScript.create(_stat_sections(), 19)
+	_check(overlay.apply_view_model(release_model, PauseOverlay.Mode.MENU), "Snapshot ohne Debug-Freigabe schließt den Testmodus")
+	await _settle()
+	_check(not overlay.test_values_action().visible, "Release-Snapshot blendet die Testwerte-Aktion wieder vollständig aus")
+	_check(not overlay.set_mode(PauseOverlay.Mode.TEST, false), "Release-Snapshot sperrt den Testmodus erneut")
 
 
 func _assert_section_contract(overlay: PauseOverlay, view_model: PauseOverlayViewModel) -> void:
@@ -318,6 +403,7 @@ func _primary_action_count(root: Node) -> int:
 		overlay.resume_action(),
 		overlay.settings_action(),
 		overlay.stats_action(),
+		overlay.test_values_action(),
 		overlay.abort_action(),
 		overlay.back_action(),
 	]

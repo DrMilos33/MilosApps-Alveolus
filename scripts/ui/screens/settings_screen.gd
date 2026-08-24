@@ -16,6 +16,10 @@ signal binding_conflict_decided(
 	replace_existing: bool
 )
 signal bindings_reset_requested
+signal test_damage_immunity_changed(enabled: bool)
+signal test_outgoing_damage_bonus_percent_changed(percent: int)
+signal test_movement_speed_percent_changed(percent: int)
+signal test_values_reset_requested
 signal new_game_requested
 signal quit_requested
 signal back
@@ -264,6 +268,9 @@ func _rebuild_sections() -> void:
 		if setting.is_visible():
 			_build_toggle_row(_toggles_grid, setting)
 
+	if _view_model.has_test_settings():
+		_build_test_settings_section(_view_model.get_test_settings())
+
 	var controls_section := _section("Steuerung", AlveolusVisualTheme.TURQUOISE)
 	var controls_panel := controls_section["panel"] as PanelContainer
 	var controls_content := controls_section["content"] as VBoxContainer
@@ -359,6 +366,148 @@ func _section(title_text: String, accent: Color) -> Dictionary:
 	content.add_child(AlveolusUIComponents.label(title_text, AlveolusVisualTheme.TYPE_SECTION_LABEL))
 	panel.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CONTENT_GAP))
 	return {"panel": panel, "content": content}
+
+
+func _build_test_settings_section(settings: RunTestSettingsViewModel) -> void:
+	if settings == null or not settings.is_available():
+		return
+	var section := _section("Testwerte", AlveolusVisualTheme.GOLD)
+	var panel := section["panel"] as PanelContainer
+	var content := section["content"] as VBoxContainer
+	panel.name = "TestValuesSection"
+	panel.set_meta(&"test_only", true)
+	_settings_stack.add_child(panel)
+
+	var immunity := AlveolusUIComponents.toggle_row(
+		"Ein" if settings.damage_immunity_enabled() else "Aus",
+		settings.damage_immunity_enabled()
+	)
+	immunity.name = "TestDamageImmunity"
+	immunity.theme_type_variation = &""
+	immunity.flat = true
+	immunity.set_meta(&"alveolus_component", &"transparent_toggle")
+	immunity.set_meta(&"setting_id", &"test.damage_immunity")
+	immunity.set_meta(&"setting_purpose", "Schadensimmunität")
+	_update_test_immunity_accessibility(immunity, settings.damage_immunity_enabled())
+	immunity.toggled.connect(_on_test_damage_immunity_changed.bind(immunity))
+	var immunity_row := _compact_setting_row("Schadensimmunität", immunity)
+	immunity_row.name = "TestDamageImmunityRow"
+	content.add_child(immunity_row)
+	_controls[&"test.damage_immunity"] = immunity
+	_focus_order.append(immunity)
+
+	_build_test_slider(
+		content,
+		&"test.outgoing_damage_bonus_percent",
+		"TestOutgoingDamageBonus",
+		"Ausgehender Schaden",
+		RunTestSettingsViewModel.OUTGOING_DAMAGE_BONUS_MIN,
+		RunTestSettingsViewModel.OUTGOING_DAMAGE_BONUS_MAX,
+		settings.outgoing_damage_bonus_percent(),
+		RunTestSettingsViewModel.OUTGOING_DAMAGE_BONUS_STEP,
+		true
+	)
+	_build_test_slider(
+		content,
+		&"test.movement_speed_percent",
+		"TestMovementSpeed",
+		"Galopp",
+		RunTestSettingsViewModel.MOVEMENT_SPEED_MIN,
+		RunTestSettingsViewModel.MOVEMENT_SPEED_MAX,
+		settings.movement_speed_percent(),
+		RunTestSettingsViewModel.MOVEMENT_SPEED_STEP,
+		false
+	)
+
+	var reset_button := AlveolusUIComponents.action_button(
+		"Testwerte zurücksetzen",
+		AlveolusUIComponents.ACTION_QUIET,
+		&"restart",
+		AlveolusVisualTheme.MUTED
+	)
+	reset_button.name = "ResetTestValuesButton"
+	reset_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	reset_button.set_meta(&"setting_id", &"test.reset")
+	reset_button.set_meta(&"alveolus_accessible_name", "Testwerte auf Standard zurücksetzen")
+	reset_button.pressed.connect(func() -> void: test_values_reset_requested.emit())
+	content.add_child(reset_button)
+	_controls[&"test.reset"] = reset_button
+	_focus_order.append(reset_button)
+
+
+func _build_test_slider(
+	parent: VBoxContainer,
+	setting_id: StringName,
+	node_name: String,
+	label_text: String,
+	minimum: int,
+	maximum: int,
+	current_value: int,
+	step_value: int,
+	is_bonus: bool
+) -> void:
+	var parts := AlveolusUIComponents.slider_row(
+		label_text,
+		float(minimum),
+		float(maximum),
+		float(current_value),
+		float(step_value)
+	)
+	var row := parts["row"] as HBoxContainer
+	var slider := parts["control"] as HSlider
+	var value_label := parts["value_label"] as Label
+	row.name = "%sRow" % node_name
+	slider.name = node_name
+	slider.set_meta(&"setting_id", setting_id)
+	value_label.name = "%sValue" % node_name
+	value_label.custom_minimum_size.x = 64.0
+	_update_test_percent_label(value_label, slider, current_value, label_text, is_bonus)
+	slider.value_changed.connect(
+		_on_test_percent_changed.bind(slider, value_label, label_text, is_bonus)
+	)
+	parent.add_child(row)
+	_controls[setting_id] = slider
+	_focus_order.append(slider)
+
+
+func _on_test_damage_immunity_changed(enabled: bool, toggle: CheckButton) -> void:
+	toggle.text = "Ein" if enabled else "Aus"
+	_update_test_immunity_accessibility(toggle, enabled)
+	test_damage_immunity_changed.emit(enabled)
+
+
+func _update_test_immunity_accessibility(toggle: CheckButton, enabled: bool) -> void:
+	toggle.set_meta(
+		&"alveolus_accessible_name",
+		"Schadensimmunität: %s" % ("Ein" if enabled else "Aus")
+	)
+
+
+func _on_test_percent_changed(
+	value: float,
+	slider: HSlider,
+	value_label: Label,
+	label_text: String,
+	is_bonus: bool
+) -> void:
+	var percent := roundi(value)
+	_update_test_percent_label(value_label, slider, percent, label_text, is_bonus)
+	if is_bonus:
+		test_outgoing_damage_bonus_percent_changed.emit(percent)
+	else:
+		test_movement_speed_percent_changed.emit(percent)
+
+
+func _update_test_percent_label(
+	value_label: Label,
+	slider: HSlider,
+	percent: int,
+	label_text: String,
+	is_bonus: bool
+) -> void:
+	var formatted := "+%d %%" % percent if is_bonus else "%d %%" % percent
+	value_label.text = formatted
+	slider.set_meta(&"alveolus_accessible_name", "%s: %s" % [label_text, formatted])
 
 
 func _build_audio_row(parent: VBoxContainer, setting: SettingsScreenViewModel.AudioSettingViewModel) -> void:

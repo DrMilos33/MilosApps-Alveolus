@@ -11,6 +11,11 @@ extends Control
 signal resume_requested
 signal settings_requested
 signal stats_requested
+signal test_values_requested
+signal test_damage_immunity_changed(enabled: bool)
+signal test_outgoing_damage_bonus_percent_changed(percent: int)
+signal test_movement_speed_percent_changed(percent: int)
+signal test_values_reset_requested
 signal abort_requested
 signal intro_skip_requested
 signal back_requested
@@ -18,6 +23,7 @@ signal back_requested
 enum Mode {
 	MENU,
 	STATS,
+	TEST,
 }
 
 const MENU_MAXIMUM_WIDTH := 620.0
@@ -62,14 +68,22 @@ var _menu_danger_row: HBoxContainer
 var _stats_body: VBoxContainer
 var _stats_grid: GridContainer
 var _empty_stats_label: Label
+var _test_body: VBoxContainer
 var _footer_actions: HBoxContainer
 
 var _resume_button: Button
 var _settings_button: Button
 var _stats_button: Button
+var _test_values_button: Button
 var _abort_button: Button
 var _intro_skip_button: Button
 var _back_button: Button
+var _test_damage_immunity_toggle: CheckButton
+var _test_outgoing_damage_slider: HSlider
+var _test_outgoing_damage_value: Label
+var _test_movement_speed_slider: HSlider
+var _test_movement_speed_value: Label
+var _test_reset_button: Button
 var _stat_sections: Array[PanelContainer] = []
 var _stat_rows: Array[PanelContainer] = []
 var _section_controls: Dictionary = {}
@@ -92,7 +106,9 @@ func _init() -> void:
 
 
 func apply_view_model(view_model: PauseOverlayViewModel, mode: int = Mode.MENU) -> bool:
-	if view_model == null or mode < Mode.MENU or mode > Mode.STATS:
+	if view_model == null or mode < Mode.MENU or mode > Mode.TEST:
+		return false
+	if mode == Mode.TEST and not view_model.has_test_settings():
 		return false
 	if _applied_revision >= 0 and view_model.revision() < _applied_revision:
 		return false
@@ -106,9 +122,14 @@ func apply_view_model(view_model: PauseOverlayViewModel, mode: int = Mode.MENU) 
 	_view_model = view_model
 	_applied_revision = view_model.revision()
 	_applied_content_hash = view_model.content_hash()
+	if view_model.has_test_settings():
+		_build_test_body()
 	if content_changed:
 		_sync_stat_sections()
+		_sync_test_settings()
 	AlveolusUIComponents.set_button_disabled(_stats_button, not view_model.has_stats())
+	_test_values_button.visible = view_model.has_test_settings()
+	AlveolusUIComponents.set_button_disabled(_test_values_button, not view_model.has_test_settings())
 	_intro_skip_button.visible = view_model.show_intro_skip()
 	_apply_mode(mode)
 	# A newer presenter revision with identical visible data is acknowledged but
@@ -129,7 +150,9 @@ func dismiss() -> void:
 
 
 func set_mode(mode: int, request_focus: bool = true) -> bool:
-	if mode < Mode.MENU or mode > Mode.STATS or mode == _mode:
+	if mode < Mode.MENU or mode > Mode.TEST or mode == _mode:
+		return false
+	if mode == Mode.TEST and (_view_model == null or not _view_model.has_test_settings()):
 		return false
 	_apply_mode(mode)
 	if request_focus:
@@ -147,7 +170,11 @@ func handle_ui_cancel() -> bool:
 
 
 func grab_initial_focus() -> bool:
-	var target := _resume_button if _mode == Mode.MENU else _back_button
+	var target: Control = _resume_button
+	if _mode == Mode.STATS:
+		target = _back_button
+	elif _mode == Mode.TEST:
+		target = _test_damage_immunity_toggle
 	if not is_inside_tree() or not is_visible_in_tree() or target == null or not target.is_visible_in_tree():
 		return false
 	target.grab_focus()
@@ -185,6 +212,10 @@ func menu_action_grid() -> GridContainer:
 
 func stats_grid() -> GridContainer:
 	return _stats_grid
+
+
+func test_values_body() -> VBoxContainer:
+	return _test_body
 
 
 func stat_sections() -> Array[PanelContainer]:
@@ -231,6 +262,23 @@ func settings_action() -> Button:
 
 func stats_action() -> Button:
 	return _stats_button
+
+
+func test_values_action() -> Button:
+	return _test_values_button
+
+
+func test_control(setting_id: StringName) -> Control:
+	match setting_id:
+		&"damage_immunity":
+			return _test_damage_immunity_toggle
+		&"outgoing_damage_bonus_percent":
+			return _test_outgoing_damage_slider
+		&"movement_speed_percent":
+			return _test_movement_speed_slider
+		&"reset":
+			return _test_reset_button
+	return null
 
 
 func abort_action() -> Button:
@@ -349,6 +397,7 @@ func _build() -> void:
 		_resume_button,
 		_settings_button,
 		_stats_button,
+		_test_values_button,
 		_abort_button,
 		_intro_skip_button,
 		_back_button,
@@ -404,6 +453,19 @@ func _build_menu_body() -> void:
 	_stats_button.pressed.connect(func() -> void: stats_requested.emit())
 	_menu_actions.add_child(_stats_button)
 
+	_test_values_button = AlveolusUIComponents.action_button(
+		"Testwerte",
+		AlveolusUIComponents.ACTION_SECONDARY,
+		&"settings",
+		AlveolusVisualTheme.GOLD
+	)
+	_test_values_button.name = "TestValues"
+	_test_values_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_test_values_button.set_meta(&"test_only", true)
+	_test_values_button.hide()
+	_test_values_button.pressed.connect(func() -> void: test_values_requested.emit())
+	_menu_actions.add_child(_test_values_button)
+
 	_abort_button = AlveolusUIComponents.action_button(
 		"Runde abbrechen",
 		AlveolusUIComponents.ACTION_DANGER,
@@ -450,6 +512,196 @@ func _build_stats_body() -> void:
 	_stats_grid.add_theme_constant_override("h_separation", 0)
 	_stats_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTENT_GAP)
 	_stats_body.add_child(_stats_grid)
+
+
+func _build_test_body() -> void:
+	if _test_body != null:
+		return
+	_test_body = VBoxContainer.new()
+	_test_body.name = "TestValuesBody"
+	_test_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_test_body.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	_test_body.set_meta(&"test_only", true)
+	_body_stack.add_child(_test_body)
+
+	var panel := AlveolusUIComponents.surface(
+		AlveolusVisualTheme.SurfaceRole.ACTION_CARD,
+		AlveolusVisualTheme.GOLD
+	)
+	panel.name = "TestValuesPanel"
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var content := VBoxContainer.new()
+	content.name = "TestValuesControls"
+	content.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	panel.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CONTENT_GAP))
+	_test_body.add_child(panel)
+
+	_test_damage_immunity_toggle = AlveolusUIComponents.toggle_row("Aus", false)
+	_test_damage_immunity_toggle.name = "TestDamageImmunity"
+	_test_damage_immunity_toggle.theme_type_variation = &""
+	_test_damage_immunity_toggle.flat = true
+	_test_damage_immunity_toggle.set_meta(&"alveolus_component", &"transparent_toggle")
+	_test_damage_immunity_toggle.set_meta(&"test_only", true)
+	_test_damage_immunity_toggle.toggled.connect(_on_test_damage_immunity_changed)
+	content.add_child(_test_setting_row("Schadensimmunität", _test_damage_immunity_toggle))
+
+	var damage_parts := _test_slider_row(
+		"Ausgehender Schaden",
+		RunTestSettingsViewModel.OUTGOING_DAMAGE_BONUS_MIN,
+		RunTestSettingsViewModel.OUTGOING_DAMAGE_BONUS_MAX,
+		0,
+		RunTestSettingsViewModel.OUTGOING_DAMAGE_BONUS_STEP,
+		true
+	)
+	_test_outgoing_damage_slider = damage_parts["control"] as HSlider
+	_test_outgoing_damage_slider.name = "TestOutgoingDamageBonus"
+	_test_outgoing_damage_value = damage_parts["value_label"] as Label
+	_test_outgoing_damage_value.name = "TestOutgoingDamageBonusValue"
+	content.add_child(damage_parts["row"] as HBoxContainer)
+
+	var movement_parts := _test_slider_row(
+		"Galopp",
+		RunTestSettingsViewModel.MOVEMENT_SPEED_MIN,
+		RunTestSettingsViewModel.MOVEMENT_SPEED_MAX,
+		100,
+		RunTestSettingsViewModel.MOVEMENT_SPEED_STEP,
+		false
+	)
+	_test_movement_speed_slider = movement_parts["control"] as HSlider
+	_test_movement_speed_slider.name = "TestMovementSpeed"
+	_test_movement_speed_value = movement_parts["value_label"] as Label
+	_test_movement_speed_value.name = "TestMovementSpeedValue"
+	content.add_child(movement_parts["row"] as HBoxContainer)
+
+	_test_reset_button = AlveolusUIComponents.action_button(
+		"Testwerte zurücksetzen",
+		AlveolusUIComponents.ACTION_QUIET,
+		&"restart",
+		AlveolusVisualTheme.MUTED
+	)
+	_test_reset_button.name = "ResetTestValues"
+	_test_reset_button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_test_reset_button.set_meta(&"test_only", true)
+	_test_reset_button.set_meta(&"alveolus_accessible_name", "Testwerte auf Standard zurücksetzen")
+	_test_reset_button.pressed.connect(func() -> void: test_values_reset_requested.emit())
+	content.add_child(_test_reset_button)
+	for control in [
+		_test_damage_immunity_toggle,
+		_test_outgoing_damage_slider,
+		_test_movement_speed_slider,
+		_test_reset_button,
+	]:
+		control.focus_entered.connect(_ensure_focus_visible.bind(control))
+
+
+func _test_setting_row(label_text: String, control: Control) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	row.set_meta(&"alveolus_component", &"compact_setting_row")
+	var label := AlveolusUIComponents.label(label_text, AlveolusVisualTheme.TYPE_BODY_LABEL)
+	label.name = "SettingPurpose"
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(label)
+	control.focus_mode = Control.FOCUS_ALL
+	control.custom_minimum_size.y = maxf(
+		control.custom_minimum_size.y,
+		AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	)
+	row.add_child(control)
+	return row
+
+
+func _test_slider_row(
+	label_text: String,
+	minimum: int,
+	maximum: int,
+	current_value: int,
+	step_value: int,
+	is_bonus: bool
+) -> Dictionary:
+	var parts := AlveolusUIComponents.slider_row(
+		label_text,
+		float(minimum),
+		float(maximum),
+		float(current_value),
+		float(step_value)
+	)
+	var slider := parts["control"] as HSlider
+	var value_label := parts["value_label"] as Label
+	slider.set_meta(&"test_only", true)
+	value_label.custom_minimum_size.x = 64.0
+	_update_test_percent_label(value_label, slider, current_value, label_text, is_bonus)
+	slider.value_changed.connect(
+		_on_test_percent_changed.bind(slider, value_label, label_text, is_bonus)
+	)
+	return parts
+
+
+func _sync_test_settings() -> void:
+	if _view_model == null or not _view_model.has_test_settings():
+		return
+	var settings := _view_model.test_settings()
+	_test_damage_immunity_toggle.set_pressed_no_signal(settings.damage_immunity_enabled())
+	_update_test_immunity(settings.damage_immunity_enabled())
+	_test_outgoing_damage_slider.set_value_no_signal(settings.outgoing_damage_bonus_percent())
+	_update_test_percent_label(
+		_test_outgoing_damage_value,
+		_test_outgoing_damage_slider,
+		settings.outgoing_damage_bonus_percent(),
+		"Ausgehender Schaden",
+		true
+	)
+	_test_movement_speed_slider.set_value_no_signal(settings.movement_speed_percent())
+	_update_test_percent_label(
+		_test_movement_speed_value,
+		_test_movement_speed_slider,
+		settings.movement_speed_percent(),
+		"Galopp",
+		false
+	)
+
+
+func _on_test_damage_immunity_changed(enabled: bool) -> void:
+	_update_test_immunity(enabled)
+	test_damage_immunity_changed.emit(enabled)
+
+
+func _update_test_immunity(enabled: bool) -> void:
+	_test_damage_immunity_toggle.text = "Ein" if enabled else "Aus"
+	_test_damage_immunity_toggle.set_meta(
+		&"alveolus_accessible_name",
+		"Schadensimmunität: %s" % ("Ein" if enabled else "Aus")
+	)
+
+
+func _on_test_percent_changed(
+	value: float,
+	slider: HSlider,
+	value_label: Label,
+	label_text: String,
+	is_bonus: bool
+) -> void:
+	var percent := roundi(value)
+	_update_test_percent_label(value_label, slider, percent, label_text, is_bonus)
+	if is_bonus:
+		test_outgoing_damage_bonus_percent_changed.emit(percent)
+	else:
+		test_movement_speed_percent_changed.emit(percent)
+
+
+func _update_test_percent_label(
+	value_label: Label,
+	slider: HSlider,
+	percent: int,
+	label_text: String,
+	is_bonus: bool
+) -> void:
+	var formatted := "+%d %%" % percent if is_bonus else "%d %%" % percent
+	value_label.text = formatted
+	slider.set_meta(&"alveolus_accessible_name", "%s: %s" % [label_text, formatted])
 
 
 func _sync_stat_sections() -> void:
@@ -716,12 +968,20 @@ func _safe_node_suffix(value: StringName) -> String:
 func _apply_mode(mode: int) -> void:
 	_mode = mode
 	var menu_visible := mode == Mode.MENU
-	_title_label.text = "Pause" if menu_visible else "Charakterwerte"
+	match mode:
+		Mode.MENU:
+			_title_label.text = "Pause"
+		Mode.STATS:
+			_title_label.text = "Charakterwerte"
+		Mode.TEST:
+			_title_label.text = "Testwerte"
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if menu_visible else HORIZONTAL_ALIGNMENT_LEFT
 	_doctor_balance.visible = menu_visible
 	_doctor_label.visible = menu_visible
 	_menu_body.visible = menu_visible
-	_stats_body.visible = not menu_visible
+	_stats_body.visible = mode == Mode.STATS
+	if _test_body != null:
+		_test_body.visible = mode == Mode.TEST
 	_resume_button.visible = menu_visible
 	_back_button.visible = not menu_visible
 	_update_focus_trap()
@@ -729,19 +989,36 @@ func _apply_mode(mode: int) -> void:
 
 
 func _update_focus_trap() -> void:
-	var visible_actions: Array[Button] = []
+	var visible_actions: Array[Control] = []
 	if _mode == Mode.MENU:
-		var menu_buttons: Array[Button] = [_settings_button, _stats_button, _intro_skip_button, _abort_button, _resume_button]
+		var menu_buttons: Array[Button] = [
+			_settings_button,
+			_stats_button,
+			_test_values_button,
+			_intro_skip_button,
+			_abort_button,
+			_resume_button,
+		]
 		for button in menu_buttons:
 			if not button.disabled and button.visible:
 				visible_actions.append(button)
-	else:
+	elif _mode == Mode.STATS:
 		if _view_model != null:
 			for section in _view_model.sections():
 				var header := _section_headers.get(section.id()) as Button
 				if header != null and header.visible and not header.disabled:
 					visible_actions.append(header)
 		visible_actions.append(_back_button)
+	else:
+		for control in [
+			_test_damage_immunity_toggle,
+			_test_outgoing_damage_slider,
+			_test_movement_speed_slider,
+			_test_reset_button,
+			_back_button,
+		]:
+			if control != null and control.visible and control.focus_mode != Control.FOCUS_NONE:
+				visible_actions.append(control)
 	for index in range(visible_actions.size()):
 		var action := visible_actions[index]
 		var previous := visible_actions[posmod(index - 1, visible_actions.size())]
@@ -787,7 +1064,7 @@ func _update_responsive_layout() -> void:
 	for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
 		_sheet_margin.add_theme_constant_override(side, sheet_padding)
 	var compact_menu := sheet_width < COMPACT_MENU_BREAKPOINT
-	_menu_actions.columns = 2 if compact_menu else 3
+	_menu_actions.columns = 2 if compact_menu or _has_test_settings() else 3
 	_set_compact_menu_layout(compact_menu)
 	_stats_grid.columns = 1
 	for body_value in _section_bodies.values():
@@ -797,7 +1074,11 @@ func _update_responsive_layout() -> void:
 	_set_compact_stat_label_width(compact_menu)
 
 	_body_scroll.custom_minimum_size.y = 0.0
-	var active_body: Control = _menu_body if _mode == Mode.MENU else _stats_body
+	var active_body: Control = _menu_body
+	if _mode == Mode.STATS:
+		active_body = _stats_body
+	elif _mode == Mode.TEST:
+		active_body = _test_body
 	var body_height := active_body.get_combined_minimum_size().y
 	var active_footer := _resume_button if _mode == Mode.MENU else _back_button
 	var chrome_height := (
@@ -837,11 +1118,15 @@ func _set_compact_menu_layout(compact: bool) -> void:
 		return
 	if _abort_button.get_parent() != _menu_actions:
 		_abort_button.reparent(_menu_actions)
-		# Settings, stats and abort retain the established desktop order. The
-		# optional intro action follows them when it is enabled.
-		_menu_actions.move_child(_abort_button, 2)
+		# Routine actions stay before the danger action. The optional intro
+		# action follows them when it is enabled.
+		_menu_actions.move_child(_abort_button, mini(3, _menu_actions.get_child_count() - 1))
 		_update_focus_trap()
 	_menu_danger_row.hide()
+
+
+func _has_test_settings() -> bool:
+	return _view_model != null and _view_model.has_test_settings()
 
 
 func _measured_stat_value_width(value: Label) -> float:

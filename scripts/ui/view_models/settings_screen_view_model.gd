@@ -272,6 +272,7 @@ var _option_settings: Array[OptionSettingViewModel]
 var _toggle_settings: Array[ToggleSettingViewModel]
 var _binding_settings: Array[BindingSettingViewModel]
 var _binding_conflict: BindingConflictViewModel
+var _test_settings: RunTestSettingsViewModel
 
 
 func _init(
@@ -282,7 +283,8 @@ func _init(
 	binding_settings_value: Array[BindingSettingViewModel] = [],
 	status_text_value: String = "",
 	show_quit_value: bool = false,
-	binding_conflict_value: BindingConflictViewModel = null
+	binding_conflict_value: BindingConflictViewModel = null,
+	test_settings_value: RunTestSettingsViewModel = null
 ) -> void:
 	_revision = maxi(revision_value, 0)
 	_show_quit = show_quit_value
@@ -292,6 +294,7 @@ func _init(
 	_toggle_settings = _copy_toggles(toggle_settings_value)
 	_binding_settings = _copy_bindings(binding_settings_value)
 	_binding_conflict = binding_conflict_value.duplicate_immutable() if binding_conflict_value != null else null
+	_test_settings = test_settings_value.duplicate_immutable() if test_settings_value != null else null
 	_content_hash = _calculate_content_hash()
 
 
@@ -339,6 +342,14 @@ func get_binding_conflict() -> BindingConflictViewModel:
 	return _binding_conflict.duplicate_immutable() if _binding_conflict != null else null
 
 
+func has_test_settings() -> bool:
+	return _test_settings != null and _test_settings.is_available()
+
+
+func get_test_settings() -> RunTestSettingsViewModel:
+	return _test_settings.duplicate_immutable() if _test_settings != null else null
+
+
 func duplicate_immutable() -> SettingsScreenViewModel:
 	return SettingsScreenViewModel.new(
 		_revision,
@@ -348,7 +359,8 @@ func duplicate_immutable() -> SettingsScreenViewModel:
 		_binding_settings,
 		_status_text,
 		_show_quit,
-		_binding_conflict
+		_binding_conflict,
+		_test_settings
 	)
 
 
@@ -404,6 +416,9 @@ func _calculate_content_hash() -> int:
 	parts.append("1" if _binding_conflict != null else "0")
 	if _binding_conflict != null:
 		_binding_conflict.append_signature(parts)
+	parts.append("1" if _test_settings != null else "0")
+	if _test_settings != null:
+		_test_settings.append_signature(parts)
 	return hash("|".join(parts))
 
 
