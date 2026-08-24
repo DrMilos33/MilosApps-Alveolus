@@ -194,6 +194,7 @@ const FLOW_OBSTACLE_MAX_SPEED_MULTIPLIER := 1.25
 const FLOW_OBSTACLE_BLEND_IN_SECONDS := 0.15
 const FLOW_OBSTACLE_BLEND_OUT_SECONDS := 0.20
 const FLOW_OBSTACLE_MINIMUM_PROGRESS_RATIO := 0.20
+const FLOW_DOCTOR_SIDE_TANGENT_WEIGHT := 0.35
 const AVATAR_BODY_COLLISION_PASSES := 3
 const AVATAR_BODY_COLLISION_SKIN := 0.05
 const SMALL_AVATAR_PUSH_SPEED := 48.0
@@ -1892,13 +1893,30 @@ func _bulk_limit_resolved_delta(slot: int, value: Vector2) -> Vector2:
 			enemy.definition.radius
 		)
 		resolved_delta = bounded_position - origin
-	var direct_direction := _bulk_direct_directions[slot]
-	var forward := resolved_delta.dot(direct_direction)
+	var progress_target := _crowd_avatar.global_position
+	var progress_direction := _bulk_direct_directions[slot]
+	var flow_handle := int(_flow_lease_handles[slot])
+	var flow_obstacle := _active_flow_obstacle(flow_handle)
+	if _flow_motion_active[slot] != 0 and flow_obstacle != null:
+		var side_sign := int(_flow_side_signs[slot])
+		if side_sign == 0:
+			side_sign = 1 if posmod(slot, 2) == 0 else -1
+		progress_target = _flow_doctor_side_target_position(
+			slot,
+			enemy,
+			origin,
+			flow_handle,
+			side_sign
+		)
+		var to_progress_target := _crowd_topology.shortest_delta(origin, progress_target)
+		if to_progress_target.length_squared() > DIRECT_COLLISION_EPSILON:
+			progress_direction = to_progress_target.normalized()
+	var forward := resolved_delta.dot(progress_direction)
 	if forward < 0.0:
-		resolved_delta -= direct_direction * forward
+		resolved_delta -= progress_direction * forward
 	resolved_delta = resolved_delta.limit_length(_bulk_proposals[slot].length())
-	var origin_distance := _crowd_topology.distance(origin, _crowd_avatar.global_position)
-	var resolved_distance := _crowd_topology.distance(origin + resolved_delta, _crowd_avatar.global_position)
+	var origin_distance := _crowd_topology.distance(origin, progress_target)
+	var resolved_distance := _crowd_topology.distance(origin + resolved_delta, progress_target)
 	if resolved_distance > origin_distance + DIRECT_COLLISION_EPSILON:
 		return Vector2.ZERO
 	return resolved_delta
@@ -2950,6 +2968,157 @@ func _flow_direct_delta_with_speed_blend(
 	return direct_delta.normalized() * allowed_length
 
 
+func _flow_doctor_side_target_position(
+	slot: int,
+	_enemy: InfectionEnemy,
+	origin: Vector2,
+	obstacle_handle: int,
+	side_sign: int
+) -> Vector2:
+	var obstacle := _active_flow_obstacle(obstacle_handle)
+	if obstacle == null or not is_instance_valid(_crowd_avatar):
+		return origin
+	var obstacle_slot := EntityHandle.slot(obstacle_handle)
+	var obstacle_to_doctor := (
+		_crowd_avatar.global_position - obstacle.global_position
+		if _crowd_bounded
+		else _crowd_topology.shortest_delta(obstacle.global_position, _crowd_avatar.global_position)
+	)
+	var obstacle_to_doctor_length := obstacle_to_doctor.length()
+	var away_axis := (
+		obstacle_to_doctor / obstacle_to_doctor_length
+		if obstacle_to_doctor_length > DIRECT_COLLISION_EPSILON
+		else Vector2.from_angle(float((slot * 53 + obstacle_slot * 17) % 360) * PI / 180.0)
+	)
+	var target_axis := (
+		away_axis
+		- away_axis.orthogonal() * float(side_sign) * FLOW_DOCTOR_SIDE_TANGENT_WEIGHT
+	).normalized()
+	var minimum_obstacle_distance := (
+		float(_direct_collision_radii[slot])
+		+ float(_direct_collision_radii[obstacle_slot])
+		+ DIRECT_COLLISION_SKIN
+	)
+	var doctor_contact_radius := maxf(
+		float(_direct_collision_radii[slot])
+		+ TherapyAvatar.CONTACT_RADIUS
+		- InfectionEnemy.DIRECT_CHASE_CONTACT_DEPTH,
+		0.0
+	)
+	var axis_projection := obstacle_to_doctor.dot(target_axis)
+	var obstacle_exit_radius := maxf(
+		-axis_projection + sqrt(maxf(
+			axis_projection * axis_projection
+			+ minimum_obstacle_distance * minimum_obstacle_distance
+			- obstacle_to_doctor.length_squared(),
+			0.0
+		)),
+		0.0
+	)
+	var side_target := (
+		_crowd_avatar.global_position
+		+ target_axis * maxf(doctor_contact_radius, obstacle_exit_radius + DIRECT_COLLISION_SKIN)
+	)
+	if _crowd_bounded:
+		side_target = _crowd_topology.resolve_position(
+			side_target,
+			float(_direct_collision_radii[slot])
+		)
+	return side_target
+
+
+func _flow_doctor_side_target_delta(
+	slot: int,
+	enemy: InfectionEnemy,
+	origin: Vector2,
+	delta: float,
+	use_bulk_neighbors: bool
+) -> Vector2:
+	if (
+		not is_instance_valid(_crowd_avatar)
+		or enemy == null
+		or enemy.definition == null
+		or enemy.definition.is_boss
+	):
+		return Vector2.ZERO
+	var full_target_delta := (
+		_crowd_avatar.global_position - origin
+		if _crowd_bounded
+		else _crowd_topology.shortest_delta(origin, _crowd_avatar.global_position)
+	)
+	if full_target_delta.length_squared() <= DIRECT_COLLISION_EPSILON:
+		return Vector2.ZERO
+	var step_length := (
+		maxf(enemy.definition.speed * enemy.speed_multiplier, 0.0)
+		* enemy.status_speed_multiplier()
+		* delta
+	)
+	if step_length <= DIRECT_COLLISION_EPSILON:
+		return Vector2.ZERO
+	var lease_handle := int(_flow_lease_handles[slot])
+	var obstacle := _active_flow_obstacle(lease_handle)
+	if obstacle == null:
+		_clear_flow_route(slot)
+		lease_handle = _flow_first_obstacle_on_delta(
+			slot,
+			origin,
+			full_target_delta
+		)
+		obstacle = _active_flow_obstacle(lease_handle)
+		if obstacle == null:
+			return Vector2.ZERO
+		_flow_lease_handles[slot] = lease_handle
+		_flow_route_epochs[slot] = _flow_next_route_epoch
+		_flow_next_route_epoch += 1
+		_clear_direct_collision_bypass(slot)
+		_flow_side_signs[slot] = _flow_choose_side(
+			slot,
+			origin,
+			lease_handle,
+			step_length,
+			use_bulk_neighbors
+		)
+		_flow_clear_ticks[slot] = 0
+		_flow_stall_seconds[slot] = 0.0
+	var obstacle_slot := EntityHandle.slot(lease_handle)
+	var minimum_obstacle_distance := (
+		float(_direct_collision_radii[slot])
+		+ float(_direct_collision_radii[obstacle_slot])
+		+ DIRECT_COLLISION_SKIN
+	)
+	if _flow_segment_entry_distance(
+		origin,
+		full_target_delta,
+		obstacle.global_position,
+		minimum_obstacle_distance
+	) == INF:
+		return Vector2.ZERO
+	var side_sign := int(_flow_side_signs[slot])
+	if side_sign == 0:
+		side_sign = 1 if posmod(slot, 2) == 0 else -1
+		_flow_side_signs[slot] = side_sign
+	# If Doctor Milos stands close to the object, the normal pursuit can already
+	# reach its contact shell while the object still blocks the segment. Aim at a
+	# deterministic point beside and just beyond Doctor instead. It remains on the
+	# leased side and just outside the mover-expanded object body.
+	var side_target := _flow_doctor_side_target_position(
+		slot,
+		enemy,
+		origin,
+		lease_handle,
+		side_sign
+	)
+	var to_side_target := (
+		side_target - origin
+		if _crowd_bounded
+		else _crowd_topology.shortest_delta(origin, side_target)
+	)
+	if to_side_target.length_squared() <= DIRECT_COLLISION_EPSILON:
+		_clear_flow_route(slot)
+		return Vector2.ZERO
+	return to_side_target.limit_length(step_length)
+
+
 func _static_flow_desired_delta(
 	slot: int,
 	enemy: InfectionEnemy,
@@ -2966,10 +3135,29 @@ func _static_flow_desired_delta(
 		_clear_flow_route(slot)
 		_flow_fade_speed(slot, delta)
 		return _flow_direct_delta_with_speed_blend(slot, enemy, origin, direct_delta)
+	var base_step_length := (
+		maxf(enemy.definition.speed * enemy.speed_multiplier, 0.0)
+		* enemy.status_speed_multiplier()
+		* delta
+	)
+	var direct_length := sqrt(direct_length_squared)
+	var using_doctor_side_target := false
+	if direct_length + DIRECT_COLLISION_EPSILON < base_step_length:
+		var side_target_delta := _flow_doctor_side_target_delta(
+			slot,
+			enemy,
+			origin,
+			delta,
+			use_bulk_neighbors
+		)
+		if side_target_delta.length_squared() > direct_length_squared + DIRECT_COLLISION_EPSILON:
+			direct_delta = side_target_delta
+			direct_length_squared = direct_delta.length_squared()
+			direct_length = sqrt(direct_length_squared)
+			using_doctor_side_target = true
 	if direct_length_squared <= DIRECT_COLLISION_EPSILON:
 		_flow_fade_speed(slot, delta)
 		return direct_delta
-	var direct_length := sqrt(direct_length_squared)
 	if _flow_fail_open[slot] != 0:
 		_flow_speed_blends[slot] = 0.0
 		if _flow_fail_open_is_clear(slot, origin):
@@ -3014,18 +3202,32 @@ func _static_flow_desired_delta(
 			if _crowd_bounded
 			else _crowd_topology.shortest_delta(origin, _crowd_avatar.global_position)
 		)
+		var full_target_length := full_target_delta.length()
+		var direct_stop_radius := maxf(
+			own_radius
+			+ TherapyAvatar.CONTACT_RADIUS
+			- InfectionEnemy.DIRECT_CHASE_CONTACT_DEPTH,
+			0.0
+		)
+		var direct_chase_length := maxf(full_target_length - direct_stop_radius, 0.0)
+		var direct_chase_delta := (
+			full_target_delta * (direct_chase_length / full_target_length)
+			if full_target_length > DIRECT_COLLISION_EPSILON
+			else Vector2.ZERO
+		)
 		var minimum_distance := (
 			own_radius
 			+ float(_direct_collision_radii[obstacle_slot])
 			+ DIRECT_COLLISION_SKIN
 		)
 		var direct_is_clear := (
-			_flow_segment_entry_distance(
-				origin,
-				full_target_delta,
-				obstacle.global_position,
-				minimum_distance
-			) == INF
+			direct_chase_length > DIRECT_COLLISION_EPSILON
+			and _flow_segment_entry_distance(
+					origin,
+					direct_chase_delta,
+					obstacle.global_position,
+					minimum_distance
+				) == INF
 		)
 		var surface_clearance := (
 			_crowd_topology.distance(origin, obstacle.global_position) - minimum_distance
@@ -3066,6 +3268,18 @@ func _static_flow_desired_delta(
 	var orbit_delta := _flow_orbit_delta(
 		slot, origin, lease_handle, side_sign, step_length
 	)
+	if (
+		using_doctor_side_target
+		and _flow_segment_entry_distance(
+			origin,
+			direct_delta,
+			obstacle.global_position,
+			own_radius + float(_direct_collision_radii[EntityHandle.slot(lease_handle)]) + DIRECT_COLLISION_SKIN
+		) == INF
+		and _flow_static_clearance(slot, origin, direct_delta, lease_handle)
+			>= -DIRECT_COLLISION_EPSILON
+	):
+		orbit_delta = direct_delta
 	_flow_route_directions[slot] = (
 		orbit_delta.normalized() if not orbit_delta.is_zero_approx() else Vector2.ZERO
 	)
@@ -3176,8 +3390,6 @@ func _resolve_direct_collision(
 		else _crowd_topology.shortest_delta(movement_origin, enemy.global_position)
 	)
 	var requested_length_squared := requested_delta.length_squared()
-	if requested_length_squared <= DIRECT_COLLISION_EPSILON * DIRECT_COLLISION_EPSILON:
-		return
 	var direct_target_length := sqrt(requested_length_squared)
 	var requested_length := direct_target_length
 	var direct_target_delta := requested_delta
@@ -3186,6 +3398,12 @@ func _resolve_direct_collision(
 		or EntityHandle.is_valid(int(_flow_lease_handles[slot]))
 		or _flow_fail_open[slot] != 0
 	)
+	if (
+		requested_length_squared <= DIRECT_COLLISION_EPSILON * DIRECT_COLLISION_EPSILON
+		and not has_flow_state
+		and _flow_speed_blends[slot] <= DIRECT_COLLISION_EPSILON
+	):
+		return
 	if (
 		(_flow_obstacle_active_count > 0 and has_flow_state)
 		or _flow_speed_blends[slot] > DIRECT_COLLISION_EPSILON
@@ -3211,7 +3429,11 @@ func _resolve_direct_collision(
 	_direct_collision_queued[slot] = 0
 	_direct_collision_queue_blockers[slot] = EntityHandle.INVALID
 	var own_contact_radius := float(_direct_collision_radii[slot])
-	var requested_direction := direct_target_delta / direct_target_length
+	var requested_direction := (
+		direct_target_delta / direct_target_length
+		if direct_target_length > DIRECT_COLLISION_EPSILON
+		else requested_delta / requested_length
+	)
 	var resolved_delta := requested_delta
 	var neighbor_count := mini(
 		int(_crowd_motion_guard_counts[slot]),

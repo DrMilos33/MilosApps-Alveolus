@@ -113,7 +113,9 @@ and required status feedback are never degraded.
   immediate lifecycle updates and stores at most four packed generation-safe
   guards per nearby mover. Side choice consumes the existing direct-guard or
   bulk-neighbor cache, while one allocation-free chord is rebuilt from packed
-  state at the authoritative position each active tick. Normal routing adds no
+  state at the authoritative position each active tick. A contact-shell clamp
+  may append one O(1) Doctor-side target calculation, and routed bulk projection
+  reuses that target for its existing progress check. Normal routing adds no
   per-mover/per-tick broad-phase query, sort, allocation, dictionary, timer, node
   or second spatial index; only an actually sealed static pocket may enter the
   bounded object-clearance fail-open. Speed blend and fail-open remain packed

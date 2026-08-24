@@ -15,6 +15,8 @@ func _init() -> void:
 func _run() -> void:
 	_prepare_input_actions()
 	_test_small_and_cluster_flow_around_single_obstacle()
+	_test_doctor_side_target_keeps_blocked_route_moving()
+	_test_bulk_route_uses_doctor_side_progress_target()
 	_test_small_group_enters_bulk_early()
 	_test_off_axis_side_choice_is_progress_stable()
 	_test_dense_bulk_preserves_bodies_and_flow_side()
@@ -126,6 +128,133 @@ func _assert_single_obstacle_pass(
 	_equal(side_flips, 0, "%s behält seine gewählte Umlaufseite" % label)
 	_true(reached_doctor, "%s erreicht Doctor Milos hinter dem Zielherd" % label)
 	_true(obstacle.global_position.is_equal_approx(Vector2(110.0, 0.0)), "Der Zielherd bleibt stationär")
+	_cleanup_fixture(fixture, [obstacle, mover])
+
+
+func _test_doctor_side_target_keeps_blocked_route_moving() -> void:
+	var fixture := _fixture(Rect2(-600.0, -400.0, 1200.0, 800.0))
+	var world: EnemyWorld = fixture.world
+	var avatar: TherapyAvatar = fixture.avatar
+	var topology: ArenaTopology = fixture.topology
+	var obstacle := _enemy(
+		_focus_definition(), avatar, topology, Vector2(30.0, 0.0),
+		0.0, EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE
+	)
+	var mover := _enemy(_small_definition(), avatar, topology, Vector2(105.0, 0.0))
+	world.register_enemy(obstacle, true)
+	var mover_handle := world.register_enemy(mover)
+	var mover_slot := EntityHandle.slot(mover_handle)
+	var required_spacing := mover.contact_body_radius() + obstacle.contact_body_radius()
+	var stop_radius := (
+		mover.contact_body_radius()
+		+ TherapyAvatar.CONTACT_RADIUS
+		- InfectionEnemy.DIRECT_CHASE_CONTACT_DEPTH
+	)
+	var blocked_shell_samples := 0
+	var blocked_shell_motion_samples := 0
+	var stationary_streak := 0
+	var maximum_stationary_streak := 0
+	var route_finished_after_shell := false
+	var minimum_obstacle_spacing := INF
+	for _tick in range(720):
+		var position_before := mover.global_position
+		world.step_fixed(FIXED_DELTA)
+		minimum_obstacle_spacing = minf(
+			minimum_obstacle_spacing,
+			topology.distance(mover.global_position, obstacle.global_position)
+		)
+		var lease_active := EntityHandle.is_valid(int(world._flow_lease_handles[mover_slot]))
+		var full_target_delta := avatar.global_position - mover.global_position
+		var object_still_blocks := (
+			world._flow_segment_entry_distance(
+				mover.global_position,
+				full_target_delta,
+				obstacle.global_position,
+				required_spacing
+			) != INF
+		)
+		var inside_direct_stop_shell := full_target_delta.length() <= stop_radius + POSITION_EPSILON
+		if lease_active and object_still_blocks and inside_direct_stop_shell:
+			blocked_shell_samples += 1
+			var moved := topology.distance(position_before, mover.global_position)
+			if moved > 0.01:
+				blocked_shell_motion_samples += 1
+				stationary_streak = 0
+			else:
+				stationary_streak += 1
+				maximum_stationary_streak = maxi(maximum_stationary_streak, stationary_streak)
+		elif blocked_shell_samples > 0 and not lease_active:
+			route_finished_after_shell = true
+			break
+	_true(blocked_shell_samples > 0, "Der nahe Doctor erzeugt den blockierten Zielkontakt-Randfall")
+	_true(
+		blocked_shell_motion_samples == blocked_shell_samples,
+		"Der Seitwärtsziel-Fallback bewegt jeden noch objektblockierten Tick (%d/%d)" % [blocked_shell_motion_samples, blocked_shell_samples]
+	)
+	_equal(maximum_stationary_streak, 0, "Der objektblockierte Verfolger bleibt am Doctor-Zielradius niemals stehen")
+	_true(
+		route_finished_after_shell,
+		"Nach freier Direktlinie übernimmt wieder die normale Doctor-Verfolgung (pos=%s Doctor-Abstand=%.2f Seite=%d)" % [
+			str(mover.global_position),
+			topology.distance(mover.global_position, avatar.global_position),
+			int(world._flow_side_signs[mover_slot])
+		]
+	)
+	_true(
+		minimum_obstacle_spacing + POSITION_EPSILON >= required_spacing,
+		"Der Seitwärtsziel-Fallback überschneidet das Flusshindernis nicht"
+	)
+	_cleanup_fixture(fixture, [obstacle, mover])
+
+
+func _test_bulk_route_uses_doctor_side_progress_target() -> void:
+	var fixture := _fixture(Rect2(-600.0, -400.0, 1200.0, 800.0))
+	var world: EnemyWorld = fixture.world
+	var avatar: TherapyAvatar = fixture.avatar
+	var topology: ArenaTopology = fixture.topology
+	var obstacle := _enemy(
+		_focus_definition(), avatar, topology, Vector2(60.0, 0.0),
+		0.0, EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE
+	)
+	var mover := _enemy(_small_definition(), avatar, topology, Vector2(109.0, 0.0))
+	var obstacle_handle := world.register_enemy(obstacle, true)
+	var mover_handle := world.register_enemy(mover)
+	var mover_slot := EntityHandle.slot(mover_handle)
+	world._refresh_flow_guards(mover_slot, mover)
+	var route_delta := world._static_flow_desired_delta(
+		mover_slot,
+		mover,
+		mover.global_position,
+		Vector2.LEFT * _small_definition().speed * FIXED_DELTA,
+		FIXED_DELTA,
+		false
+	)
+	_true(EntityHandle.is_valid(int(world._flow_lease_handles[mover_slot])), "Der Bulk-Fallbacktest erzeugt eine echte Hindernislease")
+	_equal(int(world._flow_fail_open[mover_slot]), 0, "Die offene Testroute benötigt kein statisches Durchgleiten")
+	_equal(int(world._bulk_neighbor_counts[mover_slot]), 0, "Der Testkörper ist nicht durch einen echten Pulk gesättigt")
+	_true(absf(route_delta.y) > 0.0001, "Die echte Route wählt eine sichtbare Umlaufseite")
+	var lateral_step := Vector2(0.0, signf(route_delta.y))
+	world._bulk_origins[mover_slot] = mover.global_position
+	world._bulk_proposals[mover_slot] = lateral_step
+	world._bulk_direct_directions[mover_slot] = Vector2.LEFT
+	var routed_result := world._bulk_project_cached_proposal(mover_slot)
+	_true(
+		routed_result.length() > 0.9 and signf(routed_result.y) == signf(lateral_step.y),
+		"Der Bulk-Solver akzeptiert den freien Schritt zum Doctor-Seitenziel (Route=%s, Vorschlag=%s, Ergebnis=%s, Seite=%d)" % [
+			str(route_delta),
+			str(lateral_step),
+			str(routed_result),
+			int(world._flow_side_signs[mover_slot])
+		]
+	)
+	world._set_flow_obstacle_active(obstacle_handle, obstacle, false)
+	_equal(int(world._flow_lease_handles[mover_slot]), EntityHandle.INVALID, "Ohne Hindernis endet das temporäre Seitenziel")
+	world._bulk_proposals[mover_slot] = lateral_step
+	var ordinary_lateral_result := world._bulk_project_cached_proposal(mover_slot)
+	_true(ordinary_lateral_result.is_zero_approx(), "Ein gewöhnlicher Bulk erfindet weiterhin keinen seitlichen Zielpunkt")
+	world._bulk_proposals[mover_slot] = Vector2.LEFT
+	var ordinary_direct_result := world._bulk_project_cached_proposal(mover_slot)
+	_true(ordinary_direct_result.x < -0.9, "Nach freier Direktlinie übernimmt sofort wieder die Doctor-Verfolgung")
 	_cleanup_fixture(fixture, [obstacle, mover])
 
 

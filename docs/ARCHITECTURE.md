@@ -372,7 +372,12 @@ circular side from the mover's existing direct-guard or bulk-neighbor cache;
 clearance wins, then Doctor progress, then deterministic slot parity. Each tick
 reconstructs an exact constant-time chord from the authoritative position toward
 the Minkowski circle consisting of mover radius, obstacle radius and 0.05 skin.
-Once the direct Doctor segment is tangent-clear, the lease releases immediately.
+If the ordinary pursuit reaches its Doctor contact shell while that contact path
+is still blocked, a non-boss derives one deterministic point beside Doctor on
+the already leased side and outside the mover-expanded obstacle. Direct and bulk
+projection temporarily measure progress against that point instead of rejecting
+the valid lateral chord against Doctor distance. Once the actual path to the
+Doctor contact shell is clear, ordinary Doctor pursuit owns movement again.
 Only the locally clear front mover may blend from base speed to 1.25x over 0.15
 seconds; the blend leaves over 0.20 seconds and a body-blocked follower remains at
 base speed.
@@ -384,7 +389,9 @@ contact instead of after a visible 0.8-second stall. Until the mover has cleared
 every active static obstacle plus the release margin, only those obstacle bodies
 are ignored; ordinary enemy bodies, Doctor contact, arena bounds, statuses and
 generation remain authoritative. This path adds no teleport, global steering
-target, per-entity process or timer, dictionary or second spatial index.
+graph, per-entity process or timer, dictionary or second spatial index. The
+Doctor-side point is allocation-free O(1) geometry derived from packed lease
+state each active tick; it is never published as an entity combat target.
 
 `CasePressurePlan` is authored on `LevelDefinition`, copied defensively into
 `RunConfig` and consumed by one seed-isolated `CasePressureDirector` after the
