@@ -163,6 +163,10 @@ func _run() -> void:
 		actual_methods.get("set_boss_direction_indicator", "<missing>") == "visible:bool,direction:Vector2->void",
 		"GameHUD exposes the additive process-free boss direction indicator contract"
 	)
+	_check(
+		actual_methods.get("set_target_focus_direction_indicator", "<missing>") == "visible:bool,direction:Vector2,countdown_text:String->void",
+		"GameHUD exposes the additive target-focus direction indicator contract"
+	)
 
 	_finish(
 		maxi(0, actual_signals.size() - BASELINE_SIGNALS.size()),

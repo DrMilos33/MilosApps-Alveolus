@@ -61,6 +61,8 @@ $tests = [ordered]@{
     combat_progression = @{ script = 'res://tests/new_combat_progression_runner.gd'; args = @() }
     latest_progression_balance = @{ script = 'res://tests/latest_progression_balance_runner.gd'; args = @() }
     enemy_ranged_attack = @{ script = 'res://tests/enemy_ranged_attack_runner.gd'; args = @() }
+    case_pressure_director = @{ script = 'res://tests/case_pressure_director_runner.gd'; args = @() }
+    case_pressure_runtime = @{ script = 'res://tests/case_pressure_runtime_runner.gd'; args = @() }
     crowd_collision_stun = @{ script = 'res://tests/crowd_collision_stun_runner.gd'; args = @() }
     bounded_arena = @{ script = 'res://tests/bounded_arena_runner.gd'; args = @() }
     endless_cases = @{ script = 'res://tests/endless_case_contract_runner.gd'; args = @() }
@@ -90,8 +92,8 @@ $groups = [ordered]@{
     Quick = @('core')
     Flow = @('core', 'flow', 'intro', 'intro_runtime_contract', 'tactical_flow', 'save_v6_progression', 'endless_cases', 'loadout_navigation', 'loadout_availability', 'ui_audio_settings')
     UI = @('game_hud_facade_contract', 'ui_screen_dependency', 'style_gallery', 'context_detail', 'ui_screen_host', 'story_screen', 'practice_screen', 'case_archive_screen', 'settings_screen', 'progression_screen', 'pause_overlay', 'confirmation_overlay', 'result_overlay', 'upgrade_overlay', 'finding_overlay', 'run_hud_overlay', 'plain_run_prompt', 'discovery_modal', 'ui_component_churn', 'ui_polish', 'ui_accessibility', 'campus', 'campus_building_chrome', 'lexicon_catalog', 'lexicon_stats', 'lexicon_view', 'tactical_ui', 'loadout_navigation', 'ui_audio_settings', 'ui_settings_hud')
-    Combat = @('core', 'combat', 'upgrades', 'damage_types', 'case_modifiers', 'feedback_architecture', 'lexicon_presentation', 'combat_progression', 'latest_progression_balance', 'enemy_ranged_attack', 'crowd_collision_stun', 'treatment_aim', 'treatment_beam', 'ability_pipeline', 'tactical_flow', 'loadout_availability', 'determinism')
-    Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'hidden_nest_spawn', 'spawn_lifecycle', 'enemy_spawn_cadence', 'crowd_collision_stun', 'bounded_arena', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
+    Combat = @('core', 'combat', 'upgrades', 'damage_types', 'case_modifiers', 'feedback_architecture', 'lexicon_presentation', 'combat_progression', 'latest_progression_balance', 'enemy_ranged_attack', 'case_pressure_director', 'crowd_collision_stun', 'treatment_aim', 'treatment_beam', 'ability_pipeline', 'tactical_flow', 'loadout_availability', 'determinism')
+    Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'hidden_nest_spawn', 'spawn_lifecycle', 'enemy_spawn_cadence', 'case_pressure_director', 'case_pressure_runtime', 'crowd_collision_stun', 'bounded_arena', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
     Performance = @('ability_stress', 'pressure_ai', 'performance', 'performance_soak')
 }
 

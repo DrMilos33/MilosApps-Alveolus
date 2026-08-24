@@ -25,6 +25,7 @@ const BOSS_DIRECTION_INDICATOR_EXTENT := 32.0
 const BOSS_DIRECTION_SIDE_INSET := 18.0
 const BOSS_DIRECTION_TOP_INSET := 54.0
 const BOSS_DIRECTION_BOTTOM_INSET := 50.0
+const TARGET_FOCUS_DIRECTION_LABEL_SIZE := Vector2(44.0, 18.0)
 
 var _view_model: RunHUDViewModel
 var _applied_revision := -1
@@ -50,6 +51,9 @@ var _boss_phase: Label
 var _boss_bar: ProgressBar
 var _boss_direction_indicator: SimpleIcon
 var _boss_direction := Vector2.ZERO
+var _target_focus_direction_indicator: SimpleIcon
+var _target_focus_countdown: Label
+var _target_focus_direction := Vector2.ZERO
 var _analysis_panel: Panel
 var _analysis_bar: ProgressBar
 var _analysis_value: Label
@@ -190,6 +194,30 @@ func set_boss_direction_indicator(visible: bool, direction: Vector2) -> void:
 		_layout_boss_direction_indicator()
 
 
+func target_focus_direction_indicator() -> SimpleIcon:
+	return _target_focus_direction_indicator
+
+
+func target_focus_countdown_label() -> Label:
+	return _target_focus_countdown
+
+
+func set_target_focus_direction_indicator(visible: bool, direction: Vector2, countdown_text: String) -> void:
+	var has_direction := direction.length_squared() > 0.000001
+	_target_focus_direction = direction.normalized() if visible and has_direction else Vector2.ZERO
+	var show_indicator := visible and has_direction
+	_target_focus_direction_indicator.visible = show_indicator
+	_set_label_text(_target_focus_countdown, countdown_text.strip_edges())
+	_target_focus_countdown.visible = show_indicator and not _target_focus_countdown.text.is_empty()
+	var accessible_name := "Kleiner Herd außerhalb des Bildschirms"
+	if not _target_focus_countdown.text.is_empty():
+		accessible_name += ", verbleibend %s" % _target_focus_countdown.text
+	_target_focus_direction_indicator.set_meta(&"alveolus_accessible_name", accessible_name)
+	_target_focus_direction_indicator.tooltip_text = accessible_name
+	if show_indicator:
+		_layout_target_focus_direction_indicator()
+
+
 func analysis_panel() -> Panel:
 	return _analysis_panel
 
@@ -309,6 +337,7 @@ func _build() -> void:
 	_build_timer()
 	_build_boss()
 	_build_boss_direction_indicator()
+	_build_target_focus_direction_indicator()
 	_build_analysis()
 	_build_stats()
 	_build_abilities()
@@ -441,6 +470,30 @@ func _build_boss_direction_indicator() -> void:
 	_boss_direction_indicator.z_index = 2
 	_boss_direction_indicator.hide()
 	add_child(_boss_direction_indicator)
+
+
+func _build_target_focus_direction_indicator() -> void:
+	_target_focus_direction_indicator = _hud_icon(
+		"TargetFocusDirectionIndicator",
+		&"back",
+		AlveolusVisualTheme.GOLD,
+		BOSS_DIRECTION_INDICATOR_EXTENT
+	)
+	_target_focus_direction_indicator.set_meta(&"alveolus_component", &"target_focus_direction_indicator")
+	_target_focus_direction_indicator.set_meta(&"alveolus_accessible_name", "Kleiner Herd außerhalb des Bildschirms")
+	_target_focus_direction_indicator.z_index = 2
+	_target_focus_direction_indicator.hide()
+	add_child(_target_focus_direction_indicator)
+	_target_focus_countdown = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
+	_target_focus_countdown.name = "TargetFocusDirectionCountdown"
+	_target_focus_countdown.custom_minimum_size = TARGET_FOCUS_DIRECTION_LABEL_SIZE
+	_target_focus_countdown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_target_focus_countdown.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_target_focus_countdown.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_target_focus_countdown.add_theme_color_override("font_color", AlveolusVisualTheme.GOLD.lightened(0.18))
+	_target_focus_countdown.z_index = 2
+	_target_focus_countdown.hide()
+	add_child(_target_focus_countdown)
 
 
 func _build_analysis() -> void:
@@ -822,6 +875,8 @@ func _update_responsive_layout() -> void:
 		_apply_compact_layout()
 	if _boss_direction_indicator.visible:
 		_layout_boss_direction_indicator()
+	if _target_focus_direction_indicator.visible:
+		_layout_target_focus_direction_indicator()
 
 
 func _apply_wide_layout() -> void:
@@ -888,6 +943,43 @@ func _place(control: Control, rect: Rect2) -> void:
 func _layout_boss_direction_indicator() -> void:
 	if _boss_direction_indicator == null or _boss_direction.is_zero_approx():
 		return
+	var indicator_center := _edge_indicator_center(_boss_direction)
+	var half_extent := BOSS_DIRECTION_INDICATOR_EXTENT * 0.5
+	_place(
+		_boss_direction_indicator,
+		Rect2(indicator_center - Vector2.ONE * half_extent, Vector2.ONE * BOSS_DIRECTION_INDICATOR_EXTENT)
+	)
+	_boss_direction_indicator.pivot_offset = Vector2.ONE * half_extent
+	# The drawn back glyph points left; rotate that axis toward the supplied
+	# screen-space direction without advancing an animation loop.
+	_boss_direction_indicator.rotation = _boss_direction.angle() + PI
+
+
+func _layout_target_focus_direction_indicator() -> void:
+	if _target_focus_direction_indicator == null or _target_focus_direction.is_zero_approx():
+		return
+	var indicator_center := _edge_indicator_center(_target_focus_direction)
+	var half_extent := BOSS_DIRECTION_INDICATOR_EXTENT * 0.5
+	_place(
+		_target_focus_direction_indicator,
+		Rect2(indicator_center - Vector2.ONE * half_extent, Vector2.ONE * BOSS_DIRECTION_INDICATOR_EXTENT)
+	)
+	_target_focus_direction_indicator.pivot_offset = Vector2.ONE * half_extent
+	_target_focus_direction_indicator.rotation = _target_focus_direction.angle() + PI
+	if not _target_focus_countdown.visible:
+		return
+	var label_size := TARGET_FOCUS_DIRECTION_LABEL_SIZE
+	var label_half_extent := absf(_target_focus_direction.x) * label_size.x * 0.5 + absf(_target_focus_direction.y) * label_size.y * 0.5
+	var label_center := indicator_center - _target_focus_direction * (half_extent + 4.0 + label_half_extent)
+	var minimum_position := Vector2(BOSS_DIRECTION_SIDE_INSET, BOSS_DIRECTION_TOP_INSET)
+	var maximum_position := Vector2(
+		maxf(minimum_position.x, size.x - BOSS_DIRECTION_SIDE_INSET - label_size.x),
+		maxf(minimum_position.y, size.y - BOSS_DIRECTION_BOTTOM_INSET - label_size.y)
+	)
+	_place(_target_focus_countdown, Rect2((label_center - label_size * 0.5).clamp(minimum_position, maximum_position), label_size))
+
+
+func _edge_indicator_center(direction: Vector2) -> Vector2:
 	var half_extent := BOSS_DIRECTION_INDICATOR_EXTENT * 0.5
 	var minimum_center := Vector2(
 		BOSS_DIRECTION_SIDE_INSET + half_extent,
@@ -903,21 +995,13 @@ func _layout_boss_direction_indicator() -> void:
 		maxf(0.0, minf(viewport_center.y - minimum_center.y, maximum_center.y - viewport_center.y))
 	)
 	var distance_to_edge := INF
-	if absf(_boss_direction.x) > 0.000001:
-		distance_to_edge = minf(distance_to_edge, ray_extent.x / absf(_boss_direction.x))
-	if absf(_boss_direction.y) > 0.000001:
-		distance_to_edge = minf(distance_to_edge, ray_extent.y / absf(_boss_direction.y))
+	if absf(direction.x) > 0.000001:
+		distance_to_edge = minf(distance_to_edge, ray_extent.x / absf(direction.x))
+	if absf(direction.y) > 0.000001:
+		distance_to_edge = minf(distance_to_edge, ray_extent.y / absf(direction.y))
 	if not is_finite(distance_to_edge):
 		distance_to_edge = 0.0
-	var indicator_center := (viewport_center + _boss_direction * distance_to_edge).clamp(minimum_center, maximum_center)
-	_place(
-		_boss_direction_indicator,
-		Rect2(indicator_center - Vector2.ONE * half_extent, Vector2.ONE * BOSS_DIRECTION_INDICATOR_EXTENT)
-	)
-	_boss_direction_indicator.pivot_offset = Vector2.ONE * half_extent
-	# The drawn back glyph points left; rotate that axis toward the supplied
-	# screen-space direction without advancing an animation loop.
-	_boss_direction_indicator.rotation = _boss_direction.angle() + PI
+	return (viewport_center + direction * distance_to_edge).clamp(minimum_center, maximum_center)
 
 
 func _visible_ability_count() -> int:

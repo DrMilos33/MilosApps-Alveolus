@@ -166,6 +166,23 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(is_equal_approx(wrapf(boss_indicator.rotation, -PI, PI), PI * 0.5), "Pfeilrotation folgt der aktualisierten Bildschirmrichtung")
 	hud.set_boss_direction_indicator(false, Vector2.UP)
 	_check(not boss_indicator.visible, "Boss-Randpfeil verschwindet ohne verbleibenden Prozesszustand")
+	var target_focus_indicator := hud.target_focus_direction_indicator()
+	var target_focus_countdown := hud.target_focus_countdown_label()
+	_check(not target_focus_indicator.visible and target_focus_indicator.kind == &"back", "Zielherd-Randpfeil bleibt ohne explizite Richtungsübergabe verborgen")
+	_check(
+		target_focus_indicator.mouse_filter == Control.MOUSE_FILTER_IGNORE
+			and target_focus_countdown.mouse_filter == Control.MOUSE_FILTER_IGNORE
+			and target_focus_indicator.get_meta(&"alveolus_component", &"") == &"target_focus_direction_indicator",
+		"Zielherd-Randhinweis blockiert keine Gameplayeingabe und besitzt eine stabile semantische Kennung"
+	)
+	hud.set_target_focus_direction_indicator(true, Vector2.LEFT, "12 s")
+	await _settle()
+	_check(target_focus_indicator.visible and _transformed_control_inside_viewport(target_focus_indicator, Vector2i(1280, 720)), "Zielherd-Randpfeil bleibt vollständig im sicheren Viewport")
+	_check(target_focus_countdown.visible and target_focus_countdown.text == "12 s" and _transformed_control_inside_viewport(target_focus_countdown, Vector2i(1280, 720)), "Zielherd-Randpfeil zeigt einen kurzen Countdown innerhalb des sicheren Viewports")
+	_check(target_focus_indicator.get_meta(&"alveolus_accessible_name", "") == "Kleiner Herd außerhalb des Bildschirms, verbleibend 12 s", "Zielherd-Randpfeil aktualisiert seinen Accessible Name mit der Restzeit")
+	_check(is_equal_approx(wrapf(target_focus_indicator.rotation, -PI, PI), 0.0), "Zielherd-Randpfeil folgt der aktualisierten Bildschirmrichtung")
+	hud.set_target_focus_direction_indicator(false, Vector2.LEFT, "")
+	_check(not target_focus_indicator.visible and not target_focus_countdown.visible, "Zielherd-Randpfeil und Countdown verschwinden ohne verbleibenden Prozesszustand")
 	_check(hud.analysis_value_label().text == "Lv 3 · 7/12" and hud.analysis_bar().value == 7.0, "Proben und Analyse bleiben als kompakte Zielanzeige sichtbar")
 	_check(hud.stability_panel().size.y <= 30.0 and hud.stability_panel().size.x >= 360.0 and hud.stability_panel().find_child("StabilityIcon", true, false) == null, "Leben nutzt einen niedrigen, breiten und zentrierten Balken ohne redundantes Vital-Icon")
 	_check(hud.stability_panel().get_meta(&"alveolus_component", &"") == &"transparent_hud_vital" and is_zero_approx(hud.stability_panel().self_modulate.a), "Leben schwebt ohne Kartenfläche über dem Run")

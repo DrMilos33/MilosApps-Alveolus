@@ -32,6 +32,9 @@ const SPAWN_INTERVAL_CURVE_EXPONENT := 0.82
 @export var boss_count: int = 1
 @export var spawn_rate_multiplier: float = 1.0
 @export var experience_gain_multiplier: float = 1.0
+## A run owns a detached pressure plan; catalog resources remain immutable while
+## gameplay consumes its deterministic schedule.
+@export var case_pressure_plan: CasePressurePlan
 
 func arena_rect() -> Rect2:
 	return Rect2(-arena_size * 0.5, arena_size)
@@ -103,6 +106,7 @@ static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunCo
 	config.boss_wave_amplitude = level.boss_wave_amplitude
 	config.boss_phase_minions = level.boss_phase_minions
 	config.reward_multiplier = level.reward_multiplier
+	config.case_pressure_plan = level.case_pressure_plan.duplicate(true) as CasePressurePlan if level.case_pressure_plan != null else null
 	config.random_seed += level.order * 101
 	config.event_driven_intro = level.is_tutorial
 	if quick_run:

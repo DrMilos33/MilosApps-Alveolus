@@ -10,6 +10,8 @@ const MAX_ACTIVE_PICKUPS := 360
 const MAX_ENEMY_POOL := 640
 const MAX_AMBIENT_MELEE_WEIGHT := 145
 const MAX_ACTIVE_PROJECTILES := 512
+const PRESSURE_PROJECTILE_RESERVE := 48
+const REGULAR_PROJECTILE_LIMIT := MAX_ACTIVE_PROJECTILES - PRESSURE_PROJECTILE_RESERVE
 const MAX_PROJECTILE_POOL := MAX_ACTIVE_PROJECTILES
 const MAX_PICKUP_POOL := MAX_ACTIVE_PICKUPS
 const MAX_DAMAGE_NUMBER_POOL := 40
@@ -45,6 +47,16 @@ const OFFSCREEN_PLACEMENT_ANGLE_OFFSETS: Array[float] = [0.0, -0.14, 0.14, -0.24
 const OFFSCREEN_PLACEMENT_RADIAL_OFFSETS: Array[float] = [0.0, 42.0, 84.0]
 const OFFSCREEN_PLACEMENT_BODY_GAP := 4.0
 const OFFSCREEN_RELOCATION_RADIAL_JITTER := 18.0
+const CASE_PRESSURE_TARGET_ACTIVE_SECONDS := 20.0
+const CASE_PRESSURE_WARNING_SECONDS := 1.5
+const CASE_PRESSURE_SALVO_INTERVAL := 0.45
+const CASE_PRESSURE_FAN_ANGLES: Array[float] = [-24.0, -12.0, 0.0, 12.0, 24.0]
+const CASE_PRESSURE_PROJECTILE_DAMAGE := 6.0
+const CASE_PRESSURE_TARGET_PROJECTILE_SPEED := 185.0
+const CASE_PRESSURE_GATE_PROJECTILE_SPEED := 180.0
+const CASE_PRESSURE_GATE_SPACING := 52.0
+const CASE_PRESSURE_GATE_SAFE_GAP := 156.0
+const CASE_PRESSURE_GATE_MAX_PROJECTILES := 24
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := false
@@ -92,6 +104,7 @@ var pickup_query: CombatQuery
 var defense_cell_world: DefenseCellWorld
 var treatment_beam_world: TreatmentBeamWorld
 var enemy_attack_director: EnemyAttackDirector
+var case_pressure_director := CasePressureDirector.new()
 var defense_cell_damage_profile: DamageProfile
 var avatar: TherapyAvatar
 var hud: GameHUD
@@ -125,6 +138,15 @@ var boss_aggregate_maximum: float = 0.0
 var boss_aggregate_phase: int = 0
 var enemy_runtime_resistance_profiles: Dictionary = {}
 var run_damage_by_source: Dictionary = {}
+var case_pressure_target_states: Dictionary = {}
+var case_pressure_target_expirations := PackedInt64Array()
+var case_pressure_pending_gates: Array[Dictionary] = []
+var case_pressure_last_spawn_sector: int = -1
+var case_pressure_gate_sequence: int = 0
+var case_pressure_reward_defeat_points: int = 0
+var pressure_gate_id_by_projectile: Dictionary = {}
+var pressure_gate_hits: Dictionary = {}
+var pressure_gate_projectile_counts: Dictionary = {}
 
 var pending_run_context: RunContext
 var active_run_context: RunContext
@@ -532,6 +554,7 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 	if flow_state != GameFlowState.State.RUNNING:
 		_finalize_fixed_step()
 		return
+	_case_pressure_step(delta)
 	pressure_grace_timer = maxf(0.0, pressure_grace_timer - delta)
 	_spawn_step(delta)
 	_profile_phase(&"clock_spawn", phase_started)
@@ -1393,6 +1416,15 @@ func start_run(run_context: RunContext = null) -> void:
 	pickup_merge_cursor = 0
 	defeats = 0
 	run_damage_by_source.clear()
+	case_pressure_target_states.clear()
+	case_pressure_target_expirations.clear()
+	case_pressure_pending_gates.clear()
+	case_pressure_last_spawn_sector = -1
+	case_pressure_gate_sequence = 0
+	case_pressure_reward_defeat_points = 0
+	pressure_gate_id_by_projectile.clear()
+	pressure_gate_hits.clear()
+	pressure_gate_projectile_counts.clear()
 	defeat_reward_survival_bucket = -1
 	stress_reported = false
 	stress_hud_timer = 0.0
@@ -1437,6 +1469,11 @@ func start_run(run_context: RunContext = null) -> void:
 	state.boss_due.connect(_spawn_boss)
 	state.run_finished.connect(_on_run_finished)
 	state.reset(config, 0, stats.max_stability_bonus)
+	case_pressure_director.configure(
+		config.case_pressure_plan,
+		int(config.random_seed) ^ 0x43505253,
+		WAVE_SPAWN_SECTOR_COUNT
+	)
 	if selected_level.is_tutorial:
 		state.set_analysis_target(INTRO_ANALYSIS_TARGET)
 	state.set_analysis_gain_multiplier(stats.experience_gain_multiplier * config.experience_gain_multiplier)
@@ -1898,7 +1935,7 @@ func _therapy_step(delta: float) -> void:
 	if not targets.is_empty():
 		avatar.show_treatment_impulse()
 	for enemy in targets:
-		if projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+		if projectiles.size() >= REGULAR_PROJECTILE_LIMIT:
 			enemy.take_damage(stats.therapy_damage, &"therapy")
 			continue
 		var projectile: TherapyProjectile
@@ -1945,7 +1982,7 @@ func _on_treatment_shots_requested(shots: Array[TreatmentShot]) -> void:
 		if shot == null:
 			continue
 		if shot.mode == TreatmentShot.Mode.TRACKING and is_instance_valid(shot.target):
-			if projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+			if projectiles.size() >= REGULAR_PROJECTILE_LIMIT:
 				shot.target.take_damage(_resolved_treatment_damage(shot.damage, shot.target), shot.source_id)
 				continue
 			var projectile: TherapyProjectile
@@ -2020,7 +2057,7 @@ func _spawn_directional_treatment_projectile(shot: TreatmentShot) -> void:
 		target_handle = int(shot.resolved_handles[0])
 		target = enemy_world.resolve(target_handle) as InfectionEnemy
 	var resolved_damage := _resolved_treatment_damage(shot.damage, target) if is_instance_valid(target) else shot.damage
-	if projectiles.size() >= MAX_ACTIVE_PROJECTILES:
+	if projectiles.size() >= REGULAR_PROJECTILE_LIMIT:
 		if is_instance_valid(target) and target.is_targetable():
 			target.take_damage(resolved_damage, shot.source_id)
 		return
@@ -2068,8 +2105,6 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 	var source := enemy_world.resolve(source_handle) as InfectionEnemy
 	if not is_instance_valid(source) or not source.is_targetable() or source.definition == null or not is_instance_valid(avatar):
 		return
-	if projectiles.size() >= MAX_ACTIVE_PROJECTILES:
-		return
 	var heading := topology.shortest_delta(source.global_position, avatar.global_position).normalized()
 	if heading.length_squared() <= 0.0001:
 		heading = Vector2.RIGHT
@@ -2086,6 +2121,37 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 	amount = float(roundi(amount))
 	if amount <= 0.0:
 		return
+	_spawn_hostile_projectile(
+		source.global_position,
+		heading,
+		amount,
+		source.definition.damage_profile,
+		TherapyProjectile.HOSTILE_DIAMOND if pattern == EnemyAttackDirector.Pattern.DIAMOND else TherapyProjectile.HOSTILE_NORMAL,
+		phase,
+		move_speed,
+		1050.0,
+		config.boss_wave_amplitude if role == EnemyAttackDirector.Role.BOSS else 44.0
+	)
+
+
+func _spawn_hostile_projectile(
+	origin: Vector2,
+	heading: Vector2,
+	amount: float,
+	profile: DamageProfile,
+	pattern: int = TherapyProjectile.HOSTILE_NORMAL,
+	phase: float = 0.0,
+	move_speed: float = 230.0,
+	max_distance: float = 1050.0,
+	wave_amplitude: float = 44.0,
+	critical_pressure: bool = false,
+	gate_id: int = -1
+) -> bool:
+	if projectile_world == null or hostile_projectile_renderer == null or not is_instance_valid(avatar):
+		return false
+	var projectile_limit := MAX_ACTIVE_PROJECTILES if critical_pressure else REGULAR_PROJECTILE_LIMIT
+	if projectiles.size() >= projectile_limit or amount <= 0.0:
+		return false
 	var projectile: TherapyProjectile
 	if not projectile_pool.is_empty():
 		projectile = projectile_pool.pop_back()
@@ -2097,33 +2163,42 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 		simulation_root.add_child(projectile)
 	if not projectile.hostile_hit.is_connected(_on_hostile_projectile_hit):
 		projectile.hostile_hit.connect(_on_hostile_projectile_hit)
-	projectile.global_position = source.global_position
+	projectile.global_position = origin
 	projectile.configure_hostile(
 		heading,
 		amount,
 		topology,
 		avatar,
-		source.definition.damage_profile,
-		TherapyProjectile.HOSTILE_DIAMOND if pattern == EnemyAttackDirector.Pattern.DIAMOND else TherapyProjectile.HOSTILE_NORMAL,
+		profile,
+		pattern,
 		phase,
 		move_speed,
-		1050.0,
-		config.boss_wave_amplitude if role == EnemyAttackDirector.Role.BOSS else 44.0
+		max_distance,
+		wave_amplitude
 	)
-	projectile.global_position = source.global_position
+	projectile.global_position = origin
 	projectile.reset_visual_motion()
 	var projectile_handle := projectile_world.register_projectile(projectile)
 	if not EntityHandle.is_valid(projectile_handle):
 		_store_projectile(projectile)
-		return
+		return false
 	if not hostile_projectile_renderer.register_projectile(projectile, projectile_handle, false):
 		projectile_world.release(projectile_handle, false)
 		_store_projectile(projectile)
-		return
+		return false
 	projectiles.append(projectile)
+	if gate_id >= 0:
+		pressure_gate_id_by_projectile[projectile] = gate_id
+		pressure_gate_projectile_counts[gate_id] = int(pressure_gate_projectile_counts.get(gate_id, 0)) + 1
+	return true
 
 
-func _on_hostile_projectile_hit(_projectile: TherapyProjectile, amount: float, profile: DamageProfile) -> void:
+func _on_hostile_projectile_hit(projectile: TherapyProjectile, amount: float, profile: DamageProfile) -> void:
+	if pressure_gate_id_by_projectile.has(projectile):
+		var gate_id := int(pressure_gate_id_by_projectile[projectile])
+		if pressure_gate_hits.has(gate_id):
+			return
+		pressure_gate_hits[gate_id] = true
 	_apply_incoming_damage(amount, profile)
 
 
@@ -2365,7 +2440,13 @@ func _spawn_enemy(
 				))
 		return null
 	var resolved_spawn_position := spawn_position
-	var force_detailed_discovery := discovery_manager != null and not discovery_manager.has_seen(definition.discovery_id) and not discovery_spawn_reservations.has(definition.discovery_id)
+	var preserves_authored_position := spawn_request != null and bool(spawn_request.metadata.get("preserve_spawn_position", false))
+	var force_detailed_discovery := (
+		not preserves_authored_position
+		and discovery_manager != null
+		and not discovery_manager.has_seen(definition.discovery_id)
+		and not discovery_spawn_reservations.has(definition.discovery_id)
+	)
 	if force_detailed_discovery:
 		resolved_spawn_position = _visible_discovery_spawn_position(definition.radius)
 		discovery_spawn_reservations[definition.discovery_id] = true
@@ -2424,6 +2505,8 @@ func _spawn_enemy(
 func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnRequest) -> void:
 	if enemy == null or request == null:
 		return
+	if bool(request.metadata.get("case_pressure_target", false)):
+		_register_case_pressure_target(enemy, StringName(request.metadata.get("pressure_behavior", &"stationary_fan")))
 	if request.source_id == &"hidden_nest":
 		hidden_nest_timers[enemy] = maxf(0.1, float(request.metadata.get("release_after_seconds", 20.0)))
 	if bool(request.metadata.get("ranged_shooter", false)) and enemy_attack_director != null and enemy_world != null:
@@ -2741,6 +2824,11 @@ func _store_damage_number(number: DamageNumber) -> void:
 
 func _on_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bool) -> void:
 	var handle := enemy_world.handle_for(enemy) if enemy_world != null and is_instance_valid(enemy) else EntityHandle.INVALID
+	var pressure_reward_points := 0
+	if EntityHandle.is_valid(handle) and case_pressure_target_states.has(handle):
+		var pressure_runtime: Dictionary = case_pressure_target_states[handle]
+		pressure_reward_points = maxi(0, int(pressure_runtime.get(&"reward_points", 0)))
+		case_pressure_target_states.erase(handle)
 	if enemy_attack_director != null and EntityHandle.is_valid(handle):
 		enemy_attack_director.release(handle)
 	if crowd_renderer != null and is_instance_valid(enemy):
@@ -2753,17 +2841,19 @@ func _on_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bo
 		run_session.event_queue.push(&"enemy_defeated", handle, EntityHandle.INVALID, float(analysis_value), enemy.global_position, {
 			"enemy": enemy,
 			"was_boss": was_boss,
+			"pressure_reward_points": pressure_reward_points,
 		})
 		return
-	_apply_enemy_defeated(enemy, analysis_value, was_boss)
+	_apply_enemy_defeated(enemy, analysis_value, was_boss, pressure_reward_points)
 
-func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bool) -> void:
+func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bool, pressure_reward_points: int = 0) -> void:
 	if not is_instance_valid(enemy) or not enemies.has(enemy):
 		return
 	var death_position := enemy.global_position
 	var intro_role := StringName(intro_enemy_roles.get(enemy, &""))
 	enemies.erase(enemy)
 	defeats += 1
+	case_pressure_reward_defeat_points += maxi(0, pressure_reward_points)
 	if enemy.definition != null and enemy.definition.id == &"minor_focus":
 		hidden_nest_timers.erase(enemy)
 		if build_state != null:
@@ -2927,6 +3017,7 @@ func _on_projectile_finished(projectile: TherapyProjectile) -> void:
 func _apply_projectile_finished(projectile: TherapyProjectile) -> void:
 	if not is_instance_valid(projectile) or not projectiles.has(projectile):
 		return
+	_release_pressure_gate_projectile(projectile)
 	projectiles.erase(projectile)
 	_store_projectile(projectile)
 
@@ -2940,7 +3031,12 @@ func _apply_combat_event(event: CombatEventQueue.CombatEvent) -> void:
 	match event.type:
 		&"enemy_defeated":
 			var payload: Dictionary = event.payload if event.payload is Dictionary else {}
-			_apply_enemy_defeated(payload.get("enemy") as InfectionEnemy, roundi(event.amount), bool(payload.get("was_boss", false)))
+			_apply_enemy_defeated(
+				payload.get("enemy") as InfectionEnemy,
+				roundi(event.amount),
+				bool(payload.get("was_boss", false)),
+				int(payload.get("pressure_reward_points", 0))
+			)
 		&"pickup_collected":
 			_apply_pickup_collected(roundi(event.amount), event.payload as AnalysisPickup)
 		&"projectile_finished":
@@ -2957,8 +3053,10 @@ func _finalize_fixed_step() -> void:
 	# keeping every structural mutation outside registry iteration.
 	_flush_deferred_world_releases()
 	_flush_combat_events()
+	_flush_case_pressure_target_expirations()
 	_flush_deferred_world_releases()
-	_update_boss_direction_indicator()
+	var offscreen_boss_visible := _update_boss_direction_indicator()
+	_update_case_pressure_target_indicator(offscreen_boss_visible)
 	_profile_phase(&"event_queue_flush", phase_started)
 	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
 	if crowd_renderer != null:
@@ -2976,6 +3074,7 @@ func _finalize_fixed_step() -> void:
 	_profile_phase(&"ability_feedback_snapshot", phase_started)
 
 func _store_projectile(projectile: TherapyProjectile) -> void:
+	_release_pressure_gate_projectile(projectile)
 	var allocated_handle := projectile_world.allocated_handle_for(projectile) if projectile_world != null else EntityHandle.INVALID
 	_release_projectile_visual(projectile, allocated_handle)
 	if not _release_registry_entity_for_pool(projectile_world, projectile, &"projectile"):
@@ -2988,11 +3087,24 @@ func _store_projectile(projectile: TherapyProjectile) -> void:
 		projectile.queue_free()
 
 
-func _update_boss_direction_indicator() -> void:
+func _release_pressure_gate_projectile(projectile: TherapyProjectile) -> void:
+	if not pressure_gate_id_by_projectile.has(projectile):
+		return
+	var gate_id := int(pressure_gate_id_by_projectile[projectile])
+	pressure_gate_id_by_projectile.erase(projectile)
+	var remaining := int(pressure_gate_projectile_counts.get(gate_id, 0)) - 1
+	if remaining > 0:
+		pressure_gate_projectile_counts[gate_id] = remaining
+		return
+	pressure_gate_projectile_counts.erase(gate_id)
+	pressure_gate_hits.erase(gate_id)
+
+
+func _update_boss_direction_indicator() -> bool:
 	if hud == null or topology == null or enemy_world == null or active_boss_handles.is_empty():
 		if hud != null:
 			hud.set_boss_direction_indicator(false, Vector2.ZERO)
-		return
+		return false
 	var visible_rect := _visible_world_rect()
 	var camera_center := visible_rect.get_center()
 	var selected_direction := Vector2.ZERO
@@ -3019,7 +3131,58 @@ func _update_boss_direction_indicator() -> void:
 			selected_direction = direction.normalized()
 			selected_distance_squared = distance_squared
 			selected_handle = handle
-	hud.set_boss_direction_indicator(not selected_direction.is_zero_approx(), selected_direction)
+	var visible := not selected_direction.is_zero_approx()
+	hud.set_boss_direction_indicator(visible, selected_direction)
+	return visible
+
+
+func _update_case_pressure_target_indicator(offscreen_boss_visible: bool) -> void:
+	if hud == null:
+		return
+	if offscreen_boss_visible or topology == null or enemy_world == null or case_pressure_target_states.is_empty():
+		hud.set_target_focus_direction_indicator(false, Vector2.ZERO, "")
+		return
+	var visible_rect := _visible_world_rect()
+	var camera_center := visible_rect.get_center()
+	var selected_direction := Vector2.ZERO
+	var selected_distance_squared := INF
+	var selected_handle := EntityHandle.INVALID
+	var countdown_text := ""
+	for handle_value in case_pressure_target_states.keys():
+		var handle := int(handle_value)
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy
+		if not is_instance_valid(enemy) or enemy.definition == null or not enemy.is_targetable():
+			continue
+		var visible_radius := maxf(enemy.definition.radius, enemy.visual_extent() * 0.5)
+		var closest := Vector2(
+			clampf(enemy.global_position.x, visible_rect.position.x, visible_rect.end.x),
+			clampf(enemy.global_position.y, visible_rect.position.y, visible_rect.end.y)
+		)
+		if enemy.global_position.distance_squared_to(closest) <= visible_radius * visible_radius:
+			continue
+		var direction := topology.shortest_delta(camera_center, enemy.global_position)
+		var distance_squared := direction.length_squared()
+		if distance_squared > selected_distance_squared or (
+			is_equal_approx(distance_squared, selected_distance_squared) and handle >= selected_handle
+		):
+			continue
+		selected_direction = direction.normalized()
+		selected_distance_squared = distance_squared
+		selected_handle = handle
+		var runtime: Dictionary = case_pressure_target_states[handle]
+		match StringName(runtime.get(&"phase", &"active")):
+			&"active":
+				countdown_text = "%d s" % maxi(0, ceili(float(runtime.get(&"remaining", 0.0))))
+			&"warning":
+				countdown_text = "WARNUNG"
+			&"finale":
+				countdown_text = "FEUERT"
+			&"ambient":
+				var release_remaining := float(hidden_nest_timers.get(enemy, -1.0))
+				countdown_text = "%d s" % ceili(release_remaining) if release_remaining > 0.0 else "ZIEL"
+			_:
+				countdown_text = "ZIEL"
+	hud.set_target_focus_direction_indicator(not selected_direction.is_zero_approx(), selected_direction, countdown_text)
 
 
 func _release_projectile_visual(projectile: TherapyProjectile, handle: int) -> void:
@@ -3382,6 +3545,347 @@ func _active_finding() -> FindingDefinition:
 		return null
 	return finding_definitions.get(active_run_context.hidden_finding_id)
 
+
+func _case_pressure_step(delta: float) -> void:
+	if case_pressure_director == null or selected_level == null or state == null:
+		return
+	var boss_active := state.boss_spawned
+	var due_events := case_pressure_director.advance(
+		state.elapsed,
+		_active_case_pressure_target_count(),
+		selected_level.is_tutorial,
+		boss_active
+	)
+	if not boss_active:
+		for due_event in due_events:
+			match int(due_event.get(&"kind", -1)):
+				CasePressureDirector.EventKind.TARGET_FOCUS:
+					_spawn_case_pressure_target(due_event)
+				CasePressureDirector.EventKind.PROJECTILE_GATE:
+					_queue_case_pressure_gate(due_event)
+	else:
+		case_pressure_pending_gates.clear()
+	_step_case_pressure_targets(delta)
+	if not boss_active:
+		_step_case_pressure_gates(delta)
+
+
+func _active_case_pressure_target_count() -> int:
+	var count := 0
+	for handle_value in case_pressure_target_states.keys():
+		var handle := int(handle_value)
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy if enemy_world != null else null
+		if not is_instance_valid(enemy) or not enemy.is_targetable():
+			case_pressure_target_states.erase(handle)
+			continue
+		count += 1
+	return count
+
+
+func _spawn_case_pressure_target(event: Dictionary) -> void:
+	if selected_level == null or selected_level.is_tutorial or state == null or state.boss_spawned:
+		return
+	var planned_sector := int(event.get(&"spawn_sector", 0))
+	var spawn_position := _case_pressure_spawn_position(planned_sector, _enemy_body_radius(&"minor_focus"))
+	var stationary_fan := selected_level.order >= 2
+	var request := EnemySpawnRequest.create(
+		&"minor_focus",
+		spawn_position,
+		&"infection_focus",
+		1.0,
+		0.0 if stationary_fan else config.enemy_speed_multiplier,
+		config.contact_damage_multiplier,
+		PackedInt32Array(),
+		EnemySpawnRequest.Priority.CRITICAL,
+		&"case_pressure_target"
+	)
+	request.metadata["case_pressure_target"] = true
+	request.metadata["pressure_behavior"] = &"stationary_fan" if stationary_fan else &"ambient_focus"
+	request.metadata["preserve_spawn_position"] = true
+	request.metadata["spawn_sector"] = case_pressure_last_spawn_sector
+	# A full critical pool consumes this authored slot without creating delayed
+	# pressure after a boss has already cancelled the remaining plan.
+	_spawn_enemy(&"minor_focus", spawn_position, 1.0, true, false, request)
+
+
+func _case_pressure_spawn_position(planned_sector: int, body_radius: float) -> Vector2:
+	var pressure := _local_wave_sector_pressure()
+	var sectors: Array[int] = []
+	for sector in range(WAVE_SPAWN_SECTOR_COUNT):
+		if case_pressure_last_spawn_sector >= 0 and _sector_ring_distance(sector, case_pressure_last_spawn_sector) <= 1:
+			continue
+		sectors.append(sector)
+	sectors.sort_custom(func(left: int, right: int) -> bool:
+		var left_pressure := float(pressure[left])
+		var right_pressure := float(pressure[right])
+		if not is_equal_approx(left_pressure, right_pressure):
+			return left_pressure < right_pressure
+		var left_distance := _sector_ring_distance(left, planned_sector)
+		var right_distance := _sector_ring_distance(right, planned_sector)
+		if left_distance != right_distance:
+			return left_distance < right_distance
+		return left < right
+	)
+	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
+	for sector in sectors:
+		var angle := (float(sector) + 0.5) * sector_width
+		var position := _offscreen_spawn_position(angle, body_radius, null, true, false)
+		if position == Vector2.INF:
+			continue
+		case_pressure_last_spawn_sector = sector
+		return position
+	var fallback_sector := posmod(planned_sector, WAVE_SPAWN_SECTOR_COUNT)
+	case_pressure_last_spawn_sector = fallback_sector
+	var fallback_angle := (float(fallback_sector) + 0.5) * sector_width
+	var fallback_distance := maxf(620.0, _visible_world_half_extents().length() + WAVE_SPAWN_SCREEN_MARGIN + body_radius)
+	return _safe_spawn_position_for_angle(fallback_angle, fallback_distance, body_radius)
+
+
+func _register_case_pressure_target(enemy: InfectionEnemy, behavior: StringName) -> void:
+	if not is_instance_valid(enemy) or enemy_world == null:
+		return
+	var handle := enemy_world.handle_for(enemy)
+	if not EntityHandle.is_valid(handle):
+		return
+	case_pressure_target_states[handle] = {
+		&"behavior": behavior,
+		&"phase": &"ambient" if behavior == &"ambient_focus" else &"active",
+		&"remaining": CASE_PRESSURE_TARGET_ACTIVE_SECONDS,
+		&"locked_heading": Vector2.RIGHT,
+		&"salvos_emitted": 0,
+		&"pending_expiration": false,
+		&"just_spawned": true,
+		# The visible defeat already contributes one point; seven extra points
+		# make this target worth eight only for the research calculation.
+		&"reward_points": 7,
+	}
+	if behavior == &"ambient_focus":
+		hidden_nest_timers[enemy] = CASE_PRESSURE_TARGET_ACTIVE_SECONDS
+
+
+func _step_case_pressure_targets(delta: float) -> void:
+	for handle_value in case_pressure_target_states.keys():
+		var handle := int(handle_value)
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy if enemy_world != null else null
+		if not is_instance_valid(enemy) or not enemy.is_targetable():
+			case_pressure_target_states.erase(handle)
+			continue
+		var runtime: Dictionary = case_pressure_target_states[handle]
+		if bool(runtime.get(&"pending_expiration", false)) or StringName(runtime.get(&"behavior", &"")) == &"ambient_focus":
+			continue
+		if bool(runtime.get(&"just_spawned", false)):
+			runtime[&"just_spawned"] = false
+			case_pressure_target_states[handle] = runtime
+			continue
+		var phase := StringName(runtime.get(&"phase", &"active"))
+		var remaining := maxf(0.0, float(runtime.get(&"remaining", 0.0)) - delta)
+		if phase == &"active":
+			runtime[&"remaining"] = remaining
+			if remaining <= 0.0:
+				runtime[&"phase"] = &"warning"
+				runtime[&"remaining"] = CASE_PRESSURE_WARNING_SECONDS
+				var heading := topology.shortest_delta(enemy.global_position, avatar.global_position).normalized()
+				runtime[&"locked_heading"] = heading if not heading.is_zero_approx() else Vector2.RIGHT
+				if enemy_attack_director != null:
+					enemy_attack_director.release(handle)
+				if hud != null:
+					hud.show_alert("KLEINER HERD · PROJEKTILFÄCHER", AlveolusVisualTheme.CORAL, CASE_PRESSURE_WARNING_SECONDS)
+		elif phase == &"warning":
+			runtime[&"remaining"] = remaining
+			if remaining <= 0.0:
+				runtime[&"phase"] = &"finale"
+				runtime[&"remaining"] = 0.0
+		elif phase == &"finale":
+			runtime[&"remaining"] = remaining
+			if remaining <= 0.0:
+				_emit_case_pressure_target_salvo(handle, enemy, runtime)
+				runtime = case_pressure_target_states.get(handle, runtime)
+		case_pressure_target_states[handle] = runtime
+
+
+func _emit_case_pressure_target_salvo(handle: int, enemy: InfectionEnemy, runtime: Dictionary) -> void:
+	if not is_instance_valid(enemy) or enemy.max_health <= 0.0:
+		_queue_case_pressure_target_expiration(handle, runtime)
+		return
+	var remaining_quarters := _case_pressure_salvo_quota(enemy.health, enemy.max_health)
+	var salvos_emitted := maxi(0, int(runtime.get(&"salvos_emitted", 0)))
+	if remaining_quarters <= salvos_emitted:
+		_queue_case_pressure_target_expiration(handle, runtime)
+		return
+	var heading: Vector2 = runtime.get(&"locked_heading", Vector2.RIGHT)
+	var spawned := 0
+	for angle_degrees in CASE_PRESSURE_FAN_ANGLES:
+		if _spawn_hostile_projectile(
+			enemy.global_position,
+			heading.rotated(deg_to_rad(angle_degrees)),
+			CASE_PRESSURE_PROJECTILE_DAMAGE,
+			enemy.definition.damage_profile,
+			TherapyProjectile.HOSTILE_NORMAL,
+			0.0,
+			CASE_PRESSURE_TARGET_PROJECTILE_SPEED,
+			1050.0,
+			0.0,
+			true
+		):
+			spawned += 1
+	if spawned <= 0:
+		runtime[&"remaining"] = 0.1
+		return
+	salvos_emitted += 1
+	runtime[&"salvos_emitted"] = salvos_emitted
+	runtime[&"remaining"] = CASE_PRESSURE_SALVO_INTERVAL
+	if salvos_emitted >= remaining_quarters:
+		_queue_case_pressure_target_expiration(handle, runtime)
+
+
+func _case_pressure_salvo_quota(current_health: float, maximum_health: float) -> int:
+	if maximum_health <= 0.0:
+		return 0
+	return clampi(ceili(clampf(current_health / maximum_health, 0.0, 1.0) * 4.0), 0, 4)
+
+
+func _queue_case_pressure_target_expiration(handle: int, runtime_override: Dictionary = {}) -> void:
+	if not case_pressure_target_states.has(handle):
+		return
+	var runtime: Dictionary = runtime_override if not runtime_override.is_empty() else case_pressure_target_states[handle]
+	if bool(runtime.get(&"pending_expiration", false)):
+		return
+	runtime[&"pending_expiration"] = true
+	case_pressure_target_states[handle] = runtime
+	case_pressure_target_expirations.append(handle)
+	if enemy_attack_director != null:
+		enemy_attack_director.release(handle)
+
+
+func _flush_case_pressure_target_expirations() -> void:
+	if case_pressure_target_expirations.is_empty():
+		return
+	for handle_value in case_pressure_target_expirations:
+		var handle := int(handle_value)
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy if enemy_world != null else null
+		case_pressure_target_states.erase(handle)
+		if not is_instance_valid(enemy) or not enemies.has(enemy):
+			continue
+		if enemy_attack_director != null:
+			enemy_attack_director.release(handle)
+		if crowd_renderer != null:
+			crowd_renderer.release_enemy(enemy, enemy.activation_generation)
+		if enemy_world != null:
+			enemy_world.release(handle, false)
+			_combat_query_dirty = true
+		hidden_nest_timers.erase(enemy)
+		enemies.erase(enemy)
+		_store_enemy(enemy)
+	case_pressure_target_expirations.clear()
+
+
+func _queue_case_pressure_gate(event: Dictionary) -> void:
+	case_pressure_gate_sequence += 1
+	case_pressure_pending_gates.append({
+		&"gate_id": case_pressure_gate_sequence,
+		&"sequence": int(event.get(&"sequence", case_pressure_gate_sequence)),
+		&"orientation": posmod(int(event.get(&"gate_orientation", 0)), 2),
+		&"armed": false,
+		&"remaining": CASE_PRESSURE_WARNING_SECONDS,
+	})
+
+
+func _step_case_pressure_gates(delta: float) -> void:
+	for index in range(case_pressure_pending_gates.size() - 1, -1, -1):
+		var gate := case_pressure_pending_gates[index]
+		if not bool(gate.get(&"armed", false)):
+			if _case_pressure_finale_active():
+				continue
+			gate[&"armed"] = true
+			gate[&"remaining"] = CASE_PRESSURE_WARNING_SECONDS
+			gate[&"visible_rect"] = _visible_world_rect()
+			gate[&"safe_position"] = avatar.global_position
+			gate[&"positive_direction"] = ((int(gate.get(&"sequence", 0)) + int(config.random_seed)) & 1) == 0
+			if hud != null:
+				hud.show_alert("PROJEKTILWAND · LÜCKE SUCHEN", AlveolusVisualTheme.CORAL, CASE_PRESSURE_WARNING_SECONDS)
+			case_pressure_pending_gates[index] = gate
+			continue
+		case_pressure_pending_gates[index] = gate
+		var remaining := float(gate.get(&"remaining", 0.0)) - delta
+		gate[&"remaining"] = remaining
+		case_pressure_pending_gates[index] = gate
+		if remaining > 0.0:
+			continue
+		_spawn_case_pressure_gate(gate)
+		case_pressure_pending_gates.remove_at(index)
+
+
+func _case_pressure_finale_active() -> bool:
+	for runtime_value in case_pressure_target_states.values():
+		var runtime: Dictionary = runtime_value
+		if StringName(runtime.get(&"phase", &"")) in [&"warning", &"finale"]:
+			return true
+	return false
+
+
+func _spawn_case_pressure_gate(gate: Dictionary) -> void:
+	var visible_rect: Rect2 = gate.get(&"visible_rect", _visible_world_rect())
+	var safe_position: Vector2 = gate.get(&"safe_position", avatar.global_position)
+	var horizontal_travel := int(gate.get(&"orientation", 0)) == 0
+	var positive_direction := bool(gate.get(&"positive_direction", true))
+	var lane_start := visible_rect.position.y - CASE_PRESSURE_GATE_SPACING * 0.5 if horizontal_travel else visible_rect.position.x - CASE_PRESSURE_GATE_SPACING * 0.5
+	var lane_end := visible_rect.end.y + CASE_PRESSURE_GATE_SPACING * 0.5 if horizontal_travel else visible_rect.end.x + CASE_PRESSURE_GATE_SPACING * 0.5
+	var safe_lane := safe_position.y if horizontal_travel else safe_position.x
+	var lane_coordinates := _case_pressure_gate_lane_coordinates(lane_start, lane_end, safe_lane)
+	var projectile_profile := (enemy_definitions.get(&"minor_focus") as EnemyDefinition).damage_profile
+	var gate_id := int(gate.get(&"gate_id", 0))
+	pressure_gate_hits.erase(gate_id)
+	pressure_gate_projectile_counts.erase(gate_id)
+	for lane in lane_coordinates:
+		var origin: Vector2
+		var heading: Vector2
+		var max_distance: float
+		if horizontal_travel:
+			origin = Vector2(visible_rect.position.x - 40.0 if positive_direction else visible_rect.end.x + 40.0, lane)
+			heading = Vector2.RIGHT if positive_direction else Vector2.LEFT
+			max_distance = visible_rect.size.x + 120.0
+		else:
+			origin = Vector2(lane, visible_rect.position.y - 40.0 if positive_direction else visible_rect.end.y + 40.0)
+			heading = Vector2.DOWN if positive_direction else Vector2.UP
+			max_distance = visible_rect.size.y + 120.0
+		origin = topology.resolve_position(origin, TherapyProjectile.BOUNDARY_RADIUS)
+		_spawn_hostile_projectile(
+			origin,
+			heading,
+			CASE_PRESSURE_PROJECTILE_DAMAGE,
+			projectile_profile,
+			TherapyProjectile.HOSTILE_NORMAL,
+			0.0,
+			CASE_PRESSURE_GATE_PROJECTILE_SPEED,
+			max_distance,
+			0.0,
+			true,
+			gate_id
+		)
+
+
+func _case_pressure_gate_lane_coordinates(lane_start: float, lane_end: float, safe_lane: float) -> Array[float]:
+	var lane_span := maxf(lane_end - lane_start, CASE_PRESSURE_GATE_SPACING)
+	var lane_slots := maxi(2, ceili(lane_span / CASE_PRESSURE_GATE_SPACING) + 1)
+	var lane_step := lane_span / float(lane_slots - 1)
+	var lane_coordinates: Array[float] = []
+	for slot in range(lane_slots):
+		var lane := lane_start + float(slot) * lane_step
+		if absf(lane - safe_lane) < CASE_PRESSURE_GATE_SAFE_GAP * 0.5:
+			continue
+		lane_coordinates.append(lane)
+	while lane_coordinates.size() > CASE_PRESSURE_GATE_MAX_PROJECTILES:
+		var closest_index := 0
+		var closest_distance := INF
+		for index in range(lane_coordinates.size()):
+			var distance := absf(lane_coordinates[index] - safe_lane)
+			if distance < closest_distance:
+				closest_distance = distance
+				closest_index = index
+		lane_coordinates.remove_at(closest_index)
+	return lane_coordinates
+
+
 func _case_mechanics_step(delta: float) -> void:
 	var finding := _active_finding()
 	if finding != null and finding.behavior == FindingDefinition.Behavior.PRESSURE_SURGES:
@@ -3445,7 +3949,7 @@ func _refresh_defeat_research_preview() -> void:
 		false,
 		state.elapsed,
 		state.level,
-		defeats,
+		defeats + case_pressure_reward_defeat_points,
 		multiplier,
 		state.bosses_defeated
 	)
@@ -3592,7 +4096,7 @@ func _on_run_finished(success: bool, reason: String) -> void:
 			success,
 			state.elapsed,
 			state.level,
-			defeats,
+			defeats + case_pressure_reward_defeat_points,
 			multiplier,
 			state.bosses_defeated
 		)
@@ -4536,6 +5040,7 @@ func _cleanup_run_nodes() -> void:
 		hud.hide_finding_progress()
 		hud.clear_active_abilities()
 		hud.set_boss_direction_indicator(false, Vector2.ZERO)
+		hud.set_target_focus_direction_indicator(false, Vector2.ZERO, "")
 		hud.update_shield(0.0, 0.0)
 	if treatment_controller != null:
 		treatment_controller.enabled = false
@@ -4590,6 +5095,16 @@ func _cleanup_run_nodes() -> void:
 	active_boss_phase_by_handle.clear()
 	boss_aggregate_maximum = 0.0
 	boss_aggregate_phase = 0
+	case_pressure_director.cancel()
+	case_pressure_target_states.clear()
+	case_pressure_target_expirations.clear()
+	case_pressure_pending_gates.clear()
+	case_pressure_last_spawn_sector = -1
+	case_pressure_gate_sequence = 0
+	case_pressure_reward_defeat_points = 0
+	pressure_gate_id_by_projectile.clear()
+	pressure_gate_hits.clear()
+	pressure_gate_projectile_counts.clear()
 	enemy_runtime_resistance_profiles.clear()
 	intro_enemy_roles.clear()
 	intro_pickup_roles.clear()

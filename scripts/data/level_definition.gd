@@ -34,6 +34,9 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var visible_trait_ids: Array[StringName] = []
 @export var hidden_finding_ids: Array[StringName] = []
 @export var finding_progress_target: int = 0
+## Optional authored pressure schedule. Runtime configuration receives its own
+## deep copy so a run cannot mutate the catalog definition.
+@export var case_pressure_plan: CasePressurePlan
 
 static func create(
 	level_id: StringName,
@@ -92,6 +95,11 @@ func configure_case_variation(
 	visible_trait_ids = traits.duplicate()
 	hidden_finding_ids = findings.duplicate()
 	finding_progress_target = maxi(0, finding_target)
+	return self
+
+
+func configure_case_pressure(plan: CasePressurePlan) -> LevelDefinition:
+	case_pressure_plan = plan.duplicate(true) as CasePressurePlan if plan != null else null
 	return self
 
 

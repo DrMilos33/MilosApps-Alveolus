@@ -27,7 +27,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Lerne Galopp, Behandlung, Erfahrung und Abwehrzellen kennen.",
 			"Das erste Lungenmodell ist stabilisiert. Die regulären Patientenfälle stehen nun bereit.",
 			"Das Modell blieb instabil. Wiederhole die Einführung in deinem eigenen Tempo."
-		).configure_case_variation([], [], 0).configure_boss(&"intro_focus", true),
+		).configure_case_variation([], [], 0).configure_boss(&"intro_focus", true).configure_case_pressure(CasePressurePlan.default_for_case_order(0)),
 		LevelDefinition.create(
 			&"localized_focus", 1, "lol - name fehlt", "Fall 01 · lokalisierter Pneumokokkenherd", false,
 			-1.0, 180.0, 50.0, 0.827, 0.187, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
@@ -35,7 +35,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein lokaler Bakterienherd belastet Doctor Milos. Stoppe ihn, bevor das Leben auf null fällt.",
 			"Der lokalisierte Infektionsherd wurde kontrolliert.",
 			"Die Infektionslast konnte in diesem Versuch nicht ausreichend kontrolliert werden."
-		).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", false),
+		).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", false).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
 		LevelDefinition.create(
 			&"spreading_infection", 2, "Die Ausbreitung", "Fall 02 · bakterielle Pneumonie", false,
 			-1.0, 180.0, 50.0, 0.624, 0.132, 1.35, 2.05, 1.16, 1.45, 0.18, 0.38,
@@ -43,7 +43,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Mehrere Bakteriengruppen breiten sich gleichzeitig aus. Galopp und Ausbau werden jetzt entscheidend.",
 			"Die ausbreitende Infektion wurde eingegrenzt.",
 			"Doctor Milos verlor sein gesamtes Leben."
-		).configure_case_variation(all_traits, all_findings, 42).configure_boss_behavior(1.35).configure_boss(&"infection_focus", true, 2.5, 92.0),
+		).configure_case_variation(all_traits, all_findings, 42).configure_boss_behavior(1.35).configure_boss(&"infection_focus", true, 2.5, 92.0).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
 		LevelDefinition.create(
 			&"severe_pneumonia", 3, "Schwerer Verlauf", "Fall 03 · schwere bakterielle Pneumonie", false,
 			-1.0, 180.0, 50.0, 0.528, 0.108, 1.55, 2.40, 1.24, 1.65, 0.25, 0.48,
@@ -51,7 +51,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Die Belastung steigt schnell. Du brauchst einen starken Ausbau und konsequenten Galopp.",
 			"Auch der schwere Infektionsverlauf wurde kontrolliert.",
 			"Der schwere Verlauf blieb außerhalb des kontrollierbaren Therapiefensters."
-		).configure_case_variation(all_traits, all_findings, 55).configure_boss(&"infection_focus", false)
+		).configure_case_variation(all_traits, all_findings, 55).configure_boss(&"infection_focus", false).configure_case_pressure(CasePressurePlan.default_for_case_order(3))
 	]
 
 static func tutorial_hint_definitions() -> Dictionary:

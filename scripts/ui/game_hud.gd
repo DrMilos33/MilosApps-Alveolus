@@ -3374,6 +3374,11 @@ func set_boss_direction_indicator(visible: bool, direction: Vector2) -> void:
 		run_hud_screen.set_boss_direction_indicator(visible, direction)
 
 
+func set_target_focus_direction_indicator(visible: bool, direction: Vector2, countdown_text: String) -> void:
+	if run_hud_screen != null:
+		run_hud_screen.set_target_focus_direction_indicator(visible, direction, countdown_text)
+
+
 func show_boss_phase(phase: int) -> void:
 	run_hud_vitals["boss_phase"] = "Phase %d aktiv" % (phase + 1)
 	_apply_run_hud_model()

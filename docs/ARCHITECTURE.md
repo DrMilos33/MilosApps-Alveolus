@@ -350,6 +350,22 @@ Regular timed waves stop at 145 weighted melee units; critical, boss and
 case-pressure allocations remain governed by `CombatCapacity` and its reserved
 slots rather than this ambient gameplay cap.
 
+`CasePressurePlan` is authored on `LevelDefinition`, copied defensively into
+`RunConfig` and consumed by one seed-isolated `CasePressureDirector` after the
+run clock advances. It never reads player movement, aim or the standard spawn
+RNG. Due targets use complete critical `EnemySpawnRequest` records and
+generation-safe handles; their small lifecycle dictionaries live on the Game
+facade because at most two exist. Target expiration is applied only after the
+combat event flush, so a same-tick defeat wins and cannot lose its pickup or
+reward. The fixed-step owner emits target fans and Case-3 gates through the
+existing pooled `ProjectileWorld` and hostile renderer. Regular projectiles
+stop 48 slots below technical capacity; only authored pressure patterns may use
+that reserve. Gate IDs remain attached to pooled projectiles until the final
+member finishes, enforcing one incoming hit per wall without per-projectile
+process state. Boss start cancels pending schedule/gates. Offscreen target HUD
+state is published with the render snapshot; a visible boss arrow always has
+priority.
+
 Before the avatar step, `EnemyWorld.prepare_avatar_body_interaction()` resolves
 the same authored contact circles from the player's side. Every non-small enemy
 hard-clips the proposed avatar displacement. Small bacteria instead receive a

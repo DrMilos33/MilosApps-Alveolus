@@ -132,6 +132,12 @@ bulk-active ticks, bulk projection candidates and bulk solve time. Counters are
 active only in the profiling run and are returned as one fixed
 `PackedInt64Array` snapshot; production movement creates no report dictionaries.
 
+Authored case pressure adds no entity-owned process loops or broad-phase scan.
+Its clock scheduler is constant-size, active target state is capped at two and
+the largest single gate contains 24 pooled hostile projectiles. A permanent
+48-slot reserve prevents a full friendly-projectile load from dropping these
+critical patterns while keeping the established 512-projectile technical cap.
+
 The 220-enemy scenario must satisfy the native frame budget and may not regress
 against its exact pre-change baseline. The 600-enemy scenario remains the
 capacity gate and is reported honestly if it misses an absolute threshold;
