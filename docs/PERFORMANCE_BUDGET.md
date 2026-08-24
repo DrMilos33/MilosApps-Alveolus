@@ -105,6 +105,16 @@ and required status feedback are never degraded.
   broad-phase query. Its movement hot path performs one projection pass plus
   final validation over that cache; it must not restore a query, sort or dynamic
   neighbor allocation per member and tick.
+- Static-flow obstacle discovery queries outward from each active obstacle
+  through the existing `CombatSpatialGrid` once every four fixed ticks after
+  immediate lifecycle updates and stores at most four packed generation-safe
+  guards per nearby mover. Side choice consumes the existing direct-guard or
+  bulk-neighbor cache, and its contact-safe direction is reused for at most four
+  fixed ticks. Normal routing adds no per-mover/per-tick broad-phase query,
+  sort, allocation, dictionary, timer, node or second spatial index; only
+  fail-open may perform its bounded local clearance query until the mover is
+  outside every obstacle body. Speed blend, stall tracking and fail-open remain
+  packed O(1) state.
 - Offscreen relocation uses the incrementally maintained EnemyWorld broad
   phase before its exact body-distance check and falls back to the complete
   `CombatQuery` registry while materializing bodies exist. Candidate placement
@@ -120,17 +130,21 @@ fixture: 145 enemies as the conservative gameplay-cap proxy, 220 enemies as a
 dense regression load, and 600 enemies as the technical capacity gate. The
 runtime gameplay cap is weighted rather than a raw count, so bacterial groups
 can make the real ambient body count lower. All scenarios retain 360 pickup
-stacks, 512 moving gameplay projectiles and 80 feedback effects. Warm-up lasts
-eight simulated seconds and the measured interval at least fifteen simulated
-seconds.
+stacks, 512 requested moving treatment projectiles and 80 feedback effects;
+the regular projectile lane currently admits 464 while preserving 48 critical
+case-pressure slots. The default fixture additionally retains two active
+stationary flow obstacles in reserved critical enemy slots and reports regular
+enemies, total enemies and obstacles separately. Warm-up lasts eight simulated
+seconds and the measured interval at least fifteen simulated seconds.
 
 The report includes total, `enemy_world`, `clock_spawn` and `crowd_renderer`
 p50/p95/p99/max plus exact entity counts, node/memory development and fixed
 crowd counters for grid rebuilds, guard queries, examined candidates, corridor
 evaluations, queued ticks, bypass starts, side switches, bulk snapshots,
-bulk-active ticks, bulk projection candidates and bulk solve time. Counters are
-active only in the profiling run and are returned as one fixed
-`PackedInt64Array` snapshot; production movement creates no report dictionaries.
+bulk-active ticks, bulk projection candidates, bulk solve time, obstacle
+queries, active obstacle-route ticks and fail-open starts. Counters are active
+only in the profiling run and are returned as one fixed `PackedInt64Array`
+snapshot; production movement creates no report dictionaries.
 
 Authored case pressure adds no entity-owned process loops or broad-phase scan.
 Its clock scheduler is constant-size, active target state is capped at two and

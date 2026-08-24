@@ -6,6 +6,17 @@ enum Priority {
 	CRITICAL,
 }
 
+enum BodyRole {
+	MOBILE,
+	STATIC_FLOW_OBSTACLE,
+}
+
+enum ObstacleTraversal {
+	DEFAULT,
+	FLOW_AROUND,
+	PHASE_THROUGH,
+}
+
 var definition_id: StringName = &""
 var visual_id: StringName = &""
 var position: Vector2 = Vector2.ZERO
@@ -15,6 +26,8 @@ var contact_scale: float = 1.0
 var boss_phases: PackedInt32Array = PackedInt32Array()
 var source_id: StringName = &"spawn_director"
 var priority: Priority = Priority.REGULAR
+var body_role: BodyRole = BodyRole.MOBILE
+var obstacle_traversal: ObstacleTraversal = ObstacleTraversal.DEFAULT
 var metadata: Dictionary = {}
 
 static func create(
@@ -40,6 +53,14 @@ static func create(
 	request.source_id = source
 	return request
 
+func configure_body_interaction(
+	role: BodyRole = BodyRole.MOBILE,
+	traversal: ObstacleTraversal = ObstacleTraversal.DEFAULT
+) -> EnemySpawnRequest:
+	body_role = role
+	obstacle_traversal = traversal
+	return self
+
 func is_valid() -> bool:
 	return definition_id != &"" and health_scale > 0.0 and movement_scale >= 0.0 and contact_scale >= 0.0
 
@@ -62,6 +83,8 @@ func duplicate_request() -> EnemySpawnRequest:
 		source_id
 	)
 	copy.metadata = metadata.duplicate(true)
+	copy.body_role = body_role
+	copy.obstacle_traversal = obstacle_traversal
 	return copy
 
 func reset() -> void:
@@ -74,4 +97,6 @@ func reset() -> void:
 	boss_phases = PackedInt32Array()
 	source_id = &"spawn_director"
 	priority = Priority.REGULAR
+	body_role = BodyRole.MOBILE
+	obstacle_traversal = ObstacleTraversal.DEFAULT
 	metadata.clear()

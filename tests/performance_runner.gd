@@ -20,6 +20,7 @@ func _init() -> void:
 
 func _run_performance_test() -> void:
 	var enemy_count := _requested_enemy_count()
+	var flow_obstacle_count := _requested_flow_obstacle_count()
 	Engine.physics_ticks_per_second = 60
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	var game = packed.instantiate()
@@ -43,7 +44,9 @@ func _run_performance_test() -> void:
 	game.state.max_stability = 1000000000.0
 	game.state.stability = game.state.max_stability
 
-	var enemies_to_add := maxi(enemy_count - game.enemies.size(), 0)
+	var existing_regular_count: int = game.enemies.size()
+	var flow_obstacles := _spawn_static_flow_obstacles(game, flow_obstacle_count)
+	var enemies_to_add := maxi(enemy_count - existing_regular_count, 0)
 	for index in range(enemies_to_add):
 		var angle := TAU * float(index) / float(maxi(enemies_to_add, 1))
 		var ring := 380.0 + float(index % 9) * 58.0
@@ -101,13 +104,17 @@ func _run_performance_test() -> void:
 	var enemy_reused := replacement != null and replacement.get_instance_id() == recycled_enemy_id
 	var crowd_batched: bool = game.crowd_renderer.is_batching()
 	var feedback_bounded: bool = game.visual_bursts.size() == FEEDBACK_EFFECT_COUNT
-	var projectiles_bounded: bool = game.projectiles.size() == PROJECTILE_COUNT
+	var expected_projectile_count: int = mini(PROJECTILE_COUNT, game.REGULAR_PROJECTILE_LIMIT)
+	var projectiles_bounded: bool = game.projectiles.size() == expected_projectile_count
 	var feedback_rendered: bool = game.feedback_renderer.active_count() == FEEDBACK_EFFECT_COUNT
-	var projectiles_rendered: bool = game.projectile_renderer.active_count() == PROJECTILE_COUNT
+	var projectiles_rendered: bool = game.projectile_renderer.active_count() == expected_projectile_count
 	var feedback_lifetime_stable := is_equal_approx(_feedback_remaining(game), feedback_remaining_before)
-	var exact_enemy_count: bool = game.enemies.size() == enemy_count
+	var expected_total_enemies := enemy_count + flow_obstacles.size()
+	var exact_enemy_count: bool = game.enemies.size() == expected_total_enemies
+	var exact_regular_count: bool = game.enemy_world.regular_count == enemy_count
+	var exact_flow_obstacle_count: bool = flow_obstacles.size() == flow_obstacle_count
 	var maximum_guard_queries: int = MEASURED_PHYSICS_FRAMES * (
-		ceili(float(enemy_count) / float(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES)) + 1
+		ceili(float(expected_total_enemies) / float(EnemyWorld.DIRECT_COLLISION_UPDATE_PHASES)) + 1
 	)
 	var guard_queries_bounded: bool = (
 		crowd_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES] <= maximum_guard_queries
@@ -115,6 +122,14 @@ func _run_performance_test() -> void:
 	var corridor_queries_reuse_guards: bool = (
 		crowd_profile[EnemyWorld.CrowdProfileCounter.CORRIDOR_EVALUATIONS]
 		<= crowd_profile[EnemyWorld.CrowdProfileCounter.GUARD_QUERIES]
+	)
+	var maximum_flow_obstacle_queries: int = (
+		(ceili(float(MEASURED_PHYSICS_FRAMES) / float(EnemyWorld.FLOW_OBSTACLE_REFRESH_TICKS)) + 1)
+		* maxi(flow_obstacle_count, 1)
+	)
+	var flow_obstacle_queries_bounded: bool = (
+		crowd_profile[EnemyWorld.CrowdProfileCounter.FLOW_OBSTACLE_QUERIES]
+		<= maximum_flow_obstacle_queries
 	)
 	var grid_updates_incremental: bool = crowd_profile[EnemyWorld.CrowdProfileCounter.GRID_REBUILDS] == 0
 	var replacement_clean: bool = (
@@ -141,7 +156,10 @@ func _run_performance_test() -> void:
 		and projectiles_rendered
 		and feedback_lifetime_stable
 		and exact_enemy_count
+		and exact_regular_count
+		and exact_flow_obstacle_count
 		and guard_queries_bounded
+		and flow_obstacle_queries_bounded
 		and corridor_queries_reuse_guards
 		and grid_updates_incremental
 	)
@@ -157,8 +175,12 @@ func _run_performance_test() -> void:
 		"projectiles_rendered": projectiles_rendered,
 		"feedback_lifetime_stable": feedback_lifetime_stable,
 		"exact_enemy_count": exact_enemy_count,
+		"exact_regular_count": exact_regular_count,
+		"exact_flow_obstacle_count": exact_flow_obstacle_count,
 		"guard_queries_bounded": guard_queries_bounded,
 		"maximum_guard_queries": maximum_guard_queries,
+		"flow_obstacle_queries_bounded": flow_obstacle_queries_bounded,
+		"maximum_flow_obstacle_queries": maximum_flow_obstacle_queries,
 		"corridor_queries_reuse_guards": corridor_queries_reuse_guards,
 		"grid_updates_incremental": grid_updates_incremental,
 	}
@@ -190,6 +212,8 @@ func _run_performance_test() -> void:
 		},
 		"counts": {
 			"enemies": game.enemies.size(),
+			"regular_enemies": game.enemy_world.regular_count,
+			"static_flow_obstacles": flow_obstacles.size(),
 			"pickups": game.pickups.size(),
 			"drop_values": PICKUP_DROP_COUNT,
 			"stored_drop_values": stored_analysis,
@@ -228,6 +252,9 @@ func _run_performance_test() -> void:
 			"bulk_active_ticks": crowd_profile[EnemyWorld.CrowdProfileCounter.BULK_ACTIVE_TICKS],
 			"bulk_projection_candidates": crowd_profile[EnemyWorld.CrowdProfileCounter.BULK_PROJECTION_CANDIDATES],
 			"bulk_solve_usec": crowd_profile[EnemyWorld.CrowdProfileCounter.BULK_SOLVE_USEC],
+			"flow_obstacle_queries": crowd_profile[EnemyWorld.CrowdProfileCounter.FLOW_OBSTACLE_QUERIES],
+			"flow_active_ticks": crowd_profile[EnemyWorld.CrowdProfileCounter.FLOW_ACTIVE_TICKS],
+			"flow_fail_open_starts": crowd_profile[EnemyWorld.CrowdProfileCounter.FLOW_FAIL_OPEN_STARTS],
 		},
 		"subsystem_timing_ms": subsystem_timings,
 	}, true)
@@ -248,6 +275,43 @@ func _requested_enemy_count() -> int:
 		if argument.begins_with("--crowd-enemies="):
 			return clampi(argument.trim_prefix("--crowd-enemies=").to_int(), 1, 600)
 	return DEFAULT_ENEMY_COUNT
+
+
+func _requested_flow_obstacle_count() -> int:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--flow-obstacles="):
+			return clampi(argument.trim_prefix("--flow-obstacles=").to_int(), 0, 2)
+	return 2
+
+
+func _spawn_static_flow_obstacles(game: Node, count: int) -> Array[InfectionEnemy]:
+	var obstacles: Array[InfectionEnemy] = []
+	var positions := [Vector2(170.0, -78.0), Vector2(-170.0, 78.0)]
+	for index in range(mini(count, positions.size())):
+		var request := EnemySpawnRequest.create(
+			&"minor_focus",
+			positions[index],
+			&"infection_focus",
+			1.0,
+			0.0,
+			0.0,
+			PackedInt32Array(),
+			EnemySpawnRequest.Priority.CRITICAL,
+			&"performance_static_flow"
+		).configure_body_interaction(
+			EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE,
+			EnemySpawnRequest.ObstacleTraversal.DEFAULT
+		)
+		request.metadata["preserve_spawn_position"] = true
+		var obstacle: InfectionEnemy = game._spawn_enemy(
+			&"minor_focus", positions[index], 1.0, true, false, request
+		)
+		if obstacle == null:
+			continue
+		obstacles.append(obstacle)
+		var handle: int = game.enemy_world.handle_for(obstacle)
+		game.enemy_attack_director.release(handle)
+	return obstacles
 
 func _spawn_moving_projectiles(game: Node, count: int) -> void:
 	var shots: Array[TreatmentShot] = []

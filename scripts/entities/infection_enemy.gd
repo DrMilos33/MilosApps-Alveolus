@@ -40,6 +40,8 @@ var speed_multiplier: float = 1.0
 var damage_multiplier: float = 1.0
 var runtime_resistance_profile: ResistanceProfile
 var runtime_defense: float = 0.0
+var body_role: int = EnemySpawnRequest.BodyRole.MOBILE
+var obstacle_traversal: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 var phase_minions: PackedInt32Array = PackedInt32Array()
 var next_phase_index: int = 0
 var contact_cooldown: float = 0.0
@@ -97,7 +99,9 @@ func configure(
 	contact_scale: float = 1.0,
 	boss_phases: PackedInt32Array = PackedInt32Array(),
 	resistance_profile: ResistanceProfile = null,
-	defense_rating: float = 0.0
+	defense_rating: float = 0.0,
+	body_role_value: int = EnemySpawnRequest.BodyRole.MOBILE,
+	obstacle_traversal_value: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 ) -> void:
 	activation_generation += 1
 	activation_active = true
@@ -116,6 +120,8 @@ func configure(
 	damage_multiplier = contact_scale
 	runtime_resistance_profile = resistance_profile if resistance_profile != null else definition.resistance_profile
 	runtime_defense = maxf(0.0, defense_rating)
+	body_role = body_role_value
+	obstacle_traversal = obstacle_traversal_value
 	phase_minions = boss_phases
 	next_phase_index = 0
 	contact_cooldown = 0.0
@@ -162,6 +168,8 @@ func recycle() -> void:
 	_bounded_maximum = Vector2.ZERO
 	runtime_resistance_profile = null
 	runtime_defense = 0.0
+	body_role = EnemySpawnRequest.BodyRole.MOBILE
+	obstacle_traversal = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 	phase_minions = PackedInt32Array()
 	status_speed_multipliers.clear()
 	status_contact_multipliers.clear()
@@ -179,6 +187,18 @@ func recycle() -> void:
 
 func is_targetable() -> bool:
 	return activation_active and spawn_timer <= 0.0 and not dying and health > 0.0
+
+
+func is_static_flow_obstacle() -> bool:
+	return body_role == EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE
+
+
+func resolved_obstacle_traversal() -> int:
+	if obstacle_traversal != EnemySpawnRequest.ObstacleTraversal.DEFAULT:
+		return obstacle_traversal
+	if definition != null and definition.is_boss:
+		return EnemySpawnRequest.ObstacleTraversal.PHASE_THROUGH
+	return EnemySpawnRequest.ObstacleTraversal.FLOW_AROUND
 
 
 func combat_resistance_profile() -> ResistanceProfile:
@@ -492,7 +512,7 @@ func status_contact_multiplier() -> float:
 	return _cached_status_contact_multiplier
 
 func apply_displacement(offset: Vector2) -> void:
-	if offset.length_squared() <= 0.0001 or dying or spawn_timer > 0.0:
+	if is_static_flow_obstacle() or offset.length_squared() <= 0.0001 or dying or spawn_timer > 0.0:
 		return
 	global_position += offset
 	_relocation_interaction_lock = maxf(_relocation_interaction_lock, RELOCATION_INTERACTION_LOCK_SECONDS)
@@ -507,7 +527,13 @@ func apply_knockback(
 	duration: float = DEFAULT_KNOCKBACK_SECONDS,
 	stun_duration: float = DEFAULT_STUN_SECONDS
 ) -> void:
-	if direction.length_squared() <= 0.0001 or distance <= 0.0 or dying or spawn_timer > 0.0:
+	if (
+		is_static_flow_obstacle()
+		or direction.length_squared() <= 0.0001
+		or distance <= 0.0
+		or dying
+		or spawn_timer > 0.0
+	):
 		return
 	var was_stunned := is_stunned()
 	_knockback_direction = direction.normalized()

@@ -350,6 +350,36 @@ Regular timed waves stop at 145 weighted melee units; critical, boss and
 case-pressure allocations remain governed by `CombatCapacity` and its reserved
 slots rather than this ambient gameplay cap.
 
+Authored stationary bodies use the complete `EnemySpawnRequest` pair
+`BodyRole.STATIC_FLOW_OBSTACLE` and `ObstacleTraversal`. The pair survives
+duplication and deferred activation; `InfectionEnemy.recycle()` restores
+`MOBILE`/`DEFAULT`. `DEFAULT` resolves to `FLOW_AROUND` for non-bosses and
+`PHASE_THROUGH` for bosses, while an explicit request may override either
+route. Static obstacles reject displacement and knockback, never join a bulk
+component or offscreen relocation, and register through packed per-slot flags
+and generation-safe handles. Release clears every guard and lease naming the
+old generation; same-slot reuse resets that slot's obstacle and route state
+before it may represent another generation.
+
+Every four fixed ticks, `EnemyWorld` queries outward from each active obstacle
+through the existing `CombatSpatialGrid` and retains at most four obstacle
+handles per nearby mover. A newly blocked route chooses one stable circular
+side from the mover's existing direct-guard or bulk-neighbor cache; clearance
+wins, then Doctor progress, then deterministic slot parity. A short packed
+direction cache starts from a contact-safe one-tick chord at the authoritative
+current position; later cached steps extend beyond that circle rather than
+subdividing a multi-tick chord through it. Only the locally clear front mover
+may blend from base speed to 1.25x over 0.15 seconds; the blend leaves over 0.20
+seconds and a body-blocked follower remains at base speed.
+
+If such a route achieves less than 20 percent of its expected travel for
+exactly 0.8 seconds without a mobile-body block, it enters fail-open. Until the
+mover has cleared every active static obstacle plus the release margin, only
+those obstacle bodies are ignored; ordinary enemy bodies, Doctor contact,
+arena bounds, statuses and generation remain authoritative. This path adds no
+teleport, global steering target, per-entity process or timer, dictionary or
+second spatial index.
+
 `CasePressurePlan` is authored on `LevelDefinition`, copied defensively into
 `RunConfig` and consumed by one seed-isolated `CasePressureDirector` after the
 run clock advances. It never reads player movement, aim or the standard spawn

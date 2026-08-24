@@ -90,12 +90,21 @@ func _test_spawn_request() -> void:
 		&"boss_phase"
 	)
 	request.metadata["wave"] = 2
+	request.configure_body_interaction(
+		EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE,
+		EnemySpawnRequest.ObstacleTraversal.PHASE_THROUGH
+	)
 	var copy := request.duplicate_request()
 	request.metadata["wave"] = 3
 	_assert_true(copy.is_valid() and copy.is_critical(), "Spawn request captures complete critical request")
 	_assert_equal(copy.resolved_visual_id(), &"germ_green", "Explicit visual id is preserved")
 	_assert_equal(copy.metadata["wave"], 2, "Spawn request duplicate owns metadata")
 	_assert_equal(copy.boss_phases, PackedInt32Array([3, 4]), "Spawn phases are preserved")
+	_assert_equal(copy.body_role, EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE, "Spawn request duplicate preserves body role")
+	_assert_equal(copy.obstacle_traversal, EnemySpawnRequest.ObstacleTraversal.PHASE_THROUGH, "Spawn request duplicate preserves traversal override")
+	request.reset()
+	_assert_equal(request.body_role, EnemySpawnRequest.BodyRole.MOBILE, "Spawn request reset restores mobile body role")
+	_assert_equal(request.obstacle_traversal, EnemySpawnRequest.ObstacleTraversal.DEFAULT, "Spawn request reset restores default traversal")
 
 func _test_deferred_events() -> void:
 	var queue := CombatEventQueue.new()

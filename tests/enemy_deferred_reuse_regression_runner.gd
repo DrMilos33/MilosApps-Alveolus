@@ -47,13 +47,30 @@ func _run() -> void:
 	var reused_instance_id: int = 0
 	for cycle in range(REUSE_CYCLES):
 		var spawn_position := Vector2(390.0 + float(cycle % 5) * 9.0, -140.0 + float(cycle % 7) * 11.0)
-		var enemy: InfectionEnemy = game._spawn_enemy(&"pneumococcus", spawn_position)
+		var request: EnemySpawnRequest = null
+		if cycle == 0:
+			request = EnemySpawnRequest.create(
+				&"pneumococcus", spawn_position, &"", 1.0, 0.0, 1.0
+			).configure_body_interaction(
+				EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE,
+				EnemySpawnRequest.ObstacleTraversal.PHASE_THROUGH
+			)
+		var enemy: InfectionEnemy = game._spawn_enemy(
+			&"pneumococcus", spawn_position, 1.0, false, false, request
+		)
 		_assert_true(is_instance_valid(enemy), "Cycle %d spawns from available capacity" % cycle)
 		if not is_instance_valid(enemy):
 			break
 		if reused_instance_id == 0:
 			reused_instance_id = enemy.get_instance_id()
 		_assert_equal(enemy.get_instance_id(), reused_instance_id, "Cycle %d reuses one stable pooled Node" % cycle)
+		if cycle == 0:
+			_assert_true(enemy.is_static_flow_obstacle(), "Cycle 0 carries the explicit static body role")
+			_assert_equal(enemy.obstacle_traversal, EnemySpawnRequest.ObstacleTraversal.PHASE_THROUGH, "Cycle 0 carries the explicit traversal override")
+		elif cycle == 1:
+			_assert_true(not enemy.is_static_flow_obstacle(), "The reused Node resets to a mobile body")
+			_assert_equal(enemy.body_role, EnemySpawnRequest.BodyRole.MOBILE, "The reused Node carries the mobile default")
+			_assert_equal(enemy.obstacle_traversal, EnemySpawnRequest.ObstacleTraversal.DEFAULT, "The reused Node clears the old traversal override")
 		enemy.spawn_timer = 0.0
 		enemy.materialized_emitted = true
 		enemy.reset_visual_motion()

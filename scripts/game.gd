@@ -2417,6 +2417,12 @@ func _spawn_enemy(
 	var movement_scale := spawn_request.movement_scale if spawn_request != null else config.enemy_speed_multiplier
 	var damage_scale := spawn_request.contact_scale if spawn_request != null else config.contact_damage_multiplier
 	var phases := spawn_request.boss_phases.duplicate() if spawn_request != null else PackedInt32Array()
+	var body_role := spawn_request.body_role if spawn_request != null else EnemySpawnRequest.BodyRole.MOBILE
+	var obstacle_traversal := (
+		spawn_request.obstacle_traversal
+		if spawn_request != null
+		else EnemySpawnRequest.ObstacleTraversal.DEFAULT
+	)
 	if definition.is_boss:
 		health_scale = config.boss_health_multiplier
 		if spawn_request == null:
@@ -2476,7 +2482,9 @@ func _spawn_enemy(
 		damage_scale,
 		phases,
 		enemy_runtime_resistance_profiles.get(type) as ResistanceProfile,
-		config.enemy_defense
+		config.enemy_defense,
+		body_role,
+		obstacle_traversal
 	)
 	_apply_group_control_to_enemy(enemy)
 	enemy.global_position = bounded_position
@@ -2491,6 +2499,7 @@ func _spawn_enemy(
 	var bulk_flow_allowed := (
 		definition.id in [&"pneumococcus", &"bacterial_cluster"]
 		and not definition.is_boss
+		and not enemy.is_static_flow_obstacle()
 		and (selected_level == null or not selected_level.is_tutorial)
 	)
 	enemy_world.set_bulk_flow_allowed(world_handle, bulk_flow_allowed)
@@ -3603,6 +3612,11 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 	request.metadata["pressure_behavior"] = &"stationary_fan" if stationary_fan else &"ambient_focus"
 	request.metadata["preserve_spawn_position"] = true
 	request.metadata["spawn_sector"] = case_pressure_last_spawn_sector
+	if stationary_fan:
+		request.configure_body_interaction(
+			EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE,
+			EnemySpawnRequest.ObstacleTraversal.DEFAULT
+		)
 	# A full critical pool consumes this authored slot without creating delayed
 	# pressure after a boss has already cancelled the remaining plan.
 	_spawn_enemy(&"minor_focus", spawn_position, 1.0, true, false, request)
@@ -4983,7 +4997,7 @@ func _rank_offscreen_sectors(pressure: PackedFloat32Array) -> void:
 func _enemy_can_relocate_offscreen(enemy: InfectionEnemy, source_exclusion_rect: Rect2) -> bool:
 	if not is_instance_valid(enemy) or enemy.definition == null:
 		return false
-	if enemy.definition.is_boss or enemy.definition.id == &"minor_focus":
+	if enemy.definition.is_boss or enemy.is_static_flow_obstacle() or enemy.definition.id == &"minor_focus":
 		return false
 	if enemy.definition.id not in [&"pneumococcus", &"bacterial_cluster"]:
 		return false
