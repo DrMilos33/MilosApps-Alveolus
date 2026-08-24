@@ -205,7 +205,7 @@ const FLOW_OBSTACLE_MINIMUM_PROGRESS_RATIO := 0.20
 const FLOW_DOCTOR_SIDE_TANGENT_WEIGHT := 0.35
 const AVATAR_BODY_COLLISION_PASSES := 3
 const AVATAR_BODY_COLLISION_SKIN := 0.05
-const SMALL_AVATAR_PUSH_SPEED := 48.0
+const AVATAR_PUSH_SPEED := 48.0
 const CONTACT_RING_MICRO_SLOTS := 12
 const CONTACT_RING_SMALL_SPAN := 2
 const CONTACT_RING_CLUSTER_SPAN := 3
@@ -602,8 +602,9 @@ func is_critical(handle: int) -> bool:
 
 ## Game calls this immediately before TherapyAvatar.step_fixed(). The avatar's
 ## requested displacement is clipped against the same authored contact circles
-## that deal damage. Large bodies are hard obstacles; small bacteria yield at a
-## bounded physical push speed without changing either actor's movement stat.
+## that deal damage. Mobile non-bosses yield at a bounded physical push speed by
+## default; bosses, static obstacles and explicitly opted-out definitions remain
+## hard bodies. Neither actor's movement stat is changed.
 func prepare_avatar_body_interaction(delta: float) -> void:
 	if not is_instance_valid(_crowd_avatar):
 		return
@@ -624,15 +625,15 @@ func prepare_avatar_body_interaction(delta: float) -> void:
 		_avatar_body_candidates
 	)
 	var resolved_delta := requested_delta
-	# Hard bodies are resolved first so a pushed small bacterium can never carry
-	# Doctor Milos through a cluster, herd, ranged unit or boss behind it.
+	# Hard bodies are resolved first so a pushed enemy can never carry Doctor
+	# Milos through a boss, stationary obstacle or opted-out body behind it.
 	for _pass_index in range(AVATAR_BODY_COLLISION_PASSES):
 		var hard_changed := false
 		for handle_value in _avatar_body_candidates:
 			var handle := int(handle_value)
 			var slot := EntityHandle.slot(handle)
 			var enemy := _active_collision_enemy(handle)
-			if enemy == null or enemy.definition.id == SMALL_ENEMY_ID:
+			if enemy == null or enemy.can_be_pushed_by_player():
 				continue
 			var clipped := _clip_avatar_delta_against_enemy(movement_origin, resolved_delta, enemy, slot)
 			if not clipped.is_equal_approx(resolved_delta):
@@ -641,16 +642,16 @@ func prepare_avatar_body_interaction(delta: float) -> void:
 		if not hard_changed:
 			break
 
-	# Small bodies remain real obstacles, but may be displaced slowly. The Doctor
-	# advances only by the distance the bacterium could physically yield this tick.
+	# Pushable bodies remain real obstacles. The Doctor advances only by the
+	# distance the contacted body could physically yield this tick.
 	for _push_pass_index in range(2):
 		var push_changed := false
 		for push_handle_value in _avatar_body_candidates:
 			var push_handle := int(push_handle_value)
 			var push_enemy := _active_collision_enemy(push_handle)
-			if push_enemy == null or push_enemy.definition.id != SMALL_ENEMY_ID:
+			if push_enemy == null or not push_enemy.can_be_pushed_by_player():
 				continue
-			var pushed := _resolve_avatar_small_body(
+			var pushed := _resolve_avatar_pushable_body(
 				push_handle,
 				movement_origin,
 				resolved_delta,
@@ -661,16 +662,16 @@ func prepare_avatar_body_interaction(delta: float) -> void:
 				push_changed = true
 		if not push_changed:
 			break
-	# A small-body projection may change the endpoint tangent. Reapply hard
-	# constraints so that yielding bacteria can never open a path through a large
-	# body at the side of the same contact pack.
+	# A push projection may change the endpoint tangent. Reapply hard constraints
+	# so that yielding bodies cannot open a path through a protected body at the
+	# side of the same contact pack.
 	for _final_pass_index in range(AVATAR_BODY_COLLISION_PASSES):
 		var final_changed := false
 		for final_handle_value in _avatar_body_candidates:
 			var final_handle := int(final_handle_value)
 			var final_slot := EntityHandle.slot(final_handle)
 			var final_enemy := _active_collision_enemy(final_handle)
-			if final_enemy == null or final_enemy.definition.id == SMALL_ENEMY_ID:
+			if final_enemy == null or final_enemy.can_be_pushed_by_player():
 				continue
 			var final_clipped := _clip_avatar_delta_against_enemy(
 				movement_origin,
@@ -1229,7 +1230,7 @@ func _clip_avatar_delta_against_enemy(
 	return requested_delta - contact_normal * (inward_component - allowed_inward)
 
 
-func _resolve_avatar_small_body(
+func _resolve_avatar_pushable_body(
 	handle: int,
 	movement_origin: Vector2,
 	requested_delta: Vector2,
@@ -1264,8 +1265,8 @@ func _resolve_avatar_small_body(
 	if inward_component <= allowed_inward:
 		return requested_delta
 	var required_yield := inward_component - allowed_inward
-	var requested_push := minf(required_yield, SMALL_AVATAR_PUSH_SPEED * delta)
-	var allowed_push := _small_body_push_distance(handle, enemy, contact_normal, requested_push)
+	var requested_push := minf(required_yield, AVATAR_PUSH_SPEED * delta)
+	var allowed_push := _avatar_body_push_distance(handle, enemy, contact_normal, requested_push)
 	var actual_push := 0.0
 	if allowed_push > DIRECT_COLLISION_EPSILON:
 		var previous_position := enemy.global_position
@@ -1281,7 +1282,7 @@ func _resolve_avatar_small_body(
 	return requested_delta - contact_normal * unresolved_inward
 
 
-func _small_body_push_distance(
+func _avatar_body_push_distance(
 	handle: int,
 	enemy: InfectionEnemy,
 	push_direction: Vector2,

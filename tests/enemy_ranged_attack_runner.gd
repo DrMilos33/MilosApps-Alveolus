@@ -109,7 +109,10 @@ func _test_generation_safe_attack_director() -> void:
 			reinforcements.append(count)
 	)
 	_true(director.register_enemy(handle, EnemyAttackDirector.Role.BOSS), "Boss wird genau einmal als Schütze registriert")
+	var boss_position_before_push := boss.global_position
 	boss.apply_knockback(Vector2.RIGHT, 1.0, 0.1, 1.0)
+	boss.step_fixed(0.05)
+	_true(boss.global_position.is_equal_approx(boss_position_before_push), "Stoß betäubt den Boss, verschiebt ihn aber nicht")
 	director.step_fixed(0.65)
 	_equal(shots.size(), 0, "Ein gestunnter Boss feuert keine Projektile und pausiert seinen Angriffstimer")
 	boss.step_fixed(1.01)

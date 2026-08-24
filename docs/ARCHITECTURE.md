@@ -422,10 +422,12 @@ state is published with the render snapshot; a visible boss arrow always has
 priority.
 
 Before the avatar step, `EnemyWorld.prepare_avatar_body_interaction()` resolves
-the same authored contact circles from the player's side. Every non-small enemy
-hard-clips the proposed avatar displacement. Small bacteria instead receive a
-bounded physical push and therefore yield gradually without changing the
-avatar's movement stat or applying a slow status.
+the same authored contact circles from the player's side. Ordinary mobile
+non-bosses receive a bounded physical push by default and therefore yield
+gradually without changing either movement stat or applying a slow status.
+`EnemyDefinition.player_push_enabled` is the explicit opt-out; bosses and
+`STATIC_FLOW_OBSTACLE` bodies always hard-clip the proposed avatar displacement.
+The contacted body still cannot cross another contact circle or the arena edge.
 
 Standard-wave placement evaluates twelve sectors around the current camera.
 Only enemies on screen or in the near offscreen band contribute pressure;
@@ -559,8 +561,10 @@ above; it never gains a global steering target.
 
 Knockback state lives on `InfectionEnemy` and advances inside the existing
 typed EnemyWorld loop. `Stoß` supplies a distance, short eased travel duration
-and one-second stun. While stunned, chase/contact handling and
-`EnemyAttackDirector` projectile scheduling are suspended. `CrowdRenderer`
+and one-second stun. The same `player_push_enabled` contract controls its
+translation; bosses retain the stun but never change position. While stunned,
+chase/contact handling and `EnemyAttackDirector` projectile scheduling are
+suspended. `CrowdRenderer`
 tracks only the generation-bound stunned subset and draws the tiny shared CC0
 status icon; it does not introduce per-enemy process owners.
 
@@ -568,7 +572,7 @@ status icon; it does not introduce per-enemy process owners.
 segments during `configure()`. They are part of the existing one-shot static
 SubViewport bake. Logical arenas may exceed GPU-safe texture dimensions; the
 bake preserves aspect ratio while capping its longest texture edge and then
-maps that immutable result over the full 9,600 × 5,400 world rectangle. The
+maps that immutable result over the full 8,640 × 4,860 world rectangle. The
 viewport returns to `UPDATE_DISABLED`, the short bake callback stops, and
 reconfiguration reuses the same viewport/canvas nodes.
 

@@ -23,6 +23,8 @@ im Kampf ist dagegen vollständig enthalten.
   Rangtalenten in einem Behandlungsbaum.
 - Ein Run enthält 26 Ausbaudefinitionen; endlose Familien besitzen kein Rangmaximum.
 - Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 300 Sekunden.
+- Die harte Hauptarena misst **8.640 × 4.860 Weltpunkte**. Spawnraten und
+  Gegnerabstände bleiben von dieser dichteren Spielfläche unberührt.
 
 Die spielernahen Begriffe sind **Leben**, **Schaden**, **Regeneration**,
 **Schild** und **Verteidigung**. Alte interne Namen wie `stability`,

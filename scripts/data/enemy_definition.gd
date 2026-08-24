@@ -14,6 +14,7 @@ var contact_damage: float
 @export var body_size_class: BodySizeCatalog.SizeClass = BodySizeCatalog.SizeClass.SMALL
 @export var color: Color
 @export var is_boss: bool = false
+@export var player_push_enabled: bool = true
 @export var discovery_id: StringName
 @export var visual_id: StringName
 @export var medical_name: String
@@ -63,6 +64,11 @@ static func create(
 
 func configure_contact_radius(radius_value: float) -> EnemyDefinition:
 	contact_radius = clampf(radius_value, 1.0, maxf(radius, 1.0))
+	return self
+
+
+func configure_player_push(enabled: bool) -> EnemyDefinition:
+	player_push_enabled = enabled
 	return self
 
 

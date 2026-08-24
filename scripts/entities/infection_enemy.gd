@@ -199,6 +199,16 @@ func is_static_flow_obstacle() -> bool:
 	return body_role == EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE
 
 
+func can_be_pushed_by_player() -> bool:
+	return (
+		is_targetable()
+		and definition != null
+		and definition.player_push_enabled
+		and not definition.is_boss
+		and not is_static_flow_obstacle()
+	)
+
+
 func resolved_obstacle_traversal() -> int:
 	if obstacle_traversal != EnemySpawnRequest.ObstacleTraversal.DEFAULT:
 		return obstacle_traversal
@@ -528,7 +538,7 @@ func status_contact_multiplier() -> float:
 	return _cached_status_contact_multiplier
 
 func apply_displacement(offset: Vector2) -> void:
-	if is_static_flow_obstacle() or offset.length_squared() <= 0.0001 or dying or spawn_timer > 0.0:
+	if not can_be_pushed_by_player() or offset.length_squared() <= 0.0001:
 		return
 	global_position += offset
 	_relocation_interaction_lock = maxf(_relocation_interaction_lock, RELOCATION_INTERACTION_LOCK_SECONDS)
@@ -551,9 +561,10 @@ func apply_knockback(
 		or spawn_timer > 0.0
 	):
 		return
+	var translation_enabled := can_be_pushed_by_player()
 	var was_stunned := is_stunned()
-	_knockback_direction = direction.normalized()
-	_knockback_distance = distance
+	_knockback_direction = direction.normalized() if translation_enabled else Vector2.ZERO
+	_knockback_distance = distance if translation_enabled else 0.0
 	_knockback_applied_distance = 0.0
 	_knockback_elapsed = 0.0
 	_knockback_duration = maxf(duration, 0.05)

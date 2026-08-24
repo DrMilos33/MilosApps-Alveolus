@@ -13,11 +13,12 @@ web build at 1280×720, is stable 60 FPS with:
 
 The mass-entity SceneTree node count must remain constant as these counts rise.
 Render draw calls scale with visual archetypes, not entity count.
-The static organic `ArenaBackdrop` is baked once per level configuration into
-an isolated 2400×1350 `SubViewport`; after warm-up that render target is
-disabled and the gameplay viewport submits the arena as one textured quad.
-Reconfiguration reuses the same viewport and canvas, while unsupported or
-unsafe target sizes keep the original primitive renderer as a visible fallback.
+The static organic `ArenaBackdrop` maps the logical 8640×4860 arena through an
+isolated one-shot `SubViewport` capped at 4096×2304; after warm-up that render
+target is disabled and the gameplay viewport submits the arena as one textured
+quad. Reconfiguration reuses the same viewport and canvas, while unsupported
+or unsafe target sizes keep the original primitive renderer as a visible
+fallback.
 
 ## Frame acceptance
 

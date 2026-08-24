@@ -2,7 +2,7 @@ extends SceneTree
 
 const ARENA_BOUNDS := Rect2(-1200.0, -675.0, 2400.0, 1350.0)
 const EXPECTED_SIZE := Vector2(2400.0, 1350.0)
-const LARGE_ARENA_BOUNDS := Rect2(-4800.0, -2700.0, 9600.0, 5400.0)
+const PRODUCTION_ARENA_BOUNDS := Rect2(-4320.0, -2430.0, 8640.0, 4860.0)
 const LARGE_TEXTURE_SIZE := Vector2(4096.0, 2304.0)
 
 var assertions := 0
@@ -15,7 +15,7 @@ func _init() -> void:
 
 func _run() -> void:
 	var definitions := ContentCatalog.arena_visual_definitions()
-	_assert_vector(RunConfig.new().arena_size, LARGE_ARENA_BOUNDS.size, "production arena dimensions are enlarged by 300 percent")
+	_assert_vector(RunConfig.new().arena_size, PRODUCTION_ARENA_BOUNDS.size, "production arena dimensions use the denser 8640x4860 playfield")
 	var backdrop := ArenaBackdrop.new()
 	# Production configures before inserting the arena into the Simulation tree.
 	backdrop.configure(ARENA_BOUNDS, definitions[&"intro"])
@@ -72,14 +72,14 @@ func _run() -> void:
 	_assert_true(bool(coalesced.get("ready", false)), "coalesced reconfigure ends in baked mode")
 	_assert_equal(int(coalesced.get("viewport_updates", -1)), SubViewport.UPDATE_DISABLED, "coalesced bake leaves no render target updates")
 
-	# The four-times-wider and four-times-higher production arena is baked once
-	# into a Web-safe texture while preserving its aspect ratio. Logical gameplay
-	# bounds remain full size; only the static background resolution is reduced.
-	backdrop.configure(LARGE_ARENA_BOUNDS, definitions[&"intro"])
+	# The production arena is baked once into a Web-safe texture while preserving
+	# its aspect ratio. Logical gameplay bounds remain full size; only the static
+	# background resolution is reduced.
+	backdrop.configure(PRODUCTION_ARENA_BOUNDS, definitions[&"intro"])
 	await _wait_for_bake(backdrop)
 	var large := backdrop.bake_state_snapshot()
 	_assert_true(bool(large.get("ready", false)), "large production arena keeps the static one-shot bake path")
-	_assert_vector(large.get("arena_size", Vector2.ZERO), LARGE_ARENA_BOUNDS.size, "large bake preserves full logical arena dimensions")
+	_assert_vector(large.get("arena_size", Vector2.ZERO), PRODUCTION_ARENA_BOUNDS.size, "large bake preserves full logical arena dimensions")
 	_assert_vector(large.get("texture_size", Vector2.ZERO), LARGE_TEXTURE_SIZE, "large bake is capped to a Web-safe 4096-wide texture")
 	_assert_equal(int(large.get("viewport_updates", -1)), SubViewport.UPDATE_DISABLED, "large bake leaves no ongoing render target updates")
 	_assert_equal(int(large.get("viewport_instance_id", 0)), viewport_id, "large bake reuses the existing viewport")

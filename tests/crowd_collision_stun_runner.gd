@@ -1352,31 +1352,98 @@ func _run() -> void:
 	new_recovery_neighbor.free()
 
 	# Doctor Milos uses the same damage-contact circles as physical boundaries.
-	# Large bodies hard-block; small bacteria yield slowly without a status slow.
+	# Every ordinary mobile non-boss yields slowly by default, independent of ID.
 	avatar.global_position = Vector2.ZERO
-	avatar.input_enabled = true
-	var hard_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
-	hard_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
-	var static_cluster_definition := EnemyDefinition.create(
-		&"bacterial_cluster", "Statische Bakteriengruppe", 74.0, 0.0, 0.0, 0, 30.0, Color.WHITE
+	var cluster_push_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	cluster_push_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var pushable_cluster_definition := EnemyDefinition.create(
+		&"bacterial_cluster", "Schiebbare Bakteriengruppe", 74.0, 0.0, 0.0, 0, 30.0, Color.WHITE
 	).configure_contact_radius(23.0)
-	var hard_cluster := _enemy(
-		static_cluster_definition,
+	var pushed_cluster := _enemy(
+		pushable_cluster_definition,
 		avatar,
 		topology,
 		Vector2(TherapyAvatar.CONTACT_RADIUS + 23.2, 0.0)
 	)
-	_true(EntityHandle.is_valid(hard_world.register_enemy(hard_cluster)), "Harter Spielerkörper erhält einen Handle")
-	hard_world.step_fixed(1.0 / 60.0)
+	_true(pushed_cluster.can_be_pushed_by_player(), "Eine gewöhnliche mobile Bakteriengruppe ist standardmäßig schiebbar")
+	_true(EntityHandle.is_valid(cluster_push_world.register_enemy(pushed_cluster)), "Schiebbare Bakteriengruppe erhält einen Handle")
+	cluster_push_world.step_fixed(1.0 / 60.0)
+	var cluster_origin := pushed_cluster.global_position
+	avatar.input_enabled = true
 	Input.action_press(&"move_right")
 	for _tick in range(30):
-		hard_world.prepare_avatar_body_interaction(1.0 / 60.0)
+		cluster_push_world.prepare_avatar_body_interaction(1.0 / 60.0)
 		avatar.step_fixed(1.0 / 60.0)
 	Input.action_release(&"move_right")
-	_true(avatar.global_position.x <= 0.25, "Eine rote Bakteriengruppe blockiert den Doctor an ihrer sichtbaren Schadenshitbox (%.3f)" % avatar.global_position.x)
-	_true(hard_cluster.global_position.is_equal_approx(Vector2(TherapyAvatar.CONTACT_RADIUS + 23.2, 0.0)), "Ein harter Körper wird vom Spieler nicht verschoben")
-	hard_world.clear()
-	hard_cluster.free()
+	_true(avatar.global_position.x > 5.0 and avatar.global_position.x < 40.0, "Der Doctor arbeitet sich physisch, aber nicht mit vollem Galopp durch eine Bakteriengruppe (%.2f)" % avatar.global_position.x)
+	_true(pushed_cluster.global_position.x > cluster_origin.x + 5.0, "Auch eine große gewöhnliche Gegnerart wird sichtbar weggedrückt")
+	_true(
+		pushed_cluster.global_position.distance_to(avatar.global_position) >= TherapyAvatar.CONTACT_RADIUS + pushed_cluster.contact_body_radius() - 0.1,
+		"Spieler und Bakteriengruppe unterschreiten beim Schieben nie ihre Schadenshitboxgrenze"
+	)
+	_true(not pushed_cluster.is_stunned(), "Normales Spielerschieben betäubt große Gegner nicht")
+	cluster_push_world.clear()
+	pushed_cluster.free()
+
+	# A definition can explicitly reject avatar pushing and remains a hard body.
+	avatar.global_position = Vector2.ZERO
+	var opted_out_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	opted_out_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var opted_out_definition := EnemyDefinition.create(
+		&"avatar_push_locked", "Verankerter Gegner", 74.0, 0.0, 0.0, 0, 30.0, Color.WHITE
+	).configure_contact_radius(23.0).configure_player_push(false)
+	var opted_out_enemy := _enemy(
+		opted_out_definition,
+		avatar,
+		topology,
+		Vector2(TherapyAvatar.CONTACT_RADIUS + 23.2, 0.0)
+	)
+	_true(not opted_out_enemy.can_be_pushed_by_player(), "Eine Definition kann Spielerschieben ausdrücklich verbieten")
+	_true(EntityHandle.is_valid(opted_out_world.register_enemy(opted_out_enemy)), "Verankerter Gegner erhält einen Handle")
+	opted_out_world.step_fixed(1.0 / 60.0)
+	var opted_out_origin := opted_out_enemy.global_position
+	Input.action_press(&"move_right")
+	for _tick in range(30):
+		opted_out_world.prepare_avatar_body_interaction(1.0 / 60.0)
+		avatar.step_fixed(1.0 / 60.0)
+	Input.action_release(&"move_right")
+	_true(avatar.global_position.x <= 0.25, "Ein ausdrücklich verankerter Gegner blockiert den Doctor an seiner Schadenshitbox (%.3f)" % avatar.global_position.x)
+	_true(opted_out_enemy.global_position.is_equal_approx(opted_out_origin), "Ein ausdrücklich verankerter Gegner wird nicht verschoben")
+	opted_out_enemy.apply_displacement(Vector2.RIGHT * 20.0)
+	_true(opted_out_enemy.global_position.is_equal_approx(opted_out_origin), "Auch direkte Spieler-Verschiebung respektiert das Definitionsverbot")
+	opted_out_enemy.apply_knockback(Vector2.RIGHT, 30.0, 0.1, 1.0)
+	opted_out_enemy.step_fixed(0.05)
+	_true(opted_out_enemy.global_position.is_equal_approx(opted_out_origin), "Stoß betäubt einen verankerten Gegner, ohne ihn zu verschieben")
+	_true(opted_out_enemy.is_stunned(), "Das reine Verschiebungsverbot entfernt den bestehenden Stoß-Stun nicht")
+	opted_out_world.clear()
+	opted_out_enemy.free()
+
+	# Boss status is a non-overridable hard-body exception for avatar contact.
+	avatar.global_position = Vector2.ZERO
+	var boss_push_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	boss_push_world.configure_crowd_collision(topology, avatar, 60.0)
+	var avatar_push_boss_definition := EnemyDefinition.create(
+		&"avatar_push_boss", "Nicht schiebbarer Boss", 400.0, 0.0, 0.0, 0, 60.0, Color.WHITE, true
+	).configure_contact_radius(47.0)
+	var avatar_push_boss := _enemy(
+		avatar_push_boss_definition,
+		avatar,
+		topology,
+		Vector2(TherapyAvatar.CONTACT_RADIUS + 47.2, 0.0)
+	)
+	_true(not avatar_push_boss.can_be_pushed_by_player(), "Ein Boss bleibt trotz Defaultflag grundsätzlich nicht schiebbar")
+	_true(EntityHandle.is_valid(boss_push_world.register_enemy(avatar_push_boss, true)), "Nicht schiebbarer Boss erhält einen kritischen Handle")
+	boss_push_world.step_fixed(1.0 / 60.0)
+	var avatar_push_boss_origin := avatar_push_boss.global_position
+	Input.action_press(&"move_right")
+	for _tick in range(30):
+		boss_push_world.prepare_avatar_body_interaction(1.0 / 60.0)
+		avatar.step_fixed(1.0 / 60.0)
+	Input.action_release(&"move_right")
+	_true(avatar.global_position.x <= 0.25, "Ein Boss blockiert den Doctor weiterhin an seiner Schadenshitbox (%.3f)" % avatar.global_position.x)
+	_true(avatar_push_boss.global_position.is_equal_approx(avatar_push_boss_origin), "Avatar-Körperkontakt verschiebt einen Boss nie")
+	boss_push_world.clear()
+	avatar_push_boss.free()
 
 	avatar.global_position = Vector2.ZERO
 	var push_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
