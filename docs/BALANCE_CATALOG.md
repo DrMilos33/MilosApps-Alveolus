@@ -22,7 +22,7 @@ im Kampf ist dagegen vollständig enthalten.
 - Dauerhafte Progression besteht aus zehn globalen Forschungen und vier
   Rangtalenten in einem Behandlungsbaum.
 - Ein Run enthält 26 Ausbaudefinitionen; endlose Familien besitzen kein Rangmaximum.
-- Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 180 Sekunden.
+- Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 300 Sekunden.
 
 Die spielernahen Begriffe sind **Leben**, **Schaden**, **Regeneration**,
 **Schild** und **Verteidigung**. Alte interne Namen wie `stability`,
@@ -176,8 +176,8 @@ Ein zehntes Forschungsfeld zeigt den nicht käuflichen Fall-1-Meilenstein für
 
 Der reguläre kaufbare Vollausbau kostet insgesamt **9.481 Forschungspunkte**. Ein neuer
 Spielstand startet mit 0 Forschung. Introabschluss oder Überspringen vergeben einmalig
-75 Basisforschung und keinen Talentpunkt; der besiegte Introboss erhöht einen echten
-Abschluss auf 94. Der erste
+113 Basisforschung und keinen Talentpunkt; der besiegte Introboss erhöht einen echten
+Abschluss auf 141. Der erste
 Talentpunkt wird mit dem Abschluss von Fall 2 verdient. Forschungs- und
 Talentreset erstatten beziehungsweise befreien alle investierten Punkte. Die
 Einführung verwendet ihre feste Lehrkonfiguration.
@@ -289,21 +289,25 @@ Attack-Speed-Ausbaupfade reserviert.
 
 | Gegner | Leben | Tempo | Berührungsschaden | Projektil | Schadenstyp | Erfahrung | Größenklasse | Resistenzen (Rating; positiv effektiv) |
 |---|---:|---:|---:|---:|---|---:|---:|---|
-| Bakterium | 22 | 45 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
-| Bakteriengruppe | 74 | 45 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
-| Kleiner Herd | 180 | 20 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
-| Bakterienkern | 900 | 28 | 6 | – | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
-| Infektionsherd | 2.200 | 30 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Bakterium | 22 | 54 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
+| Bakteriengruppe | 74 | 54 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
+| Kleiner Herd | 180 | 24 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
+| Bakterienkern | 900 | 42 | 6 | – | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Infektionsherd | 2.200 | 45 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
 erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
 sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
 Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
 
-Der Infektionsherd in Fall 2 bewegt sich zusätzlich mit Faktor 1,35 und feuert fortlaufend
-zwei Projektile auf gespiegelten Rautenbahnen. Bei 70 und 40 Prozent Leben
+Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile mit 212,5 Tempo auf
+gespiegelten, gegenüber dem vorherigen Stand um 25 Prozent weiter ausgelenkten
+Bahnen. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
-Sekunden weitere vier. Gegnerschaden wird mit dem Fallfaktor multipliziert und
+Sekunden weitere vier; ihre Projektile fliegen mit 322,5 Tempo. Der Fall-1-
+Bakterienkern ruft ab Bossspawn alle 15 Sekunden vier gewöhnliche kleine
+Bakterien. Seine Aura besitzt 40 Prozent Bildschirmdurchmesser und erhöht Tempo
+und Schaden naher Nichtbosse um 30 Prozent. Gegnerschaden wird mit dem Fallfaktor multipliziert und
 anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
 aufgelöst. Nach einem gültigen Treffer schützt die globale 0,5-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.
@@ -312,37 +316,29 @@ vor einem sofortigen weiteren Gegnertreffer.
 
 ### Hauptfälle
 
-Alle Kurven laufen über die ersten 180 Sekunden bis zum Bossspawn und bleiben
+Alle Kurven laufen über die ersten 300 Sekunden bis zum Bossspawn und bleiben
 danach auf ihrem Endwert. Es gibt keine Ablaufzeit.
 
-| Wert | Fall 1 | Fall 2 | Fall 3 |
-|---|---:|---:|---:|
-| Titel | lol - name fehlt | Die Ausbreitung | Schwerer Verlauf |
-| Startleben | 50 | 50 | 50 |
-| Boss erscheint | 180 s | 180 s | 180 s |
-| Referenzintervall der Standardwelle | 0,827 → 0,187 s | 0,624 → 0,132 s | 0,528 → 0,108 s |
-| Effektive Kadenz, ungefähr | 1,075 → 0,131 s | 0,811 → 0,092 s | 0,686 → 0,076 s |
-| Gegnerleben-Faktor | 1,15 → 1,70 | 1,35 → 2,05 | 1,55 → 2,40 |
-| Gegnertempo-Faktor | 1,08 | 1,16 | 1,24 |
-| Gegnerschaden-Faktor | 1,25 | 1,45 | 1,65 |
-| Gruppenwahrscheinlichkeit | 10 → 28 % | 18 → 38 % | 25 → 48 % |
-| Boss | Bakterienkern | Infektionsherd mit Rautenprojektilen | Infektionsherd |
-| Bossleben-Faktor | 1,00 | 0,75 | 1,35 |
-| Effektives Bossleben | 900 | 1.650 | 2.970 |
-| Minions bei 70 / 40 % | 3 / – | 4 / 4 | 6 / 8 |
-| Forschungsbelohnung-Faktor | 1,00 | 1,35 | 1,70 |
-| Befundziel | 30 | 42 | 55 |
+| Fall | Titel | Standardintervall | Leben | Tempo | Schaden | Gruppen | Bossleben | Phasenadds | Forschung |
+|---:|---|---|---|---:|---:|---|---:|---|---:|
+| 1 | Früher Verlauf | 1,16125 → 0,26875 s | 1,05 → 1,525 | 1,04 | 1,15 | 6 → 23 % | 0,75 | 2 / – | 0,85 |
+| 2 | lol - name fehlt | 1,03375 → 0,23375 s | 1,15 → 1,70 | 1,08 | 1,25 | 10 → 28 % | 1,00 | 3 / – | 1,00 |
+| 3 | Fortschreitender Verlauf | 0,9075 → 0,200 s | 1,25 → 1,875 | 1,12 | 1,35 | 14 → 33 % | 0,60 | 3 / 3 | 1,175 |
+| 4 | Die Ausbreitung | 0,780 → 0,165 s | 1,35 → 2,05 | 1,16 | 1,45 | 18 → 38 % | 0,75 | 4 / 4 | 1,35 |
+| 5 | Kritischer Verlauf | 0,720 → 0,150 s | 1,45 → 2,225 | 1,20 | 1,55 | 21,5 → 43 % | 1,05 | 5 / 6 | 1,525 |
+| 6 | Schwerer Verlauf | 0,660 → 0,135 s | 1,55 → 2,40 | 1,24 | 1,65 | 25 → 48 % | 1,35 | 6 / 8 | 1,70 |
 
 Die zeitgesteuerte Standardwelle verwendet zentral eine Verzögerungsstärke von
 0,30. Ihre bestehende Spawnuhr wird anfangs gedehnt und zum Bosshorizont
-kontinuierlich verdichtet. Bei unveränderter Kapazität entstehen dadurch vor
-Sekunde 180 weiterhin exakt 444 / 605 / 725 Standardwellen; `Hohe Keimlast`
-liefert weiterhin 488 / 665 / 797. Für denselben Seed bleiben auch
-Doppelpakete und Gegnerfolge gleich. Die drei Startbakterien kommen wie bisher
+kontinuierlich verdichtet. Bei freier Kapazität entstehen dadurch vor Sekunde
+300 exakt 522 / 592 / 682 / 807 / 879 / 967 Standardwellen in Fall 1–6;
+`+10 % mehr Monsterspawn` liefert 574 / 651 / 750 / 887 / 967 / 1.063.
+Das sind ungefähr vier Drittel der jeweiligen früheren Drei-Minuten-Menge.
+Für denselben Seed bleiben auch Doppelpakete und Gegnerfolge deterministisch. Die Startgegner kommen
 zusätzlich hinzu. Das Prinzip gilt automatisch für jeden Gegnertyp der
 Standardwelle. Introgegner, Bosse, Phasenverstärkungen, kleine Herde und deren
 geskriptete Freisetzungen behalten ihre ausdrücklich festgelegten Zeitpunkte.
-Das Aktivlimit von 220 Gegnern sammelt weiterhin keinen späteren Spawnrückstau.
+Das Aktivlimit von 145 gewichteten Nahkampfeinheiten sammelt weiterhin keinen späteren Spawnrückstau.
 
 Das Intro ist ereignisgesteuert, beginnt ebenfalls mit 50 Leben und besitzt
 weder Zeitlimit noch zufällige Fallparameter. Der erste Erreger bleibt nach
@@ -351,15 +347,13 @@ bestätigt ein Linksklick den Angriff. Genau drei normale Ein-Punkt-Erfahrungen 
 eine Auswahl aus drei gültigen Ausbauten für `treatment_precision` aus; nach der
 Auswahl wartet der einfache Altboss erneut in einer Linksklick-Pause. Er besitzt
 effektiv 198 Leben und sein einzelnes normales Projektil verursacht effektiv 3
-Schaden. Der erste Sieg kehrt direkt zum Campus zurück und vergibt 94 Forschung,
-der Intro-Skip 75; beide vergeben keinen Talentpunkt.
+Schaden. Der erste Sieg kehrt direkt zum Campus zurück und vergibt 141 Forschung,
+der Intro-Skip 113; beide vergeben keinen Talentpunkt.
 
-Alle positiven Forschungseinnahmen werden zentral mit 2,5 multipliziert. Das
-betrifft Runbelohnungen, passive Forschung, Klinikfälle und die Introgrundbelohnung,
-nicht jedoch Kosten oder Rückerstattungen. Zusätzlich gilt am Rundenende der
+Alle positiven Run-Forschungseinnahmen werden zentral mit 3,75 multipliziert;
+die separate Introgrundbelohnung beträgt 113. Kosten und Rückerstattungen bleiben
+unverändert. Zusätzlich gilt am Rundenende der
 Bossmultiplikator `1 + 0,25 × besiegte Bosse`; gerundet wird genau einmal am Ende.
-Vier Stunden passive Zeit ergeben 60, der Acht-Stunden-Deckel 120 Forschung.
-Die drei Klinikfälle zahlen dadurch 15 / 45 / 105 Forschung.
 
 ### Variationsregel
 

@@ -90,7 +90,7 @@ func _check_boss_profile_catalog() -> void:
 	)
 	_check_profile(
 		PracticeBossProfileScript.get_by_id(&"diamond_infection_focus"),
-		&"spreading_infection", &"infection_focus", 0.75, 1.16, 1.35, 1.45, true, 2.5, 92.0, PackedInt32Array([4, 4])
+		&"spreading_infection", &"infection_focus", 0.75, 1.16, 1.35, 1.45, true, 2.5, 115.0, PackedInt32Array([4, 4])
 	)
 	_check_profile(
 		PracticeBossProfileScript.get_by_id(&"standard_infection_focus"),

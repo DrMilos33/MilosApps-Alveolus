@@ -30,15 +30,15 @@ static func level_definitions() -> Array[LevelDefinition]:
 		).configure_runtime(0, 0, 0.0, false).configure_case_variation([], [], 0).configure_boss(&"intro_focus", true).configure_case_pressure(CasePressurePlan.default_for_case_order(0)),
 		LevelDefinition.create(
 			&"early_localized_focus", 1, "Früher Verlauf", "Fall 01 · beginnender Pneumokokkenherd", false,
-			-1.0, 180.0, 50.0, 0.929, 0.215, 1.05, 1.525, 1.04, 1.15, 0.06, 0.23,
+			-1.0, 300.0, 50.0, 1.16125, 0.26875, 1.05, 1.525, 1.04, 1.15, 0.06, 0.23,
 			0.75, PackedInt32Array([2]), 0.85,
 			"Ein früher lokaler Infektionsherd bildet den ersten regulären Patientenfall.",
 			"Der frühe Verlauf wurde kontrolliert.",
 			"Der frühe Verlauf konnte in diesem Versuch nicht kontrolliert werden."
-		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", false).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
+		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", false).configure_boss_aura(0.40, 1.30, 1.30).configure_boss_reinforcements(15.0, 4).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
 		LevelDefinition.create(
 			&"localized_focus", 2, "lol - name fehlt", "Fall 02 · lokalisierter Pneumokokkenherd", false,
-			-1.0, 180.0, 50.0, 0.827, 0.187, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
+			-1.0, 300.0, 50.0, 1.03375, 0.23375, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
 			1.0, PackedInt32Array([3]), 1.0,
 			"Ein lokaler Bakterienherd belastet Doctor Milos. Stoppe ihn, bevor das Leben auf null fällt.",
 			"Der lokalisierte Infektionsherd wurde kontrolliert.",
@@ -46,23 +46,23 @@ static func level_definitions() -> Array[LevelDefinition]:
 		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", false).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
 		LevelDefinition.create(
 			&"advancing_infection", 3, "Fortschreitender Verlauf", "Fall 03 · fortschreitende Pneumonie", false,
-			-1.0, 180.0, 50.0, 0.726, 0.160, 1.25, 1.875, 1.12, 1.35, 0.14, 0.33,
+			-1.0, 300.0, 50.0, 0.9075, 0.200, 1.25, 1.875, 1.12, 1.35, 0.14, 0.33,
 			0.60, PackedInt32Array([3, 3]), 1.175,
 			"Die Infektion breitet sich weiter aus und fordert mehr Kontrolle über den Raum.",
 			"Der fortschreitende Verlauf wurde eingegrenzt.",
 			"Der fortschreitende Verlauf blieb unkontrolliert."
-		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 36).configure_boss_behavior(1.20).configure_boss(&"infection_focus", true, 2.0, 68.0).configure_case_pressure(CasePressurePlan.default_for_case_order(3)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 36).configure_boss_behavior(1.20).configure_boss(&"infection_focus", true, 2.0, 85.0).configure_case_pressure(CasePressurePlan.default_for_case_order(3)),
 		LevelDefinition.create(
 			&"spreading_infection", 4, "Die Ausbreitung", "Fall 04 · bakterielle Pneumonie", false,
-			-1.0, 180.0, 50.0, 0.624, 0.132, 1.35, 2.05, 1.16, 1.45, 0.18, 0.38,
+			-1.0, 300.0, 50.0, 0.780, 0.165, 1.35, 2.05, 1.16, 1.45, 0.18, 0.38,
 			0.75, PackedInt32Array([4, 4]), 1.35,
 			"Mehrere Bakteriengruppen breiten sich gleichzeitig aus. Galopp und Ausbau werden jetzt entscheidend.",
 			"Die ausbreitende Infektion wurde eingegrenzt.",
 			"Doctor Milos verlor sein gesamtes Leben."
-		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 42).configure_boss_behavior(1.35).configure_boss(&"infection_focus", true, 2.5, 92.0).configure_case_pressure(CasePressurePlan.default_for_case_order(4)).configure_case_pressure_targets(true),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 42).configure_boss_behavior(1.35).configure_boss(&"infection_focus", true, 2.5, 115.0).configure_case_pressure(CasePressurePlan.default_for_case_order(4)).configure_case_pressure_targets(true),
 		LevelDefinition.create(
 			&"critical_infection", 5, "Kritischer Verlauf", "Fall 05 · kritische Pneumonie", false,
-			-1.0, 180.0, 50.0, 0.576, 0.120, 1.45, 2.225, 1.20, 1.55, 0.215, 0.43,
+			-1.0, 300.0, 50.0, 0.720, 0.150, 1.45, 2.225, 1.20, 1.55, 0.215, 0.43,
 			1.05, PackedInt32Array([5, 6]), 1.525,
 			"Stationäre Herde verengen den Raum, während die bakterielle Belastung weiter steigt.",
 			"Der kritische Verlauf wurde kontrolliert.",
@@ -70,7 +70,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 48).configure_boss(&"infection_focus", false).configure_case_pressure(CasePressurePlan.default_for_case_order(5)).configure_case_pressure_targets(true),
 		LevelDefinition.create(
 			&"severe_pneumonia", 6, "Schwerer Verlauf", "Fall 06 · schwere bakterielle Pneumonie", false,
-			-1.0, 180.0, 50.0, 0.528, 0.108, 1.55, 2.40, 1.24, 1.65, 0.25, 0.48,
+			-1.0, 300.0, 50.0, 0.660, 0.135, 1.55, 2.40, 1.24, 1.65, 0.25, 0.48,
 			1.35, PackedInt32Array([6, 8]), 1.70,
 			"Die Belastung steigt schnell. Du brauchst einen starken Ausbau und konsequenten Galopp.",
 			"Auch der schwere Infektionsverlauf wurde kontrolliert.",
@@ -90,22 +90,22 @@ static func tutorial_hint_definitions() -> Dictionary:
 static func enemy_definitions() -> Dictionary:
 	var result := {
 		&"pneumococcus": EnemyDefinition.create(
-			&"pneumococcus", "Bakterium", 22.0, 45.0, 2.0, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
+			&"pneumococcus", "Bakterium", 22.0, 54.0, 2.0, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
 		).configure_contact_radius(17.0),
 		&"bacterial_cluster": EnemyDefinition.create(
-			&"bacterial_cluster", "Bakteriengruppe", 74.0, 45.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"
+			&"bacterial_cluster", "Bakteriengruppe", 74.0, 54.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"
 		).configure_contact_radius(23.0),
 		&"minor_focus": EnemyDefinition.create(
-			&"minor_focus", "Kleiner Herd", 180.0, 20.0, 0.0, 8, 38.0, Color("9a5bbb"), false, &"minor_focus", &"infection_focus", "Kleiner Infektionsherd"
+			&"minor_focus", "Kleiner Herd", 180.0, 24.0, 0.0, 8, 38.0, Color("9a5bbb"), false, &"minor_focus", &"infection_focus", "Kleiner Infektionsherd"
 		).configure_contact_radius(31.0).configure_projectile_attack(2.0, 2.6, &"normal", false),
 		&"infection_focus": EnemyDefinition.create(
-			&"infection_focus", "Infektionsherd", 2200.0, 30.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
+			&"infection_focus", "Infektionsherd", 2200.0, 45.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
 		).configure_contact_radius(56.0).configure_projectile_attack(4.0, 1.6, &"diamond", true),
 		&"localized_boss": EnemyDefinition.create(
-			&"localized_boss", "Bakterienkern", 900.0, 28.0, 6.0, 20, 60.0, Color("d45d64"), true, &"localized_boss", &"infection_focus", "Lokaler Bakterienkern"
+			&"localized_boss", "Bakterienkern", 900.0, 42.0, 6.0, 20, 60.0, Color("d45d64"), true, &"localized_boss", &"infection_focus", "Lokaler Bakterienkern"
 		).configure_contact_radius(47.0),
 		&"intro_focus": EnemyDefinition.create(
-			&"intro_focus", "Infektionsherd", 2200.0, 30.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
+			&"intro_focus", "Infektionsherd", 2200.0, 45.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
 		).configure_contact_radius(56.0).configure_projectile_attack(6.0, 2.6, &"normal", true)
 	}
 	return result

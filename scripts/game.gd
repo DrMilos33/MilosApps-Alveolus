@@ -57,6 +57,8 @@ const CASE_PRESSURE_GATE_PROJECTILE_SPEED := 180.0
 const CASE_PRESSURE_GATE_SPACING := 52.0
 const CASE_PRESSURE_GATE_SAFE_GAP := 156.0
 const CASE_PRESSURE_GATE_MAX_PROJECTILES := 24
+const BOSS_AURA_STATUS_SOURCE := &"boss_aura"
+const BOSS_AURA_REFRESH_SECONDS := 0.10
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := false
@@ -143,6 +145,9 @@ var active_boss_handle_by_instance: Dictionary = {}
 var active_boss_phase_by_handle: Dictionary = {}
 var boss_aggregate_maximum: float = 0.0
 var boss_aggregate_phase: int = 0
+var boss_aura_refresh_timer: float = 0.0
+var boss_aura_active_handles: Dictionary = {}
+var boss_aura_query_handles := PackedInt64Array()
 var enemy_runtime_resistance_profiles: Dictionary = {}
 var run_damage_by_source: Dictionary = {}
 var case_pressure_target_states: Dictionary = {}
@@ -483,6 +488,7 @@ func _ready() -> void:
 	hud.configure_practice_tests(test_tools_available)
 	hud.set_run_stats_visibility(meta.show_run_stats)
 	avatar.set_character_name_visible(meta.ui_settings.show_character_name)
+	avatar.set_character_health_bar_visible(meta.ui_settings.show_character_health_bar)
 	discovery_manager = DiscoveryManager.new()
 	discovery_manager.configure(discovery_definitions, meta.seen_discovery_ids)
 	discovery_manager.seen_changed.connect(_on_discovery_seen)
@@ -562,6 +568,7 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 	_case_pressure_step(delta)
 	pressure_grace_timer = maxf(0.0, pressure_grace_timer - delta)
 	_spawn_step(delta)
+	_boss_aura_step(delta)
 	_profile_phase(&"clock_spawn", phase_started)
 	phase_started = Time.get_ticks_usec() if performance_profile_enabled else 0
 	enemy_world.step_fixed(delta, run_session)
@@ -1237,6 +1244,7 @@ func _on_ui_settings_changed(settings: UISettingsState) -> void:
 		input_glyph_service.configure(UISettingsState.GLYPH_KEYBOARD)
 	if avatar != null:
 		avatar.set_character_name_visible(meta.ui_settings.show_character_name)
+		avatar.set_character_health_bar_visible(meta.ui_settings.show_character_health_bar)
 	_save_meta()
 
 
@@ -1617,6 +1625,7 @@ func start_run(run_context: RunContext = null) -> void:
 	avatar.reset_physics_interpolation()
 	avatar.input_enabled = true
 	avatar.set_character_name_visible(meta.ui_settings.show_character_name)
+	avatar.set_character_health_bar_visible(meta.ui_settings.show_character_health_bar)
 	avatar.show()
 	avatar.queue_redraw()
 	rng.seed = config.random_seed
@@ -1658,6 +1667,9 @@ func start_run(run_context: RunContext = null) -> void:
 	active_boss_phase_by_handle.clear()
 	boss_aggregate_maximum = 0.0
 	boss_aggregate_phase = 0
+	boss_aura_refresh_timer = 0.0
+	boss_aura_active_handles.clear()
+	boss_aura_query_handles.clear()
 	intro_lesson = 1 if selected_level.is_tutorial else 0
 	intro_phase = &"await_primary_materialization" if selected_level.is_tutorial else &""
 	intro_primary_enemy = null
@@ -1895,6 +1907,12 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.experience_gain_multiplier = 1.0
 	config.case_pressure_plan = null
 	config.case_pressure_targets_stationary = false
+	config.boss_aura_screen_diameter_fraction = 0.0
+	config.boss_aura_speed_multiplier = 1.0
+	config.boss_aura_damage_multiplier = 1.0
+	config.boss_reinforcement_interval = 0.0
+	config.boss_reinforcement_count = 0
+	config.boss_reinforcement_minimum_phase = 0
 	config.initial_small_enemy_count = scenario.get_initial_small_count()
 	config.initial_cluster_enemy_count = scenario.get_initial_medium_count()
 	config.spawn_ramp_seconds = scenario.get_spawn_ramp_seconds()
@@ -2407,12 +2425,13 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 	var move_speed := 230.0
 	if role == EnemyAttackDirector.Role.PHASE_ADD:
 		amount = source.definition.base_damage * source.damage_multiplier * 0.75
-		move_speed = 215.0
+		move_speed = 322.5
 	elif role == EnemyAttackDirector.Role.MINOR_FOCUS:
 		move_speed = 205.0
 	elif role == EnemyAttackDirector.Role.BOSS:
 		amount *= config.boss_projectile_damage_multiplier
-		move_speed = 250.0
+		move_speed = 212.5 if pattern == EnemyAttackDirector.Pattern.DIAMOND else 250.0
+	amount *= source.status_contact_multiplier()
 	amount = float(roundi(amount))
 	if amount <= 0.0:
 		return
@@ -2503,10 +2522,13 @@ func _on_enemy_reinforcements_requested(source_handle: int, count: int) -> void:
 	var source := enemy_world.resolve(source_handle) as InfectionEnemy
 	if not is_instance_valid(source) or not source.is_targetable():
 		return
+	# The first case summons ordinary melee bacteria. Projectile-boss
+	# reinforcements keep their established ranged-add contract.
+	var add_source_handle := source_handle if config != null and config.boss_ranged_enabled else EntityHandle.INVALID
 	if _fixed_step_active:
-		run_session.event_queue.push(&"minions_requested", source_handle, EntityHandle.INVALID, float(count), source.global_position)
+		run_session.event_queue.push(&"minions_requested", add_source_handle, EntityHandle.INVALID, float(count), source.global_position)
 		return
-	_apply_minions_requested(source.global_position, count, source_handle)
+	_apply_minions_requested(source.global_position, count, add_source_handle)
 
 func _spawn_treatment_beam(shot: TreatmentShot, duration: float) -> void:
 	if treatment_beam_world == null:
@@ -2767,6 +2789,7 @@ func _spawn_enemy(
 		enemy.boss_phase_changed.connect(_on_boss_phase_changed.bind(enemy))
 		enemy.materialized.connect(_on_enemy_materialized)
 		enemy.damage_applied.connect(_on_enemy_damage_applied)
+		enemy.stun_changed.connect(_on_enemy_stun_changed)
 		simulation_root.add_child(enemy)
 	enemy.global_position = bounded_position
 	enemy.configure(
@@ -2825,6 +2848,7 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 func _spawn_boss() -> void:
 	if state == null or not state.active:
 		return
+	_clear_boss_aura_runtime()
 	active_boss_handles.clear()
 	active_boss_handle_by_instance.clear()
 	active_boss_phase_by_handle.clear()
@@ -2879,8 +2903,28 @@ func _register_active_boss(enemy: InfectionEnemy) -> void:
 	active_boss_handle_by_instance[enemy.get_instance_id()] = handle
 	active_boss_phase_by_handle[handle] = 0
 	boss_aggregate_maximum += maxf(enemy.max_health, 0.0)
-	if enemy_attack_director != null and config.boss_ranged_enabled:
+	var has_authored_reinforcements := (
+		config.boss_reinforcement_interval > 0.0
+		and config.boss_reinforcement_count > 0
+	)
+	if enemy_attack_director != null and (config.boss_ranged_enabled or has_authored_reinforcements):
 		enemy_attack_director.register_enemy(handle, EnemyAttackDirector.Role.BOSS)
+		var reinforcement_interval := config.boss_reinforcement_interval
+		var reinforcement_count := config.boss_reinforcement_count
+		var reinforcement_phase := config.boss_reinforcement_minimum_phase
+		if not has_authored_reinforcements:
+			reinforcement_interval = EnemyAttackDirector.REINFORCEMENT_INTERVAL
+			reinforcement_count = EnemyAttackDirector.REINFORCEMENT_COUNT
+			reinforcement_phase = 2
+		enemy_attack_director.configure_boss_contract(
+			handle,
+			config.boss_ranged_enabled,
+			reinforcement_interval,
+			reinforcement_count,
+			reinforcement_phase
+		)
+	if config.boss_aura_screen_diameter_fraction > 0.0:
+		enemy.set_boss_aura_radius(_boss_aura_world_radius())
 	if active_boss == null:
 		active_boss = enemy
 
@@ -2895,6 +2939,7 @@ func _remove_active_boss(enemy: InfectionEnemy) -> bool:
 	if index >= 0:
 		active_boss_handles.remove_at(index)
 	_refresh_active_boss_reference()
+	_clear_boss_aura_runtime()
 	return index >= 0
 
 
@@ -2928,6 +2973,89 @@ func active_boss_health_snapshot() -> Dictionary:
 
 func active_boss_handle_snapshot() -> PackedInt64Array:
 	return active_boss_handles.duplicate()
+
+
+func _boss_aura_world_radius() -> float:
+	if config == null or config.boss_aura_screen_diameter_fraction <= 0.0:
+		return 0.0
+	var visible_size := _visible_world_rect().size
+	return minf(visible_size.x, visible_size.y) * config.boss_aura_screen_diameter_fraction * 0.5
+
+
+func _boss_aura_step(delta: float) -> void:
+	if (
+		config == null
+		or enemy_world == null
+		or config.boss_aura_screen_diameter_fraction <= 0.0
+		or active_boss_handles.is_empty()
+	):
+		if not boss_aura_active_handles.is_empty():
+			_clear_boss_aura_runtime()
+		return
+	boss_aura_refresh_timer -= maxf(delta, 0.0)
+	if boss_aura_refresh_timer > 0.0:
+		return
+	boss_aura_refresh_timer = BOSS_AURA_REFRESH_SECONDS
+	var radius := _boss_aura_world_radius()
+	var radius_squared := radius * radius
+	var next_handles: Dictionary = {}
+	for boss_handle_value in active_boss_handles:
+		var boss_handle := int(boss_handle_value)
+		var boss := enemy_world.resolve(boss_handle) as InfectionEnemy
+		if not is_instance_valid(boss) or not boss.is_targetable():
+			continue
+		boss.set_boss_aura_radius(radius)
+		boss_aura_query_handles = enemy_world.query_collision_candidates(
+			boss.global_position,
+			radius,
+			boss_aura_query_handles
+		)
+		for candidate_value in boss_aura_query_handles:
+			var handle := int(candidate_value)
+			var enemy := enemy_world.resolve(handle) as InfectionEnemy
+			if (
+				not is_instance_valid(enemy)
+				or enemy.definition == null
+				or enemy.definition.is_boss
+				or not enemy.is_targetable()
+				or topology.distance_squared(boss.global_position, enemy.global_position) > radius_squared
+			):
+				continue
+			next_handles[handle] = true
+	for handle_value in boss_aura_active_handles.keys():
+		var handle := int(handle_value)
+		if next_handles.has(handle):
+			continue
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy
+		if is_instance_valid(enemy):
+			enemy.clear_status_modifier(BOSS_AURA_STATUS_SOURCE)
+	for handle_value in next_handles.keys():
+		var handle := int(handle_value)
+		if boss_aura_active_handles.has(handle):
+			continue
+		var enemy := enemy_world.resolve(handle) as InfectionEnemy
+		if is_instance_valid(enemy):
+			enemy.set_status_modifier(
+				BOSS_AURA_STATUS_SOURCE,
+				config.boss_aura_speed_multiplier,
+				config.boss_aura_damage_multiplier
+			)
+	boss_aura_active_handles = next_handles
+
+
+func _clear_boss_aura_runtime() -> void:
+	if enemy_world != null:
+		for handle_value in boss_aura_active_handles.keys():
+			var enemy := enemy_world.resolve(int(handle_value)) as InfectionEnemy
+			if is_instance_valid(enemy):
+				enemy.clear_status_modifier(BOSS_AURA_STATUS_SOURCE)
+		for boss_handle_value in active_boss_handles:
+			var boss := enemy_world.resolve(int(boss_handle_value)) as InfectionEnemy
+			if is_instance_valid(boss):
+				boss.set_boss_aura_radius(0.0)
+	boss_aura_active_handles.clear()
+	boss_aura_query_handles.clear()
+	boss_aura_refresh_timer = 0.0
 
 
 func _show_active_boss_hud() -> void:
@@ -3010,6 +3138,14 @@ func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
 	var requested := discovery_manager.request(enemy.definition.discovery_id, enemy, {"tutorial_boss": selected_level.is_tutorial and enemy.definition.is_boss})
 	if requested:
 		_try_present_next_discovery()
+
+
+func _on_enemy_stun_changed(enemy: InfectionEnemy, _stunned: bool) -> void:
+	if enemy_world == null or not is_instance_valid(enemy):
+		return
+	var handle := enemy_world.handle_for(enemy)
+	if EntityHandle.is_valid(handle):
+		enemy_world.notify_enemy_motion_interrupted(handle)
 
 func _on_enemy_damage_applied(enemy: InfectionEnemy, amount: float, source: StringName) -> void:
 	var resolved_source := _damage_stat_source(source)
@@ -3616,6 +3752,8 @@ func _apply_incoming_damage(amount: float, incoming_profile: DamageProfile, sour
 func _on_stability_changed(current: float, maximum: float) -> void:
 	stability_changed.emit(current, maximum)
 	hud.update_stability(current, maximum)
+	if avatar != null:
+		avatar.set_character_health_bar_values(current, maximum)
 	mastery_tracker.record_stability(current, maximum)
 
 func _on_ability_used(slot: int, _ability_id: StringName, _target: Vector2) -> void:
@@ -5378,6 +5516,7 @@ func _cleanup_run_nodes() -> void:
 		projectile_renderer.clear()
 	if hostile_projectile_renderer != null:
 		hostile_projectile_renderer.clear()
+	_clear_boss_aura_runtime()
 	if enemy_attack_director != null:
 		enemy_attack_director.clear()
 	if feedback_renderer != null:
@@ -5415,6 +5554,9 @@ func _cleanup_run_nodes() -> void:
 	active_boss_phase_by_handle.clear()
 	boss_aggregate_maximum = 0.0
 	boss_aggregate_phase = 0
+	boss_aura_refresh_timer = 0.0
+	boss_aura_active_handles.clear()
+	boss_aura_query_handles.clear()
 	case_pressure_director.cancel()
 	case_pressure_target_states.clear()
 	case_pressure_target_expirations.clear()

@@ -13,7 +13,7 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var initial_stability: float
 @export var initial_spawn_interval: float
 @export var final_spawn_interval: float
-@export var spawn_ramp_seconds: float = 180.0
+@export var spawn_ramp_seconds: float = 300.0
 @export_range(0, 64, 1) var initial_small_enemy_count: int = 3
 @export_range(0, 64, 1) var initial_cluster_enemy_count: int = 0
 @export var automatic_boss_enabled: bool = true
@@ -31,6 +31,12 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var boss_projectile_damage_multiplier: float = 1.0
 @export var boss_wave_amplitude: float = 44.0
 @export var boss_phase_minions: PackedInt32Array
+@export_range(0.0, 1.0, 0.01) var boss_aura_screen_diameter_fraction: float = 0.0
+@export var boss_aura_speed_multiplier: float = 1.0
+@export var boss_aura_damage_multiplier: float = 1.0
+@export var boss_reinforcement_interval: float = 0.0
+@export_range(0, 64, 1) var boss_reinforcement_count: int = 0
+@export_range(0, 2, 1) var boss_reinforcement_minimum_phase: int = 0
 @export var reward_multiplier: float
 @export_multiline var briefing_text: String
 @export_multiline var victory_text: String
@@ -117,7 +123,7 @@ func configure_spawn_cadence(delay_strength: float) -> LevelDefinition:
 func configure_runtime(
 	initial_small_count: int,
 	initial_cluster_count: int = 0,
-	ramp_seconds: float = 180.0,
+	ramp_seconds: float = 300.0,
 	automatic_boss: bool = true
 ) -> LevelDefinition:
 	initial_small_enemy_count = maxi(initial_small_count, 0)
@@ -135,6 +141,28 @@ func configure_case_pressure_targets(stationary: bool, health_multiplier: float 
 
 func configure_boss_behavior(speed_multiplier: float) -> LevelDefinition:
 	boss_speed_multiplier = maxf(speed_multiplier, 0.0)
+	return self
+
+
+func configure_boss_aura(
+	screen_diameter_fraction: float,
+	movement_multiplier: float,
+	damage_multiplier: float
+) -> LevelDefinition:
+	boss_aura_screen_diameter_fraction = clampf(screen_diameter_fraction, 0.0, 1.0)
+	boss_aura_speed_multiplier = maxf(movement_multiplier, 0.0)
+	boss_aura_damage_multiplier = maxf(damage_multiplier, 0.0)
+	return self
+
+
+func configure_boss_reinforcements(
+	interval_seconds: float,
+	count: int,
+	minimum_phase: int = 0
+) -> LevelDefinition:
+	boss_reinforcement_interval = maxf(interval_seconds, 0.0)
+	boss_reinforcement_count = maxi(count, 0)
+	boss_reinforcement_minimum_phase = clampi(minimum_phase, 0, 2)
 	return self
 
 func configure_boss(

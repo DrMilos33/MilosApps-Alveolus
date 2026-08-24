@@ -121,6 +121,17 @@ func _test_visible_settings_and_reduced_motion(hud: GameHUD) -> void:
 	_true(not hud.current_ui_settings.show_discovery_info, "Der Schalter deaktiviert pausierende Entdeckungsinfos unmittelbar")
 	discovery_toggle.button_pressed = true
 	_true(hud.current_ui_settings.show_discovery_info, "Entdeckungsinfos lassen sich im selben Screen wieder aktivieren")
+	var health_toggle := hud.settings_screen.control_for_setting(&"toggle.show_character_health_bar") as CheckButton
+	_true(health_toggle != null and not health_toggle.button_pressed, "Der kleine Charakter-Lebensbalken ist standardmäßig ausgeschaltet")
+	_true(health_toggle != null and health_toggle.tooltip_text.contains("ohne Zahlen") and health_toggle.tooltip_text.contains("Doctor Milos"), "Der Schalter erklärt den kleinen zahlenlosen Lebensbalken über der Figur")
+	_true(health_toggle != null and str(health_toggle.get_meta(&"alveolus_accessible_name", "")).contains("Kleiner Lebensbalken"), "Der Charakter-Lebensbalken besitzt einen klaren zugänglichen Namen")
+	var emitted: Array[UISettingsState] = []
+	hud.ui_settings_changed.connect(func(updated: UISettingsState) -> void: emitted.append(updated))
+	health_toggle.button_pressed = true
+	_true(hud.current_ui_settings.show_character_health_bar, "Der Schalter aktiviert den Charakter-Lebensbalken unmittelbar")
+	_true(not emitted.is_empty() and emitted.back().show_character_health_bar, "Der Charakter-Lebensbalken emittiert eine speicherbare Einstellungskopie")
+	health_toggle.button_pressed = false
+	_true(not hud.current_ui_settings.show_character_health_bar and not emitted.back().show_character_health_bar, "Der Charakter-Lebensbalken lässt sich im selben Screen wieder ausschalten")
 	settings.reduce_motion = true
 	hud.configure_ui_settings(settings)
 	_true(hud.reduced_motion_enabled, "Reduzierte Bewegung wird im HUD unmittelbar aktiviert")

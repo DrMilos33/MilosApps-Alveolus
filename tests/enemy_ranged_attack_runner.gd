@@ -11,6 +11,7 @@ func _init() -> void:
 func _run() -> void:
 	_test_anchor_case_boss_contract()
 	await _test_intro_boss_normal_attack()
+	await _test_configurable_boss_contract()
 	await _test_generation_safe_attack_director()
 	await _test_hostile_projectile_geometry()
 	if failures == 0:
@@ -131,6 +132,75 @@ func _test_generation_safe_attack_director() -> void:
 	world.release(handle, false)
 	world.flush_deferred()
 	boss.queue_free()
+	avatar.queue_free()
+	await process_frame
+
+
+func _test_configurable_boss_contract() -> void:
+	var topology := ArenaTopology.new(Rect2(-600.0, -400.0, 1200.0, 800.0))
+	var avatar := TherapyAvatar.new()
+	avatar.global_position = Vector2(260.0, 0.0)
+	get_root().add_child(avatar)
+	var world := EnemyWorld.new().configure_enemy_world()
+	var director := EnemyAttackDirector.new().configure(CombatCapacity.defaults().max_enemies, world.resolve)
+	var shots: Array[int] = []
+	var reinforcements: Array[int] = []
+	director.projectile_requested.connect(func(source: int, _pattern: int, _phase: float, _role: int) -> void:
+		shots.append(source)
+	)
+	director.reinforcements_requested.connect(func(_source: int, count: int) -> void:
+		reinforcements.append(count)
+	)
+
+	var custom_boss := InfectionEnemy.new()
+	get_root().add_child(custom_boss)
+	custom_boss.global_position = Vector2.ZERO
+	custom_boss.configure(ContentCatalog.enemy_definitions()[&"infection_focus"], avatar, topology)
+	custom_boss.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	var custom_handle := world.register_enemy(custom_boss, true)
+	_true(director.register_enemy(custom_handle, EnemyAttackDirector.Role.BOSS), "Der Fall-1-Boss belegt einen Director-Slot")
+	_true(
+		director.configure_boss_contract(custom_handle, false, 15.0, 4, 0),
+		"Der Fall-1-Vertrag ist generationensicher konfigurierbar"
+	)
+	director.step_fixed(14.99)
+	_equal(shots.size(), 0, "Ein Boss mit deaktiviertem Projektilvertrag feuert nicht")
+	_equal(reinforcements.size(), 0, "Vor 15 Sekunden erscheint keine Fall-1-Verstärkung")
+	director.step_fixed(0.02)
+	_equal(shots.size(), 0, "Deaktivierte Bossprojektile bleiben auch am Verstärkungstick aus")
+	_equal(reinforcements, [4], "Phase 0 fordert nach 15 Sekunden exakt vier Adds an")
+	_true(director.release(custom_handle), "Der benutzerdefinierte Bossvertrag wird synchron freigegeben")
+	_true(
+		not director.configure_boss_contract(custom_handle, true, 1.0, 9, 0),
+		"Ein freigegebener Boss-Handle kann keinen Slot mehr konfigurieren"
+	)
+	world.release(custom_handle, false)
+	custom_boss.queue_free()
+
+	shots.clear()
+	reinforcements.clear()
+	var default_boss := InfectionEnemy.new()
+	get_root().add_child(default_boss)
+	default_boss.global_position = Vector2.ZERO
+	default_boss.configure(ContentCatalog.enemy_definitions()[&"infection_focus"], avatar, topology)
+	default_boss.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	var default_handle := world.register_enemy(default_boss, true)
+	_equal(EntityHandle.slot(default_handle), EntityHandle.slot(custom_handle), "Der Regressionstest verwendet denselben recycelten Director-Slot")
+	_true(default_handle != custom_handle, "Der recycelte Slot erhält eine neue Generation")
+	_true(director.register_enemy(default_handle, EnemyAttackDirector.Role.BOSS), "Der recycelte Slot übernimmt wieder den Defaultvertrag")
+	director.step_fixed(0.65)
+	_equal(shots.size(), 2, "Nach Recycling sind Bossprojektile standardmäßig wieder aktiv")
+	_true(director.set_boss_phase(default_handle, 1), "Phase 1 bleibt unter dem Defaultminimum")
+	director.step_fixed(20.1)
+	_equal(reinforcements.size(), 0, "Der Defaultvertrag ruft vor Phase 2 keine Adds")
+	_true(director.set_boss_phase(default_handle, 2), "Phase 2 aktiviert den recycelten Defaultvertrag")
+	director.step_fixed(19.9)
+	_equal(reinforcements.size(), 0, "Der recycelte Defaultvertrag bewahrt das 20-Sekunden-Intervall")
+	director.step_fixed(0.11)
+	_equal(reinforcements, [4], "Der Defaultvertrag bleibt 20 Sekunden, vier Adds, ab Phase 2")
+	director.release(default_handle)
+	world.release(default_handle, false)
+	default_boss.queue_free()
 	avatar.queue_free()
 	await process_frame
 

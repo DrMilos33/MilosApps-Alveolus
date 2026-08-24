@@ -12,6 +12,9 @@ const WALK_FRAME_SECONDS := 0.12
 const DOCTOR_DRAW_RECT := Rect2(-30.0, -44.0, 60.0, 60.0)
 const CHARACTER_NAME_TEXT := "Doctor Milos"
 const CHARACTER_NAME_RECT := Rect2(-72.0, -71.0, 144.0, 24.0)
+const CHARACTER_NAME_WITH_HEALTH_RECT := Rect2(-72.0, -84.0, 144.0, 24.0)
+const CHARACTER_HEALTH_BAR_RECT := Rect2(-27.0, -56.0, 54.0, 5.0)
+const CHARACTER_HEALTH_BAR_OUTLINE := 1.0
 
 var arena_bounds: Rect2
 var stats: PlayerStats
@@ -30,6 +33,9 @@ var doctor_texture: Texture2D
 var immune_texture: Texture2D
 var character_name_label: Label
 var _character_name_visible := false
+var _character_health_bar_visible := false
+var _character_health_bar_current: float = 0.0
+var _character_health_bar_maximum: float = 1.0
 var _defense_cell_count: int = 0
 var _defense_cell_radius: float = 0.0
 var _crowd_blocking := Vector2.ZERO
@@ -40,6 +46,10 @@ func configure(bounds: Rect2, player_stats: PlayerStats, arena_topology: ArenaTo
 	arena_bounds = bounds
 	stats = player_stats
 	topology = arena_topology
+	_character_health_bar_visible = false
+	_character_health_bar_current = 0.0
+	_character_health_bar_maximum = 1.0
+	_update_character_name_layout()
 	queue_redraw()
 
 func _ready() -> void:
@@ -159,6 +169,23 @@ func is_character_name_visible() -> bool:
 	return _character_name_visible
 
 
+func set_character_health_bar_visible(visible_value: bool) -> void:
+	if _character_health_bar_visible == visible_value:
+		return
+	_character_health_bar_visible = visible_value
+	_update_character_name_layout()
+	queue_redraw()
+
+
+func set_character_health_bar_values(current: float, maximum: float) -> void:
+	_character_health_bar_current = maxf(current, 0.0)
+	_character_health_bar_maximum = maxf(maximum, 0.0)
+	# Values remain cached while hidden so making the optional bar visible never
+	# flashes a default frame before the next HUD publication.
+	if _character_health_bar_visible:
+		queue_redraw()
+
+
 ## DefenseCellWorld owns gameplay and publishes the identical orbit snapshot
 ## used here. The avatar never advances a second render-only orbit.
 func set_defense_cell_snapshot(angle: float, count: int, radius: float) -> void:
@@ -198,6 +225,19 @@ func _build_character_name_label() -> void:
 	character_name_label.add_theme_constant_override("outline_size", 3)
 	character_name_label.visible = _character_name_visible
 	add_child(character_name_label)
+	_update_character_name_layout()
+
+
+func _update_character_name_layout() -> void:
+	if character_name_label == null:
+		return
+	var name_rect := (
+		CHARACTER_NAME_WITH_HEALTH_RECT
+		if _character_health_bar_visible
+		else CHARACTER_NAME_RECT
+	)
+	character_name_label.position = name_rect.position
+	character_name_label.size = name_rect.size
 
 func _draw() -> void:
 	if doctor_texture != null:
@@ -211,6 +251,30 @@ func _draw() -> void:
 		draw_set_transform(Vector2(0.0, -treatment_amount), 0.0, Vector2.ONE)
 		draw_texture_rect(doctor_texture, DOCTOR_DRAW_RECT, false, doctor_tint)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if _character_health_bar_visible:
+		var health_fraction := (
+			clampf(_character_health_bar_current / _character_health_bar_maximum, 0.0, 1.0)
+			if _character_health_bar_maximum > 0.0
+			else 0.0
+		)
+		draw_rect(
+			CHARACTER_HEALTH_BAR_RECT.grow(CHARACTER_HEALTH_BAR_OUTLINE),
+			Color(AlveolusVisualTheme.PETROL_DEEP, 0.94),
+			true
+		)
+		draw_rect(
+			CHARACTER_HEALTH_BAR_RECT,
+			Color(AlveolusVisualTheme.IVORY_DEEP, 0.88),
+			true
+		)
+		draw_rect(
+			Rect2(
+				CHARACTER_HEALTH_BAR_RECT.position,
+				Vector2(CHARACTER_HEALTH_BAR_RECT.size.x * health_fraction, CHARACTER_HEALTH_BAR_RECT.size.y)
+			),
+			AlveolusVisualTheme.TEAL,
+			true
+		)
 
 	if _defense_cell_count <= 0:
 		return

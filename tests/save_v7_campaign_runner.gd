@@ -28,21 +28,21 @@ func _test_catalog_contract() -> void:
 		_equal(levels[index].id, expected_ids[index], "Stabile ID an Katalogposition %d" % index)
 		_equal(levels[index].order, index, "Lückenlose Reihenfolge %d" % index)
 	_equal(_level_snapshot(levels[2]), {
-		"spawn": [0.827, 0.187], "health": [1.15, 1.70], "speed": 1.08,
+		"boss_time": 300.0, "ramp": 300.0, "spawn": [1.03375, 0.23375], "health": [1.15, 1.70], "speed": 1.08,
 		"contact": 1.25, "clusters": [0.10, 0.28], "boss_health": 1.0,
 		"boss_speed": 1.0, "boss_id": &"localized_boss", "boss_ranged": false,
 		"projectile": 1.0, "amplitude": 44.0, "adds": PackedInt32Array([3]),
 		"reward": 1.0,
 	}, "Fall-2-Anker bleibt ein Golden Snapshot des bisherigen Falls 1")
 	_equal(_level_snapshot(levels[4]), {
-		"spawn": [0.624, 0.132], "health": [1.35, 2.05], "speed": 1.16,
+		"boss_time": 300.0, "ramp": 300.0, "spawn": [0.780, 0.165], "health": [1.35, 2.05], "speed": 1.16,
 		"contact": 1.45, "clusters": [0.18, 0.38], "boss_health": 0.75,
 		"boss_speed": 1.35, "boss_id": &"infection_focus", "boss_ranged": true,
-		"projectile": 2.5, "amplitude": 92.0, "adds": PackedInt32Array([4, 4]),
+		"projectile": 2.5, "amplitude": 115.0, "adds": PackedInt32Array([4, 4]),
 		"reward": 1.35,
 	}, "Fall-4-Anker bleibt ein Golden Snapshot des bisherigen Falls 2")
 	_equal(_level_snapshot(levels[6]), {
-		"spawn": [0.528, 0.108], "health": [1.55, 2.40], "speed": 1.24,
+		"boss_time": 300.0, "ramp": 300.0, "spawn": [0.660, 0.135], "health": [1.55, 2.40], "speed": 1.24,
 		"contact": 1.65, "clusters": [0.25, 0.48], "boss_health": 1.35,
 		"boss_speed": 1.0, "boss_id": &"infection_focus", "boss_ranged": false,
 		"projectile": 1.0, "amplitude": 44.0, "adds": PackedInt32Array([6, 8]),
@@ -94,6 +94,8 @@ func _test_v7_roundtrip_and_retired_income() -> void:
 
 func _level_snapshot(level: LevelDefinition) -> Dictionary:
 	return {
+		"boss_time": level.boss_spawn_seconds,
+		"ramp": level.spawn_ramp_seconds,
 		"spawn": [level.initial_spawn_interval, level.final_spawn_interval],
 		"health": [level.enemy_health_start, level.enemy_health_end],
 		"speed": level.enemy_speed_multiplier,

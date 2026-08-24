@@ -76,8 +76,10 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_true(not defaults.reduce_motion, "Reduzierte Bewegung ist optional")
 	_true(defaults.show_discovery_info, "Neue Entdeckungsinfos sind standardmäßig sichtbar")
 	_true(not defaults.show_character_name, "Der Charaktername ist standardmäßig dezent ausgeblendet")
+	_true(not defaults.show_character_health_bar, "Der kleine Charakter-Lebensbalken ist standardmäßig ausgeblendet")
 	_true(defaults.confirm_run_restart, "Strg+R verlangt standardmäßig eine bewusste Bestätigung")
 	_true(UISettingsState.from_dict({}).confirm_run_restart, "Ältere Einstellungsdaten erhalten den sicheren Neustart-Standard")
+	_true(not UISettingsState.from_dict({}).show_character_health_bar, "Ältere Einstellungsdaten blenden den optionalen Charakter-Lebensbalken aus")
 	_true(UISettingsState.CONFIGURABLE_ACTIONS.has(&"ui_info"), "Kontextinformationen besitzen eine konfigurierbare Eingabeaktion")
 	for upgrade_action in [&"upgrade_1", &"upgrade_2", &"upgrade_3", &"reroll_upgrades"]:
 		_true(UISettingsState.CONFIGURABLE_ACTIONS.has(upgrade_action), "%s ist in den Einstellungen frei belegbar" % String(upgrade_action))
@@ -94,6 +96,7 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 		"reduce_motion": true,
 		"show_discovery_info": false,
 		"show_character_name": true,
+		"show_character_health_bar": true,
 		"fullscreen": true,
 		"confirm_run_restart": false,
 		"input_bindings": {"active_ability_1": [{"type": "key", "physical_keycode": KEY_R}]},
@@ -103,7 +106,9 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_equal(sanitized.ui_scale, 1.5, "Nicht unterstützte UI-Skalierung wird auf die nächste Stufe gesetzt")
 	_equal(sanitized.glyph_mode, UISettingsState.GLYPH_AUTO, "Unbekannter Glyphmodus fällt sicher auf Automatisch zurück")
 	_true(sanitized.reduce_motion and not sanitized.show_discovery_info and sanitized.show_character_name and sanitized.fullscreen, "Anzeigeoptionen überleben das Laden")
+	_true(sanitized.show_character_health_bar, "Der Charakter-Lebensbalken überlebt das Laden")
 	_true(not sanitized.confirm_run_restart, "Die Neustartbestätigung lässt sich im Einstellungs-Dictionary ausschalten")
+	_true(bool(sanitized.to_dict().get("show_character_health_bar", false)), "Das Einstellungs-Dictionary speichert den Charakter-Lebensbalken explizit")
 	_true(not bool(sanitized.to_dict().get("confirm_run_restart", true)), "Das Einstellungs-Dictionary speichert die Neustartbestätigung explizit")
 	_equal(UISettingsState.from_dict({"ui_scale": 0.76}).ui_scale, 0.75, "Niedrige Save-Skalierung rastet sicher auf 75 Prozent ein")
 	_equal(UISettingsState.from_dict({"ui_scale": 0.88}).ui_scale, 0.90, "Niedrige Save-Skalierung rastet sicher auf 90 Prozent ein")
@@ -111,6 +116,7 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_true(not copy.show_discovery_info, "Einstellungsduplikate bewahren die Neuigkeitenoption")
 	_true(not copy.confirm_run_restart, "Einstellungsduplikate bewahren die Neustartbestätigung")
 	_true(copy.show_character_name, "Einstellungsduplikate bewahren die Namensanzeige")
+	_true(copy.show_character_health_bar, "Einstellungsduplikate bewahren den Charakter-Lebensbalken")
 	(copy.input_bindings["active_ability_1"] as Array).append({"type": "key", "physical_keycode": KEY_T})
 	_equal((sanitized.input_bindings["active_ability_1"] as Array).size(), 1, "Einstellungsduplikate teilen keine verschachtelten Bindingdaten")
 
@@ -388,6 +394,7 @@ func _test_save_v7_settings_roundtrip() -> void:
 	settings.ui_scale = 0.90
 	settings.reduce_motion = true
 	settings.show_discovery_info = false
+	settings.show_character_health_bar = true
 	settings.glyph_mode = UISettingsState.GLYPH_GAMEPAD
 	settings.confirm_run_restart = false
 	settings.input_bindings = {
@@ -410,6 +417,7 @@ func _test_save_v7_settings_roundtrip() -> void:
 	_equal(restored.ui_settings.ui_scale, 0.90, "Eine UI-Skalierung unter 100 Prozent überlebt den Savegame-Roundtrip")
 	_true(restored.ui_settings.reduce_motion, "Reduzierte Bewegung überlebt den Savegame-Roundtrip")
 	_true(not restored.ui_settings.show_discovery_info, "Die Neuigkeitenoption überlebt im Save-v7-Container")
+	_true(restored.ui_settings.show_character_health_bar, "Der Charakter-Lebensbalken überlebt den Savegame-Roundtrip")
 	_equal(restored.ui_settings.glyph_mode, UISettingsState.GLYPH_GAMEPAD, "Glyphmodus überlebt den Savegame-Roundtrip")
 	_true(not restored.ui_settings.confirm_run_restart, "Die ausgeschaltete Neustartbestätigung überlebt den Savegame-Roundtrip")
 	_true(restored.ui_settings.input_bindings.has("ui_info"), "Eine angepasste ui_info-Belegung überlebt im aktuellen Saveformat")

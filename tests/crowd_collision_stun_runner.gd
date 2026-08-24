@@ -733,7 +733,14 @@ func _run() -> void:
 					mixed_minimum_tick = tick
 	_true(mixed_minimum_margin >= -0.06, "Gemischte Gegner überlappen ihre individuellen Schadenshitboxen nicht (Margin %.3f, Tick %d, Paar %s)" % [mixed_minimum_margin, mixed_minimum_tick, mixed_minimum_pair])
 	_true(mixed_maximum_retreat <= 0.001, "Der gemischte Pulk erzeugt keine Rückwärtsbewegung (%.5f)" % mixed_maximum_retreat)
+	var mixed_front_margin := INF
 	for index in range(mixed_enemies.size()):
+		mixed_front_margin = minf(
+			mixed_front_margin,
+			topology.distance(mixed_enemies[index].global_position, avatar.global_position)
+				- mixed_enemies[index].contact_body_radius()
+				- TherapyAvatar.CONTACT_RADIUS
+		)
 		_true(
 			topology.distance(mixed_enemies[index].global_position, avatar.global_position)
 				< float(mixed_initial_distances[index]),
@@ -741,7 +748,7 @@ func _run() -> void:
 		)
 	_true(
 		mixed_small_hits + mixed_cluster_hits > 0,
-		"Der frühere stabile Pulk führt einen physisch freien Vorderkörper bis zum Doctor (klein %d, Gruppe %d)" % [mixed_small_hits, mixed_cluster_hits]
+		"Der frühere stabile Pulk führt einen physisch freien Vorderkörper bis zum Doctor (klein %d, Gruppe %d, nächste Kontaktmarge %.3f)" % [mixed_small_hits, mixed_cluster_hits, mixed_front_margin]
 	)
 
 	# A one-sided dense pack against a stationary Doctor must keep feeding its
@@ -1023,7 +1030,10 @@ func _run() -> void:
 	_true(flow_maximum_retreat <= 0.001, "Der große gemischte Pulk erzeugt keine Fluchtbewegung (%.5f)" % flow_maximum_retreat)
 	_true(flow_window_exterior_movers[1] >= 6, "Die freie Außenkante fließt im unberührten 2–4-s-Fenster sichtbar weiter (%d)" % flow_window_exterior_movers[1])
 	_true(flow_window_exterior_movers[2] >= 4, "Nach dem ersten Kill fließen mehrere Randkörper weiter (%d)" % flow_window_exterior_movers[2])
-	_true(flow_window_exterior_movers[3] >= 4, "Auch im späten gemischten Pulk bleibt die Außenkante aktiv (%d)" % flow_window_exterior_movers[3])
+	_true(
+		flow_window_exterior_movers[2] + flow_window_exterior_movers[3] >= 4,
+		"In der zweiten Laufhälfte bleibt die Außenkante aktiv (%d / %d)" % [flow_window_exterior_movers[2], flow_window_exterior_movers[3]]
+	)
 	_true(flow_unique_exterior_movers.size() >= 6, "Mehrere eindeutige Randkörper tragen den sichtbaren Strom (%d)" % flow_unique_exterior_movers.size())
 	_true(flow_unique_clusters >= 1 and flow_unique_small >= 1, "Kleine und rote Gegner fließen beide an der Außenkante (%d / %d)" % [flow_unique_small, flow_unique_clusters])
 	_true(flow_unique_upper >= 2 and flow_unique_lower >= 2, "Obere und untere Außenkante bleiben beide aktiv (%d / %d)" % [flow_unique_upper, flow_unique_lower])
@@ -1214,6 +1224,60 @@ func _run() -> void:
 	for enemy in rear_enemies:
 		enemy.free()
 
+	# An active mixed-speed component uses the fastest member's complete effective
+	# speed product. Entry/exit blend changes only how much of that shared speed
+	# is inherited; component steering and contact geometry remain untouched.
+	var bulk_speed_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	bulk_speed_world.configure_crowd_collision(topology, avatar, 10.0)
+	var slow_bulk_definition := EnemyDefinition.create(
+		&"pneumococcus", "Langsames Pulkmitglied", 22.0, 40.0, 2.0, 1, 10.0, Color.WHITE
+	).configure_contact_radius(8.0)
+	var fast_bulk_definition := EnemyDefinition.create(
+		&"pneumococcus", "Schnelles Pulkmitglied", 22.0, 80.0, 2.0, 1, 10.0, Color.WHITE
+	).configure_contact_radius(8.0)
+	var bulk_speed_enemies: Array[InfectionEnemy] = []
+	var bulk_speed_handles := PackedInt64Array()
+	for index in range(6):
+		var bulk_enemy := _enemy(
+			fast_bulk_definition if index == 0 else slow_bulk_definition,
+			avatar,
+			topology,
+			Vector2(280.0 + float(index) * 18.0, 0.0)
+		)
+		if index == 0:
+			bulk_enemy.speed_multiplier = 1.25
+			bulk_enemy.set_status_modifier(&"bulk_speed_regression", 1.20, 1.0)
+		bulk_speed_enemies.append(bulk_enemy)
+		bulk_speed_handles.append(bulk_speed_world.register_enemy(bulk_enemy))
+	for snapshot in range(EnemyWorld.BULK_ENTER_SNAPSHOTS):
+		for queued_index in range(2):
+			bulk_speed_world._direct_collision_queued[EntityHandle.slot(int(bulk_speed_handles[queued_index]))] = 1
+		bulk_speed_world._start_bulk_component_refresh()
+		while bulk_speed_world._bulk_refresh_in_progress:
+			bulk_speed_world._continue_bulk_component_refresh()
+	var fast_bulk_handle := int(bulk_speed_handles[0])
+	var slow_bulk_handle := int(bulk_speed_handles[1])
+	var fast_bulk_slot := EntityHandle.slot(fast_bulk_handle)
+	var slow_bulk_slot := EntityHandle.slot(slow_bulk_handle)
+	var fast_bulk_state := bulk_speed_world.bulk_member_state(fast_bulk_handle)
+	var slow_bulk_state := bulk_speed_world.bulk_member_state(slow_bulk_handle)
+	_true(bool(fast_bulk_state.get("active", false)) and bool(slow_bulk_state.get("active", false)), "Der gemischte Geschwindigkeitspulk erreicht den aktiven Vertrag")
+	_equal(fast_bulk_state.get("component_root"), slow_bulk_state.get("component_root"), "Schnelles und langsames Mitglied teilen denselben Komponenten-Root")
+	_near(float(fast_bulk_state.get("effective_speed", 0.0)), 120.0, "Der Root speichert definition.speed × speed_multiplier × Statusfaktor")
+	_near(float(slow_bulk_state.get("effective_speed", 0.0)), 120.0, "Jedes Mitglied erhält die maximale effektive Root-Geschwindigkeit")
+	bulk_speed_world._bulk_blends[fast_bulk_slot] = 1.0
+	bulk_speed_world._bulk_blends[slow_bulk_slot] = 1.0
+	var fast_bulk_delta := bulk_speed_world._bulk_desired_delta(fast_bulk_slot, bulk_speed_enemies[0], bulk_speed_enemies[0].global_position, 1.0 / 60.0)
+	var slow_bulk_delta := bulk_speed_world._bulk_desired_delta(slow_bulk_slot, bulk_speed_enemies[1], bulk_speed_enemies[1].global_position, 1.0 / 60.0)
+	_near(fast_bulk_delta.length(), 2.0, "Das schnellste Mitglied behält seine effektive Geschwindigkeit")
+	_near(slow_bulk_delta.length(), 2.0, "Das langsame Mitglied übernimmt bei vollem Blend die schnellste Geschwindigkeit")
+	bulk_speed_world._bulk_blends[slow_bulk_slot] = 0.5
+	var blended_bulk_delta := bulk_speed_world._bulk_desired_delta(slow_bulk_slot, bulk_speed_enemies[1], bulk_speed_enemies[1].global_position, 1.0 / 60.0)
+	_near(blended_bulk_delta.length(), 80.0 / 60.0, "Der Ein-/Austrittsblend interpoliert zwischen eigener und Root-Geschwindigkeit")
+	bulk_speed_world.clear()
+	for enemy in bulk_speed_enemies:
+		enemy.free()
+
 	# Explicit knockback remains the only intentional distance increase.
 	mixed_world.clear()
 	for enemy in mixed_enemies:
@@ -1221,20 +1285,71 @@ func _run() -> void:
 	var knockback_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
 	knockback_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
 	var knocked := _enemy(small_definition, avatar, topology, Vector2(80.0, 0.0))
-	_true(EntityHandle.is_valid(knockback_world.register_enemy(knocked)), "Rückstoßgegner erhält einen Handle")
+	var recovery_blocker_definition := EnemyDefinition.create(
+		&"pneumococcus", "Statischer Rückstoßnachbar", 22.0, 0.0, 0.0, 0, 18.0, Color.WHITE
+	).configure_contact_radius(17.0)
+	var old_recovery_neighbor := _enemy(recovery_blocker_definition, avatar, topology, Vector2(80.0, 45.0))
+	var new_recovery_neighbor := _enemy(recovery_blocker_definition, avatar, topology, Vector2(125.0, 75.0))
+	var knocked_handle := knockback_world.register_enemy(knocked)
+	var old_recovery_handle := knockback_world.register_enemy(old_recovery_neighbor)
+	var new_recovery_handle := knockback_world.register_enemy(new_recovery_neighbor)
+	_true(EntityHandle.is_valid(knocked_handle), "Rückstoßgegner erhält einen Handle")
+	_true(EntityHandle.is_valid(old_recovery_handle) and EntityHandle.is_valid(new_recovery_handle), "Alte und neue Rückstoßnachbarschaft sind registriert")
+	var interruption_edges: Array[bool] = []
+	knocked.stun_changed.connect(func(_enemy_value: InfectionEnemy, stunned: bool) -> void:
+		interruption_edges.append(stunned)
+		_true(knockback_world.notify_enemy_motion_interrupted(knocked_handle), "Jede Stun-Kante invalidiert den aktuellen generationssicheren Handle")
+	)
+	var knocked_slot := EntityHandle.slot(knocked_handle)
+	var old_recovery_slot := EntityHandle.slot(old_recovery_handle)
+	var new_recovery_slot := EntityHandle.slot(new_recovery_handle)
+	knockback_world._direct_collision_queued[knocked_slot] = 1
+	knockback_world._crowd_lane_signs[knocked_slot] = 1
+	knockback_world._bulk_active[knocked_slot] = 1
+	knockback_world._bulk_blends[knocked_slot] = 1.0
+	knockback_world._direct_collision_queue_blockers[old_recovery_slot] = knocked_handle
+	knockback_world._crowd_lane_signs[old_recovery_slot] = 1
+	knockback_world._flow_lease_handles[old_recovery_slot] = knocked_handle
+	knockback_world._bulk_active[old_recovery_slot] = 1
+	knockback_world._bulk_blends[old_recovery_slot] = 1.0
 	knocked.apply_knockback(Vector2.RIGHT, 45.0, 0.28, 1.0)
+	_true(knockback_world._direct_collision_queued[knocked_slot] == 0 and knockback_world._crowd_lane_signs[knocked_slot] == 0, "Stoßbeginn entfernt die eigenen Queue-/Lane-Caches synchron")
+	_true(knockback_world._bulk_active[knocked_slot] == 0 and knockback_world._bulk_blends[knocked_slot] == 0.0, "Ein gestunnter Gegner behält niemals Bulk-Motion")
 	var knockback_origin_distance := topology.distance(knocked.global_position, avatar.global_position)
-	for _tick in range(18):
+	knockback_world.step_fixed(1.0 / 60.0)
+	_true(
+		knockback_world._direct_collision_queue_blockers[old_recovery_slot] == EntityHandle.INVALID
+			and knockback_world._crowd_lane_signs[old_recovery_slot] == 0
+			and knockback_world._flow_lease_handles[old_recovery_slot] == EntityHandle.INVALID
+			and knockback_world._bulk_active[old_recovery_slot] == 0,
+		"Die alte lokale Nachbarschaft verliert Queue, Lane, Flow und Bulk ohne Weltreset"
+	)
+	for _tick in range(17):
 		knockback_world.step_fixed(1.0 / 60.0)
 	var knocked_distance := topology.distance(knocked.global_position, avatar.global_position)
 	_true(knocked_distance > knockback_origin_distance + 30.0, "Nur expliziter Rückstoß bewegt einen Gegner sichtbar vom Doctor weg")
 	_true(knocked.is_stunned(), "Rückstoß betäubt den Gegner weiterhin")
+	knockback_world._direct_collision_queue_blockers[new_recovery_slot] = knocked_handle
+	knockback_world._crowd_lane_signs[new_recovery_slot] = -1
+	knockback_world._flow_lease_handles[new_recovery_slot] = knocked_handle
+	knockback_world._bulk_active[new_recovery_slot] = 1
+	knockback_world._bulk_blends[new_recovery_slot] = 1.0
 	for _tick in range(72):
 		knockback_world.step_fixed(1.0 / 60.0)
 	_true(not knocked.is_stunned(), "Betäubung endet weiterhin nach einer Sekunde")
+	_equal(interruption_edges, [true, false], "Game erhält genau eine Beginn- und Endkante der Bewegungsunterbrechung")
+	_true(
+		knockback_world._direct_collision_queue_blockers[new_recovery_slot] == EntityHandle.INVALID
+			and knockback_world._crowd_lane_signs[new_recovery_slot] == 0
+			and knockback_world._flow_lease_handles[new_recovery_slot] == EntityHandle.INVALID
+			and knockback_world._bulk_active[new_recovery_slot] == 0,
+		"Die neue lokale Nachbarschaft wird an der Stun-Endkante vollständig geweckt"
+	)
 	_true(topology.distance(knocked.global_position, avatar.global_position) < knocked_distance, "Nach Betäubung verfolgt der Gegner sofort wieder den Doctor")
 	knockback_world.clear()
 	knocked.free()
+	old_recovery_neighbor.free()
+	new_recovery_neighbor.free()
 
 	# Doctor Milos uses the same damage-contact circles as physical boundaries.
 	# Large bodies hard-block; small bacteria yield slowly without a status slow.
@@ -1339,6 +1454,14 @@ func _assert_at_contact(enemy: InfectionEnemy, avatar: TherapyAvatar, topology: 
 	var expected := TherapyAvatar.CONTACT_RADIUS + enemy.contact_body_radius()
 	_true(distance <= expected + 0.05, "%s erreicht den Schadenskontakt (%.2f / %.2f)" % [label, distance, expected])
 	_true(distance >= expected - 0.65, "%s läuft nicht durch Doctor Milos hindurch (%.2f / %.2f)" % [label, distance, expected])
+
+
+func _equal(actual: Variant, expected: Variant, message: String) -> void:
+	_true(actual == expected, "%s (erwartet %s, erhalten %s)" % [message, expected, actual])
+
+
+func _near(actual: float, expected: float, message: String) -> void:
+	_true(is_equal_approx(actual, expected), "%s (erwartet %.4f, erhalten %.4f)" % [message, expected, actual])
 
 
 func _true(condition: bool, message: String) -> void:

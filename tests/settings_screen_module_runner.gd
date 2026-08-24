@@ -117,6 +117,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	(screen.control_for_setting(&"audio.master.mute") as CheckButton).toggled.emit(true)
 	(screen.control_for_setting(&"toggle.reduce_motion") as CheckButton).toggled.emit(true)
 	(screen.control_for_setting(&"toggle.show_discovery_info") as CheckButton).toggled.emit(false)
+	(screen.control_for_setting(&"toggle.show_character_health_bar") as CheckButton).toggled.emit(true)
 	(screen.control_for_setting(&"binding.ui_info.1") as Button).pressed.emit()
 	(screen.control_for_setting(&"binding.ui_info.0") as Button).pressed.emit()
 	(screen.control_for_setting(&"bindings.reset") as Button).pressed.emit()
@@ -127,7 +128,7 @@ func _assert_intents(screen: SettingsScreen) -> void:
 	_check(audio_values.size() == 1 and audio_values[0][0] == &"master" and is_equal_approx(audio_values[0][1], 0.42), "Lautstärke emittiert ID und linearen Wert")
 	_check(audio_mutes == [[&"master", true]], "Stummschaltung emittiert einen typisierten Intent")
 	_check(options.is_empty(), "Ausgeblendete Anzeigeoptionen können keinen sichtbaren Intent emittieren")
-	_check(toggles == [[&"reduce_motion", true], [&"show_discovery_info", false]], "Schalter emittieren ID und Zustand")
+	_check(toggles == [[&"reduce_motion", true], [&"show_discovery_info", false], [&"show_character_health_bar", true]], "Schalter emittieren ID und Zustand")
 	_check(bindings == [[&"ui_info", 1], [&"ui_info", 0]], "Binding-Intent enthält Aktion und den ausdrücklich gewählten Tastaturplatz")
 	_check(legacy_bindings == [&"ui_info"], "Der erste Tastaturplatz emittiert weiterhin den kompatiblen Ein-Slot-Intent")
 	_check(reset_count[0] == 1 and new_game_count[0] == 1 and quit_count[0] == 1 and back_count[0] == 1, "Reset, Neues Spiel, Beenden und Zurück bleiben getrennte Intents")
@@ -265,6 +266,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 		"ToggleLayout_reduce_motion",
 		"ToggleLayout_show_discovery_info",
 		"ToggleLayout_show_character_name",
+		"ToggleLayout_show_character_health_bar",
 		"ToggleLayout_confirm_restart",
 	]:
 		var row := screen.find_child(row_name, true, false) as HBoxContainer
@@ -283,6 +285,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 		&"show_discovery_info": "Neuigkeiten anzeigen",
 		&"run_stats": "Werte im Run",
 		&"show_character_name": "Charaktername anzeigen",
+		&"show_character_health_bar": "Kleiner Lebensbalken",
 		&"fullscreen": "Vollbild",
 	}
 	for setting_id: StringName in compact_toggle_labels:
@@ -332,7 +335,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	var visible_binding := _button_caption(binding_button)
 	_check(not visible_binding.contains("Y") and not visible_binding.contains("Gamepad"), "Controllerbelegungen sind in der Settings-Zeile visuell ausgeblendet")
 	var toggle_grid := screen.find_child("DisplayTogglesGrid", true, false) as GridContainer
-	for setting_id in [&"reduce_motion", &"show_discovery_info", &"run_stats", &"show_character_name", &"fullscreen", &"confirm_restart"]:
+	for setting_id in [&"reduce_motion", &"show_discovery_info", &"run_stats", &"show_character_name", &"show_character_health_bar", &"fullscreen", &"confirm_restart"]:
 		var toggle := screen.control_for_setting(StringName("toggle.%s" % String(setting_id))) as CheckButton
 		var toggle_row := screen.find_child("ToggleLayout_%s" % String(setting_id), true, false) as HBoxContainer
 		_check(toggle_row != null and toggle_row.get_parent() == toggle_grid, "%s liegt ohne zusätzliche Kachel direkt im Anzeigenraster" % setting_id)
@@ -344,6 +347,8 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	_check(reduce_motion != null and reduce_motion.tooltip_text.contains("UI-Animationen"), "Animationen reduzieren erklärt die Wirkung knapp und verständlich")
 	var character_name := screen.control_for_setting(&"toggle.show_character_name") as CheckButton
 	_check(character_name != null and character_name.tooltip_text.contains("Doctor Milos"), "Namensoption erklärt ihren sichtbaren Effekt eindeutig")
+	var character_health_bar := screen.control_for_setting(&"toggle.show_character_health_bar") as CheckButton
+	_check(character_health_bar != null and str(character_health_bar.get_meta(&"alveolus_accessible_name", "")).contains("Kleiner Lebensbalken"), "Lebensbalkenoption nennt ihren Zweck zugänglich")
 	for bus_id in [&"master", &"ui", &"effects", &"music"]:
 		var mute := screen.control_for_setting(StringName("audio.%s.mute" % String(bus_id))) as CheckButton
 		_check(mute != null and mute.theme_type_variation == &"", "%s-Stummschaltung liegt transparent in ihrer Audiozeile" % bus_id)
@@ -418,6 +423,7 @@ func _toggle_fixture() -> Array[SettingsScreenViewModel.ToggleSettingViewModel]:
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Neuigkeiten anzeigen", true))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", true))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Name über dem Charakter", false))
+	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_health_bar", "Kleiner Lebensbalken", false))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"fullscreen", "Vollbild", false))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"confirm_restart", "Neustart bestätigen", true))
 	return result

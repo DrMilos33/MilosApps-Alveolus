@@ -40,9 +40,10 @@ entsteht durch:
 - Der aktuelle Produktkatalog umfasst drei Behandlungen, sechs sichtbare aktive
   Fähigkeiten, neun kaufbare Forschungen plus ein Meilensteinfeld, vier Rangtalente und 26
   Run-Ausbaustufen.
-- Praxis mit Offline-Forschung und Klinikfällen, Forschungsbrett, Talente,
-  Meisterschaft, kategorisiertes Lexikon und lokale Savegame-Version 6.
-- Hauptfälle haben keine Zeitbegrenzung; ihr Boss erscheint nach 180 Sekunden.
+- Editor-only Praxis-Testbereich, Forschungsbrett, Talente, Meisterschaft,
+  kategorisiertes Lexikon und lokale Savegame-Version 7; Offline-Forschung und
+  Klinikfälle sind entfernt.
+- Hauptfälle haben keine Zeitbegrenzung; ihr Boss erscheint nach 300 Sekunden.
   Doctor Milos startet mit 50 Leben.
 - Die sichtbaren Kampfbegriffe lauten Leben, Schaden, Regeneration, Schild und
   Verteidigung. Feuer, Wasser, Erde und Luft sind die vier aktiven
@@ -66,8 +67,8 @@ konkretes Feedback zu Bedienung, Verständlichkeit, Fähigkeiten und Spielfluss
 sammeln. Bestätigte Fehler werden zuerst reproduziert und gezielt behoben.
 
 Der aktuelle Test verwendet die echte Forschungsökonomie. Ein neuer Spielstand
-startet mit 0 Forschung. Introabschluss oder Überspringen geben einmalig 75
-Basisforschung; ein tatsächlich besiegter Introboss erhöht sie auf 94. Der erste Talentpunkt folgt erst
+startet mit 0 Forschung. Introabschluss oder Überspringen geben einmalig 113
+Basisforschung; ein tatsächlich besiegter Introboss erhöht sie auf 141. Der erste Talentpunkt folgt erst
 mit Fall 2. Forschungs- und Talentreset geben investierte Punkte zurück, und
 der vollständige lokale Spielstand lässt sich für neue Testläufe zurücksetzen.
 
@@ -221,6 +222,8 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-110 | Präzisiert D-109 für einen Doctor nahe am stationären Hindernis: Wird der normale Verfolgungsschritt am Doctor-Kontaktradius kürzer als das Basistempo, obwohl die aktive Objektlease den direkten Kontaktweg noch blockiert, verwendet der mobile Nichtboss vorübergehend einen deterministischen Punkt neben und auf der doctorabgewandten Seite des Hindernisses. Der Punkt liegt mindestens außerhalb des um den Gegnerkörper erweiterten Objektkreises und bleibt an die bereits gewählte Umlaufseite gebunden. Der direkte Pfad und ein aktiver Pulk bewerten Fortschritt nur während dieser Lease gegen denselben Hilfspunkt; sobald der reale Kontaktweg frei ist, übernimmt wieder die unveränderte Doctor-Verfolgung. Das Hilfsziel ändert weder Angriffsziel, Tempo, Kontakt, Schaden, Spawn noch Status und erzeugt keine Abfrage, dauerhafte Wegplanung, Seitenumschaltung, Überlappung oder Teleportation. Bosse und tatsächlich von mobilen Körpern gesättigte Innengegner behalten ihr bisheriges Verhalten. |
 | D-111 | Ersetzt D-107 nur hinsichtlich Fallzahl und Falldruckzuordnung: Die Kampagne besitzt nach dem Intro sechs Fälle. Die stabilen Anker `localized_focus`, `spreading_infection` und `severe_pneumonia` bleiben unverändert als Fälle 2, 4 und 6; `early_localized_focus`, `advancing_infection` und `critical_infection` bilden die linearen Zwischenstufen 1, 3 und 5. Mobile Zielherde liegen in Fall 1 bei 60/120 und in Fall 3 bei 22,5/60/97,5/135 Sekunden; Fall 5 verwendet stationäre Zielherde bei 20/60/100/140 und Projektiltore bei 65/105 Sekunden. Die Ankerfälle behalten ihre bisherigen Profile. Der zweite Aktivslot und Fetter Lazer werden nach Fall 1 freigeschaltet, der erste Talentpunkt bleibt an den ersten Abschluss von Fall 2 gebunden. |
 | D-112 | Ersetzt D-044 hinsichtlich des Saveformats und entfernt die Offline-/Klinikprogression: Save v7 migriert den alten Freischaltungsstand 0/1/2/3 auf 0/2/4/6 und bewahrt stabile Records, Seeds, Pläne, Forschung, Talente, Meisterschaft und beanspruchte Werte; nicht beanspruchte Offline- und Klinikwerte entfallen. Die Praxis ist ausschließlich in Debug-/Editor-Builds ein lokaler Testbereich mit drei getrennten `PracticeScenarioDefinition`-Läufen und vier vollständigen Bossprofilen. Praxisläufe tragen `RunContext.Mode.PRACTICE_TEST`, besitzen feste Seeds und verändern niemals Meta-Fortschritt oder Einsatzpläne. Testwerte für Immunität, finalen ausgehenden Schaden und Galopp liegen ausschließlich in `user://alveolus_test_tools.cfg`, wirken live in allen Debug-Läufen und sind in Release-Builds weder sichtbar noch wirksam. |
+| D-113 | Ersetzt D-104/D-106 hinsichtlich Bosshorizont und Pulktempo: Alle sechs Hauptfälle rufen ihren Boss nach 300 Sekunden. Die authored Standardwellenintervalle werden dabei auf 125 Prozent des vorherigen Werts verlängert, sodass bei freier Kapazität über fünf Minuten ungefähr vier Drittel der bisherigen Drei-Minuten-Menge entstehen und der vorhandene ruhige Kadenzstart erhalten bleibt. Kleine Bakterien, Bakteriengruppen und kleine Herde besitzen 20 Prozent mehr Basistempo; Bosse besitzen 50 Prozent mehr Basistempo. Ein aktiver Pulk verwendet über seinen bestehenden Eintritts-/Austrittsblend die höchste aktuell effektive Geschwindigkeit seiner verbundenen Mitglieder. Abstände, Rückwärtsverbot und Kollisionsgrenzen bleiben unverändert; ausschließlich ein lokal freier Vorderkörper richtet innerhalb der letzten 24 Weltpunkte seinen bisherigen Seitenbogen wieder direkt auf Doctor Milos aus, damit der schnellere Pulk weiter echte Angreifer zuführt. Stoß- und Stunübergänge invalidieren ausschließlich lokale generationssichere Bewegungsleasen, damit kein Gegner in einem veralteten Wartezustand verbleibt. |
+| D-114 | Der neue Fall-1-Bakterienkern besitzt eine sichtbare Aura mit 40 Prozent Bildschirmdurchmesser, die Tempo und Schaden naher Nichtbosse um 30 Prozent erhöht, und ruft ab seinem Erscheinen alle 15 Sekunden vier gewöhnliche kleine Bakterien. Rautenboss-Projektile fliegen 15 Prozent langsamer, ihre authored Flugamplitude ist 25 Prozent größer; Projektile schießender Bossverstärkungen fliegen 50 Prozent schneller. Alle positiven Forschungseinnahmen steigen gegenüber D-098 nochmals um 50 Prozent auf den zentralen Faktor 3,75; die einmalige Introgrundbelohnung beträgt 113. Eine additive, standardmäßig ausgeschaltete Einstellung zeigt einen kleinen zahlenlosen Lebensbalken über Doctor Milos, ohne die zentrale HUD-Lebensanzeige zu ersetzen. Die vorhandene vollflächige Talent-Schlossfläche vor Introabschluss bleibt verbindlich. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

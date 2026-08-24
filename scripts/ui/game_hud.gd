@@ -868,6 +868,7 @@ func _on_settings_toggle_changed(setting_id: StringName, enabled: bool) -> void:
 		&"show_discovery_info": _on_settings_discovery_info(enabled)
 		&"run_stats": _on_run_stats_toggle(enabled)
 		&"show_character_name": _on_settings_character_name(enabled)
+		&"show_character_health_bar": _on_settings_character_health_bar(enabled)
 		&"fullscreen": _on_settings_fullscreen(enabled)
 		&"confirm_restart": _on_settings_restart_confirmation(enabled)
 
@@ -901,6 +902,7 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Neuigkeiten anzeigen", current_ui_settings.show_discovery_info),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", run_stats_enabled),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Charaktername anzeigen", current_ui_settings.show_character_name),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_health_bar", "Kleiner Lebensbalken", current_ui_settings.show_character_health_bar),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"fullscreen", "Vollbild", current_ui_settings.fullscreen, not OS.has_feature("web")),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"confirm_restart", "Neustart bestätigen", current_ui_settings.confirm_run_restart),
 	]
@@ -962,6 +964,9 @@ func _map_settings_compatibility_controls() -> void:
 	settings_run_stats_toggle = settings_screen.control_for_setting(&"toggle.run_stats") as CheckButton
 	settings_fullscreen_toggle = settings_screen.control_for_setting(&"toggle.fullscreen") as CheckButton
 	settings_restart_confirmation_toggle = settings_screen.control_for_setting(&"toggle.confirm_restart") as CheckButton
+	var character_health_bar_toggle := settings_screen.control_for_setting(&"toggle.show_character_health_bar") as CheckButton
+	if character_health_bar_toggle != null:
+		character_health_bar_toggle.tooltip_text = "Zeigt einen kleinen Lebensbalken ohne Zahlen über Doctor Milos."
 	settings_status_label = settings_screen.find_child("StatusText", true, false) as Label
 	settings_quit_button = settings_screen.control_for_setting(&"quit") as Button
 	settings_initial_focus = settings_screen.get_default_focus_control()
@@ -1062,6 +1067,12 @@ func _on_settings_character_name(enabled: bool) -> void:
 	if current_ui_settings == null:
 		return
 	current_ui_settings.show_character_name = enabled
+	_emit_ui_settings_changed()
+
+func _on_settings_character_health_bar(enabled: bool) -> void:
+	if current_ui_settings == null:
+		return
+	current_ui_settings.show_character_health_bar = enabled
 	_emit_ui_settings_changed()
 
 func _on_settings_restart_confirmation(enabled: bool) -> void:

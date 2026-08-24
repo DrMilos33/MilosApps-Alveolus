@@ -273,7 +273,7 @@ func _test_level_catalog_and_run_config() -> void:
 	var levels := ContentCatalog.level_definitions()
 	_assert_equal(levels.size(), 7, "Levelkatalog enthält Intro und sechs Hauptfälle")
 	var expected_durations := [0.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0]
-	var expected_boss_times := [0.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0]
+	var expected_boss_times := [0.0, 300.0, 300.0, 300.0, 300.0, 300.0, 300.0]
 	var expected_stability := [50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0]
 	for index in range(levels.size()):
 		var level: LevelDefinition = levels[index]
@@ -371,7 +371,7 @@ func _test_level_progression_and_records() -> void:
 	_assert_equal(meta.highest_unlocked_level, 1, "Niederlagen schalten kein Level frei")
 	var reward_before := meta.research_points
 	var repeated_reward := meta.award_run(true, 60.0, 2, 20, 0.25)
-	_assert_equal(repeated_reward, roundi(float(2 + 2 + 1 + 12) * 0.25 * 2.5), "Intro-Wiederholung verwendet den global erhöhten Forschungsgewinn")
+	_assert_equal(repeated_reward, roundi(float(2 + 2 + 1 + 12) * 0.25 * 3.75), "Intro-Wiederholung verwendet den um weitere 50 Prozent erhöhten Forschungsgewinn")
 	_assert_equal(meta.research_points, reward_before + repeated_reward, "Belohnungsmultiplikator wird genau einmal gutgeschrieben")
 
 func _test_meta_progression() -> void:
@@ -411,9 +411,9 @@ func _test_meta_progression() -> void:
 
 	var reward_meta := MetaProgressionState.new(func() -> int: return current_time[0])
 	reward_meta.reset_defaults(current_time[0])
-	_assert_equal(reward_meta.award_run(true, 600.0, 15, 200), 93, "Run-Belohnung deckelt alle Leistungsbestandteile und skaliert sie global")
-	_assert_equal(MetaProgressionState.calculate_run_reward(true, 600.0, 15, 200, 1.0, 1), 116, "Ein besiegter Boss erhöht die Endbelohnung um 25 Prozent")
-	_assert_equal(MetaProgressionState.calculate_run_reward(true, 600.0, 15, 200, 1.0, 2), 139, "Zwei besiegte Bosse erhöhen die Endbelohnung additiv um 50 Prozent")
+	_assert_equal(reward_meta.award_run(true, 600.0, 15, 200), 139, "Run-Belohnung deckelt alle Leistungsbestandteile und skaliert sie global")
+	_assert_equal(MetaProgressionState.calculate_run_reward(true, 600.0, 15, 200, 1.0, 1), 173, "Ein besiegter Boss erhöht die Endbelohnung um 25 Prozent")
+	_assert_equal(MetaProgressionState.calculate_run_reward(true, 600.0, 15, 200, 1.0, 2), 208, "Zwei besiegte Bosse erhöhen die Endbelohnung additiv um 50 Prozent")
 	_assert_equal(reward_meta.lifetime_runs, 1, "Beendeter Run wird genau einmal gezählt")
 
 func _test_meta_save_roundtrip_and_recovery() -> void:

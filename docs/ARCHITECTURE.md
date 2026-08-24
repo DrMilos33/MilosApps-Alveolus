@@ -340,8 +340,16 @@ weight four or below ten percent queued weight release it. The lease chooses the
 less occupied lateral side once and blends a maximum 20-degree arc into the
 unchanged direct-pursuit step.
 The accepted endpoint is still bounded by the arena, the Doctor-distance
-monotonicity check and the cached contact circles, so the layer cannot add speed,
-retreat, overlap, teleportation or combat state.
+monotonicity check and the cached contact circles. The component stores the
+maximum effective member speed in packed root/member arrays and blends every
+active member toward that shared speed with the existing lease blend. It still
+cannot retreat, overlap, teleport or create combat state. A physically exposed
+local front body inside the final 24-world-unit attack margin drops only the
+lease's lateral arc and keeps the shared speed directly toward Doctor Milos;
+this prevents the faster component from becoming a closed nonattacking shell.
+Stun and knockback
+transitions invalidate only the affected slot and cached local neighbors; a
+stale closed-corridor fast path may never survive the transition back to chase.
 
 The topology snapshot is built into a double buffer over four fixed ticks. Its
 limited broad-phase query retains the nearest six exact bodies per member;
@@ -442,16 +450,20 @@ fire, water, earth, wind.
 `MetaProgressionState.calculate_run_reward()` is the pure reward preview and is
 the only arithmetic used by `award_run()`. A loss preview therefore shares the
 same multiplier, rounding and minimum with the eventual mutation. All positive
-research income uses the central 2.5 gain factor; purchases and refunds do not.
+research income uses the central 3.75 gain factor; purchases and refunds do not.
 Run rewards apply `1 + 0.25 * bosses_defeated` once before the single final
-rounding. The one-time intro base grant is 75 for completion or skip and uses
+rounding. The one-time intro base grant is 113 for completion or skip and uses
 the same boss multiplier only when a boss was actually defeated.
 
-`UISettingsState.show_discovery_info` is an additive Save-v6 setting with a
+`UISettingsState.show_discovery_info` is an additive Save-v7 setting with a
 default of `true`. When disabled, `Game` drains requested discoveries through
 `DiscoveryManager.complete_active()` without entering `DISCOVERY_PAUSE`; IDs
 remain unlocked and cannot accumulate into a later modal backlog. It does not
 disable guided intro prompts or campus guidance.
+`UISettingsState.show_character_health_bar` is another additive, default-false
+setting. `RunState.stability_changed` publishes its cached current/maximum values
+to `TherapyAvatar`, which draws a small numberless world bar only when enabled;
+the accessible central HUD bar remains authoritative and always present.
 
 The event-driven intro uses `GameFlowState.State.INTRO_CONFIRMATION` for its two
 blocking explanations. That state pauses both `RunSession` and the scene tree;
@@ -488,13 +500,16 @@ This keeps unique boss mechanics discrete while wave pressure can progress
 linearly between the preserved anchor cases.
 
 Product cases use `total_seconds <= 0` to mean no run deadline and schedule
-their boss at 180 seconds. The player baseline is 100 life. A case with no prior
+their boss at 300 seconds. Their standard spawn ramp uses the same 300-second
+horizon and 125-percent authored intervals, producing roughly four thirds of
+the previous total over five minutes at free capacity. The player baseline is
+50 life. A case with no prior
 completion starts without a trait or finding; subsequent attempts derive both
 from the saved case seed. That seed advances only after a successful non-intro
 result, so failure and cancellation cannot silently reroll the case.
 
 `minor_focus` participates in the normal centralized enemy movement path with
-base speed 20 before case modifiers. It remains a detailed,
+base speed 24 before case modifiers. It remains a detailed,
 generation-safe spawning objective and releases four bacteria after its
 20-second lifecycle if it survives; mobility does not authorize a per-entity
 process loop or a second renderer.
@@ -507,8 +522,14 @@ clears both possible render owners before a projectile node returns to its
 pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase. Projectile geometry is data-driven: the later special boss emits
-its two phased diamond shots, while the intro boss emits one ordinary hostile
-projectile per attack interval. Boss locomotion remains direct and ignores all
+its two phased diamond shots at 212.5 world units per second and a 25-percent
+larger authored amplitude; ranged phase adds use 322.5. The intro boss emits one
+ordinary hostile projectile per attack interval. The Fall-1 boss configures a
+projectile-free director lease that requests four ordinary small bacteria every
+15 seconds from phase zero. Its Game-owned 10 Hz aura query reuses the existing
+enemy collision grid, applies one named 1.30 speed/damage status to nearby
+nonbosses inside a radius equal to 20 percent of the shorter visible dimension,
+and removes that status on exit, death, reuse or run cleanup. Boss locomotion remains direct and ignores all
 enemy-enemy contact circles in both directions; Doctor contact, damage, stun,
 knockback and bounded-arena constraints remain unchanged. The HUD resolves at
 most the active boss handles once per fixed snapshot and drives one process-free

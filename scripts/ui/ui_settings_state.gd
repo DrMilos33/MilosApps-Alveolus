@@ -36,6 +36,7 @@ var ui_scale: float = 1.0
 var reduce_motion: bool = false
 var show_discovery_info: bool = true
 var show_character_name: bool = false
+var show_character_health_bar: bool = false
 var glyph_mode: StringName = GLYPH_AUTO
 var fullscreen: bool = false
 var confirm_run_restart: bool = true
@@ -58,6 +59,7 @@ func to_dict() -> Dictionary:
 		"reduce_motion": reduce_motion,
 		"show_discovery_info": show_discovery_info,
 		"show_character_name": show_character_name,
+		"show_character_health_bar": show_character_health_bar,
 		"glyph_mode": String(glyph_mode),
 		"fullscreen": fullscreen,
 		"confirm_run_restart": confirm_run_restart,
@@ -80,6 +82,7 @@ static func from_dict(data: Variant) -> UISettingsState:
 	settings.reduce_motion = bool(data.get("reduce_motion", false))
 	settings.show_discovery_info = bool(data.get("show_discovery_info", true))
 	settings.show_character_name = bool(data.get("show_character_name", false))
+	settings.show_character_health_bar = bool(data.get("show_character_health_bar", false))
 	var requested_glyph := StringName(str(data.get("glyph_mode", GLYPH_AUTO)))
 	settings.glyph_mode = requested_glyph if requested_glyph in [GLYPH_AUTO, GLYPH_KEYBOARD, GLYPH_GAMEPAD] else GLYPH_AUTO
 	settings.fullscreen = bool(data.get("fullscreen", false))

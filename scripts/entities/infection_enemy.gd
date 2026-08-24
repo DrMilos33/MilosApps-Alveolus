@@ -85,6 +85,7 @@ var _relocation_interaction_lock: float = 0.0
 var _topology_bounded: bool = false
 var _bounded_minimum := Vector2.ZERO
 var _bounded_maximum := Vector2.ZERO
+var _boss_aura_radius: float = 0.0
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -147,6 +148,7 @@ func configure(
 	_crowd_speed_target = 1.0
 	_contact_check_pending = false
 	_relocation_interaction_lock = 0.0
+	_boss_aura_radius = 0.0
 	detailed_visual_required = definition.is_boss or definition.id == &"minor_focus"
 	_configure_visual()
 	reset_visual_snapshot()
@@ -186,6 +188,7 @@ func recycle() -> void:
 	_crowd_speed_target = 1.0
 	_contact_check_pending = false
 	_relocation_interaction_lock = 0.0
+	_boss_aura_radius = 0.0
 	visual_motion_initialized = false
 
 func is_targetable() -> bool:
@@ -260,6 +263,16 @@ func set_detailed_visual_required(required: bool) -> void:
 
 func requires_detailed_visual() -> bool:
 	return detailed_visual_required or definition == null or definition.is_boss or definition.id == &"minor_focus"
+
+
+## Presentation-only radius published by the case runtime. Aura membership and
+## every gameplay modifier remain world-owned.
+func set_boss_aura_radius(radius: float) -> void:
+	var resolved_radius := maxf(radius, 0.0)
+	if is_equal_approx(_boss_aura_radius, resolved_radius):
+		return
+	_boss_aura_radius = resolved_radius
+	queue_redraw()
 
 func reset_visual_motion() -> void:
 	visual_previous_position = global_position
@@ -689,6 +702,22 @@ func _draw() -> void:
 		alpha = clampf((elapsed - SPAWN_TELEGRAPH_SECONDS) / SPAWN_MATERIALIZE_SECONDS, 0.0, 1.0)
 	var body_color := definition.color
 	body_color.a *= alpha
+	if definition.is_boss and _boss_aura_radius > 0.0:
+		draw_circle(
+			Vector2.ZERO,
+			_boss_aura_radius,
+			Color(AlveolusVisualTheme.CORAL, 0.035 * alpha)
+		)
+		draw_arc(
+			Vector2.ZERO,
+			_boss_aura_radius,
+			0.0,
+			TAU,
+			64,
+			Color(AlveolusVisualTheme.CORAL, 0.20 * alpha),
+			2.0,
+			true
+		)
 	if visual_texture != null:
 		if definition.is_boss:
 			draw_circle(Vector2.ZERO, definition.radius + 13.0, Color(AlveolusVisualTheme.CORAL, 0.16 * alpha))

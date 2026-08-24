@@ -24,6 +24,12 @@ var _crowd_resolved_directions := PackedVector2Array()
 var _crowd_resolved_speeds := PackedFloat32Array()
 var _crowd_motion_guards := PackedByteArray()
 var _crowd_motion_guard_counts := PackedByteArray()
+var _motion_interrupted := PackedByteArray()
+var _motion_interruption_origins := PackedVector2Array()
+var _motion_local_invalidation_pending := PackedByteArray()
+var _motion_guard_refresh_pending := PackedByteArray()
+var _motion_pending_marked := PackedByteArray()
+var _motion_pending_handles := PackedInt64Array()
 var _direct_collision_mixed_guard_sets := PackedByteArray()
 var _crowd_motion_guard_neighbors := PackedInt64Array()
 var _crowd_motion_guard_distances := PackedFloat32Array()
@@ -114,6 +120,8 @@ var _bulk_root_side_signs := PackedInt32Array()
 var _bulk_root_lease_epochs := PackedInt64Array()
 var _bulk_root_active := PackedByteArray()
 var _bulk_root_flow_routes := PackedByteArray()
+var _bulk_root_effective_speeds := PackedFloat32Array()
+var _bulk_component_effective_speeds := PackedFloat32Array()
 var _bulk_neighbor_counts := PackedByteArray()
 var _bulk_neighbor_handles := PackedInt64Array()
 var _bulk_neighbor_distances := PackedFloat32Array()
@@ -213,6 +221,7 @@ const CONTACT_RING_CLAIM_CLEARANCE := 1.0
 const CONTACT_RING_RECLAIM_HOLD_UPDATES := 6
 const CLUSTER_ENEMY_ID := &"bacterial_cluster"
 const BULK_CONTACT_MARGIN := 4.0
+const BULK_FRONT_ATTACK_MARGIN := 24.0
 const BULK_SNAPSHOT_SECONDS := 0.25
 const BULK_ENTER_WEIGHT := 6
 const BULK_EXIT_WEIGHT := 4
@@ -251,6 +260,17 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_crowd_motion_guards.fill(0)
 	_crowd_motion_guard_counts.resize(combat_capacity.max_enemies)
 	_crowd_motion_guard_counts.fill(0)
+	_motion_interrupted.resize(combat_capacity.max_enemies)
+	_motion_interrupted.fill(0)
+	_motion_interruption_origins.resize(combat_capacity.max_enemies)
+	_motion_interruption_origins.fill(Vector2.ZERO)
+	_motion_local_invalidation_pending.resize(combat_capacity.max_enemies)
+	_motion_local_invalidation_pending.fill(0)
+	_motion_guard_refresh_pending.resize(combat_capacity.max_enemies)
+	_motion_guard_refresh_pending.fill(0)
+	_motion_pending_marked.resize(combat_capacity.max_enemies)
+	_motion_pending_marked.fill(0)
+	_motion_pending_handles.clear()
 	_direct_collision_mixed_guard_sets.resize(combat_capacity.max_enemies)
 	_direct_collision_mixed_guard_sets.fill(0)
 	_crowd_motion_guard_neighbors.resize(combat_capacity.max_enemies * MAX_CROWD_MOTION_GUARDS)
@@ -383,6 +403,10 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_bulk_root_active.fill(0)
 	_bulk_root_flow_routes.resize(combat_capacity.max_enemies)
 	_bulk_root_flow_routes.fill(0)
+	_bulk_root_effective_speeds.resize(combat_capacity.max_enemies)
+	_bulk_root_effective_speeds.fill(0.0)
+	_bulk_component_effective_speeds.resize(combat_capacity.max_enemies)
+	_bulk_component_effective_speeds.fill(0.0)
 	_bulk_neighbor_counts.resize(combat_capacity.max_enemies)
 	_bulk_neighbor_counts.fill(0)
 	_bulk_neighbor_handles.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
@@ -423,6 +447,12 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_crowd_profile_counters.resize(CrowdProfileCounter.COUNT)
 	_crowd_profile_counters.fill(0)
 	return self
+
+
+func clear() -> void:
+	super.clear()
+	_motion_pending_handles.clear()
+	_motion_pending_marked.fill(0)
 
 
 func set_crowd_profile_enabled(enabled: bool) -> void:
@@ -512,6 +542,11 @@ func register_enemy(enemy: Node, critical: bool = false, disable_automatic_physi
 	_crowd_resolved_speeds[slot] = 1.0
 	_crowd_motion_guards[slot] = 0
 	_crowd_motion_guard_counts[slot] = 0
+	_motion_interrupted[slot] = 0
+	_motion_interruption_origins[slot] = Vector2.ZERO
+	_motion_local_invalidation_pending[slot] = 0
+	_motion_guard_refresh_pending[slot] = 0
+	_motion_pending_marked[slot] = 0
 	_direct_collision_mixed_guard_sets[slot] = 0
 	_direct_collision_blocker_handles[slot] = EntityHandle.INVALID
 	_direct_collision_clear_ticks[slot] = 0
@@ -654,6 +689,140 @@ func prepare_avatar_body_interaction(delta: float) -> void:
 	if forward_component < 0.0:
 		resolved_delta -= requested_direction * forward_component
 	_crowd_avatar.prepare_crowd_movement(resolved_delta, requested_delta)
+
+
+## A stun/knockback transition keeps the generation-safe world lease, but its
+## displacement invalidates the local queue, corridor, flow and bulk snapshot.
+## Game calls this for both stun_changed edges. The end edge can occur from
+## inside InfectionEnemy.step_fixed(), so the affected slot is refreshed here
+## synchronously before that same fixed tick resumes direct pursuit.
+func notify_enemy_motion_interrupted(handle: int) -> bool:
+	if not is_active(handle):
+		return false
+	var slot := EntityHandle.slot(handle)
+	if slot < 0 or slot >= _typed_enemies.size():
+		return false
+	var enemy := _typed_enemies[slot]
+	if enemy == null or enemy.definition == null:
+		return false
+	var interrupted_now := enemy.is_stunned()
+	if _motion_interrupted[slot] == 0:
+		_motion_interruption_origins[slot] = enemy.global_position
+	_motion_interrupted[slot] = 1 if interrupted_now else 0
+	_motion_local_invalidation_pending[slot] = 1
+	_motion_guard_refresh_pending[slot] = 1
+	_invalidate_motion_history_slot(slot)
+	_flush_motion_interruption_slot(slot, handle, enemy)
+	if (
+		_motion_local_invalidation_pending[slot] != 0
+		or _motion_guard_refresh_pending[slot] != 0
+	):
+		_queue_pending_motion_interruption(handle, slot)
+	return true
+
+
+func _flush_pending_motion_interruptions() -> void:
+	if _motion_pending_handles.is_empty():
+		return
+	var pending_handles := _motion_pending_handles
+	_motion_pending_handles = PackedInt64Array()
+	for handle_value in pending_handles:
+		var handle := int(handle_value)
+		var slot := EntityHandle.slot(handle)
+		if slot < 0 or slot >= _motion_pending_marked.size():
+			continue
+		_motion_pending_marked[slot] = 0
+		if not is_active(handle):
+			continue
+		var enemy := _typed_enemies[slot]
+		if enemy == null:
+			continue
+		_flush_motion_interruption_slot(slot, handle, enemy)
+		if (
+			_motion_local_invalidation_pending[slot] != 0
+			or _motion_guard_refresh_pending[slot] != 0
+		):
+			_queue_pending_motion_interruption(handle, slot)
+
+
+func _queue_pending_motion_interruption(handle: int, slot: int) -> void:
+	if _motion_pending_marked[slot] != 0:
+		return
+	_motion_pending_marked[slot] = 1
+	_motion_pending_handles.append(handle)
+
+
+func _flush_motion_interruption_slot(slot: int, handle: int, enemy: InfectionEnemy) -> void:
+	if _crowd_topology == null or _direct_collision_grid_dirty:
+		return
+	if _motion_local_invalidation_pending[slot] != 0:
+		var position_changed := _crowd_topology.distance_squared(
+			_motion_interruption_origins[slot],
+			enemy.global_position
+		) > DIRECT_COLLISION_EPSILON * DIRECT_COLLISION_EPSILON
+		if position_changed:
+			_invalidate_local_motion_history(
+				_motion_interruption_origins[slot],
+				handle,
+				false
+			)
+		_invalidate_local_motion_history(enemy.global_position, handle, true)
+		_motion_local_invalidation_pending[slot] = 0
+	if _motion_guard_refresh_pending[slot] != 0:
+		if _direct_collision_active[slot] != 0:
+			if enemy.definition.is_boss:
+				_clear_direct_collision_bypass(slot)
+				_crowd_motion_guard_counts[slot] = 0
+				_direct_collision_mixed_guard_sets[slot] = 0
+				_crowd_motion_guards[slot] = 1
+				_direct_collision_queued[slot] = 0
+				_direct_collision_queue_blockers[slot] = EntityHandle.INVALID
+			else:
+				_refresh_direct_collision_guards(slot, enemy)
+		_motion_guard_refresh_pending[slot] = 0
+	if _motion_interrupted[slot] == 0:
+		_motion_interruption_origins[slot] = Vector2.ZERO
+
+
+func _invalidate_local_motion_history(
+	position: Vector2,
+	interrupted_handle: int,
+	keep_current_guard: bool
+) -> void:
+	var invalidation_radius := DIRECT_COLLISION_GUARD_LOOKAHEAD + _maximum_contact_radius * 2.0
+	_crowd_candidates = _crowd_grid.query_circle_candidates(
+		position,
+		invalidation_radius,
+		_crowd_candidates
+	)
+	var interrupted_slot := EntityHandle.slot(interrupted_handle)
+	var interrupted_enemy := (
+		_typed_enemies[interrupted_slot]
+		if interrupted_slot >= 0 and interrupted_slot < _typed_enemies.size()
+		else null
+	)
+	for candidate_handle_value in _crowd_candidates:
+		var candidate_handle := int(candidate_handle_value)
+		if candidate_handle == interrupted_handle or not is_active(candidate_handle):
+			continue
+		var candidate_slot := EntityHandle.slot(candidate_handle)
+		_invalidate_motion_history_slot(candidate_slot)
+		if (
+			keep_current_guard
+			and interrupted_enemy != null
+			and interrupted_enemy.definition != null
+			and not interrupted_enemy.definition.is_boss
+		):
+			_insert_direct_collision_guard(candidate_slot, interrupted_handle)
+
+
+func _invalidate_motion_history_slot(slot: int) -> void:
+	if slot < 0 or slot >= _typed_enemies.size():
+		return
+	_invalidate_direct_collision_guard_slot(slot)
+	var bulk_was_allowed := _bulk_allowed[slot] != 0
+	_clear_bulk_slot(slot)
+	_bulk_allowed[slot] = 1 if bulk_was_allowed and _flow_obstacle_bodies[slot] == 0 else 0
 
 
 ## Relocation keeps the registry lease and entity state. Only local collision
@@ -1177,6 +1346,7 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 			_crowd_profile_counters[CrowdProfileCounter.GRID_REBUILDS] += 1
 		_crowd_profile_counters[CrowdProfileCounter.GRID_REBUILD_USEC] += Time.get_ticks_usec() - profile_started_usec
 		profile_started_usec = Time.get_ticks_usec()
+	_flush_pending_motion_interruptions()
 	_direct_collision_prepare_epoch += 1
 	_prepare_direct_collision_guards()
 	_prepare_flow_obstacle_guards()
@@ -1206,6 +1376,7 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 			var bulk_motion := (
 				occupied_before
 				and (_bulk_blends[slot] > BULK_BLEND_EPSILON or routed_group_motion)
+				and not enemy.is_stunned()
 				and _bulk_enemy_eligible(enemy)
 			)
 			var suppress_direct_chase := (
@@ -1325,6 +1496,7 @@ func _start_bulk_component_refresh() -> void:
 	_bulk_root_lease_epochs.fill(0)
 	_bulk_root_active.fill(0)
 	_bulk_root_flow_routes.fill(0)
+	_bulk_root_effective_speeds.fill(0.0)
 	_bulk_build_neighbor_counts.fill(0)
 	_bulk_refresh_handles.clear()
 	for slot_value in _active_slots:
@@ -1422,6 +1594,7 @@ func _continue_bulk_component_refresh() -> void:
 
 func _finalize_bulk_component_refresh() -> void:
 	_bulk_component_roots.fill(-1)
+	_bulk_component_effective_speeds.fill(0.0)
 	var component_roots := PackedInt32Array()
 	for handle_value in _bulk_refresh_handles:
 		var handle := int(handle_value)
@@ -1452,6 +1625,17 @@ func _finalize_bulk_component_refresh() -> void:
 			_bulk_root_active[root] = 1
 		if EntityHandle.is_valid(int(_flow_lease_handles[slot])):
 			_bulk_root_flow_routes[root] = 1
+		var enemy := _typed_enemies[slot]
+		if enemy != null and enemy.definition != null:
+			_bulk_root_effective_speeds[root] = maxf(
+				float(_bulk_root_effective_speeds[root]),
+				maxf(
+					enemy.definition.speed
+						* enemy.speed_multiplier
+						* enemy.status_speed_multiplier(),
+					0.0
+				)
+			)
 		if _bulk_active[slot] != 0 or (_bulk_blends[slot] > BULK_BLEND_EPSILON and _bulk_lease_epochs[slot] > 0):
 			var lease_epoch := int(_bulk_lease_epochs[slot])
 			if _bulk_root_lease_epochs[root] == 0 or lease_epoch < int(_bulk_root_lease_epochs[root]):
@@ -1501,6 +1685,7 @@ func _finalize_bulk_component_refresh() -> void:
 		_bulk_active[slot] = _bulk_root_active[root]
 		_bulk_lease_epochs[slot] = _bulk_root_lease_epochs[root]
 		_bulk_side_signs[slot] = _bulk_root_side_signs[root]
+		_bulk_component_effective_speeds[slot] = _bulk_root_effective_speeds[root]
 	var previous_counts := _bulk_neighbor_counts
 	_bulk_neighbor_counts = _bulk_build_neighbor_counts
 	_bulk_build_neighbor_counts = previous_counts
@@ -1670,12 +1855,18 @@ func _bulk_desired_delta(
 	var side_sign := int(_bulk_side_signs[slot])
 	if side_sign == 0:
 		side_sign = 1 if posmod(int(_bulk_lease_epochs[slot]), 2) == 0 else -1
-	var desired_direction := direct_direction.rotated(BULK_ARC_RADIANS * blend * float(side_sign))
-	var step_length := maxf(
-		enemy.definition.speed * enemy.speed_multiplier * enemy.status_speed_multiplier() * delta,
-		0.0
-	)
 	var contact_radius := enemy.contact_body_radius() + TherapyAvatar.CONTACT_RADIUS
+	var exposed_attack_front := (
+		distance <= contact_radius + BULK_FRONT_ATTACK_MARGIN
+		and _bulk_member_is_local_front(slot, enemy, distance)
+	)
+	var desired_direction := (
+		direct_direction
+		if exposed_attack_front
+		else direct_direction.rotated(BULK_ARC_RADIANS * blend * float(side_sign))
+	)
+	var movement_speed := _bulk_blended_effective_speed(slot, enemy)
+	var step_length := movement_speed * delta
 	var stop_radius := maxf(contact_radius - InfectionEnemy.DIRECT_CHASE_CONTACT_DEPTH, 0.0)
 	var direct_step_length := minf(step_length, maxf(distance - stop_radius, 0.0))
 	var has_flow_state := (
@@ -1723,6 +1914,52 @@ func _bulk_desired_delta(
 				- movement_origin
 			)
 	return proposed.limit_length(step_length)
+
+
+func _bulk_member_is_local_front(slot: int, enemy: InfectionEnemy, avatar_distance: float) -> bool:
+	if enemy == null or not is_instance_valid(_crowd_avatar) or _crowd_topology == null:
+		return false
+	var own_surface_distance := avatar_distance - enemy.contact_body_radius()
+	var neighbor_offset := slot * MAX_BULK_NEIGHBORS
+	var neighbor_count := mini(int(_bulk_neighbor_counts[slot]), MAX_BULK_NEIGHBORS)
+	for neighbor_index in range(neighbor_count):
+		var neighbor_handle := int(_bulk_neighbor_handles[neighbor_offset + neighbor_index])
+		var neighbor_slot := EntityHandle.slot(neighbor_handle)
+		if (
+			neighbor_slot < 0
+			or neighbor_slot >= _typed_enemies.size()
+			or _retiring[neighbor_slot] != 0
+			or int(_generations[neighbor_slot]) != EntityHandle.generation(neighbor_handle)
+		):
+			continue
+		var neighbor := _typed_enemies[neighbor_slot]
+		if neighbor == null or not neighbor.is_targetable():
+			continue
+		var neighbor_surface_distance := (
+			_crowd_topology.distance(neighbor.global_position, _crowd_avatar.global_position)
+			- neighbor.contact_body_radius()
+		)
+		if neighbor_surface_distance + FRONT_PRIORITY_EPSILON < own_surface_distance:
+			return false
+	return true
+
+
+func _bulk_blended_effective_speed(slot: int, enemy: InfectionEnemy) -> float:
+	if enemy == null or enemy.definition == null:
+		return 0.0
+	var own_effective_speed := maxf(
+		enemy.definition.speed * enemy.speed_multiplier * enemy.status_speed_multiplier(),
+		0.0
+	)
+	var component_effective_speed := maxf(
+		float(_bulk_component_effective_speeds[slot]),
+		own_effective_speed
+	)
+	return lerpf(
+		own_effective_speed,
+		component_effective_speed,
+		clampf(float(_bulk_blends[slot]), 0.0, 1.0)
+	)
 
 
 func _resolve_bulk_movements(delta: float) -> void:
@@ -2000,6 +2237,7 @@ func bulk_member_state(handle: int) -> Dictionary:
 		"side": int(_bulk_side_signs[slot]),
 		"lease_epoch": int(_bulk_lease_epochs[slot]),
 		"component_root": int(_bulk_component_roots[slot]),
+		"effective_speed": float(_bulk_component_effective_speeds[slot]),
 	}
 
 
@@ -2026,11 +2264,21 @@ func _clear_bulk_slot(slot: int) -> void:
 	_bulk_side_signs[slot] = 0
 	_bulk_lease_epochs[slot] = 0
 	_bulk_component_roots[slot] = -1
+	_bulk_component_effective_speeds[slot] = 0.0
+	_bulk_root_effective_speeds[slot] = 0.0
 	_bulk_blends[slot] = 0.0
 	_bulk_origins[slot] = Vector2.ZERO
 	_bulk_proposals[slot] = Vector2.ZERO
 	_bulk_resolved[slot] = Vector2.ZERO
 	_bulk_direct_directions[slot] = Vector2.ZERO
+	_bulk_neighbor_counts[slot] = 0
+	_bulk_build_neighbor_counts[slot] = 0
+	var neighbor_offset := slot * MAX_BULK_NEIGHBORS
+	for neighbor_index in range(MAX_BULK_NEIGHBORS):
+		_bulk_neighbor_handles[neighbor_offset + neighbor_index] = EntityHandle.INVALID
+		_bulk_neighbor_distances[neighbor_offset + neighbor_index] = INF
+		_bulk_build_neighbor_handles[neighbor_offset + neighbor_index] = EntityHandle.INVALID
+		_bulk_build_neighbor_distances[neighbor_offset + neighbor_index] = INF
 
 
 func _queued_blocker_still_at_contact(slot: int, enemy: InfectionEnemy) -> bool:
@@ -3048,11 +3296,15 @@ func _flow_doctor_side_target_delta(
 	)
 	if full_target_delta.length_squared() <= DIRECT_COLLISION_EPSILON:
 		return Vector2.ZERO
-	var step_length := (
-		maxf(enemy.definition.speed * enemy.speed_multiplier, 0.0)
-		* enemy.status_speed_multiplier()
-		* delta
+	var movement_speed := (
+		_bulk_blended_effective_speed(slot, enemy)
+		if use_bulk_neighbors
+		else maxf(
+			enemy.definition.speed * enemy.speed_multiplier * enemy.status_speed_multiplier(),
+			0.0
+		)
 	)
+	var step_length := movement_speed * delta
 	if step_length <= DIRECT_COLLISION_EPSILON:
 		return Vector2.ZERO
 	var lease_handle := int(_flow_lease_handles[slot])
@@ -3135,11 +3387,15 @@ func _static_flow_desired_delta(
 		_clear_flow_route(slot)
 		_flow_fade_speed(slot, delta)
 		return _flow_direct_delta_with_speed_blend(slot, enemy, origin, direct_delta)
-	var base_step_length := (
-		maxf(enemy.definition.speed * enemy.speed_multiplier, 0.0)
-		* enemy.status_speed_multiplier()
-		* delta
+	var base_movement_speed := (
+		_bulk_blended_effective_speed(slot, enemy)
+		if use_bulk_neighbors
+		else maxf(
+			enemy.definition.speed * enemy.speed_multiplier * enemy.status_speed_multiplier(),
+			0.0
+		)
 	)
+	var base_step_length := base_movement_speed * delta
 	var direct_length := sqrt(direct_length_squared)
 	var using_doctor_side_target := false
 	if direct_length + DIRECT_COLLISION_EPSILON < base_step_length:
@@ -5048,6 +5304,11 @@ func _before_slot_released(slot: int, _entity: Node, handle: int) -> void:
 	_crowd_resolved_speeds[slot] = 1.0
 	_crowd_motion_guards[slot] = 0
 	_crowd_motion_guard_counts[slot] = 0
+	_motion_interrupted[slot] = 0
+	_motion_interruption_origins[slot] = Vector2.ZERO
+	_motion_local_invalidation_pending[slot] = 0
+	_motion_guard_refresh_pending[slot] = 0
+	_motion_pending_marked[slot] = 0
 	_contact_ring_claim_starts[slot] = -1
 	_contact_ring_claim_spans[slot] = 0
 	_contact_ring_wait_starts[slot] = -1

@@ -40,24 +40,28 @@ func _test_catalog_contract() -> void:
 	]
 	var expected_intervals: Array[Vector2] = [
 		Vector2(1.10, 0.55),
-		Vector2(0.929, 0.215),
-		Vector2(0.827, 0.187),
-		Vector2(0.726, 0.160),
-		Vector2(0.624, 0.132),
-		Vector2(0.576, 0.120),
-		Vector2(0.528, 0.108),
+		Vector2(1.16125, 0.26875),
+		Vector2(1.03375, 0.23375),
+		Vector2(0.9075, 0.200),
+		Vector2(0.780, 0.165),
+		Vector2(0.720, 0.150),
+		Vector2(0.660, 0.135),
 	]
 	for order in range(levels.size()):
 		_equal(levels[order].id, expected_ids[order], "Order %d besitzt die feste Fall-ID" % order)
 		_equal(levels[order].order, order, "Fall-ID %s bewahrt Order %d" % [levels[order].id, order])
 		_near(levels[order].initial_spawn_interval, expected_intervals[order].x, "Order %d bewahrt sein anfängliches Spawnintervall" % order)
 		_near(levels[order].final_spawn_interval, expected_intervals[order].y, "Order %d bewahrt sein finales Spawnintervall" % order)
+		if order > 0:
+			_near(levels[order].boss_spawn_seconds, 300.0, "Order %d ruft den Boss nach fünf Minuten" % order)
+			_near(levels[order].spawn_ramp_seconds, 300.0, "Order %d verteilt die Standardwelle über fünf Minuten" % order)
 
 	var enemies := ContentCatalog.enemy_definitions()
-	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 45.0, "Bakterium verwendet die neue Basisgeschwindigkeit")
-	_near((enemies[&"bacterial_cluster"] as EnemyDefinition).speed, 45.0, "Bakteriengruppe verwendet die neue Basisgeschwindigkeit")
-	_near((enemies[&"minor_focus"] as EnemyDefinition).speed, 20.0, "Kleiner Herd verwendet die neue Basisgeschwindigkeit")
-	_near((enemies[&"infection_focus"] as EnemyDefinition).speed, 30.0, "Infektionsherd verwendet die neue Basisgeschwindigkeit")
+	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 54.0, "Bakterium verwendet die um 20 Prozent erhöhte Basisgeschwindigkeit")
+	_near((enemies[&"bacterial_cluster"] as EnemyDefinition).speed, 54.0, "Bakteriengruppe verwendet die um 20 Prozent erhöhte Basisgeschwindigkeit")
+	_near((enemies[&"minor_focus"] as EnemyDefinition).speed, 24.0, "Kleiner Herd verwendet die um 20 Prozent erhöhte Basisgeschwindigkeit")
+	_near((enemies[&"infection_focus"] as EnemyDefinition).speed, 45.0, "Infektionsherd verwendet die um 50 Prozent erhöhte Bossgeschwindigkeit")
+	_near((enemies[&"localized_boss"] as EnemyDefinition).speed, 42.0, "Bakterienkern verwendet die um 50 Prozent erhöhte Bossgeschwindigkeit")
 	_near(PlayerStats.BASE_MOVEMENT_SPEED, 180.0, "Doctor Milos verwendet die neue Basisgeschwindigkeit")
 
 	var treatments := TreatmentDefinition.catalog()

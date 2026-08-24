@@ -33,6 +33,10 @@ var _roles := PackedByteArray()
 var _shot_timers := PackedFloat32Array()
 var _reinforcement_timers := PackedFloat32Array()
 var _boss_phases := PackedByteArray()
+var _projectile_enabled := PackedByteArray()
+var _reinforcement_intervals := PackedFloat32Array()
+var _reinforcement_counts := PackedInt32Array()
+var _reinforcement_minimum_phases := PackedByteArray()
 var _dense_index_by_slot := PackedInt32Array()
 var _active_slots := PackedInt32Array()
 
@@ -50,6 +54,14 @@ func configure(capacity: int, resolver: Callable) -> EnemyAttackDirector:
 	_reinforcement_timers.fill(0.0)
 	_boss_phases.resize(_capacity)
 	_boss_phases.fill(0)
+	_projectile_enabled.resize(_capacity)
+	_projectile_enabled.fill(0)
+	_reinforcement_intervals.resize(_capacity)
+	_reinforcement_intervals.fill(0.0)
+	_reinforcement_counts.resize(_capacity)
+	_reinforcement_counts.fill(0)
+	_reinforcement_minimum_phases.resize(_capacity)
+	_reinforcement_minimum_phases.fill(0)
 	_dense_index_by_slot.resize(_capacity)
 	_dense_index_by_slot.fill(-1)
 	_active_slots.clear()
@@ -71,6 +83,10 @@ func register_enemy(handle: int, role: int) -> bool:
 	_shot_timers[slot] = _initial_delay(role)
 	_reinforcement_timers[slot] = 0.0
 	_boss_phases[slot] = 0
+	_projectile_enabled[slot] = 1
+	_reinforcement_intervals[slot] = REINFORCEMENT_INTERVAL if role == Role.BOSS else 0.0
+	_reinforcement_counts[slot] = REINFORCEMENT_COUNT if role == Role.BOSS else 0
+	_reinforcement_minimum_phases[slot] = 2 if role == Role.BOSS else 0
 	_dense_index_by_slot[slot] = _active_slots.size()
 	_active_slots.append(slot)
 	return true
@@ -91,8 +107,35 @@ func set_boss_phase(handle: int, phase: int) -> bool:
 	if resolved_phase <= int(_boss_phases[slot]):
 		return true
 	_boss_phases[slot] = resolved_phase
-	if resolved_phase >= 2 and _reinforcement_timers[slot] <= 0.0:
-		_reinforcement_timers[slot] = REINFORCEMENT_INTERVAL
+	if _boss_reinforcements_enabled(slot) and _reinforcement_timers[slot] <= 0.0:
+		_reinforcement_timers[slot] = _reinforcement_intervals[slot]
+	return true
+
+
+func configure_boss_contract(
+	handle: int,
+	projectile_enabled: bool,
+	reinforcement_interval: float,
+	reinforcement_count: int,
+	minimum_phase: int
+) -> bool:
+	if not _owns(handle) or role_for(handle) != Role.BOSS:
+		return false
+	var slot := EntityHandle.slot(handle)
+	var projectiles_were_enabled := _projectile_enabled[slot] != 0
+	_projectile_enabled[slot] = 1 if projectile_enabled else 0
+	if projectile_enabled and not projectiles_were_enabled:
+		_shot_timers[slot] = _initial_delay(Role.BOSS)
+	elif not projectile_enabled:
+		_shot_timers[slot] = 0.0
+	_reinforcement_intervals[slot] = maxf(reinforcement_interval, 0.0)
+	_reinforcement_counts[slot] = maxi(reinforcement_count, 0)
+	_reinforcement_minimum_phases[slot] = clampi(minimum_phase, 0, 2)
+	_reinforcement_timers[slot] = (
+		_reinforcement_intervals[slot]
+		if _boss_reinforcements_enabled(slot)
+		else 0.0
+	)
 	return true
 
 
@@ -118,16 +161,17 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 		if not enemy.is_targetable() or enemy.is_stunned():
 			dense_index += 1
 			continue
-		_shot_timers[slot] -= delta
-		if _shot_timers[slot] <= 0.0:
-			var interval := _shot_interval(enemy, int(_roles[slot]))
-			_shot_timers[slot] += maxf(interval, 0.1)
-			_emit_attack(handle, int(_roles[slot]), enemy)
-		if _roles[slot] == Role.BOSS and _boss_phases[slot] >= 2:
+		if _projectile_enabled[slot] != 0:
+			_shot_timers[slot] -= delta
+			if _shot_timers[slot] <= 0.0:
+				var interval := _shot_interval(enemy, int(_roles[slot]))
+				_shot_timers[slot] += maxf(interval, 0.1)
+				_emit_attack(handle, int(_roles[slot]), enemy)
+		if _roles[slot] == Role.BOSS and _boss_reinforcements_enabled(slot):
 			_reinforcement_timers[slot] -= delta
 			if _reinforcement_timers[slot] <= 0.0:
-				_reinforcement_timers[slot] += REINFORCEMENT_INTERVAL
-				reinforcements_requested.emit(handle, REINFORCEMENT_COUNT)
+				_reinforcement_timers[slot] += _reinforcement_intervals[slot]
+				reinforcements_requested.emit(handle, int(_reinforcement_counts[slot]))
 		dense_index += 1
 
 
@@ -137,6 +181,10 @@ func clear() -> void:
 	_shot_timers.fill(0.0)
 	_reinforcement_timers.fill(0.0)
 	_boss_phases.fill(0)
+	_projectile_enabled.fill(0)
+	_reinforcement_intervals.fill(0.0)
+	_reinforcement_counts.fill(0)
+	_reinforcement_minimum_phases.fill(0)
 	_dense_index_by_slot.fill(-1)
 	_active_slots.clear()
 
@@ -169,6 +217,15 @@ func _initial_delay(role: int) -> float:
 	return 1.0
 
 
+func _boss_reinforcements_enabled(slot: int) -> bool:
+	return (
+		_roles[slot] == Role.BOSS
+		and _reinforcement_intervals[slot] > 0.0
+		and _reinforcement_counts[slot] > 0
+		and _boss_phases[slot] >= _reinforcement_minimum_phases[slot]
+	)
+
+
 func _owns(handle: int) -> bool:
 	if not EntityHandle.is_valid(handle):
 		return false
@@ -194,4 +251,8 @@ func _release_slot(slot: int) -> void:
 	_shot_timers[slot] = 0.0
 	_reinforcement_timers[slot] = 0.0
 	_boss_phases[slot] = 0
+	_projectile_enabled[slot] = 0
+	_reinforcement_intervals[slot] = 0.0
+	_reinforcement_counts[slot] = 0
+	_reinforcement_minimum_phases[slot] = 0
 	_dense_index_by_slot[slot] = -1

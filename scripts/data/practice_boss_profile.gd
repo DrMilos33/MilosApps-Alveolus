@@ -194,7 +194,7 @@ static func catalog() -> Array[PracticeBossProfile]:
 			1.45,
 			true,
 			2.5,
-			92.0,
+			115.0,
 			PackedInt32Array([4, 4])
 		),
 		PracticeBossProfile.new(

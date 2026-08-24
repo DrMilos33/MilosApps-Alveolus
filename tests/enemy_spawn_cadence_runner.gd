@@ -224,17 +224,17 @@ func _simulate_standard_waves(config: RunConfig, delay: float) -> Dictionary:
 func _expected_standard_slots(level_id: StringName, rate_index: int) -> int:
 	match level_id:
 		&"early_localized_focus":
-			return 391 if rate_index == 0 else 430
+			return 522 if rate_index == 0 else 574
 		&"localized_focus":
-			return 444 if rate_index == 0 else 488
+			return 592 if rate_index == 0 else 651
 		&"advancing_infection":
-			return 511 if rate_index == 0 else 562
+			return 682 if rate_index == 0 else 750
 		&"spreading_infection":
-			return 605 if rate_index == 0 else 665
+			return 807 if rate_index == 0 else 887
 		&"critical_infection":
-			return 659 if rate_index == 0 else 725
+			return 879 if rate_index == 0 else 967
 		&"severe_pneumonia":
-			return 725 if rate_index == 0 else 797
+			return 967 if rate_index == 0 else 1063
 		_:
 			return -1
 

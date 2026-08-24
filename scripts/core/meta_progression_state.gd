@@ -1,9 +1,9 @@
 class_name MetaProgressionState
 extends RefCounted
 
-const RESEARCH_GAIN_MULTIPLIER := 2.5
+const RESEARCH_GAIN_MULTIPLIER := 3.75
 const BOSS_RESEARCH_MULTIPLIER_PER_DEFEAT := 0.25
-const INTRO_RESEARCH_REWARD := 75
+const INTRO_RESEARCH_REWARD := 113
 
 signal research_changed(points: int, claimable: int)
 signal clinic_changed
