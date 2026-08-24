@@ -14,6 +14,7 @@ const SPAWN_INTERVAL_CURVE_EXPONENT := 0.82
 @export var initial_cluster_enemy_count: int = 0
 @export var automatic_boss_enabled: bool = true
 @export var regular_spawns_enabled: bool = true
+@export_range(0, 600, 1) var regular_spawn_weight_cap: int = 145
 @export_range(0.0, 0.9, 0.01) var spawn_cadence_delay: float = LevelDefinition.DEFAULT_SPAWN_CADENCE_DELAY
 @export var random_seed: int = 20260809
 @export var level_id: StringName = &"intro"
@@ -56,10 +57,9 @@ func has_deadline() -> bool:
 	return final_deadline_seconds > 0.0
 
 
-## Maps real run progress back onto the established spawn clock. The authored
-## interval curve, RNG order and total number of due standard waves therefore
-## stay unchanged, while a positive delay moves early waves later and compresses
-## the same clock smoothly near the boss horizon.
+## Maps real run progress onto the authored density curve. A positive delay
+## keeps early packets smaller and catches their density up smoothly near the
+## boss horizon without changing health or group interpolation.
 func regular_spawn_progress(elapsed_seconds: float) -> float:
 	if spawn_ramp_seconds <= 0.0:
 		return 0.0
@@ -67,15 +67,6 @@ func regular_spawn_progress(elapsed_seconds: float) -> float:
 		clampf(elapsed_seconds / spawn_ramp_seconds, 0.0, 1.0),
 		spawn_cadence_delay
 	)
-
-
-func regular_spawn_clock_delta(current_elapsed: float, fixed_delta: float) -> float:
-	if spawn_ramp_seconds <= 0.0:
-		return maxf(fixed_delta, 0.0)
-	var previous_elapsed := maxf(0.0, current_elapsed - maxf(fixed_delta, 0.0))
-	var current_clock := regular_spawn_progress(current_elapsed) * spawn_ramp_seconds
-	var previous_clock := regular_spawn_progress(previous_elapsed) * spawn_ramp_seconds
-	return maxf(0.0, current_clock - previous_clock)
 
 
 func regular_spawn_interval(spawn_progress: float) -> float:

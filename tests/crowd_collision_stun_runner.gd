@@ -1353,6 +1353,7 @@ func _run() -> void:
 
 	# Doctor Milos uses the same damage-contact circles as physical boundaries.
 	# Every ordinary mobile non-boss yields slowly by default, independent of ID.
+	_near(EnemyWorld.AVATAR_PUSH_SPEED, 72.0, "Das zentrale Spielerschiebetempo bleibt exakt auf 72 begrenzt")
 	avatar.global_position = Vector2.ZERO
 	var cluster_push_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
 	cluster_push_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
@@ -1375,7 +1376,7 @@ func _run() -> void:
 		cluster_push_world.prepare_avatar_body_interaction(1.0 / 60.0)
 		avatar.step_fixed(1.0 / 60.0)
 	Input.action_release(&"move_right")
-	_true(avatar.global_position.x > 5.0 and avatar.global_position.x < 40.0, "Der Doctor arbeitet sich physisch, aber nicht mit vollem Galopp durch eine Bakteriengruppe (%.2f)" % avatar.global_position.x)
+	_true(avatar.global_position.x > 30.0 and avatar.global_position.x < 60.0, "Der Doctor arbeitet sich mit dem erhöhten, weiterhin begrenzten Schiebetempo durch eine Bakteriengruppe (%.2f)" % avatar.global_position.x)
 	_true(pushed_cluster.global_position.x > cluster_origin.x + 5.0, "Auch eine große gewöhnliche Gegnerart wird sichtbar weggedrückt")
 	_true(
 		pushed_cluster.global_position.distance_to(avatar.global_position) >= TherapyAvatar.CONTACT_RADIUS + pushed_cluster.contact_body_radius() - 0.1,
@@ -1417,6 +1418,41 @@ func _run() -> void:
 	_true(opted_out_enemy.is_stunned(), "Das reine Verschiebungsverbot entfernt den bestehenden Stoß-Stun nicht")
 	opted_out_world.clear()
 	opted_out_enemy.free()
+
+	# A stationary flow obstacle is a hard body even when its definition retains
+	# the ordinary default push flag.
+	avatar.global_position = Vector2.ZERO
+	var static_push_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
+	static_push_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
+	var static_enemy := InfectionEnemy.new()
+	static_enemy.configure(
+		pushable_cluster_definition,
+		avatar,
+		topology,
+		1.0,
+		1.0,
+		1.0,
+		PackedInt32Array(),
+		null,
+		0.0,
+		EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE
+	)
+	static_enemy.spawn_timer = 0.0
+	static_enemy.global_position = Vector2(TherapyAvatar.CONTACT_RADIUS + 23.2, 0.0)
+	static_enemy.reset_visual_motion()
+	_true(not static_enemy.can_be_pushed_by_player(), "Ein stationäres Flusshindernis überschreibt das gewöhnliche Push-Default")
+	_true(EntityHandle.is_valid(static_push_world.register_enemy(static_enemy, true)), "Stationäres Flusshindernis erhält einen kritischen Handle")
+	static_push_world.step_fixed(1.0 / 60.0)
+	var static_origin := static_enemy.global_position
+	Input.action_press(&"move_right")
+	for _tick in range(30):
+		static_push_world.prepare_avatar_body_interaction(1.0 / 60.0)
+		avatar.step_fixed(1.0 / 60.0)
+	Input.action_release(&"move_right")
+	_true(avatar.global_position.x <= 0.25, "Ein stationäres Flusshindernis blockiert den Doctor an seiner Schadenshitbox (%.3f)" % avatar.global_position.x)
+	_true(static_enemy.global_position.is_equal_approx(static_origin), "Avatar-Körperkontakt verschiebt ein stationäres Flusshindernis nie")
+	static_push_world.clear()
+	static_enemy.free()
 
 	# Boss status is a non-overridable hard-body exception for avatar contact.
 	avatar.global_position = Vector2.ZERO
@@ -1466,7 +1502,7 @@ func _run() -> void:
 		push_world.prepare_avatar_body_interaction(1.0 / 60.0)
 		avatar.step_fixed(1.0 / 60.0)
 	Input.action_release(&"move_right")
-	_true(avatar.global_position.x > 5.0 and avatar.global_position.x < 40.0, "Der Doctor arbeitet sich physisch, aber nicht mit vollem Galopp durch kleine Bakterien (%.2f)" % avatar.global_position.x)
+	_true(avatar.global_position.x > 30.0 and avatar.global_position.x < 60.0, "Der Doctor arbeitet sich mit dem erhöhten, weiterhin begrenzten Schiebetempo durch kleine Bakterien (%.2f)" % avatar.global_position.x)
 	_true(pushed_small.global_position.x > small_origin.x + 5.0, "Das kleine Bakterium wird über mehrere Ticks sichtbar weggedrückt")
 	_true(
 		pushed_small.global_position.distance_to(avatar.global_position) >= TherapyAvatar.CONTACT_RADIUS + pushed_small.contact_body_radius() - 0.1,

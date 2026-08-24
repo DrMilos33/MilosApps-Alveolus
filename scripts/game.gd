@@ -167,6 +167,7 @@ var build_state: RunBuildState
 var treatment_controller: TreatmentController
 var ability_controller: AbilityController
 var finding_controller: FindingController
+var standard_wave_director := StandardWaveDirector.new()
 var mastery_tracker := MasteryTracker.new()
 var pending_preparation_loadout: PreparedLoadout
 var pending_loadout_draft: LoadoutDraft
@@ -188,7 +189,8 @@ var gamepad_target_direction: Vector2 = Vector2.ZERO
 var ability_ready_states: Dictionary = {}
 var treatment_beam_return_visualized: Dictionary = {}
 
-var spawn_accumulator: float = 0.0
+var standard_wave_spawn_sectors := PackedInt32Array()
+var standard_wave_spawn_sector_cursor: int = 0
 var offscreen_relocation_timer: float = OFFSCREEN_RELOCATION_INTERVAL
 var offscreen_relocation_move_timer: float = 0.0
 var offscreen_relocation_move_interval: float = OFFSCREEN_RELOCATION_INTERVAL
@@ -1631,7 +1633,12 @@ func start_run(run_context: RunContext = null) -> void:
 	rng.seed = config.random_seed
 	_reset_spawn_position_sequence()
 	relocation_rng.seed = int(config.random_seed) ^ 0x52454C4F43415445
-	spawn_accumulator = config.initial_spawn_interval
+	standard_wave_spawn_sectors.clear()
+	standard_wave_spawn_sector_cursor = 0
+	if selected_level.is_tutorial or not config.regular_spawns_enabled:
+		standard_wave_director.cancel()
+	else:
+		standard_wave_director.configure(config.random_seed)
 	offscreen_relocation_timer = OFFSCREEN_RELOCATION_INTERVAL
 	offscreen_relocation_move_timer = 0.0
 	offscreen_relocation_move_interval = OFFSCREEN_RELOCATION_INTERVAL
@@ -1739,10 +1746,15 @@ func start_run(run_context: RunContext = null) -> void:
 	else:
 		treatment_controller.enabled = true
 		hud.update_timer(0.0, config.run_duration_seconds, config.final_deadline_seconds, false)
+		var initial_wave_handles := PackedInt64Array()
+		var initial_wave_weights := PackedInt32Array()
 		for index in range(config.initial_small_enemy_count):
-			_spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0 + index * 34.0, _enemy_body_radius(&"pneumococcus")))
+			var small_enemy := _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0 + index * 34.0, _enemy_body_radius(&"pneumococcus")))
+			_track_initial_standard_wave_enemy(small_enemy, 1, initial_wave_handles, initial_wave_weights)
 		for index in range(config.initial_cluster_enemy_count):
-			_spawn_enemy(&"bacterial_cluster", _spawn_position_around_avatar(520.0 + index * 46.0, _enemy_body_radius(&"bacterial_cluster")))
+			var cluster_enemy := _spawn_enemy(&"bacterial_cluster", _spawn_position_around_avatar(520.0 + index * 46.0, _enemy_body_radius(&"bacterial_cluster")))
+			_track_initial_standard_wave_enemy(cluster_enemy, 2, initial_wave_handles, initial_wave_weights)
+		standard_wave_director.begin_initial_wave(initial_wave_handles, initial_wave_weights)
 		if _is_practice_test():
 			_spawn_practice_obstacles()
 		elif discovery_manager.request(&"patient_stability", null):
@@ -1915,6 +1927,7 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_reinforcement_minimum_phase = 0
 	config.initial_small_enemy_count = scenario.get_initial_small_count()
 	config.initial_cluster_enemy_count = scenario.get_initial_medium_count()
+	config.regular_spawn_weight_cap = scenario.get_ongoing_weighted_cap()
 	config.spawn_ramp_seconds = scenario.get_spawn_ramp_seconds()
 	config.spawn_rate_multiplier = scenario.get_spawn_rate_multiplier()
 	config.cluster_chance_start = 0.5 if scenario.are_waves_enabled() else 0.0
@@ -2162,43 +2175,102 @@ func _spawn_step(delta: float) -> void:
 	if selected_level.is_tutorial or stress_test or not config.regular_spawns_enabled:
 		return
 	_offscreen_relocation_step(delta)
-	var ambient_melee_weight := _ambient_melee_weight()
-	if state.boss_spawned or ambient_melee_weight >= MAX_AMBIENT_MELEE_WEIGHT:
+	if state.boss_spawned:
+		standard_wave_director.cancel()
+		standard_wave_spawn_sectors.clear()
 		return
-	spawn_accumulator -= config.regular_spawn_clock_delta(state.elapsed, delta)
-	if spawn_accumulator > 0.0:
+	var ambient_melee_weight := _ambient_melee_weight()
+	var weight_cap := _regular_spawn_weight_cap()
+	if weight_cap <= 0:
+		standard_wave_director.discard_pending_intents()
+		return
+	if standard_wave_director.has_pending_intents():
+		if ambient_melee_weight >= weight_cap:
+			standard_wave_director.discard_pending_intents()
+			return
+		_emit_standard_wave_intents(ambient_melee_weight, weight_cap)
+		return
+	var capacity_blocked := weight_cap - ambient_melee_weight < StandardWaveDirector.MINIMUM_OPEN_WEIGHT
+	var wave_due := standard_wave_director.advance_clock(delta, capacity_blocked)
+	if not wave_due or capacity_blocked:
 		return
 	var progress := config.regular_spawn_progress(state.elapsed)
-	var interval := config.regular_spawn_interval(progress)
 	var finding := _active_finding()
+	var interval_factor := 1.0
 	if finding != null and finding.behavior == FindingDefinition.Behavior.ACCELERATION and progress >= 0.5:
 		var late_factor := inverse_lerp(0.5, 1.0, progress)
-		interval *= lerpf(1.0, 1.0 - finding.magnitude, late_factor)
-	spawn_accumulator += interval
-	var batch := 1
-	if progress > 0.58 and rng.randf() < 0.22:
-		batch = 2
-	for index in range(batch):
-		var type: StringName = &"pneumococcus"
-		var cluster_chance := lerpf(config.cluster_chance_start, config.cluster_chance_end, progress)
-		if finding != null and finding.behavior == FindingDefinition.Behavior.GROUPING:
-			cluster_chance = clampf(cluster_chance + finding.magnitude, 0.0, 0.85)
-		# Practice recipes author their own fixed population mix and intentionally
-		# disable discoveries, so their 50 % group contract cannot depend on a
-		# campaign discovery flag.
-		if (_is_practice_test() or discovery_manager.has_seen(&"pneumococcus")) and rng.randf() < cluster_chance:
-			type = &"bacterial_cluster"
-		var spawn_weight := 2 if type == &"bacterial_cluster" else 1
-		if ambient_melee_weight + spawn_weight > MAX_AMBIENT_MELEE_WEIGHT:
+		interval_factor = lerpf(1.0, 1.0 - finding.magnitude, late_factor)
+	var cluster_bonus := 0.0
+	if finding != null and finding.behavior == FindingDefinition.Behavior.GROUPING:
+		cluster_bonus = finding.magnitude
+	# Practice recipes author their own fixed population mix and intentionally
+	# disable discoveries, so their 50 % group contract cannot depend on a
+	# campaign discovery flag.
+	var clusters_enabled := _is_practice_test() or discovery_manager.has_seen(&"pneumococcus")
+	var opened_count := standard_wave_director.open_wave(
+		config,
+		progress,
+		weight_cap - ambient_melee_weight,
+		clusters_enabled,
+		cluster_bonus,
+		interval_factor
+	)
+	if opened_count <= 0:
+		return
+	standard_wave_spawn_sectors = _choose_standard_wave_spawn_sectors(opened_count)
+	standard_wave_spawn_sector_cursor = 0
+	_emit_standard_wave_intents(ambient_melee_weight, weight_cap)
+
+
+func _emit_standard_wave_intents(ambient_melee_weight: int, weight_cap: int) -> void:
+	var intents := standard_wave_director.take_spawn_intents()
+	for intent in intents:
+		if ambient_melee_weight + intent.weight > weight_cap:
+			standard_wave_director.discard_pending_intents()
 			break
-		var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, progress)
+		var preferred_sector := -1
+		if not standard_wave_spawn_sectors.is_empty():
+			preferred_sector = int(standard_wave_spawn_sectors[
+				standard_wave_spawn_sector_cursor % standard_wave_spawn_sectors.size()
+			])
+			standard_wave_spawn_sector_cursor += 1
 		var spawned := _spawn_enemy(
-			type,
-			_wave_spawn_position_around_avatar(rng.randf_range(500.0, 620.0), _enemy_body_radius(type)),
-			health_scale
+			intent.enemy_id,
+			_wave_spawn_position_around_avatar(
+				spawn_rng.randf_range(500.0, 620.0),
+				_enemy_body_radius(intent.enemy_id),
+				preferred_sector
+			),
+			intent.health_scale,
+			false,
+			false
 		)
-		if spawned != null:
-			ambient_melee_weight += spawn_weight
+		if spawned == null:
+			continue
+		var handle := enemy_world.handle_for(spawned)
+		if standard_wave_director.commit_spawn(intent, handle):
+			ambient_melee_weight += intent.weight
+
+
+func _track_initial_standard_wave_enemy(
+	enemy: InfectionEnemy,
+	weight: int,
+	handles: PackedInt64Array,
+	weights: PackedInt32Array
+) -> void:
+	if enemy == null or enemy_world == null:
+		return
+	var handle := enemy_world.handle_for(enemy)
+	if not EntityHandle.is_valid(handle):
+		return
+	handles.append(handle)
+	weights.append(maxi(weight, 1))
+
+
+func _regular_spawn_weight_cap() -> int:
+	if config == null:
+		return MAX_AMBIENT_MELEE_WEIGHT
+	return clampi(config.regular_spawn_weight_cap, 0, MAX_AMBIENT_MELEE_WEIGHT)
 
 
 func _ambient_melee_weight() -> int:
@@ -2848,6 +2920,8 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 func _spawn_boss() -> void:
 	if state == null or not state.active:
 		return
+	standard_wave_director.cancel()
+	standard_wave_spawn_sectors.clear()
 	_clear_boss_aura_runtime()
 	active_boss_handles.clear()
 	active_boss_handle_by_instance.clear()
@@ -3269,6 +3343,8 @@ func _store_damage_number(number: DamageNumber) -> void:
 
 func _on_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bool) -> void:
 	var handle := enemy_world.handle_for(enemy) if enemy_world != null and is_instance_valid(enemy) else EntityHandle.INVALID
+	if EntityHandle.is_valid(handle):
+		standard_wave_director.retire(handle)
 	var pressure_reward_points := 0
 	if EntityHandle.is_valid(handle) and case_pressure_target_states.has(handle):
 		var pressure_runtime: Dictionary = case_pressure_target_states[handle]
@@ -4529,6 +4605,8 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	_try_present_next_discovery()
 
 func _on_run_finished(success: bool, reason: String) -> void:
+	standard_wave_director.cancel()
+	standard_wave_spawn_sectors.clear()
 	if run_session != null:
 		run_session.finish(success, reason)
 	run_finished.emit(success, reason)
@@ -4883,15 +4961,60 @@ func _safe_spawn_position_for_angle(angle: float, distance: float, body_radius: 
 ## dedicated deterministic spawn stream, and the body is placed just outside
 ## the actual camera rectangle. This creates several attack fronts without
 ## teaching locomotion to predict or flank the player.
-func _wave_spawn_position_around_avatar(distance: float, body_radius: float = 0.0) -> Vector2:
+func _choose_standard_wave_spawn_sectors(body_count: int) -> PackedInt32Array:
+	var pressure := _local_wave_sector_pressure()
+	var ranked: Array[int] = []
+	for sector in range(WAVE_SPAWN_SECTOR_COUNT):
+		ranked.append(sector)
+	ranked.sort_custom(func(first: int, second: int) -> bool:
+		if not is_equal_approx(float(pressure[first]), float(pressure[second])):
+			return float(pressure[first]) < float(pressure[second])
+		return first < second
+	)
+	var result := PackedInt32Array()
+	if ranked.is_empty():
+		return result
+	var first_pool_size := mini(WAVE_SPAWN_EMPTY_SECTOR_CHOICES, ranked.size())
+	result.append(ranked[spawn_rng.randi_range(0, first_pool_size - 1)])
+	var desired_fronts := 1
+	if body_count >= 28:
+		desired_fronts = 3
+	elif body_count >= 12:
+		desired_fronts = 2
+	for sector in ranked:
+		if result.size() >= desired_fronts:
+			break
+		var separated := true
+		for selected_sector in result:
+			if _sector_ring_distance(sector, selected_sector) < 2:
+				separated = false
+				break
+		if separated:
+			result.append(sector)
+	return result
+
+
+func _wave_spawn_position_around_avatar(
+	distance: float,
+	body_radius: float = 0.0,
+	preferred_sector: int = -1
+) -> Vector2:
 	var candidate := _spawn_position_around_avatar(distance, body_radius)
 	if not is_instance_valid(avatar) or topology == null:
 		return candidate
+	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
+	if preferred_sector >= 0 and preferred_sector < WAVE_SPAWN_SECTOR_COUNT:
+		var preferred_angle := (
+			(float(preferred_sector) + 0.5) * sector_width
+			+ spawn_rng.randf_range(-sector_width * 0.22, sector_width * 0.22)
+		)
+		var preferred_position := _offscreen_spawn_position(preferred_angle, body_radius)
+		if preferred_position != Vector2.INF:
+			return preferred_position
 	var sector_pressure := _local_wave_sector_pressure()
 	var candidate_delta := topology.shortest_delta(avatar.global_position, candidate)
 	if candidate_delta.length_squared() <= 0.0001:
 		return candidate
-	var sector_width := TAU / float(WAVE_SPAWN_SECTOR_COUNT)
 	var candidate_angle := fposmod(candidate_delta.angle(), TAU)
 	var ranked_sectors: Array[Dictionary] = []
 	for sector in range(WAVE_SPAWN_SECTOR_COUNT):
@@ -5480,6 +5603,9 @@ func _visible_discovery_spawn_position(radius: float) -> Vector2:
 	)
 
 func _cleanup_run_nodes() -> void:
+	standard_wave_director.cancel()
+	standard_wave_spawn_sectors.clear()
+	standard_wave_spawn_sector_cursor = 0
 	if run_session != null:
 		if run_session.is_active():
 			run_session.cancel()

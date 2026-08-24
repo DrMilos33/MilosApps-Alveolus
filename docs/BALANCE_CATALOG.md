@@ -25,6 +25,9 @@ im Kampf ist dagegen vollständig enthalten.
 - Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 300 Sekunden.
 - Die harte Hauptarena misst **8.640 × 4.860 Weltpunkte**. Spawnraten und
   Gegnerabstände bleiben von dieser dichteren Spielfläche unberührt.
+- Das 1.280 × 720 Referenzcanvas nutzt `canvas_items` mit `expand`: Vollbild
+  und freie Fensterformate füllen die gesamte Fläche verzerrungsfrei und zeigen
+  bei abweichendem Seitenverhältnis entsprechend mehr Welt.
 
 Die spielernahen Begriffe sind **Leben**, **Schaden**, **Regeneration**,
 **Schild** und **Verteidigung**. Alte interne Namen wie `stability`,
@@ -330,17 +333,33 @@ danach auf ihrem Endwert. Es gibt keine Ablaufzeit.
 | 5 | Kritischer Verlauf | 0,720 → 0,150 s | 1,45 → 2,225 | 1,20 | 1,55 | 21,5 → 43 % | 1,05 | 5 / 6 | 1,525 |
 | 6 | Schwerer Verlauf | 0,660 → 0,135 s | 1,55 → 2,40 | 1,24 | 1,65 | 25 → 48 % | 1,35 | 6 / 8 | 1,70 |
 
-Die zeitgesteuerte Standardwelle verwendet zentral eine Verzögerungsstärke von
-0,30. Ihre bestehende Spawnuhr wird anfangs gedehnt und zum Bosshorizont
-kontinuierlich verdichtet. Bei freier Kapazität entstehen dadurch vor Sekunde
-300 exakt 522 / 592 / 682 / 807 / 879 / 967 Standardwellen in Fall 1–6;
-`+10 % mehr Monsterspawn` liefert 574 / 651 / 750 / 887 / 967 / 1.063.
-Das sind ungefähr vier Drittel der jeweiligen früheren Drei-Minuten-Menge.
-Für denselben Seed bleiben auch Doppelpakete und Gegnerfolge deterministisch. Die Startgegner kommen
-zusätzlich hinzu. Das Prinzip gilt automatisch für jeden Gegnertyp der
-Standardwelle. Introgegner, Bosse, Phasenverstärkungen, kleine Herde und deren
-geskriptete Freisetzungen behalten ihre ausdrücklich festgelegten Zeitpunkte.
-Das Aktivlimit von 145 gewichteten Nahkampfeinheiten sammelt weiterhin keinen späteren Spawnrückstau.
+Die Standardzufuhr erscheint als klar erkennbare Pakete. Die seit dem letzten
+Paket vergangene aktive Simulationszeit sammelt mit Faktor 1,10 Guthaben aus der
+weiterhin anfangs gedehnten Intervallkurve; spätestens nach 4,5 Sekunden folgt
+das nächste. Sind nach mindestens zwei Sekunden 70 Prozent des aktuellen
+Wellengewichts besiegt, darf es früher folgen und fällt entsprechend kleiner
+aus. Damit ist die Gesamtzufuhr moderat zehn Prozent schneller, unabhängig von
+der Tötungsgeschwindigkeit; starke Builds verändern den Rhythmus, vervielfachen
+aber weder Gegner, EXP noch Levelprogression.
+
+| Fall | Körper im ersten Timeout-Paket | Körper im späten Timeout-Paket (ca.) |
+|---:|---:|---:|
+| 1 | 4 | 23 |
+| 2 | 4 | 26 |
+| 3 | 5 | 31 |
+| 4 | 6 | 37 |
+| 5 | 6 | 41 |
+| 6 | 7 | 45 |
+
+Die exakte späte Zahl bleibt seed-stabil und enthält die bestehende
+22-Prozent-Chance auf einen zweiten Körper je Slot. `+10 % mehr Monsterspawn`
+vergrößert das Paket über die Intervallkurve. Ein Paket nutzt abhängig von
+seiner Größe ein bis drei druckarme Offscreen-Fronten und materialisiert
+höchstens vier Körper je Fixed Tick. Unter vier freien Gewichtspunkten öffnet
+keine Restwelle. Startgegner bilden Welle 0; Introgegner, Bosse,
+Phasenverstärkungen, kleine Herde und deren geskriptete Freisetzungen behalten
+ihre ausdrücklichen Zeitpunkte. Das Aktivlimit von 145 gewichteten
+Nahkampfeinheiten sammelt keinen späteren Spawnrückstau.
 
 Das Intro ist ereignisgesteuert, beginnt ebenfalls mit 50 Leben und besitzt
 weder Zeitlimit noch zufällige Fallparameter. Der erste Erreger bleibt nach

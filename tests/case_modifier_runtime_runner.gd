@@ -161,7 +161,7 @@ func _test_runtime_config_and_double_boss() -> void:
 	game.start_run(context)
 	game.set_physics_process(false)
 	game.treatment_controller.enabled = false
-	game.spawn_accumulator = 999999.0
+	game.standard_wave_director.cancel()
 	var run_seed_before: int = game.config.random_seed
 	game._reset_spawn_position_sequence()
 	var expected_content_rng := RandomNumberGenerator.new()

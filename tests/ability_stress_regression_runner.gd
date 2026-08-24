@@ -12,7 +12,8 @@ const Metrics = preload("res://tests/support/performance_metrics.gd")
 
 const ENEMY_COUNT := 600
 const PICKUP_COUNT := 360
-const PROJECTILE_COUNT := 512
+# The runtime reserves 48 of 512 slots for critical pressure projectiles.
+const PROJECTILE_COUNT := 464
 const EXISTING_FEEDBACK_COUNT := 80
 const FIXED_DELTA := 1.0 / 60.0
 const MATERIALIZATION_FRAMES := 45
@@ -160,7 +161,7 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 	game.set_physics_process(false)
 	game.stress_test = true
 	game.stress_reported = true
-	game.spawn_accumulator = 999999.0
+	game.standard_wave_director.cancel()
 	game.treatment_controller.enabled = false
 	game.config.run_duration_seconds = 100000.0
 	game.config.final_deadline_seconds = 100000.0

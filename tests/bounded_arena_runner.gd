@@ -23,6 +23,8 @@ func _run() -> void:
 
 
 func _test_topology_modes() -> void:
+	_equal(ProjectSettings.get_setting("display/window/stretch/mode"), "canvas_items", "Das Spiel skaliert weiterhin sein 2D-Referenzcanvas")
+	_equal(ProjectSettings.get_setting("display/window/stretch/aspect"), "expand", "Nicht-16:9-Fenster füllen die gesamte Fläche verzerrungsfrei")
 	var bounds := Rect2(0.0, 0.0, 200.0, 200.0)
 	var wrapped := ArenaTopology.new(bounds)
 	_true(wrapped.is_wrapping(), "WRAP bleibt der kompatible Standardmodus")

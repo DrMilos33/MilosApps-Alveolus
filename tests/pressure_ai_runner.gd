@@ -117,7 +117,7 @@ func _prepare_game(run_seed: int) -> Node:
 	)
 	game.start_run(context)
 	game.set_physics_process(false)
-	game.spawn_accumulator = 999999.0
+	game.standard_wave_director.cancel()
 	game.treatment_controller.enabled = false
 	game.ability_controller.clear()
 	game.config.run_duration_seconds = 100000.0

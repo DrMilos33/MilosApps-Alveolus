@@ -4,7 +4,8 @@ const Metrics = preload("res://tests/support/performance_metrics.gd")
 
 const ENEMY_COUNT := 600
 const PICKUP_DROP_COUNT := 1200
-const PROJECTILE_COUNT := 512
+# The runtime reserves 48 of 512 slots for critical pressure projectiles.
+const PROJECTILE_COUNT := 464
 const FEEDBACK_COUNT := 80
 const FIXED_DELTA := 1.0 / 60.0
 ## Crowd measurements use the same eight-second settling window as the
@@ -39,7 +40,7 @@ func _run() -> void:
 		game.discovery_manager.mark_seen(discovery_id)
 	game.selected_level = game.levels[1]
 	game.start_run()
-	game.spawn_accumulator = 9999.0
+	game.standard_wave_director.cancel()
 	game.treatment_controller.enabled = false
 	game.performance_profile_enabled = phase_profile
 	# The full soak deliberately outlives every shipped case. It validates the

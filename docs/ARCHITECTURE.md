@@ -39,15 +39,20 @@ content definitions do not depend on scene nodes.
 - Deaths, drops, phase spawns, and removals are queued and applied after the
   current system iteration. A system never removes from a collection that it
   is currently iterating.
-- `RunConfig` owns the standard-wave clock. Its default monotonic time warp
-  delays the established interval clock early and catches it up before the boss
-  horizon, so authored wave slots, batch decisions, enemy-type RNG and per-wave
-  health progression remain ordinally unchanged. Every enemy type selected by
-  the timed standard-wave path inherits this policy unless its level explicitly
-  overrides the cadence. Tutorial enemies, the three authored starting enemies,
-  bosses, phase reinforcements and finding spawns are event-authored exceptions
-  and never advance the standard-wave clock. Capacity backpressure freezes the
-  current accumulator without accruing spawn debt.
+- `RunConfig` owns the authored standard-spawn density curve;
+  `StandardWaveDirector` is the sole owner of its run-local packet clock,
+  isolated content RNG, pending intents and generation-safe membership. The
+  elapsed gate time accrues spawn credit at 1.10 times the established density;
+  clearing a wave early therefore releases a smaller packet instead of creating
+  extra enemies or EXP. Its successor opens after at most 4.5 seconds or, after
+  a two-second lockout, when at least 70 percent of the current packet weight
+  has been defeated. At most four
+  bodies materialize per fixed tick, pending intent state is bounded to 64 and
+  the 145-weight gameplay cap freezes the gate without debt. The six campaign
+  cases and the spawn/obstacle practice tests use this path. Tutorial enemies,
+  boss-only practice, bosses, phase reinforcements, pressure targets and finding
+  spawns remain event-authored exceptions. Boss start and run end cancel all
+  pending standard-wave state before handles can be reused.
 - `CombatSpatialGrid` and `CombatQuery` are the sole broad-phase query path.
   Both use `ArenaTopology`. `WRAP` remains the explicit compatibility mode;
   playable runs select `BOUNDED`, whose direct distances, clamped cell ranges
@@ -424,15 +429,19 @@ priority.
 Before the avatar step, `EnemyWorld.prepare_avatar_body_interaction()` resolves
 the same authored contact circles from the player's side. Ordinary mobile
 non-bosses receive a bounded physical push by default and therefore yield
-gradually without changing either movement stat or applying a slow status.
+gradually without changing either movement stat or applying a slow status. The
+shared yield cap is 72 world units per second, forty percent of the base Galopp
+value, so contact is easier to work through but never equals free travel.
 `EnemyDefinition.player_push_enabled` is the explicit opt-out; bosses and
 `STATIC_FLOW_OBSTACLE` bodies always hard-clip the proposed avatar displacement.
 The contacted body still cannot cross another contact circle or the arena edge.
 
 Standard-wave placement evaluates twelve sectors around the current camera.
 Only enemies on screen or in the near offscreen band contribute pressure;
-closer bodies count more and a bacterial cluster counts twice. New bodies are
-placed beyond the viewport in one of the three lowest-pressure valid sectors.
+closer bodies count more and a bacterial cluster counts twice. A packet leases
+one, two or three separated fronts from the lowest-pressure sectors according
+to its size. Its bodies receive small deterministic angle offsets and remain
+beyond the actual viewport until they enter together.
 Materializing enemies publish their leased render slot immediately, so a batch
 does not create a transient invisible frame.
 

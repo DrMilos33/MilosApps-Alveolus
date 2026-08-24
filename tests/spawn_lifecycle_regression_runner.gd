@@ -26,7 +26,7 @@ func _run() -> void:
 		game.discovery_manager.mark_seen(discovery_id)
 	game.selected_level = game.levels[1]
 	game.start_run()
-	game.spawn_accumulator = 9999.0
+	game.standard_wave_director.cancel()
 	game.treatment_controller.enabled = false
 
 	_test_single_pool_reactivation(game)

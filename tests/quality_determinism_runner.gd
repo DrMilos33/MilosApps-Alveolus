@@ -223,12 +223,22 @@ func _canonical_gameplay_state(game: Node, frame: int) -> String:
 		int(game.state.boss_defeated),
 	])
 	parts.append("avatar=%s,%s" % [_v(game.avatar.global_position), _v(game.avatar.velocity)])
-	parts.append("combat=%d,%s,%s,%s,%d" % [
+	parts.append("combat=%d,%s,%s,%d" % [
 		int(game.defeats),
-		_f(game.spawn_accumulator),
 		_f(game.therapy_timer),
 		_f(game.treatment_controller.cooldown_remaining),
 		int(game.rng.state),
+	])
+	var wave: Dictionary = game.standard_wave_director.snapshot()
+	parts.append("wave=%d,%s,%s,%s,%d,%d,%d,%d" % [
+		int(wave["wave_ordinal"]),
+		_f(float(wave["wave_age_seconds"])),
+		_f(float(wave["seconds_until_forced_wave"])),
+		_f(float(wave["slot_credit"])),
+		int(wave["current_total_weight"]),
+		int(wave["current_alive_weight"]),
+		int(wave["pending_intents"]),
+		int(wave["random_state"]),
 	])
 	parts.append("stats=%s" % _canonical_stats(game.stats))
 	parts.append("abilities=%s" % _canonical_abilities(game.ability_controller))

@@ -121,6 +121,7 @@ func _check_common_config(
 	_check(is_equal_approx(config.spawn_ramp_seconds, ramp_seconds), "Praxis-Config bewahrt die Rampe %.0f s" % ramp_seconds)
 	_check(is_equal_approx(config.spawn_rate_multiplier, spawn_multiplier), "Praxis-Config bewahrt den Spawnfaktor %.2f" % spawn_multiplier)
 	_check(config.regular_spawns_enabled == regular_spawns, "Praxis-Config bewahrt den Wellenmodus")
+	_check(config.regular_spawn_weight_cap == (145 if regular_spawns else 0), "Praxis-Config überträgt ihr explizites Wellengewichtslimit")
 	_check(config.automatic_boss_enabled == automatic_boss, "Praxis-Config bewahrt den automatischen Bossmodus")
 	_check(not config.event_driven_intro and not config.has_deadline(), "Praxis-Config deaktiviert Introereignisse und Deadline")
 	_check(is_zero_approx(config.reward_multiplier), "Praxis-Config deaktiviert Belohnungen")
@@ -219,9 +220,9 @@ func _check_practice_group_spawns_ignore_discovery_gate(game: Node) -> void:
 			groups_before += 1
 	game.config.cluster_chance_start = 1.0
 	game.config.cluster_chance_end = 1.0
-	game.spawn_accumulator = 0.0
+	game.standard_wave_director.force_next_wave()
 	game.state.elapsed = 1.0
-	game._spawn_step(0.1)
+	game._spawn_step(4.5)
 	var groups_after := 0
 	for enemy in game.enemies:
 		if enemy.definition != null and enemy.definition.id == &"bacterial_cluster":

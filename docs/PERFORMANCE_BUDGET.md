@@ -46,10 +46,12 @@ percentiles from a release build.
 
 `CombatCapacity` is a gameplay contract, not merely an inactive pool size.
 
-- Regular spawns stop allocating at 600; the remaining 40 slots are reserved
-  for bosses and critical phase spawns.
-- Deferred regular spawn debt is stored as bounded counters per archetype and
-  drained when slots become available. No emergency nodes are allocated.
+- The regular enemy pool stops allocating at 600; the remaining 40 slots are
+  reserved for bosses and critical phase spawns. Ordinary campaign/practice
+  melee population is additionally capped at 145 weighted units.
+- `StandardWaveDirector` stores at most 64 pending intents and materializes at
+  most four per fixed tick. Fewer than four free weighted units freeze its gate;
+  no standard-wave debt is accrued and no emergency nodes are allocated.
 - Pickup overflow merges into existing stacks without losing sample value.
 - Projectile state is capped at 512. Quality reduction may remove only trails,
   glow and secondary particles; it never removes a gameplay projectile body,
