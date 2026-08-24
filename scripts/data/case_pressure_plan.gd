@@ -28,17 +28,35 @@ static func default_for_case_order(case_order: int) -> CasePressurePlan:
 	match case_order:
 		1:
 			return create(
+				PackedFloat32Array([60.0, 120.0]),
+				PackedFloat32Array(),
+				1
+			)
+		2:
+			return create(
 				PackedFloat32Array([25.0, 60.0, 95.0, 130.0]),
 				PackedFloat32Array(),
 				2
 			)
-		2:
+		3:
+			return create(
+				PackedFloat32Array([22.5, 60.0, 97.5, 135.0]),
+				PackedFloat32Array(),
+				1
+			)
+		4:
 			return create(
 				PackedFloat32Array([20.0, 60.0, 100.0, 140.0]),
 				PackedFloat32Array(),
 				1
 			)
-		3:
+		5:
+			return create(
+				PackedFloat32Array([20.0, 60.0, 100.0, 140.0]),
+				PackedFloat32Array([65.0, 105.0]),
+				1
+			)
+		6:
 			return create(
 				PackedFloat32Array([20.0, 60.0, 100.0, 140.0]),
 				PackedFloat32Array([45.0, 85.0, 125.0]),

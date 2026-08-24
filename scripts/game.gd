@@ -72,7 +72,6 @@ var relocation_rng := RandomNumberGenerator.new()
 var spawn_attempt_index: int = 0
 var spawn_angle_cursor: float = 0.0
 var enemy_definitions: Dictionary
-var clinic_definitions: Dictionary
 var research_definitions: Array[ResearchDefinition]
 var discovery_definitions: Dictionary
 var arena_visuals: Dictionary
@@ -83,6 +82,14 @@ var ability_definitions: Dictionary
 var case_traits: Dictionary
 var finding_definitions: Dictionary
 var reaction_definitions: Dictionary
+var practice_scenarios: Array[PracticeScenarioDefinition] = []
+var practice_boss_profiles: Array[PracticeBossProfile] = []
+var selected_practice_scenario_id: StringName = &""
+var selected_practice_boss_profile_id: StringName = &""
+var practice_presenter_revision: int = 0
+var test_tools_available: bool = false
+var run_test_settings: RunTestSettings = RunTestSettings.new()
+var run_test_settings_repository: RunTestSettingsRepository
 
 var topology: ArenaTopology
 var simulation_root: Node2D
@@ -189,7 +196,6 @@ var support_timer: float = 0.0
 var life_regeneration_accumulator: float = 0.0
 var pressure_grace_timer: float = 0.0
 var pickup_merge_cursor: int = 0
-var meta_refresh_timer: float = 0.0
 var defeats: int = 0
 var defeat_reward_survival_bucket: int = -1
 var reroll_available: bool = false
@@ -274,7 +280,6 @@ func _ready() -> void:
 		selected_level = levels[1]
 	config = ContentCatalog.create_run_config(selected_level, quick_run)
 	enemy_definitions = ContentCatalog.enemy_definitions()
-	clinic_definitions = ContentCatalog.clinic_job_definitions()
 	research_definitions = ContentCatalog.research_definitions()
 	discovery_definitions = ContentCatalog.discovery_definitions()
 	arena_visuals = ContentCatalog.arena_visual_definitions()
@@ -285,6 +290,12 @@ func _ready() -> void:
 	case_traits = ContentCatalog.case_trait_definitions()
 	finding_definitions = ContentCatalog.finding_definitions()
 	reaction_definitions = ContentCatalog.reaction_definitions()
+	test_tools_available = OS.is_debug_build()
+	if test_tools_available:
+		practice_scenarios = PracticeScenarioDefinition.catalog()
+		practice_boss_profiles = PracticeBossProfile.catalog()
+		run_test_settings_repository = RunTestSettingsRepository.new()
+		run_test_settings = run_test_settings_repository.load_settings()
 	rng.seed = config.random_seed
 	topology = ArenaTopology.new(config.arena_rect(), ArenaTopology.BoundaryMode.BOUNDED)
 
@@ -415,11 +426,10 @@ func _ready() -> void:
 	hud.abort_confirmed.connect(_on_abort_confirmed)
 	hud.abort_cancelled.connect(_on_abort_cancelled)
 	hud.retry_requested.connect(_on_retry_requested)
-	hud.result_levels_requested.connect(_show_level_select)
+	hud.result_levels_requested.connect(_on_result_levels_requested)
 	hud.result_campus_requested.connect(_show_campus)
-	hud.offline_claim_requested.connect(_on_offline_claim_requested)
-	hud.clinic_job_start_requested.connect(_on_clinic_job_start_requested)
-	hud.clinic_job_claim_requested.connect(_on_clinic_job_claim_requested)
+	hud.practice_scenario_selected.connect(_on_practice_scenario_selected)
+	hud.practice_boss_profile_selected.connect(_on_practice_boss_profile_selected)
 	hud.research_purchase_requested.connect(_on_research_purchase_requested)
 	hud.research_reset_requested.connect(_on_research_reset_requested)
 	hud.research_tab_changed.connect(_on_research_tab_changed)
@@ -437,6 +447,10 @@ func _ready() -> void:
 	hud.run_stats_visibility_changed.connect(_on_run_stats_visibility_changed)
 	hud.ui_settings_changed.connect(_on_ui_settings_changed)
 	hud.settings_reset_bindings_requested.connect(_on_settings_reset_bindings_requested)
+	hud.test_damage_immunity_changed.connect(_on_test_damage_immunity_changed)
+	hud.test_outgoing_damage_bonus_percent_changed.connect(_on_test_outgoing_damage_bonus_percent_changed)
+	hud.test_movement_speed_percent_changed.connect(_on_test_movement_speed_percent_changed)
+	hud.test_values_reset_requested.connect(_on_test_values_reset_requested)
 	if hud.has_signal(&"new_game_requested"):
 		hud.connect(&"new_game_requested", _on_new_game_requested)
 	hud.context_detail_opened.connect(_on_context_detail_opened)
@@ -465,6 +479,8 @@ func _ready() -> void:
 	input_glyph_service.configure(UISettingsState.GLYPH_KEYBOARD)
 	hud.configure_input_glyphs(input_glyph_service)
 	hud.configure_ui_settings(meta.ui_settings)
+	hud.configure_test_settings(run_test_settings, test_tools_available)
+	hud.configure_practice_tests(test_tools_available)
 	hud.set_run_stats_visibility(meta.show_run_stats)
 	avatar.set_character_name_visible(meta.ui_settings.show_character_name)
 	discovery_manager = DiscoveryManager.new()
@@ -485,17 +501,6 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_ability_target_preview()
-	meta_refresh_timer -= delta
-	if meta_refresh_timer <= 0.0:
-		meta_refresh_timer = 1.0
-		meta.accrue_time()
-		if flow_state == GameFlowState.State.PRACTICE:
-			hud.refresh_practice(meta, clinic_definitions)
-		elif flow_state == GameFlowState.State.RESEARCH:
-			_sync_progression_availability()
-			hud.refresh_research(meta, research_definitions)
-		elif flow_state == GameFlowState.State.CAMPUS:
-			hud.refresh_campus(meta, clinic_definitions)
 	if pause_smoke:
 		_pause_smoke_step(delta)
 	if flow_state == GameFlowState.State.RUNNING and state != null and state.active and stress_test:
@@ -900,16 +905,157 @@ func _show_campus(reset_route: bool = true) -> void:
 	meta.accrue_time()
 	_save_meta()
 	_set_flow(GameFlowState.State.CAMPUS)
-	hud.show_campus(meta, clinic_definitions)
+	hud.show_campus(meta)
 	if bool(meta.tutorial_status.get(&"research_guidance_pending", false)) and hud.has_method("show_campus_research_guidance"):
 		hud.call("show_campus_research_guidance")
 	if reset_route:
 		ui_router.reset(&"campus")
 
 func _show_practice() -> void:
+	if not test_tools_available:
+		_show_campus(false)
+		return
+	_cleanup_run_nodes()
+	avatar.input_enabled = false
+	avatar.hide()
 	_route_to(&"practice")
 	_set_flow(GameFlowState.State.PRACTICE)
-	hud.show_practice(meta, clinic_definitions)
+	hud.show_practice(_practice_view_model())
+
+
+func _practice_view_model() -> PracticeScreenViewModel:
+	var scenario_offers: Array[PracticeScreenViewModel.ScenarioOfferViewModel] = []
+	for scenario in practice_scenarios:
+		scenario_offers.append(PracticeScreenViewModel.ScenarioOfferViewModel.create(
+			scenario.get_id(),
+			scenario.get_title(),
+			scenario.get_description(),
+			scenario.get_facts_text(),
+			test_tools_available,
+			scenario.requires_boss_profile()
+		))
+	var boss_offers: Array[PracticeScreenViewModel.BossProfileOfferViewModel] = []
+	for profile in practice_boss_profiles:
+		boss_offers.append(PracticeScreenViewModel.BossProfileOfferViewModel.create(
+			profile.get_id(),
+			profile.get_title(),
+			profile.get_description(),
+			_practice_boss_facts(profile),
+			test_tools_available
+		))
+	practice_presenter_revision += 1
+	return PracticeScreenViewModel.create(
+		practice_presenter_revision,
+		test_tools_available,
+		selected_practice_scenario_id,
+		selected_practice_boss_profile_id,
+		scenario_offers,
+		boss_offers
+	)
+
+
+func _practice_boss_facts(profile: PracticeBossProfile) -> String:
+	var range_text := "Fernkampf" if profile.is_ranged_enabled() else "Nahkampf"
+	var phase_text := "%d Phasen" % profile.get_phase_minions().size() if not profile.get_phase_minions().is_empty() else "Keine Adds"
+	return "%s · %s · Leben %.2f×" % [range_text, phase_text, profile.get_health_multiplier()]
+
+
+func _on_practice_scenario_selected(id: StringName) -> void:
+	if not test_tools_available or flow_state != GameFlowState.State.PRACTICE:
+		return
+	var scenario := PracticeScenarioDefinition.get_by_id(id)
+	if scenario == null:
+		return
+	selected_practice_scenario_id = id
+	selected_practice_boss_profile_id = &""
+	if scenario.requires_boss_profile():
+		hud.refresh_practice(_practice_view_model())
+		return
+	_begin_practice_preparation(scenario, null)
+
+
+func _on_practice_boss_profile_selected(id: StringName) -> void:
+	if not test_tools_available or flow_state != GameFlowState.State.PRACTICE:
+		return
+	var scenario := PracticeScenarioDefinition.get_by_id(selected_practice_scenario_id)
+	var profile := PracticeBossProfile.get_by_id(id)
+	if scenario == null or profile == null or not scenario.requires_boss_profile():
+		return
+	selected_practice_boss_profile_id = id
+	_begin_practice_preparation(scenario, profile)
+
+
+func _begin_practice_preparation(scenario: PracticeScenarioDefinition, profile: PracticeBossProfile) -> void:
+	if scenario == null:
+		return
+	selected_level = _practice_baseline_level(scenario, profile)
+	var default_loadout := PreparedLoadout.create(
+		&"treatment_precision",
+		[&"ability_defense_burst", &"ability_treatment_line"]
+	)
+	pending_run_context = RunContext.create_practice(
+		scenario,
+		profile,
+		_practice_seed(scenario.get_id(), profile.get_id() if profile != null else &""),
+		default_loadout,
+		meta.talent_ranks
+	)
+	pending_run_context.level_id = selected_level.id
+	pending_preparation_loadout = default_loadout.duplicate_loadout()
+	var available := _practice_available_loadout_ids()
+	pending_loadout_draft = LoadoutDraft.from_prepared(
+		pending_preparation_loadout,
+		loadout_modules,
+		available,
+		meta.preparation_capacity()
+	)
+	pending_replacement_component = &""
+	_set_flow(GameFlowState.State.PREPARATION)
+	ui_router.push_screen(&"preparation", null, get_viewport().gui_get_focus_owner())
+	_refresh_preparation()
+
+
+func _practice_baseline_level(scenario: PracticeScenarioDefinition, profile: PracticeBossProfile) -> LevelDefinition:
+	var requested_order := scenario.get_spawn_baseline_case_order()
+	if profile != null:
+		for level in levels:
+			if level.id == profile.get_source_case_id() and not level.is_tutorial:
+				return level
+	for level in levels:
+		if level.order == requested_order and not level.is_tutorial:
+			return level
+	return levels[mini(1, levels.size() - 1)]
+
+
+func _practice_seed(scenario_id: StringName, profile_id: StringName = &"") -> int:
+	var seed_by_scenario := {
+		PracticeScenarioDefinition.SPAWN_TEST_ID: 2026082401,
+		PracticeScenarioDefinition.OBSTACLE_TEST_ID: 2026082402,
+		PracticeScenarioDefinition.BOSS_TEST_ID: 2026082403,
+	}
+	var seed := int(seed_by_scenario.get(scenario_id, 2026082400))
+	for index in range(practice_boss_profiles.size()):
+		if practice_boss_profiles[index].get_id() == profile_id:
+			return seed + index + 1
+	return seed
+
+
+func _practice_available_loadout_ids() -> Dictionary:
+	var result: Dictionary = {}
+	for id in LoadoutAvailabilityPolicy.AVAILABLE_TREATMENT_IDS:
+		if loadout_modules.has(id):
+			result[id] = true
+	for id in LoadoutAvailabilityPolicy.AVAILABLE_ABILITY_IDS:
+		if loadout_modules.has(id):
+			result[id] = true
+	return result
+
+
+func _practice_loadout_catalog() -> Array:
+	var result: Array = []
+	for id in _practice_available_loadout_ids():
+		result.append(loadout_modules[id])
+	return result
 
 func _show_research() -> void:
 	_route_to(&"research")
@@ -957,7 +1103,8 @@ func _on_navigate_requested(destination: StringName) -> void:
 		_save_meta()
 	match destination:
 		&"practice":
-			_show_practice()
+			if test_tools_available:
+				_show_practice()
 		&"research":
 			_show_research()
 		&"levels":
@@ -997,6 +1144,9 @@ func _on_back_requested() -> void:
 				return
 			if pending_replacement_component != &"":
 				_on_preparation_replacement_cancelled()
+			elif pending_run_context != null and pending_run_context.is_practice_test():
+				ui_router.back(get_viewport().gui_get_focus_owner())
+				_show_practice()
 			else:
 				_show_level_select(false)
 				ui_router.back(get_viewport().gui_get_focus_owner())
@@ -1026,7 +1176,7 @@ func _restore_screen(target_state: GameFlowState.State) -> void:
 			hud.show_pause(_can_skip_intro(), stats, state)
 		GameFlowState.State.PRACTICE:
 			_set_flow(GameFlowState.State.PRACTICE)
-			hud.show_practice(meta, clinic_definitions)
+			hud.show_practice(_practice_view_model())
 		GameFlowState.State.RESEARCH:
 			_set_flow(GameFlowState.State.RESEARCH)
 			_sync_progression_availability()
@@ -1090,10 +1240,60 @@ func _on_ui_settings_changed(settings: UISettingsState) -> void:
 	_save_meta()
 
 
+func _on_test_damage_immunity_changed(enabled: bool) -> void:
+	if test_tools_available and run_test_settings.set_damage_immunity(enabled):
+		_commit_test_settings_change()
+
+
+func _on_test_outgoing_damage_bonus_percent_changed(percent: int) -> void:
+	if test_tools_available and run_test_settings.set_outgoing_damage_bonus_percent(percent):
+		_commit_test_settings_change()
+
+
+func _on_test_movement_speed_percent_changed(percent: int) -> void:
+	if test_tools_available and run_test_settings.set_movement_speed_percent(percent):
+		_commit_test_settings_change()
+
+
+func _on_test_values_reset_requested() -> void:
+	if test_tools_available and run_test_settings.reset_defaults():
+		_commit_test_settings_change()
+
+
+func _commit_test_settings_change() -> void:
+	if run_test_settings_repository != null:
+		run_test_settings_repository.save(run_test_settings)
+	hud.configure_test_settings(run_test_settings, test_tools_available)
+	_apply_live_test_settings()
+
+
+func _apply_live_test_settings() -> void:
+	if not test_tools_available:
+		return
+	var damage_multiplier := run_test_settings.outgoing_damage_multiplier()
+	for enemy in enemies:
+		if is_instance_valid(enemy):
+			enemy.set_incoming_player_damage_multiplier(damage_multiplier)
+	if build_state == null or stats == null:
+		return
+	build_state.remove_source(&"debug_test_values")
+	build_state.add_modifier_dictionary(&"debug_test_values", 0, {
+		"stat_id": RunBuildState.MOVEMENT_SPEED,
+		"operation": &"multiply",
+		"value": run_test_settings.movement_speed_multiplier(),
+		"priority": 1000,
+	})
+	stats.refresh_resolved_run_build()
+	if avatar != null:
+		avatar.queue_redraw()
+	if hud != null:
+		hud.update_run_stats(stats, state)
+
+
 func _force_current_runtime_ui_settings(settings: UISettingsState) -> void:
 	if settings == null:
 		return
-	# Save v6 keeps both fields for backwards compatibility, but this milestone
+	# Save v7 keeps both legacy fields for backwards compatibility, but this milestone
 	# has one visible presentation/input contract. Old 200%- or gamepad-forced
 	# saves therefore cannot silently alter the current runtime.
 	settings.ui_scale = 1.0
@@ -1121,10 +1321,21 @@ func _on_context_detail_closed() -> void:
 		ui_router.close_modal(get_viewport().gui_get_focus_owner())
 
 func _on_retry_requested() -> void:
+	if _is_practice_test():
+		var retry_context := active_run_context.duplicate_context()
+		start_run(retry_context)
+		return
 	if selected_level != null and not quick_run:
 		_show_preparation()
 	else:
 		start_run()
+
+
+func _on_result_levels_requested() -> void:
+	if _is_practice_test():
+		_show_practice()
+	else:
+		_show_level_select()
 
 func _show_preparation() -> void:
 	if selected_level == null:
@@ -1180,29 +1391,34 @@ func _refresh_preparation() -> void:
 		return
 	pending_preparation_loadout = pending_loadout_draft.to_prepared()
 	var validation := pending_loadout_draft.validate()
-	var case_trait_value: Variant = case_traits.get(pending_run_context.visible_trait_id)
+	var practice_mode := pending_run_context != null and pending_run_context.is_practice_test()
+	var scenario := pending_run_context.practice_scenario as PracticeScenarioDefinition if practice_mode else null
+	var case_trait_value: Variant = null if practice_mode else case_traits.get(pending_run_context.visible_trait_id)
+	var available_ids := _practice_available_loadout_ids() if practice_mode else LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	var view_model := {
-		"level_title": selected_level.title,
-		"level_description": selected_level.briefing_text,
-		"duration_text": selected_level.duration_text(),
-		"boss_time_text": selected_level.boss_time_text(),
-		"tutorial_locked": selected_level.is_tutorial,
-		"can_skip_intro": selected_level.is_tutorial and not meta.intro_skipped,
+		"level_title": scenario.get_title() if scenario != null else selected_level.title,
+		"level_description": scenario.get_description() if scenario != null else selected_level.briefing_text,
+		"duration_text": "∞" if scenario != null and scenario.is_endless() else ("Bis zum Boss-Sieg" if scenario != null else selected_level.duration_text()),
+		"boss_time_text": "Nach 2 Sekunden" if scenario != null and scenario.requires_boss_profile() else ("Kein Boss" if scenario != null else selected_level.boss_time_text()),
+		"tutorial_locked": false if practice_mode else selected_level.is_tutorial,
+		"can_skip_intro": false if practice_mode else selected_level.is_tutorial and not meta.intro_skipped,
 		"trait": case_trait_value,
+		"trait_title": "Lokaler Testlauf" if practice_mode else "Kein Fallmerkmal",
+		"trait_effect": "Keine Fallmerkmale, Befunde oder Belohnungen." if practice_mode else "Kein besonderer Einfluss.",
 		"validation": validation,
-		"finding_hint": _preparation_finding_hint(),
-		"unlocked_ids": meta.unlocked_module_ids(loadout_modules, research_definitions),
-		"available_ids": LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete()),
-		"availability_reasons": _preparation_availability_reasons(),
-		"locked_slot_ids": {LoadoutSlotId.ACTIVE_2: true} if not _first_case_complete() else {},
+		"finding_hint": "Befunde sind im Testlauf deaktiviert." if practice_mode else _preparation_finding_hint(),
+		"unlocked_ids": available_ids if practice_mode else meta.unlocked_module_ids(loadout_modules, research_definitions),
+		"available_ids": available_ids,
+		"availability_reasons": {} if practice_mode else _preparation_availability_reasons(),
+		"locked_slot_ids": {} if practice_mode else ({LoadoutSlotId.ACTIVE_2: true} if not _first_case_complete() else {}),
 		"slot_lock_reasons": {
 			LoadoutSlotId.ACTIVE_2: "Wird nach Abschluss von Fall 1 freigeschaltet."
-		} if not _first_case_complete() else {},
+		} if not practice_mode and not _first_case_complete() else {},
 		"slot_snapshot": pending_loadout_draft.slot_snapshot(),
 		"loadout_snapshot": pending_preparation_loadout.to_dict(),
 		"replacement_component": pending_replacement_component,
 	}
-	hud.show_preparation(view_model, loadout_modules.values(), pending_preparation_loadout)
+	hud.show_preparation(view_model, _practice_loadout_catalog() if practice_mode else loadout_modules.values(), pending_preparation_loadout)
 
 func _preparation_finding_hint() -> String:
 	return "Der genaue Befund entsteht während der Behandlung."
@@ -1224,7 +1440,7 @@ func _preparation_availability_reasons() -> Dictionary:
 func _on_preparation_component_requested(id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
 		return
-	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
+	var available := _practice_available_loadout_ids() if pending_run_context.is_practice_test() else LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	if not bool(available.get(id, false)) or not loadout_modules.has(id):
 		return
 	var result := pending_loadout_draft.equip(id)
@@ -1235,9 +1451,9 @@ func _on_preparation_slot_component_requested(slot_id: StringName, id: StringNam
 		return
 	if not LoadoutSlotId.planning().has(slot_id) or not loadout_modules.has(id):
 		return
-	if slot_id == LoadoutSlotId.ACTIVE_2 and not _first_case_complete():
+	if slot_id == LoadoutSlotId.ACTIVE_2 and not pending_run_context.is_practice_test() and not _first_case_complete():
 		return
-	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
+	var available := _practice_available_loadout_ids() if pending_run_context.is_practice_test() else LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	if not bool(available.get(id, false)):
 		return
 	# The plan already names an explicit target slot, so replacement is atomic
@@ -1256,7 +1472,7 @@ func _on_preparation_slot_requested(slot_id: StringName) -> void:
 		return
 	if not LoadoutSlotId.planning().has(slot_id):
 		return
-	if slot_id == LoadoutSlotId.ACTIVE_2 and not _first_case_complete():
+	if slot_id == LoadoutSlotId.ACTIVE_2 and not pending_run_context.is_practice_test() and not _first_case_complete():
 		return
 	var result: LoadoutChangeResult
 	if pending_replacement_component != &"":
@@ -1293,9 +1509,10 @@ func _handle_loadout_change(result: LoadoutChangeResult) -> void:
 		return
 	pending_preparation_loadout = pending_loadout_draft.to_prepared()
 	if pending_loadout_draft.validate().valid:
-		meta.set_prepared_loadout(selected_level.id, pending_preparation_loadout)
 		pending_run_context.loadout_snapshot = pending_preparation_loadout.duplicate_loadout()
-		_save_meta()
+		if not pending_run_context.is_practice_test():
+			meta.set_prepared_loadout(selected_level.id, pending_preparation_loadout)
+			_save_meta()
 	hud.complete_preparation_change(result.target_slot)
 	_refresh_preparation()
 
@@ -1329,9 +1546,10 @@ func _on_preparation_start_requested(snapshot: Dictionary) -> void:
 		_refresh_preparation()
 		return
 	pending_preparation_loadout = requested.duplicate_loadout()
-	meta.set_prepared_loadout(selected_level.id, requested)
 	pending_run_context.loadout_snapshot = requested.duplicate_loadout()
-	_save_meta()
+	if not pending_run_context.is_practice_test():
+		meta.set_prepared_loadout(selected_level.id, requested)
+		_save_meta()
 	start_run(pending_run_context)
 
 func start_run(run_context: RunContext = null) -> void:
@@ -1343,7 +1561,10 @@ func start_run(run_context: RunContext = null) -> void:
 	active_loadout = active_run_context.loadout_snapshot.duplicate_loadout() if active_run_context != null and active_run_context.loadout_snapshot != null else null
 	if active_run_context != null:
 		config.random_seed = active_run_context.seed
-		_apply_case_trait_to_config(active_run_context.visible_trait_id)
+		if active_run_context.is_practice_test():
+			_configure_practice_run_config(active_run_context)
+		else:
+			_apply_case_trait_to_config(active_run_context.visible_trait_id)
 	if stress_test:
 		_configure_stress_run_config()
 	_compile_enemy_runtime_resistance_profiles()
@@ -1481,6 +1702,7 @@ func start_run(run_context: RunContext = null) -> void:
 		run_session.reset()
 		run_session.start(active_run_context)
 	_configure_tactical_run(treatment)
+	_apply_live_test_settings()
 	mastery_tracker.begin_run(selected_level.id, config.run_duration_seconds)
 	mastery_tracker.record_stability(state.stability, state.max_stability)
 	hud.update_run_stats(stats, state)
@@ -1505,9 +1727,13 @@ func start_run(run_context: RunContext = null) -> void:
 	else:
 		treatment_controller.enabled = true
 		hud.update_timer(0.0, config.run_duration_seconds, config.final_deadline_seconds, false)
-		for index in range(3):
+		for index in range(config.initial_small_enemy_count):
 			_spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0 + index * 34.0, _enemy_body_radius(&"pneumococcus")))
-		if discovery_manager.request(&"patient_stability", null):
+		for index in range(config.initial_cluster_enemy_count):
+			_spawn_enemy(&"bacterial_cluster", _spawn_position_around_avatar(520.0 + index * 46.0, _enemy_body_radius(&"bacterial_cluster")))
+		if _is_practice_test():
+			_spawn_practice_obstacles()
+		elif discovery_manager.request(&"patient_stability", null):
 			_try_present_next_discovery()
 	if stress_test:
 		for index in range(600):
@@ -1638,6 +1864,8 @@ func _stress_number_option(arguments: PackedStringArray, prefix: String, web_key
 	return fallback
 
 func _resolved_run_context(requested: RunContext) -> RunContext:
+	if requested != null and requested.is_practice_test():
+		return requested.duplicate_context()
 	if selected_level == null or selected_level.is_tutorial:
 		return null
 	var resolved: RunContext = null
@@ -1655,6 +1883,69 @@ func _resolved_run_context(requested: RunContext) -> RunContext:
 			_first_case_complete()
 		)
 	return resolved
+
+
+func _configure_practice_run_config(context: RunContext) -> void:
+	var scenario := context.practice_scenario as PracticeScenarioDefinition
+	if scenario == null:
+		return
+	config.event_driven_intro = false
+	config.final_deadline_seconds = -1.0
+	config.reward_multiplier = 0.0
+	config.experience_gain_multiplier = 1.0
+	config.case_pressure_plan = null
+	config.case_pressure_targets_stationary = false
+	config.initial_small_enemy_count = scenario.get_initial_small_count()
+	config.initial_cluster_enemy_count = scenario.get_initial_medium_count()
+	config.spawn_ramp_seconds = scenario.get_spawn_ramp_seconds()
+	config.spawn_rate_multiplier = scenario.get_spawn_rate_multiplier()
+	config.cluster_chance_start = 0.5 if scenario.are_waves_enabled() else 0.0
+	config.cluster_chance_end = 0.5 if scenario.are_waves_enabled() else 0.0
+	config.regular_spawns_enabled = scenario.are_waves_enabled()
+	config.automatic_boss_enabled = scenario.requires_boss_profile()
+	config.run_duration_seconds = 2.0 if scenario.requires_boss_profile() else STRESS_RUN_SECONDS
+	if not scenario.requires_boss_profile():
+		return
+	var profile := context.practice_boss_profile as PracticeBossProfile
+	if profile == null:
+		config.automatic_boss_enabled = false
+		return
+	config.boss_enemy_id = profile.get_enemy_id()
+	config.boss_health_multiplier = profile.get_health_multiplier()
+	config.enemy_speed_multiplier = profile.get_enemy_speed_multiplier()
+	config.boss_speed_multiplier = profile.get_boss_speed_multiplier()
+	config.contact_damage_multiplier = profile.get_contact_damage_multiplier()
+	config.boss_ranged_enabled = profile.is_ranged_enabled()
+	config.boss_projectile_damage_multiplier = profile.get_projectile_damage_multiplier()
+	config.boss_wave_amplitude = profile.get_wave_amplitude()
+	config.boss_phase_minions = profile.get_phase_minions()
+	config.boss_count = profile.get_boss_count()
+
+
+func _is_practice_test() -> bool:
+	return active_run_context != null and active_run_context.is_practice_test()
+
+
+func _spawn_practice_obstacles() -> void:
+	if not _is_practice_test():
+		return
+	var scenario := active_run_context.practice_scenario as PracticeScenarioDefinition
+	if scenario == null:
+		return
+	for obstacle in scenario.get_obstacles():
+		var request := EnemySpawnRequest.create(
+			obstacle.get_enemy_id(),
+			obstacle.get_position(),
+			obstacle.get_visual_id(),
+			obstacle.get_health_multiplier(),
+			obstacle.get_movement_multiplier(),
+			obstacle.get_contact_damage_multiplier(),
+			PackedInt32Array(),
+			obstacle.get_priority(),
+			&"practice_obstacle"
+		).configure_body_interaction(obstacle.get_body_role(), obstacle.get_obstacle_traversal())
+		request.metadata["preserve_spawn_position"] = true
+		_spawn_enemy(request.definition_id, request.position, -1.0, true, false, request)
 
 func _apply_case_trait_to_config(trait_id: StringName) -> void:
 	var case_trait_definition: CaseTraitDefinition = case_traits.get(trait_id)
@@ -1771,6 +2062,7 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 		if ability != null and ability_controller.equip(slot, ability):
 			ability_views.append(_ability_hud_view(ability))
 	hud.configure_active_abilities(ability_views)
+	finding_controller.clear()
 	var finding: FindingDefinition = finding_definitions.get(active_run_context.hidden_finding_id) if active_run_context != null else null
 	if finding != null:
 		finding_controller.configure(finding, maxi(1, selected_level.finding_progress_target))
@@ -1849,7 +2141,7 @@ func _hud_number(value: float, decimals: int = 0) -> String:
 
 func _spawn_step(delta: float) -> void:
 	_drain_deferred_spawns(8)
-	if selected_level.is_tutorial or stress_test:
+	if selected_level.is_tutorial or stress_test or not config.regular_spawns_enabled:
 		return
 	_offscreen_relocation_step(delta)
 	var ambient_melee_weight := _ambient_melee_weight()
@@ -1873,7 +2165,10 @@ func _spawn_step(delta: float) -> void:
 		var cluster_chance := lerpf(config.cluster_chance_start, config.cluster_chance_end, progress)
 		if finding != null and finding.behavior == FindingDefinition.Behavior.GROUPING:
 			cluster_chance = clampf(cluster_chance + finding.magnitude, 0.0, 0.85)
-		if discovery_manager.has_seen(&"pneumococcus") and rng.randf() < cluster_chance:
+		# Practice recipes author their own fixed population mix and intentionally
+		# disable discoveries, so their 50 % group contract cannot depend on a
+		# campaign discovery flag.
+		if (_is_practice_test() or discovery_manager.has_seen(&"pneumococcus")) and rng.randf() < cluster_chance:
 			type = &"bacterial_cluster"
 		var spawn_weight := 2 if type == &"bacterial_cluster" else 1
 		if ambient_melee_weight + spawn_weight > MAX_AMBIENT_MELEE_WEIGHT:
@@ -2449,6 +2744,7 @@ func _spawn_enemy(
 	var preserves_authored_position := spawn_request != null and bool(spawn_request.metadata.get("preserve_spawn_position", false))
 	var force_detailed_discovery := (
 		not preserves_authored_position
+		and not _is_practice_test()
 		and discovery_manager != null
 		and not discovery_manager.has_seen(definition.discovery_id)
 		and not discovery_spawn_reservations.has(definition.discovery_id)
@@ -2486,6 +2782,8 @@ func _spawn_enemy(
 		body_role,
 		obstacle_traversal
 	)
+	if test_tools_available:
+		enemy.set_incoming_player_damage_multiplier(run_test_settings.outgoing_damage_multiplier())
 	_apply_group_control_to_enemy(enemy)
 	enemy.global_position = bounded_position
 	enemy.reset_physics_interpolation()
@@ -2691,11 +2989,13 @@ func _on_boss_phase_changed(phase: int, enemy: InfectionEnemy) -> void:
 	if phase > boss_aggregate_phase:
 		boss_aggregate_phase = phase
 		hud.show_boss_phase(boss_aggregate_phase)
-	if discovery_manager.request(&"boss_phases", enemy):
+	if not _is_practice_test() and discovery_manager.request(&"boss_phases", enemy):
 		_try_present_next_discovery()
 
 func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
 	if not is_instance_valid(enemy) or enemy.definition == null:
+		return
+	if _is_practice_test():
 		return
 	if selected_level.is_tutorial:
 		var intro_role := StringName(intro_enemy_roles.get(enemy, &""))
@@ -2766,7 +3066,7 @@ func _damage_stat_label(source_id: StringName) -> String:
 	return String(source_id).replace("_", " ").capitalize()
 
 func _try_present_next_discovery() -> void:
-	if discovery_manager == null or not discovery_manager.active.is_empty():
+	if _is_practice_test() or discovery_manager == null or not discovery_manager.active.is_empty():
 		return
 	if flow_state not in [GameFlowState.State.RUNNING, GameFlowState.State.RESULT, GameFlowState.State.DISCOVERY_PAUSE]:
 		return
@@ -3290,6 +3590,8 @@ func _on_pressure_applied(amount: float, source_enemy: InfectionEnemy = null) ->
 
 
 func _apply_incoming_damage(amount: float, incoming_profile: DamageProfile, source_enemy: InfectionEnemy = null) -> void:
+	if test_tools_available and run_test_settings.damage_immunity_enabled():
+		return
 	if state == null or not state.active or state.level_up_pending or pressure_grace_timer > 0.0:
 		return
 	if build_state != null and source_enemy != null and source_enemy.definition != null and source_enemy.definition.id == &"bacterial_cluster":
@@ -3596,12 +3898,12 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 		return
 	var planned_sector := int(event.get(&"spawn_sector", 0))
 	var spawn_position := _case_pressure_spawn_position(planned_sector, _enemy_body_radius(&"minor_focus"))
-	var stationary_fan := selected_level.order >= 2
+	var stationary_fan := config.case_pressure_targets_stationary
 	var request := EnemySpawnRequest.create(
 		&"minor_focus",
 		spawn_position,
 		&"infection_focus",
-		1.0,
+		config.case_pressure_target_health_multiplier,
 		0.0 if stationary_fan else config.enemy_speed_multiplier,
 		config.contact_damage_multiplier,
 		PackedInt32Array(),
@@ -3619,7 +3921,7 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 		)
 	# A full critical pool consumes this authored slot without creating delayed
 	# pressure after a boss has already cancelled the remaining plan.
-	_spawn_enemy(&"minor_focus", spawn_position, 1.0, true, false, request)
+	_spawn_enemy(&"minor_focus", spawn_position, config.case_pressure_target_health_multiplier, true, false, request)
 
 
 func _case_pressure_spawn_position(planned_sector: int, body_radius: float) -> Vector2:
@@ -4080,6 +4382,8 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	if pending_finding_definition != null:
 		_present_finding(pending_finding_definition)
 		return
+	if _is_practice_test():
+		return
 	if definition.effect == &"immune_level":
 		# Abwehrzellen sind im Ausbau und am Avatar unmittelbar sichtbar. Ein
 		# zweites Discovery-Popup würde die Auswahl nur erneut unterbrechen.
@@ -4095,6 +4399,20 @@ func _on_run_finished(success: bool, reason: String) -> void:
 		get_tree().quit(0 if success else 2)
 		return
 	avatar.input_enabled = false
+	if _is_practice_test():
+		var scenario := active_run_context.practice_scenario as PracticeScenarioDefinition
+		_set_flow(GameFlowState.State.RESULT)
+		ui_router.replace_screen(&"result", null, get_viewport().gui_get_focus_owner())
+		hud.show_practice_end(
+			scenario.get_title() if scenario != null else "Lokaler Testlauf",
+			success,
+			reason,
+			state.elapsed,
+			state.level,
+			defeats
+		)
+		hud.set_result_damage_statistics(result_damage_statistics())
+		return
 	var first_intro_completion := success and selected_level.is_tutorial and not meta.has_completed_level(selected_level.id)
 	var reward := 0
 	var unlocked_new := false
@@ -4182,12 +4500,16 @@ func _on_abort_cancelled() -> void:
 func _on_abort_confirmed() -> void:
 	if flow_state != GameFlowState.State.ABORT_CONFIRMATION:
 		return
+	var was_practice := _is_practice_test()
 	if state != null:
 		state.cancel()
 	_cleanup_run_nodes()
 	avatar.input_enabled = false
 	avatar.hide()
-	_show_level_select()
+	if was_practice:
+		_show_practice()
+	else:
+		_show_level_select()
 
 func _on_intro_skip_requested() -> void:
 	if not _can_skip_intro() or flow_state not in [GameFlowState.State.PREPARATION, GameFlowState.State.MANUAL_PAUSE]:
@@ -4224,22 +4546,6 @@ func _on_intro_skip_confirmed() -> void:
 	meta.set_tutorial_step(&"intro_skipped")
 	_save_meta()
 	_show_level_select()
-
-func _on_offline_claim_requested() -> void:
-	meta.accrue_time()
-	if meta.claim_passive() > 0:
-		_save_meta()
-	hud.refresh_practice(meta, clinic_definitions)
-
-func _on_clinic_job_start_requested(id: StringName) -> void:
-	if clinic_definitions.has(id) and meta.start_job(clinic_definitions[id]):
-		_save_meta()
-	hud.refresh_practice(meta, clinic_definitions)
-
-func _on_clinic_job_claim_requested() -> void:
-	if meta.claim_job(clinic_definitions) > 0:
-		_save_meta()
-	hud.refresh_practice(meta, clinic_definitions)
 
 func _on_research_purchase_requested(id: StringName) -> void:
 	for definition in research_definitions:
@@ -4333,7 +4639,7 @@ func _talent_view_model() -> Dictionary:
 
 
 func _first_case_complete() -> bool:
-	return meta != null and meta.has_completed_level(&"localized_focus")
+	return LoadoutAvailabilityPolicy.first_case_complete(meta)
 
 
 func _sync_progression_availability() -> void:
@@ -5133,10 +5439,6 @@ func _cleanup_run_nodes() -> void:
 	hidden_nest_timers.clear()
 
 func _sanitize_meta() -> void:
-	if meta.active_job_id != &"" and not clinic_definitions.has(meta.active_job_id):
-		meta.active_job_id = &""
-		meta.job_started_at = 0
-		meta.job_finishes_at = 0
 	for definition in research_definitions:
 		var stored_rank := meta.rank(definition.id)
 		meta.research_ranks[definition.id] = clampi(stored_rank, 0, definition.max_level)

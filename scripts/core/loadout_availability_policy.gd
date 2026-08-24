@@ -14,11 +14,23 @@ const AVAILABLE_ABILITY_IDS: Array[StringName] = [
 	&"ability_defense_burst",
 	&"ability_treatment_line",
 ]
-const FIRST_CASE_LEVEL_ID := &"localized_focus"
+const FIRST_CASE_LEVEL_ID := &"early_localized_focus"
 const SECOND_ACTIVE_SLOT_ID := &"active_2"
 const TREATMENT_LINE_ID := &"ability_treatment_line"
 const TREATMENT_LINE_RESEARCH_ID := &"unlock_treatment_line"
 const TREATMENT_LINE_MILESTONE_COPY := "Wird nach Abschluss von Fall 1 freigeschaltet."
+
+
+## The completed-first-case fact is normally represented by the Fall-1
+## record. Save-v7 migration also maps an older unlocked campaign anchor to
+## order 2, where Fall 1 necessarily sits behind the player's preserved
+## progress. The order check keeps that migration from relocking slot 2 and
+## Fetter Lazer without inventing synthetic records.
+static func first_case_complete(meta: MetaProgressionState) -> bool:
+	return meta != null and (
+		meta.has_completed_level(FIRST_CASE_LEVEL_ID)
+		or meta.highest_unlocked_level >= 2
+	)
 
 
 ## `first_case_complete` is deliberately a derived progression fact instead of

@@ -49,7 +49,7 @@ func tick(delta: float) -> void:
 	elapsed += delta
 	if config.event_driven_intro:
 		return
-	if not boss_spawned and elapsed >= config.run_duration_seconds:
+	if config.automatic_boss_enabled and not boss_spawned and elapsed >= config.run_duration_seconds:
 		boss_spawned = true
 		boss_due.emit()
 	if config.has_deadline() and elapsed >= config.final_deadline_seconds and not boss_defeated:

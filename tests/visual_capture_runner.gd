@@ -1,7 +1,7 @@
 extends SceneTree
 
 const OUTPUT_DIR := "res://.codex-temp/visual_restart/screens"
-const EXPECTED_CAPTURE_COUNT := 29
+const EXPECTED_CAPTURE_COUNT := 31
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
@@ -121,7 +121,8 @@ func _capture_suite(game: Node) -> void:
 		push_error("Lexikon markiert beim Öffnen unerwartet den ersten Eintrag")
 		return
 	await _capture("lexicon")
-	if not game.hud.lexicon_master_detail.select_entry(&"pneumococcus"):
+	# `move_focus=true` also opens the compact list-to-detail view used at 200 %.
+	if not game.hud.lexicon_master_detail.select_entry(&"pneumococcus", true):
 		capture_failed = true
 		push_error("Bekannter Gegner konnte für die strukturierte Typwert-Capture nicht ausgewählt werden")
 		return
@@ -152,6 +153,14 @@ func _capture_suite(game: Node) -> void:
 	game.hud.close_all_context_details()
 	game.hud.show_settings(true, true)
 	await _capture("settings")
+	var test_values_section := game.hud.settings_screen.find_child("TestValuesSection", true, false) as Control
+	if test_values_section == null:
+		capture_failed = true
+		push_error("Debug-Einstellungen besitzen keine sichtbare Testwerte-Sektion")
+		return
+	game.hud.settings_screen.get_scroll_container().ensure_control_visible(test_values_section)
+	await _settle()
+	await _capture("settings_test_values")
 
 	game.selected_level = game.levels[0]
 	game._show_preparation()
@@ -190,6 +199,16 @@ func _capture_suite(game: Node) -> void:
 	game.hud.hide_run_prompt()
 	game.hud.show_pause(false, game.stats, game.state)
 	await _capture("pause")
+	game.hud._show_pause_test_values()
+	await _settle()
+	if game.hud.pause_screen.current_mode() != PauseOverlay.Mode.TEST \
+		or game.hud.pause_screen.test_control(&"damage_immunity") == null \
+		or game.hud.pause_screen.test_control(&"outgoing_damage_bonus_percent") == null \
+		or game.hud.pause_screen.test_control(&"movement_speed_percent") == null:
+		capture_failed = true
+		push_error("Pause-Capture besitzt keinen vollständigen Testwerte-Untermodus")
+		return
+	await _capture("pause_test_values")
 	_populate_character_stats_capture(game)
 	game.hud._show_pause_stats()
 	await _settle()
@@ -226,7 +245,7 @@ func _capture_suite(game: Node) -> void:
 
 func _populate_character_stats_capture(game: Node) -> void:
 	# Keep the visual contract honest by capturing the densest supported sheet,
-	# including all four stable accordion sections. Their disclosure state, not a
+	# including all five stable accordion sections. Their disclosure state, not a
 	# permanently expanded flat sheet, controls the visible density.
 	if game.stats.prepared_treatment == null or game.stats.prepared_treatment.id != &"treatment_precision":
 		capture_failed = true
@@ -293,6 +312,7 @@ func _verify_pause_accordion(pause_screen: PauseOverlay) -> bool:
 		&"treatment:treatment_precision",
 		&"ability:0:ability_defense_burst",
 		&"ability:1:ability_treatment_line",
+		&"ability:run:defense_cells",
 	]
 	var valid := pause_screen.current_mode() == PauseOverlay.Mode.STATS \
 		and pause_screen.stat_sections().size() == expected_ids.size() \
@@ -306,7 +326,10 @@ func _verify_pause_accordion(pause_screen: PauseOverlay) -> bool:
 	if valid:
 		return true
 	capture_failed = true
-	push_error("Charakterwerte-Capture besitzt nicht die vier stabilen fokussierbaren Accordion-Sektionen")
+	var actual_ids: Array[String] = []
+	for section in pause_screen.stat_sections():
+		actual_ids.append(String(section.get_meta(&"section_id", &"")))
+	push_error("Charakterwerte-Capture besitzt nicht die fünf stabilen fokussierbaren Accordion-Sektionen (Modus %d, IDs %s)" % [pause_screen.current_mode(), str(actual_ids)])
 	return false
 
 
@@ -327,7 +350,9 @@ func _verify_level_up_title(upgrade_screen: UpgradeOverlay) -> bool:
 func _verify_research_capture(game: Node) -> bool:
 	var screen := game.hud.progression_screen as ProgressionScreen
 	var definitions := ContentCatalog.research_definitions()
-	var valid := screen.research_columns() == 4 and definitions.size() == 8
+	var logical_width := screen.size.x
+	var expected_columns := 4 if logical_width >= 1100.0 else (3 if logical_width >= 900.0 else (2 if logical_width >= 680.0 else 1))
+	var valid := screen.research_columns() == expected_columns and definitions.size() == 10
 	for definition in definitions:
 		var action := screen.research_action(definition.id)
 		valid = valid \
@@ -344,7 +369,7 @@ func _verify_research_capture(game: Node) -> bool:
 	if valid:
 		return true
 	capture_failed = true
-	push_error("Forschungs-Capture zeigt nicht acht kompakte Karten in zwei Viererreihen oder verrät Gesamtwerte auf der Karte")
+	push_error("Forschungs-Capture verwendet nicht das responsive Kompaktraster oder verrät Gesamtwerte auf der Karte (Breite %.1f, Spalten %d/%d)" % [logical_width, screen.research_columns(), expected_columns])
 	return false
 
 
@@ -387,6 +412,7 @@ func _verify_talent_tree(screen: ProgressionScreen) -> bool:
 func _verify_upgrade_capture(game: Node, options: Array[UpgradeDefinition]) -> bool:
 	var cards: Array[Button] = game.hud.upgrade_screen.cards()
 	var valid: bool = cards.size() == options.size()
+	var diagnostics: Array[String] = []
 	var stats := game.stats as PlayerStats
 	for index in range(mini(cards.size(), options.size())):
 		var card: Button = cards[index]
@@ -410,16 +436,28 @@ func _verify_upgrade_capture(game: Node, options: Array[UpgradeDefinition]) -> b
 			elif node is Label:
 				visible_copy += (node as Label).text + " "
 		if option.id == &"rhythm":
-			valid = valid and visible_copy.contains("/s") and not visible_copy.contains("Intervall")
+			valid = valid \
+				and visible_copy.contains("Attack Speed") \
+				and visible_copy.contains("%") \
+				and not visible_copy.contains("Intervall") \
+				and not visible_copy.contains("/s")
 		if option.id == &"neutrophils":
 			valid = valid and visible_copy.contains("Radius 4")
 		valid = valid \
 			and not visible_copy.to_lower().contains(" px") \
 			and not visible_copy.contains("Stufe")
+		diagnostics.append("%s icon=%s/%s size=%.1f title=%s copy=%s" % [
+			String(option.id),
+			String(icon.kind) if icon != null else "<null>",
+			String(expected_icon),
+			icon.custom_minimum_size.x if icon != null else -1.0,
+			heading.text if heading != null else "<null>",
+			visible_copy,
+		])
 	if valid:
 		return true
 	capture_failed = true
-	push_error("Ausbau-Capture übernimmt Icons, Komponentenname, Rate oder Radius nicht datengetrieben")
+	push_error("Ausbau-Capture übernimmt Icons, Komponentenname, Attack-Speed-Bonus oder Radius nicht datengetrieben: %s" % str(diagnostics))
 	return false
 
 
@@ -427,8 +465,9 @@ func _verify_result_rewards(result: ResultOverlay) -> bool:
 	var strip := result.find_child("RewardStrip", true, false) as GridContainer
 	var research := result.find_child("Reward_research", true, false) as Control
 	var research_value := research.find_child("Optional_reward_Body", true, false) as Label if research != null else null
+	var expected_columns := 2 if result.size.x < ResultOverlay.COMPACT_WIDTH else 4
 	var valid := strip != null \
-		and strip.columns == 4 \
+		and strip.columns == expected_columns \
 		and strip.get_child_count() == 4 \
 		and research != null \
 		and research.find_child("RewardIcon", true, false) is SimpleIcon \
@@ -447,7 +486,7 @@ func _verify_result_rewards(result: ResultOverlay) -> bool:
 	if valid:
 		return true
 	capture_failed = true
-	push_error("Ergebnis-Capture besitzt nicht Forschung plus exakt drei angeforderte Placeholder-Spalten")
+	push_error("Ergebnis-Capture besitzt nicht Forschung plus exakt drei angeforderte Placeholder im responsiven Raster")
 	return false
 
 

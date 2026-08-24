@@ -28,13 +28,30 @@ func _run() -> void:
 
 func _test_catalog_contract() -> void:
 	var levels := ContentCatalog.level_definitions()
-	_equal(levels.size(), 4, "Der Fallkatalog behält Intro plus drei Hauptfälle")
-	_near(levels[1].initial_spawn_interval, 0.827, "Fall 1 startet mit exakt zehn Prozent weniger Standardspawns")
-	_near(levels[1].final_spawn_interval, 0.187, "Fall 1 endet mit exakt zehn Prozent weniger Standardspawns")
-	_near(levels[2].initial_spawn_interval, 0.624, "Fall 2 startet mit dem verlangsamten Spawnintervall")
-	_near(levels[2].final_spawn_interval, 0.132, "Fall 2 endet mit dem verlangsamten Spawnintervall")
-	_near(levels[3].initial_spawn_interval, 0.528, "Fall 3 startet mit dem verlangsamten Spawnintervall")
-	_near(levels[3].final_spawn_interval, 0.108, "Fall 3 endet mit dem verlangsamten Spawnintervall")
+	_equal(levels.size(), 7, "Der Fallkatalog enthält Intro plus sechs Hauptfälle")
+	var expected_ids: Array[StringName] = [
+		&"intro",
+		&"early_localized_focus",
+		&"localized_focus",
+		&"advancing_infection",
+		&"spreading_infection",
+		&"critical_infection",
+		&"severe_pneumonia",
+	]
+	var expected_intervals: Array[Vector2] = [
+		Vector2(1.10, 0.55),
+		Vector2(0.929, 0.215),
+		Vector2(0.827, 0.187),
+		Vector2(0.726, 0.160),
+		Vector2(0.624, 0.132),
+		Vector2(0.576, 0.120),
+		Vector2(0.528, 0.108),
+	]
+	for order in range(levels.size()):
+		_equal(levels[order].id, expected_ids[order], "Order %d besitzt die feste Fall-ID" % order)
+		_equal(levels[order].order, order, "Fall-ID %s bewahrt Order %d" % [levels[order].id, order])
+		_near(levels[order].initial_spawn_interval, expected_intervals[order].x, "Order %d bewahrt sein anfängliches Spawnintervall" % order)
+		_near(levels[order].final_spawn_interval, expected_intervals[order].y, "Order %d bewahrt sein finales Spawnintervall" % order)
 
 	var enemies := ContentCatalog.enemy_definitions()
 	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 45.0, "Bakterium verwendet die neue Basisgeschwindigkeit")
@@ -117,7 +134,8 @@ func _test_runtime_config_and_double_boss() -> void:
 	game.discovery_manager.configure(game.discovery_definitions, {})
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(discovery_id)
-	game.selected_level = game.levels[2]
+	game.selected_level = _level_by_id(game.levels, &"spreading_infection")
+	_true(game.selected_level != null and game.selected_level.order == 4, "Spezialboss- und Doppelboss-Test verwendet spreading_infection auf Order 4")
 
 	_assert_trait_config(game, &"monster_resistance_20", "enemy_resistance_effective_bonus", 20.0)
 	_assert_trait_config(game, &"monster_defense_10", "enemy_defense", 10.0)
@@ -200,7 +218,7 @@ func _test_runtime_config_and_double_boss() -> void:
 	first.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	second.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	_true(first.is_targetable() and second.is_targetable(), "Beide Bosse materialisieren regulär")
-	_near(first.speed_multiplier, game.selected_level.enemy_speed_multiplier * 1.35, "Der Fall-2-Boss erhält den zusätzlichen Geschwindigkeitsfaktor")
+	_near(first.speed_multiplier, game.selected_level.enemy_speed_multiplier * 1.35, "Der Fall-4-Boss erhält den zusätzlichen Geschwindigkeitsfaktor")
 	game.enemy_attack_director.step_fixed(0.65, game.run_session)
 	var hostile_count := 0
 	for projectile in game.projectiles:
@@ -260,6 +278,13 @@ func _assert_trait_config(game: Node, trait_id: StringName, property_name: Strin
 	if trait_id == &"monster_health_15":
 		_near(game.config.enemy_health_end, game.selected_level.enemy_health_end * 1.15, "Robuste Erreger skalieren auch das spätere Gegnerleben")
 		_near(game.config.boss_health_multiplier, game.selected_level.boss_health_multiplier * 1.15, "Robuste Erreger skalieren ausdrücklich auch Bossleben")
+
+
+func _level_by_id(levels: Array[LevelDefinition], id: StringName) -> LevelDefinition:
+	for level in levels:
+		if level.id == id:
+			return level
+	return null
 
 
 func _sorted_string_names(values: Array) -> PackedStringArray:

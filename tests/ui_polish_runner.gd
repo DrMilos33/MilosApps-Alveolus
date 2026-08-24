@@ -75,7 +75,7 @@ func _run() -> void:
 	hud.story_next_button.focus_entered.emit()
 	await process_frame
 	_check(hud.story_next_button.scale.is_equal_approx(Vector2.ONE), "Prologfokus bleibt innerhalb der Buttongeometrie")
-	_check(ContentCatalog.level_definitions()[1].title == "lol - name fehlt", "Fall 1 zeigt den gewünschten Platzhalternamen")
+	_check(ContentCatalog.level_definitions()[2].title == "lol - name fehlt", "Fall 2 zeigt den gewünschten Platzhalternamen")
 	_assert_compact_modal(hud.story_panel, 260.0, "Prolog")
 
 	var meta := MetaProgressionState.new()
@@ -137,7 +137,7 @@ func _run() -> void:
 	_check(hud.finding_copy_grid.columns == 1 and hud.finding_copy_grid.get_meta(&"alveolus_component", &"") == &"finding_effect_line", "Befund zeigt nur eine kompakte mechanische Effektzeile")
 	var finding_effect := hud.finding_copy_grid.get_child(0) as Label
 	_check(finding_effect != null and finding_effect.text == "+2 Bakteriengruppen" and hud.finding_copy_grid.find_children("*", "PanelContainer", true, false).is_empty(), "Befund verzichtet auf medizinische und spielerische Erklärungskacheln")
-	hud.show_end(levels[1], false, "Das Leben ist auf null gefallen.", 95.0, 2, 8, 20, false)
+	hud.show_end(levels[2], false, "Das Leben ist auf null gefallen.", 95.0, 2, 8, 20, false)
 	hud.set_result_reward_presentations([
 		RewardPresentation.research(20),
 		RewardPresentation.experience(9),
@@ -174,7 +174,7 @@ func _run() -> void:
 		AbilityDefinition.catalog()[&"ability_emergency_support"],
 	])
 	var state := RunState.new()
-	state.reset(ContentCatalog.create_run_config(ContentCatalog.level_definitions()[1], true))
+	state.reset(ContentCatalog.create_run_config(ContentCatalog.level_definitions()[2], true))
 	hud.update_run_stats(stats, state)
 	hud.set_run_stats_visibility(true)
 	hud.show_running_hud()

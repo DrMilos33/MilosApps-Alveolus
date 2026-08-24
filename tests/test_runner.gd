@@ -271,10 +271,10 @@ func _test_character_stat_rows() -> void:
 
 func _test_level_catalog_and_run_config() -> void:
 	var levels := ContentCatalog.level_definitions()
-	_assert_equal(levels.size(), 4, "Levelkatalog enthält Intro und drei Hauptfälle")
-	var expected_durations := [0.0, -1.0, -1.0, -1.0]
-	var expected_boss_times := [0.0, 180.0, 180.0, 180.0]
-	var expected_stability := [50.0, 50.0, 50.0, 50.0]
+	_assert_equal(levels.size(), 7, "Levelkatalog enthält Intro und sechs Hauptfälle")
+	var expected_durations := [0.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0]
+	var expected_boss_times := [0.0, 180.0, 180.0, 180.0, 180.0, 180.0, 180.0]
+	var expected_stability := [50.0, 50.0, 50.0, 50.0, 50.0, 50.0, 50.0]
 	for index in range(levels.size()):
 		var level: LevelDefinition = levels[index]
 		_assert_equal(level.order, index, "Levelreihenfolge ist datengetrieben und lückenlos")
@@ -287,7 +287,10 @@ func _test_level_catalog_and_run_config() -> void:
 		_assert_true(not config.has_deadline(), "Intro und Hauptfälle besitzen keine Zeitniederlage")
 	_assert_equal(levels[0].boss_health_multiplier, 0.09, "Intro verwendet den um weitere 50 Prozent reduzierten Boss")
 	_assert_true(levels[0].boss_phase_minions.is_empty(), "Intro hat keine vollständige Bossphasenmechanik")
-	_assert_equal(levels[3].boss_phase_minions, PackedInt32Array([6, 8]), "Fall 3 verwendet die geplanten Minion-Schübe")
+	_assert_equal(levels[6].boss_phase_minions, PackedInt32Array([6, 8]), "Fall 6 bewahrt die geplanten Minion-Schübe")
+	_assert_equal(levels[2].id, &"localized_focus", "Der bisherige Fall 1 bleibt als stabiler Anker in Fall 2")
+	_assert_equal(levels[4].id, &"spreading_infection", "Der bisherige Fall 2 bleibt als stabiler Anker in Fall 4")
+	_assert_equal(levels[6].id, &"severe_pneumonia", "Der bisherige Fall 3 bleibt als stabiler Anker in Fall 6")
 
 func _test_enemy_spawn_and_boss_phases() -> void:
 	var target := TherapyAvatar.new()
@@ -377,14 +380,13 @@ func _test_meta_progression() -> void:
 	meta.reset_defaults(current_time[0])
 	current_time[0] += 4 * 60 * 60
 	meta.accrue_time()
-	_assert_equal(meta.claimable_research(), 60, "Vier Stunden ergeben nach der Erhöhung 60 passive Forschung")
-	_assert_equal(meta.claim_passive(), 60, "Passive Forschung wird exakt einmal abgeholt")
-	_assert_equal(meta.claim_passive(), 0, "Passive Forschung kann nicht doppelt abgeholt werden")
+	_assert_equal(meta.claimable_research(), 0, "Save v7 erzeugt keine passive Forschung mehr")
+	_assert_equal(meta.claim_passive(), 0, "Die alte Abhol-API bleibt wirkungslos")
 
 	meta.reset_defaults(current_time[0])
 	current_time[0] += 12 * 60 * 60
 	meta.accrue_time()
-	_assert_equal(meta.claimable_research(), 120, "Offline-Forschung ist auf acht Stunden mit erhöhtem Ertrag begrenzt")
+	_assert_equal(meta.claimable_research(), 0, "Auch lange Offlinezeit erzeugt keine Forschung")
 	var bank_before_rollback := meta.passive_seconds
 	current_time[0] -= 24 * 60 * 60
 	meta.accrue_time()
@@ -393,14 +395,9 @@ func _test_meta_progression() -> void:
 	current_time[0] = 200000
 	meta.reset_defaults(current_time[0])
 	var jobs := ContentCatalog.clinic_job_definitions()
-	var short_job: ClinicJobDefinition = jobs[&"short_review"]
-	_assert_true(meta.start_job(short_job), "Ein Klinikfall kann gestartet werden")
-	_assert_true(not meta.start_job(jobs[&"follow_up"]), "Ein zweiter Klinikfall kann nicht parallel starten")
-	current_time[0] += short_job.duration_seconds - 1
-	_assert_true(not meta.is_job_complete(), "Klinikfall endet nicht zu früh")
-	current_time[0] += 1
-	_assert_equal(meta.claim_job(jobs), 15, "Abgeschlossener Kurzbefund erhält den globalen Forschungsfaktor")
-	_assert_equal(meta.claim_job(jobs), 0, "Klinikfall kann nicht doppelt abgeholt werden")
+	_assert_true(jobs.is_empty(), "Zeitgesteuerte Klinikfälle sind aus dem Katalog entfernt")
+	_assert_true(not meta.start_job(null), "Die alte Klinik-API kann keinen Auftrag mehr starten")
+	_assert_equal(meta.claim_job(jobs), 0, "Die alte Klinik-Abholung bleibt wirkungslos")
 
 	meta.research_points = 2000
 	var research := ContentCatalog.research_definitions()
@@ -464,9 +461,9 @@ func _test_meta_save_roundtrip_and_recovery() -> void:
 	}))
 	version_two.close()
 	var migrated_v2 := MetaProgressionState.new(func() -> int: return 300000)
-	_assert_true(repository.load_into(migrated_v2), "Savegame-Version 2 wird automatisch auf Version 3 migriert")
+	_assert_true(repository.load_into(migrated_v2), "Savegame-Version 2 wird automatisch auf Version 7 migriert")
 	_assert_equal(migrated_v2.research_points, 88, "V2-Migration bewahrt Forschung")
-	_assert_equal(migrated_v2.highest_unlocked_level, 2, "V2-Migration bewahrt Level-Freischaltungen")
+	_assert_equal(migrated_v2.highest_unlocked_level, 4, "V2-Migration bildet den zweiten alten Anker auf Fall 4 ab")
 	_assert_equal(migrated_v2.get_level_record(&"localized_focus").victories, 1, "V2-Migration bewahrt Levelrekorde")
 	_assert_true(migrated_v2.seen_discovery_ids.is_empty(), "V2-Migration erfindet keine Entdeckungen")
 	_assert_true(not migrated_v2.show_run_stats, "Ältere Spielstände starten mit ausgeblendeten Charakterwerten")
@@ -488,7 +485,7 @@ func _test_meta_save_roundtrip_and_recovery() -> void:
 	_assert_true(repository.load_into(migrated), "Savegame-Version 1 wird automatisch migriert")
 	_assert_equal(migrated.research_points, 77, "Migration bewahrt vorhandene Forschung")
 	_assert_equal(migrated.rank(&"sample_logistics"), 2, "Migration bewahrt Forschungsränge")
-	_assert_equal(migrated.active_job_id, &"short_review", "Migration bewahrt den aktiven Klinikfall")
+	_assert_equal(migrated.active_job_id, &"", "Migration verwirft nicht beanspruchte Klinikwerte")
 	_assert_equal(migrated.highest_unlocked_level, 0, "Migrierte Spielstände beginnen beim Intro")
 	_assert_true(not migrated.prologue_seen, "Migrierte Spielstände nehmen keinen Prologabschluss an")
 

@@ -198,7 +198,11 @@ cap in data while `show_cap == false` prevents that implementation limit from
 leaking into the card. Reroll exclusion expands from a picked ID to its whole
 resolved family.
 
-Savegame version 6 and `talent_tree_revision` 4 are the current outer formats.
+Savegame version 7 and `talent_tree_revision` 4 are the current outer formats.
+The v6-to-v7 migration maps the old highest completed campaign order
+`0/1/2/3` to `0/2/4/6` while retaining stable case IDs, records, seeds,
+loadouts, talents and already claimed research. Retired offline-research and
+clinic-job fields are read only as legacy input and are never written again.
 The treatment tree contains exactly four ranked definitions: the root
 Treatment Damage Training plus Spread Penetration, Manual Treatment Aim and
 Piercing Persistence. `piercing_return` is absent from the active catalog and
@@ -459,12 +463,29 @@ applied through the same bound `RunBuildState` as the rest of the run. Intro
 learning events mark their discovery IDs as seen without entering the discovery
 modal flow.
 
-Save v6 retains `ui_scale` and `glyph_mode`, but the current runtime normalizes
+Save v7 retains the legacy `ui_scale` and `glyph_mode` fields, but the current runtime normalizes
 them to 1.0 and keyboard/mouse. Those legacy fields therefore remain readable
 without allowing an old scale or forced-gamepad value to alter this milestone's
 visible runtime.
 
+Practice tests are a debug-build-only runtime surface, not campaign content.
+`PracticeScenarioDefinition` and `PracticeBossProfile` live outside
+`ContentCatalog.level_definitions()` and are carried through an explicit
+`RunContext.Mode.PRACTICE_TEST`. Practice results bypass discoveries, findings,
+mastery, rewards, records and every meta-save mutation. The separate
+`user://alveolus_test_tools.cfg` owns immunity, outgoing-damage and movement
+test values; it is never serialized through `UISettingsState` or
+`MetaProgressionState` and its UI is absent outside debug builds.
+
 ## Case lifecycle and variation
+
+The campaign catalog contains the intro plus exactly six ordered cases.
+Existing stable IDs remain the anchor cases at orders 2, 4 and 6; the new
+orders 1, 3 and 5 are data-authored interpolation cases. Start populations,
+spawn-ramp duration, pressure-object mobility and automatic boss activation
+are `LevelDefinition`/`RunConfig` data, never inferred from a numeric order.
+This keeps unique boss mechanics discrete while wave pressure can progress
+linearly between the preserved anchor cases.
 
 Product cases use `total_seconds <= 0` to mean no run deadline and schedule
 their boss at 180 seconds. The player baseline is 100 life. A case with no prior

@@ -31,7 +31,7 @@ func _test_names_and_level_language() -> void:
 	_check(not sample.gameplay_text.contains("Probenstufe"), "Das Lexikon verwendet keine Probenstufe")
 	_check(treatment.title == "Behandlung", "Die automatische Behandlung besitzt einen einfachen Namen")
 	_check(TerminologyCatalog.simple(&"automatic_therapy") == "Behandlung", "Terminologiekatalog nutzt denselben Behandlungsnamen")
-	_check(ContentCatalog.level_definitions()[1].title == "lol - name fehlt", "Fall 1 verwendet den gewünschten Platzhalternamen")
+	_check(ContentCatalog.level_definitions()[2].title == "lol - name fehlt", "Fall 2 verwendet den gewünschten Platzhalternamen")
 
 func _test_active_damage_type_terms() -> void:
 	var expected_ids: Array[StringName] = [&"fire", &"water", &"earth", &"wind"]

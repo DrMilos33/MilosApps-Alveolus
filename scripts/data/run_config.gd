@@ -9,6 +9,11 @@ const SPAWN_INTERVAL_CURVE_EXPONENT := 0.82
 @export var arena_size: Vector2 = Vector2(9600.0, 5400.0)
 @export var initial_spawn_interval: float = 1.10
 @export var final_spawn_interval: float = 0.55
+@export var spawn_ramp_seconds: float = 45.0
+@export var initial_small_enemy_count: int = 3
+@export var initial_cluster_enemy_count: int = 0
+@export var automatic_boss_enabled: bool = true
+@export var regular_spawns_enabled: bool = true
 @export_range(0.0, 0.9, 0.01) var spawn_cadence_delay: float = LevelDefinition.DEFAULT_SPAWN_CADENCE_DELAY
 @export var random_seed: int = 20260809
 @export var level_id: StringName = &"intro"
@@ -32,6 +37,8 @@ const SPAWN_INTERVAL_CURVE_EXPONENT := 0.82
 @export var boss_count: int = 1
 @export var spawn_rate_multiplier: float = 1.0
 @export var experience_gain_multiplier: float = 1.0
+@export var case_pressure_targets_stationary: bool = false
+@export var case_pressure_target_health_multiplier: float = 1.0
 ## A run owns a detached pressure plan; catalog resources remain immutable while
 ## gameplay consumes its deterministic schedule.
 @export var case_pressure_plan: CasePressurePlan
@@ -48,20 +55,20 @@ func has_deadline() -> bool:
 ## stay unchanged, while a positive delay moves early waves later and compresses
 ## the same clock smoothly near the boss horizon.
 func regular_spawn_progress(elapsed_seconds: float) -> float:
-	if run_duration_seconds <= 0.0:
+	if spawn_ramp_seconds <= 0.0:
 		return 0.0
 	return delayed_spawn_progress(
-		clampf(elapsed_seconds / run_duration_seconds, 0.0, 1.0),
+		clampf(elapsed_seconds / spawn_ramp_seconds, 0.0, 1.0),
 		spawn_cadence_delay
 	)
 
 
 func regular_spawn_clock_delta(current_elapsed: float, fixed_delta: float) -> float:
-	if run_duration_seconds <= 0.0:
+	if spawn_ramp_seconds <= 0.0:
 		return maxf(fixed_delta, 0.0)
 	var previous_elapsed := maxf(0.0, current_elapsed - maxf(fixed_delta, 0.0))
-	var current_clock := regular_spawn_progress(current_elapsed) * run_duration_seconds
-	var previous_clock := regular_spawn_progress(previous_elapsed) * run_duration_seconds
+	var current_clock := regular_spawn_progress(current_elapsed) * spawn_ramp_seconds
+	var previous_clock := regular_spawn_progress(previous_elapsed) * spawn_ramp_seconds
 	return maxf(0.0, current_clock - previous_clock)
 
 
@@ -91,6 +98,10 @@ static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunCo
 	config.initial_stability = level.initial_stability
 	config.initial_spawn_interval = level.initial_spawn_interval
 	config.final_spawn_interval = level.final_spawn_interval
+	config.spawn_ramp_seconds = level.spawn_ramp_seconds
+	config.initial_small_enemy_count = level.initial_small_enemy_count
+	config.initial_cluster_enemy_count = level.initial_cluster_enemy_count
+	config.automatic_boss_enabled = level.automatic_boss_enabled
 	config.spawn_cadence_delay = level.spawn_cadence_delay
 	config.enemy_health_start = level.enemy_health_start
 	config.enemy_health_end = level.enemy_health_end
@@ -107,10 +118,13 @@ static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunCo
 	config.boss_phase_minions = level.boss_phase_minions
 	config.reward_multiplier = level.reward_multiplier
 	config.case_pressure_plan = level.case_pressure_plan.duplicate(true) as CasePressurePlan if level.case_pressure_plan != null else null
+	config.case_pressure_targets_stationary = level.case_pressure_targets_stationary
+	config.case_pressure_target_health_multiplier = level.case_pressure_target_health_multiplier
 	config.random_seed += level.order * 101
 	config.event_driven_intro = level.is_tutorial
 	if quick_run:
 		config.run_duration_seconds = 12.0
+		config.spawn_ramp_seconds = 12.0
 		config.final_deadline_seconds = 22.0
 		config.initial_spawn_interval = 0.35
 		config.final_spawn_interval = 0.12

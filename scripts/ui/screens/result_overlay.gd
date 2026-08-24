@@ -245,7 +245,7 @@ func _rebuild_modal() -> void:
 	_action_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	_action_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	_levels_button = AlveolusUIComponents.action_button(
-		"Fallübersicht",
+		_view_model.get_levels_action_text(),
 		AlveolusUIComponents.ACTION_PRIMARY,
 		&"archive",
 		AlveolusVisualTheme.TEAL
@@ -255,7 +255,7 @@ func _rebuild_modal() -> void:
 	_levels_button.pressed.connect(func() -> void: levels.emit())
 	_action_grid.add_child(_levels_button)
 	_retry_button = AlveolusUIComponents.action_button(
-		"Erneut behandeln",
+		_view_model.get_retry_action_text(),
 		AlveolusUIComponents.ACTION_SECONDARY,
 		&"restart",
 		AlveolusVisualTheme.TEAL
@@ -265,7 +265,7 @@ func _rebuild_modal() -> void:
 	_retry_button.pressed.connect(func() -> void: retry.emit())
 	_action_grid.add_child(_retry_button)
 	_campus_button = AlveolusUIComponents.action_button(
-		"Zum Campus",
+		_view_model.get_campus_action_text(),
 		AlveolusUIComponents.ACTION_SECONDARY,
 		&"back",
 		AlveolusVisualTheme.COBALT

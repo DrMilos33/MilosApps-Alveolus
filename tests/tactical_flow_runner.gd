@@ -13,8 +13,9 @@ func _run() -> void:
 	# _ready() may read the normal save, but this runner must never mutate it.
 	game.persistence_enabled = false
 	game.meta.reset_defaults(710000)
+	_check(game.levels.size() == 7, "Der taktische Ablauf verwendet Intro plus sechs Hauptfälle")
 	game.meta.prologue_seen = true
-	game.meta.highest_unlocked_level = 1
+	game.meta.highest_unlocked_level = 2
 	game.meta.research_ranks[&"stability_reserve"] = 1
 	game.meta.research_ranks[&"sample_logistics"] = 1
 	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
@@ -27,7 +28,7 @@ func _run() -> void:
 	_test_quick_restart_contract(game)
 	await _test_run_abilities_finding_and_mastery(game)
 	await _test_pause_abort_and_intro_regression(game)
-	_test_save_v6_roundtrip(game)
+	_test_save_v7_roundtrip(game)
 
 	game.queue_free()
 	await process_frame
@@ -51,7 +52,8 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	_check(game.meta.get_prepared_loadout(&"localized_focus").to_dict() == historical_plan.to_dict(), "Ein historischer Spielstand darf seinen vollständigen alten Plan weiterhin laden")
 	game._show_level_select()
 	game._on_level_selected(&"localized_focus")
-	_check(game.flow_state == GameFlowState.State.PREPARATION, "Fall 1 öffnet direkt die Einsatzplanung")
+	_check(game.selected_level != null and game.selected_level.order == 2, "localized_focus bleibt als Fall-2-Anker erhalten")
+	_check(game.flow_state == GameFlowState.State.PREPARATION, "Fall 2 öffnet direkt die Einsatzplanung")
 	_check(game.pending_run_context != null, "Vorbereitung erzeugt einen RunContext")
 	_check(game.pending_preparation_loadout.treatment_id == &"treatment_spread", "Die aktuelle Planung bewahrt eine der drei erlaubten Behandlungen")
 	_check(game.pending_preparation_loadout.ability_ids.is_empty(), "Die aktuelle Planung entfernt alte Aktive, ohne freie Plätze heimlich zu befüllen")
@@ -67,7 +69,12 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	game._on_back_requested()
 	_check(game.flow_state == GameFlowState.State.LEVEL_SELECT, "Zurück aus der Vorbereitung führt ohne altes Briefing zur Fallauswahl")
 	_check(game.meta.get_prepared_loadout(&"localized_focus").to_dict() == historical_plan.to_dict(), "Zurück bewahrt den historischen Plan und alle alten Werte")
-	var level: LevelDefinition = ContentCatalog.level_definitions()[1]
+	var levels := ContentCatalog.level_definitions()
+	var first_case := levels[1] as LevelDefinition
+	var level := levels[2] as LevelDefinition
+	_check(first_case.id == &"early_localized_focus" and first_case.order == 1, "Der neue Fall 1 besitzt seinen eigenen Fortschrittsanker")
+	_check(level.id == &"localized_focus" and level.order == 2, "Die deterministische Taktikspur verwendet localized_focus als Fall 2")
+	game.meta.register_level_result(first_case, true, 120.0, 3, 20)
 	game.meta.register_level_result(level, true, 120.0, 3, 20)
 	game.meta.advance_case_seed(level.id)
 	game._on_level_selected(&"localized_focus")
@@ -262,12 +269,12 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 		game.state.mark_boss_defeated()
 	await process_frame
 	_check(game.flow_state == GameFlowState.State.RESULT, "Ein erfolgreicher Abschluss führt zum Ergebnis")
-	_check(game.meta.has_completed_mastery(&"fall_1_first_victory"), "Der erste Fall-Sieg schaltet Meisterschaft frei")
-	_check(game.meta.has_completed_mastery(&"fall_1_early_finding"), "Ein früher Befund wird am Ergebnis ausgewertet")
-	_check(game.meta.has_completed_mastery(&"fall_1_healthy_win"), "Ein stabiler Abschluss wird am Ergebnis ausgewertet")
-	_check(game.meta.talent_points_earned() == points_before, "Fall 1 vergibt noch keinen Talentpunkt")
+	_check(game.meta.has_completed_mastery(&"fall_2_first_victory"), "Der Fall-2-Sieg schaltet seine erste Meisterschaft frei")
+	_check(game.meta.has_completed_mastery(&"fall_2_reserve_win"), "Je ein Einsatz beider Aktivfähigkeiten erfüllt die erhaltene Fall-2-Meisterschaft")
+	_check(not game.meta.has_completed_mastery(&"fall_2_active_usage"), "Je ein Einsatz erfüllt die Vierfach-Nutzung noch nicht")
+	_check(game.meta.talent_points_earned() == points_before + 2, "Die zwei erfüllten Fall-2-Meisterschaften vergeben je einen Talentpunkt")
 	_check(game.hud.end_mastery_panel.visible, "Das Ergebnis zeigt neue Meisterschaft sichtbar an")
-	_check(game.hud.end_mastery_label.text.to_lower().contains("0 talentpunkte"), "Das Ergebnis macht die noch punktlose Fall-1-Meisterschaft sichtbar")
+	_check(game.hud.end_mastery_label.text.to_lower().contains("+2 talentpunkte"), "Das Ergebnis zeigt die zwei neuen Fall-2-Talentpunkte sichtbar an")
 
 func _test_pause_abort_and_intro_regression(game: Node) -> void:
 	var research_before_abort: int = game.meta.research_points
@@ -302,15 +309,15 @@ func _test_pause_abort_and_intro_regression(game: Node) -> void:
 	await process_frame
 	_check(game.flow_state == GameFlowState.State.LEVEL_SELECT, "Auch das Intro lässt sich weiterhin sauber abbrechen")
 
-func _test_save_v6_roundtrip(game: Node) -> void:
-	var save_path := "user://alveolus_tactical_flow_v6_test.json"
+func _test_save_v7_roundtrip(game: Node) -> void:
+	var save_path := "user://alveolus_tactical_flow_v7_test.json"
 	var repository := MetaSaveRepository.new(save_path)
 	_check(repository.save(game.meta), "Der integrierte Fortschritt lässt sich lokal speichern")
 	var restored := MetaProgressionState.new(func() -> int: return 710000)
-	_check(repository.load_into(restored), "Der lokale Save-v6-Roundtrip lässt sich laden")
-	_check(int(restored.to_dict().get("version", 0)) == 6, "Der integrierte Spielstand verwendet Version 6")
-	_check(restored.has_completed_mastery(&"fall_1_first_victory"), "Save v6 bewahrt Ergebnis-Meisterschaft")
-	_check(restored.get_prepared_loadout(&"localized_focus").reserve_id == &"", "Save v6 bewahrt den für neue Runs reservefreien Behandlungsplan")
+	_check(repository.load_into(restored), "Der lokale Save-v7-Roundtrip lässt sich laden")
+	_check(int(restored.to_dict().get("version", 0)) == 7, "Der integrierte Spielstand verwendet Version 7")
+	_check(restored.has_completed_mastery(&"fall_2_first_victory"), "Save v7 bewahrt die Fall-2-Ergebnis-Meisterschaft")
+	_check(restored.get_prepared_loadout(&"localized_focus").reserve_id == &"", "Save v7 bewahrt den für neue Runs reservefreien Behandlungsplan")
 	var absolute_path := ProjectSettings.globalize_path(save_path)
 	if FileAccess.file_exists(save_path):
 		DirAccess.remove_absolute(absolute_path)

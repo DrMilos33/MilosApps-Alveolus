@@ -95,6 +95,9 @@ var _unlock_text: String
 var _mastery_text: String
 var _stats: Array[StatViewModel]
 var _rewards: Array[RewardViewModel]
+var _levels_action_text: String
+var _retry_action_text: String
+var _campus_action_text: String
 
 
 func _init(
@@ -107,7 +110,10 @@ func _init(
 	reward_text_value: String = "",
 	unlock_text_value: String = "",
 	mastery_text_value: String = "",
-	reward_items_value: Array[RewardViewModel] = []
+	reward_items_value: Array[RewardViewModel] = [],
+	levels_action_text_value: String = "Fallübersicht",
+	retry_action_text_value: String = "Erneut behandeln",
+	campus_action_text_value: String = "Zum Campus"
 ) -> void:
 	_revision = maxi(revision_value, 0)
 	_success = success_value
@@ -119,6 +125,9 @@ func _init(
 	_mastery_text = mastery_text_value
 	_stats = _copy_stats(stats_value)
 	_rewards = _copy_rewards(reward_items_value)
+	_levels_action_text = levels_action_text_value
+	_retry_action_text = retry_action_text_value
+	_campus_action_text = campus_action_text_value
 	# Compatibility bridge for the current GameHUD facade. New callers pass a
 	# value-only RewardViewModel so the icon, not copied prose, carries meaning.
 	if _rewards.is_empty() and not _reward_text.strip_edges().is_empty():
@@ -176,6 +185,18 @@ func get_reward_items() -> Array[RewardViewModel]:
 	return _copy_rewards(_rewards)
 
 
+func get_levels_action_text() -> String:
+	return _levels_action_text
+
+
+func get_retry_action_text() -> String:
+	return _retry_action_text
+
+
+func get_campus_action_text() -> String:
+	return _campus_action_text
+
+
 func duplicate_immutable() -> ResultOverlayViewModel:
 	return ResultOverlayViewModel.new(
 		_revision,
@@ -187,7 +208,10 @@ func duplicate_immutable() -> ResultOverlayViewModel:
 		_reward_text,
 		_unlock_text,
 		_mastery_text,
-		_rewards
+		_rewards,
+		_levels_action_text,
+		_retry_action_text,
+		_campus_action_text
 	)
 
 
@@ -217,6 +241,9 @@ func _calculate_content_hash() -> int:
 		_signature_part(_reward_text),
 		_signature_part(_unlock_text),
 		_signature_part(_mastery_text),
+		_signature_part(_levels_action_text),
+		_signature_part(_retry_action_text),
+		_signature_part(_campus_action_text),
 		str(_stats.size()),
 		str(_rewards.size()),
 	])

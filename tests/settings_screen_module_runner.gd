@@ -177,6 +177,24 @@ func _assert_test_values(screen: SettingsScreen) -> void:
 	var movement_label := screen.find_child("TestMovementSpeedValue", true, false) as Label
 	_check(damage_label != null and damage_label.text == "+40 %", "Ausgehender Schaden zeigt den Bonus mit Pluszeichen")
 	_check(movement_label != null and movement_label.text == "115 %", "Galopp zeigt den absoluten Prozentwert")
+	var damage_instance := damage.get_instance_id()
+	var movement_instance := movement.get_instance_id()
+	_check(
+		screen.sync_test_values(RunTestSettingsViewModel.new(true, true, 80, 135)),
+		"Live-Testwerte lassen sich ohne Dokumentneuaufbau synchronisieren"
+	)
+	_check(
+		damage.get_instance_id() == damage_instance and movement.get_instance_id() == movement_instance,
+		"Live-Synchronisierung bewahrt beide Slider während eines Pointer-Drags"
+	)
+	_check(
+		immunity.button_pressed and damage.value == 80.0 and movement.value == 135.0,
+		"Live-Synchronisierung aktualisiert alle drei Testwerte"
+	)
+	_check(
+		damage_values == [40] and movement_values == [115],
+		"Integrator-Synchronisierung emittiert keine rückläufigen Slider-Intents"
+	)
 
 	var release_model := SettingsScreenViewModel.new(
 		6, _audio_fixture(), _option_fixture(), _toggle_fixture(), _binding_fixture(), "", true

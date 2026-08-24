@@ -81,19 +81,42 @@ func _test_research_and_intro_rewards() -> void:
 	_equal(restored.talent_points_earned(), 0, "Der Save-Roundtrip erzeugt keinen alten Intro-Talentpunkt")
 	_true(restored.complete_mastery(&"fall_2_first_victory"), "Der erste Abschluss von Fall 2 vergibt seine Meisterschaft")
 	_equal(restored.talent_points_earned(), 1, "Der erste Talentpunkt entsteht erst durch den Abschluss von Fall 2")
+	var mastery := MasteryObjectiveDefinition.catalog()
+	_equal(mastery[&"fall_1_first_victory"].level_id, &"early_localized_focus", "Fall-1-Meisterschaft folgt dem neuen Order-1-Fall")
+	_equal(mastery[&"fall_2_first_victory"].level_id, &"localized_focus", "Erhaltene Fall-2-Meisterschaft bleibt am Order-2-Anker")
+	_equal(mastery[&"fall_3_first_victory"].level_id, &"severe_pneumonia", "Erhaltene schwere Meisterschaft folgt dem Order-6-Anker")
 
 
 func _test_boss_and_finding_contract() -> void:
 	var levels := ContentCatalog.level_definitions()
-	_equal(levels[0].boss_enemy_id, &"intro_focus", "Intro behält einen eigenen einfachen Boss")
-	_near(levels[0].boss_health_multiplier, 0.09, "Intro-Boss besitzt gegenüber der vorherigen Einführung halbierte Leben")
-	_true(levels[0].boss_ranged_enabled, "Intro-Boss feuert ein normales Projektil statt einer Spezialbahn")
-	_equal(levels[1].boss_enemy_id, &"localized_boss", "Fall 1 verwendet den neuen Bakterienkern")
-	_true(not levels[1].boss_ranged_enabled, "Neuer erster Boss bleibt zunächst einfach")
-	_equal(levels[2].boss_enemy_id, &"infection_focus", "Der bisherige Spezialboss lebt jetzt in Fall 2")
-	_true(levels[2].boss_ranged_enabled, "Fall-2-Boss verwendet die Rautenprojektile")
-	_near(levels[2].boss_projectile_damage_multiplier, 2.5, "Fall-2-Projektilschaden ist um 150 Prozent erhöht")
-	_near(levels[2].boss_wave_amplitude, 92.0, "Fall-2-Rautenflugbahn ist deutlich breiter")
+	_equal(levels.size(), 7, "Bossvertrag umfasst Intro plus sechs Hauptfälle")
+	var intro := _level_by_id(levels, &"intro")
+	var case_one := _level_by_id(levels, &"early_localized_focus")
+	var case_two := _level_by_id(levels, &"localized_focus")
+	var case_three := _level_by_id(levels, &"advancing_infection")
+	var case_four := _level_by_id(levels, &"spreading_infection")
+	var case_five := _level_by_id(levels, &"critical_infection")
+	var case_six := _level_by_id(levels, &"severe_pneumonia")
+	var ordered_cases := [intro, case_one, case_two, case_three, case_four, case_five, case_six]
+	for order in range(ordered_cases.size()):
+		_true(ordered_cases[order] != null and ordered_cases[order].order == order, "Bosskatalog bewahrt den Fall auf Order %d" % order)
+	_equal(intro.boss_enemy_id, &"intro_focus", "Intro behält einen eigenen einfachen Boss")
+	_near(intro.boss_health_multiplier, 0.09, "Intro-Boss besitzt gegenüber der vorherigen Einführung halbierte Leben")
+	_true(intro.boss_ranged_enabled, "Intro-Boss feuert ein normales Projektil statt einer Spezialbahn")
+	_equal(case_one.boss_enemy_id, &"localized_boss", "Fall 1 beginnt mit dem einfachen Bakterienkern")
+	_true(not case_one.boss_ranged_enabled and case_one.boss_phase_minions == PackedInt32Array([2]), "Fall 1 verwendet genau eine kleine Zweierphase")
+	_equal(case_two.boss_enemy_id, &"localized_boss", "Erhaltener Bakterienkern liegt auf Order 2")
+	_true(not case_two.boss_ranged_enabled and case_two.boss_phase_minions == PackedInt32Array([3]), "Fall 2 bewahrt die einfache Dreierphase")
+	_equal(case_three.boss_enemy_id, &"infection_focus", "Fall 3 führt den Infektionsherd ein")
+	_true(case_three.boss_ranged_enabled, "Fall 3 führt die Rautenprojektile ein")
+	_near(case_three.boss_projectile_damage_multiplier, 2.0, "Fall 3 verwendet den neuen Zwischen-Projektilfaktor")
+	_near(case_three.boss_wave_amplitude, 68.0, "Fall 3 verwendet die neue Zwischen-Flugbahn")
+	_equal(case_four.boss_enemy_id, &"infection_focus", "Der bisherige Spezialboss liegt jetzt auf Order 4")
+	_true(case_four.boss_ranged_enabled, "Fall-4-Boss verwendet die Rautenprojektile")
+	_near(case_four.boss_projectile_damage_multiplier, 2.5, "Fall-4-Projektilschaden ist um 150 Prozent erhöht")
+	_near(case_four.boss_wave_amplitude, 92.0, "Fall-4-Rautenflugbahn ist deutlich breiter")
+	_true(not case_five.boss_ranged_enabled and case_five.boss_phase_minions == PackedInt32Array([5, 6]), "Fall 5 verwendet den neuen stationären Nahkampf-Bossvertrag")
+	_true(not case_six.boss_ranged_enabled and case_six.boss_phase_minions == PackedInt32Array([6, 8]), "Fall 6 bewahrt den schweren Standardboss")
 	_equal(ContentCatalog.finding_definitions().keys().size(), 2, "Nur zwei verständliche Befunde bleiben aktiv")
 	_true(ContentCatalog.finding_definitions().has(&"grouping") and ContentCatalog.finding_definitions().has(&"hidden_nests"), "Gruppenbildung und verdeckte Nester bleiben erhalten")
 	_true(ContentCatalog.validate_combat_profiles().is_empty(), "Neue Bossdefinitionen besitzen gültige Schadenstyp- und Resistenzprofile")
@@ -122,6 +145,13 @@ func _upgrade(id: StringName) -> UpgradeDefinition:
 	for definition in ContentCatalog.upgrade_definitions():
 		if definition.id == id:
 			return definition
+	return null
+
+
+func _level_by_id(levels: Array[LevelDefinition], id: StringName) -> LevelDefinition:
+	for level in levels:
+		if level.id == id:
+			return level
 	return null
 
 

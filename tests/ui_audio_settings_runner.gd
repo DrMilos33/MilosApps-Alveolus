@@ -15,7 +15,7 @@ func _run() -> void:
 	_test_rebinding_conflicts_and_safe_restore()
 	_test_input_glyphs_follow_bindings_and_device()
 	await _test_audio_buses_assets_pool_and_wiring()
-	_test_save_v5_settings_roundtrip()
+	_test_save_v7_settings_roundtrip()
 	_restore_actions()
 	if failures == 0:
 		print("ALVEOLUS_UI_AUDIO_SETTINGS_OK assertions=%d" % assertions)
@@ -379,7 +379,7 @@ func _test_audio_buses_assets_pool_and_wiring() -> void:
 	service.free()
 
 
-func _test_save_v5_settings_roundtrip() -> void:
+func _test_save_v7_settings_roundtrip() -> void:
 	var meta := MetaProgressionState.new(func() -> int: return 900000)
 	meta.reset_defaults(900000)
 	var settings := UISettingsState.new()
@@ -402,19 +402,19 @@ func _test_save_v5_settings_roundtrip() -> void:
 	}
 	meta.set_ui_settings(settings)
 	var data := meta.to_dict()
-	_equal(int(data.get("version", 0)), 6, "Einstellungen werden im Save-v6-Container gespeichert")
+	_equal(int(data.get("version", 0)), 7, "Einstellungen werden im Save-v7-Container gespeichert")
 	var restored := MetaProgressionState.new(func() -> int: return 900000)
-	_true(restored.load_dict(data), "Save v5 mit Einstellungen kann geladen werden")
+	_true(restored.load_dict(data), "Save v7 mit Einstellungen kann geladen werden")
 	_near(restored.ui_settings.master_volume, 0.31, 0.0001, "Masterlautstärke überlebt den Savegame-Roundtrip")
 	_near(restored.ui_settings.ui_volume, 0.47, 0.0001, "UI-Lautstärke überlebt den Savegame-Roundtrip")
 	_equal(restored.ui_settings.ui_scale, 0.90, "Eine UI-Skalierung unter 100 Prozent überlebt den Savegame-Roundtrip")
 	_true(restored.ui_settings.reduce_motion, "Reduzierte Bewegung überlebt den Savegame-Roundtrip")
-	_true(not restored.ui_settings.show_discovery_info, "Die Neuigkeitenoption überlebt im bestehenden Save-v6-Container")
+	_true(not restored.ui_settings.show_discovery_info, "Die Neuigkeitenoption überlebt im Save-v7-Container")
 	_equal(restored.ui_settings.glyph_mode, UISettingsState.GLYPH_GAMEPAD, "Glyphmodus überlebt den Savegame-Roundtrip")
 	_true(not restored.ui_settings.confirm_run_restart, "Die ausgeschaltete Neustartbestätigung überlebt den Savegame-Roundtrip")
-	_true(restored.ui_settings.input_bindings.has("ui_info"), "Eine angepasste ui_info-Belegung überlebt ohne neue Saveversion")
-	_equal((restored.ui_settings.input_bindings["ui_info"] as Array).size(), 2, "ui_info bewahrt Tastatur- und Gamepadklasse im Save-v6-Container")
-	_equal((restored.ui_settings.input_bindings["active_ability_1"] as Array).size(), 2, "Zwei Tastaturplätze überleben unverändert im Save-v6-Container")
+	_true(restored.ui_settings.input_bindings.has("ui_info"), "Eine angepasste ui_info-Belegung überlebt im aktuellen Saveformat")
+	_equal((restored.ui_settings.input_bindings["ui_info"] as Array).size(), 2, "ui_info bewahrt Tastatur- und Gamepadklasse im Save-v7-Container")
+	_equal((restored.ui_settings.input_bindings["active_ability_1"] as Array).size(), 2, "Zwei Tastaturplätze überleben unverändert im Save-v7-Container")
 	var migrated := MetaProgressionState.new(func() -> int: return 900000)
 	_true(migrated.load_dict({"version": 4, "research_points": 17}), "Save v4 wird weiterhin migriert")
 	_equal(migrated.ui_settings.to_dict(), UISettingsState.new().to_dict(), "Save v4 erhält vollständige sichere Standardeinstellungen")

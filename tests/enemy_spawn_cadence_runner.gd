@@ -2,7 +2,23 @@ extends SceneTree
 
 const FIXED_DELTA := 1.0 / 60.0
 const LEGACY_DELAY := 0.0
-const MAIN_LEVEL_IDS: Array[StringName] = [&"localized_focus", &"spreading_infection", &"severe_pneumonia"]
+const LEVEL_IDS: Array[StringName] = [
+	&"intro",
+	&"early_localized_focus",
+	&"localized_focus",
+	&"advancing_infection",
+	&"spreading_infection",
+	&"critical_infection",
+	&"severe_pneumonia",
+]
+const MAIN_LEVEL_IDS: Array[StringName] = [
+	&"early_localized_focus",
+	&"localized_focus",
+	&"advancing_infection",
+	&"spreading_infection",
+	&"critical_infection",
+	&"severe_pneumonia",
+]
 
 var assertions: int = 0
 var failures: Array[String] = []
@@ -24,7 +40,10 @@ func _run() -> void:
 
 func _test_default_and_override_contract() -> void:
 	var levels := ContentCatalog.level_definitions()
-	for level in levels:
+	_equal(levels.size(), LEVEL_IDS.size(), "Der Katalog enthält Intro plus sechs Hauptfälle")
+	for level_index in range(levels.size()):
+		var level := levels[level_index] as LevelDefinition
+		_equal(level.id, LEVEL_IDS[level_index], "Katalogplatz %d besitzt die erwartete stabile Fall-ID" % level_index)
 		_near(
 			level.spawn_cadence_delay,
 			LevelDefinition.DEFAULT_SPAWN_CADENCE_DELAY,
@@ -32,6 +51,8 @@ func _test_default_and_override_contract() -> void:
 		)
 		var config := RunConfig.from_level(level)
 		_near(config.spawn_cadence_delay, level.spawn_cadence_delay, "%s überträgt die Kadenz in RunConfig" % String(level.id))
+		_equal(config.initial_small_enemy_count, level.initial_small_enemy_count, "%s überträgt die Zahl kleiner Startgegner" % String(level.id))
+		_equal(config.initial_cluster_enemy_count, level.initial_cluster_enemy_count, "%s überträgt die Zahl gruppierter Startgegner" % String(level.id))
 
 	var explicit_legacy := LevelDefinition.create(
 		&"legacy_spawn_override", 9, "Legacy", "", false,
@@ -120,19 +141,20 @@ func _test_game_integration() -> void:
 	game.state.max_stability = 1000000.0
 	game.state.stability = game.state.max_stability
 	var expected := _simulate_standard_waves(game.config, game.config.spawn_cadence_delay)
+	var initial_enemy_count: int = int(game.config.initial_small_enemy_count) + int(game.config.initial_cluster_enemy_count)
 	var pre_boss_ticks := roundi(game.config.run_duration_seconds / FIXED_DELTA) - 1
 	for _tick in range(pre_boss_ticks):
 		game.run_session.step_fixed(FIXED_DELTA)
 	_false(game.state.boss_spawned, "Die letzte Standardwelle liegt noch vor dem Quick-Run-Bosstick")
-	_equal(game.enemies.size(), 3 + int(expected["bodies"]), "Die echte Game-Schleife emittiert Startgegner plus exakt geplante Standardgegner")
+	_equal(game.enemies.size(), initial_enemy_count + int(expected["bodies"]), "Die echte Game-Schleife emittiert die datengetriebenen Startgegner plus exakt geplante Standardgegner")
 	var actual_types := PackedStringArray()
-	for enemy_index in range(3, game.enemies.size()):
+	for enemy_index in range(initial_enemy_count, game.enemies.size()):
 		var enemy: InfectionEnemy = game.enemies[enemy_index]
 		actual_types.append("cluster" if enemy.definition != null and enemy.definition.id == &"bacterial_cluster" else "small")
 	_equal(actual_types, expected["types"], "Die echte Game-Schleife bewahrt die geplante Same-Seed-Gegnerfolge")
 	game.run_session.step_fixed(FIXED_DELTA)
 	_true(game.state.boss_spawned, "Der Boss erscheint weiterhin exakt am Quick-Run-Horizont")
-	_equal(game.enemies.size(), 4 + int(expected["bodies"]), "Der Bosstick fügt nur den Boss und keine verspätete Standardwelle hinzu")
+	_equal(game.enemies.size(), initial_enemy_count + 1 + int(expected["bodies"]), "Der Bosstick fügt nur den Boss und keine verspätete Standardwelle hinzu")
 	game.queue_free()
 	await process_frame
 
@@ -149,9 +171,12 @@ func _simulate_standard_waves(config: RunConfig, delay: float) -> Dictionary:
 	var types := PackedStringArray()
 	var random := RandomNumberGenerator.new()
 	random.seed = config.random_seed
-	# Three authored start enemies keep these compatibility draws before the
-	# first timed wave in every non-tutorial production run.
-	for _index in range(3):
+	# Game erzeugt zuerst alle kleinen, dann alle gruppierten Startgegner. Jede
+	# Platzierung verbraucht genau einen Kompatibilitätszug aus der Content-RNG,
+	# bevor die erste zeitgesteuerte Welle ihren Batch-/Typzug ausführt.
+	for _index in range(config.initial_small_enemy_count):
+		random.randf_range(0.0, TAU)
+	for _index in range(config.initial_cluster_enemy_count):
 		random.randf_range(0.0, TAU)
 	while true:
 		var previous_elapsed := elapsed
@@ -198,10 +223,16 @@ func _simulate_standard_waves(config: RunConfig, delay: float) -> Dictionary:
 
 func _expected_standard_slots(level_id: StringName, rate_index: int) -> int:
 	match level_id:
+		&"early_localized_focus":
+			return 391 if rate_index == 0 else 430
 		&"localized_focus":
 			return 444 if rate_index == 0 else 488
+		&"advancing_infection":
+			return 511 if rate_index == 0 else 562
 		&"spreading_infection":
 			return 605 if rate_index == 0 else 665
+		&"critical_infection":
+			return 659 if rate_index == 0 else 725
 		&"severe_pneumonia":
 			return 725 if rate_index == 0 else 797
 		_:

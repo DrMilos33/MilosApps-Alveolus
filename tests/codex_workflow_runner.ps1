@@ -123,7 +123,7 @@ function Initialize-FixtureRepository {
     New-Item -ItemType Directory -Path (Join-Path $Root 'tools'), (Join-Path $Root '.githooks') -Force | Out-Null
     Copy-Item -LiteralPath $workflowScript -Destination (Join-Path $Root 'tools\alveolus-workflow.ps1')
     Copy-Item -LiteralPath $prePushHook -Destination (Join-Path $Root '.githooks\pre-push')
-    $version = [ordered]@{ schema = 1; release_version = $ReleaseVersion; save_schema = 6 }
+    $version = [ordered]@{ schema = 1; release_version = $ReleaseVersion; save_schema = 7 }
     [IO.File]::WriteAllText((Join-Path $Root 'ALVEOLUS_VERSION.json'), ($version | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $Root '.gitignore'), "build/`n.codex-temp/`n", [Text.UTF8Encoding]::new($false))
     & git init -q -b codex/alveolus-local-main $Root
@@ -233,7 +233,7 @@ function Test-StatusContract {
     $status = $result.stdout | ConvertFrom-Json -ErrorAction Stop
     Test-Condition ($status.schema -eq 'ALVEOLUS-LOCAL-WORKFLOW-v1') 'Status JSON has a stable schema.'
     Test-Condition ([string]$status.head -match '^[0-9a-f]{40}$') 'Status reports an exact commit SHA.'
-    Test-Condition ([int]$status.save_schema -eq 6) 'Status distinguishes save schema v6.'
+    Test-Condition ([int]$status.save_schema -eq 7) 'Status distinguishes save schema v7.'
     Test-Condition (@($status.worktrees).Count -ge 1) 'Status reports registered worktrees.'
     Test-Condition ($status.cached_published_relation -in @('same', 'ahead', 'behind', 'diverged', 'unknown')) 'Status reports a stable cached GitHub relation.'
     Test-Condition (-not [string]::IsNullOrWhiteSpace([string]$status.worktrees[0].role)) 'Status assigns a role to every worktree.'

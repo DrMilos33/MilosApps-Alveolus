@@ -16,7 +16,7 @@ func _run() -> void:
 	# Structured type values belong to discovered entries. Keep opening and
 	# category changes selection-neutral, but unlock the explicit fixture entry.
 	meta.mark_discovery_seen(&"pneumococcus")
-	var jobs := ContentCatalog.clinic_job_definitions()
+	var practice_view := _practice_view_model()
 	var levels := ContentCatalog.level_definitions()
 	var research := ContentCatalog.research_definitions()
 	var loadout_modules := ContentCatalog.loadout_module_definitions()
@@ -103,9 +103,9 @@ func _run() -> void:
 			hud.show_preparation(tutorial_view, loadout_modules.values(), prepared)
 
 		var screens: Array[Dictionary] = [
-			{"id": "campus", "overlay": hud.campus_overlay, "show": func() -> void: hud.show_campus(meta, jobs)},
+			{"id": "campus", "overlay": hud.campus_overlay, "show": func() -> void: hud.show_campus(meta)},
 			{"id": "story", "overlay": hud.story_overlay, "show": func() -> void: hud.show_story()},
-			{"id": "practice", "overlay": hud.practice_overlay, "show": func() -> void: hud.show_practice(meta, jobs)},
+			{"id": "practice", "overlay": hud.practice_overlay, "show": func() -> void: hud.show_practice(practice_view)},
 			{"id": "research", "overlay": hud.research_overlay, "show": func() -> void: hud.show_research_tabs(meta, research, TalentDefinition.definitions())},
 			{"id": "talents", "overlay": hud.research_overlay, "show": show_talent_screen},
 			{"id": "levels", "overlay": hud.level_overlay, "show": func() -> void: hud.show_level_select(meta, levels)},
@@ -477,7 +477,7 @@ func _run() -> void:
 	hud.configure_ui_settings(compact_document_settings)
 	await _settle()
 	for compact_document in [
-		{"id": "Praxis", "overlay": hud.practice_overlay, "show": func() -> void: hud.show_practice(meta, jobs)},
+		{"id": "Praxis", "overlay": hud.practice_overlay, "show": func() -> void: hud.show_practice(practice_view)},
 		{"id": "Forschung", "overlay": hud.research_overlay, "show": func() -> void: hud.show_research_tabs(meta, research, TalentDefinition.definitions())},
 		{"id": "Einstellungen", "overlay": hud.settings_overlay, "show": func() -> void: hud.show_settings(false, true)},
 		{"id": "Fallarchiv", "overlay": hud.level_overlay, "show": func() -> void: hud.show_level_select(meta, levels)},
@@ -992,6 +992,35 @@ func _has_minimum_content_insets(style: StyleBox, horizontal: float, vertical: f
 		and style.get_content_margin(SIDE_RIGHT) >= horizontal \
 		and style.get_content_margin(SIDE_TOP) >= vertical \
 		and style.get_content_margin(SIDE_BOTTOM) >= vertical
+
+func _practice_view_model() -> PracticeScreenViewModel:
+	var scenario_offers: Array[PracticeScreenViewModel.ScenarioOfferViewModel] = []
+	for scenario in PracticeScenarioDefinition.catalog():
+		scenario_offers.append(PracticeScreenViewModel.ScenarioOfferViewModel.create(
+			scenario.get_id(),
+			scenario.get_title(),
+			scenario.get_description(),
+			scenario.get_facts_text(),
+			true,
+			scenario.requires_boss_profile()
+		))
+	var boss_offers: Array[PracticeScreenViewModel.BossProfileOfferViewModel] = []
+	for profile in PracticeBossProfile.catalog():
+		boss_offers.append(PracticeScreenViewModel.BossProfileOfferViewModel.create(
+			profile.get_id(),
+			profile.get_title(),
+			profile.get_description(),
+			"Originales Bossprofil",
+			true
+		))
+	return PracticeScreenViewModel.create(
+		1,
+		true,
+		PracticeScenarioDefinition.SPAWN_TEST_ID,
+		&"",
+		scenario_offers,
+		boss_offers
+	)
 
 func _settle() -> void:
 	for _frame in range(3):

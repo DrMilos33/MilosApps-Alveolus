@@ -18,7 +18,7 @@ func _run() -> void:
 	await process_frame
 	var campus_meta := MetaProgressionState.new(func() -> int: return 1_700_000_000)
 	campus_meta.reset_defaults(1_700_000_000)
-	hud.show_campus(campus_meta, ContentCatalog.clinic_job_definitions())
+	hud.show_campus(campus_meta)
 	hud.show_campus_research_guidance()
 	await process_frame
 	await process_frame

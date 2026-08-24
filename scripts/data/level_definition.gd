@@ -13,6 +13,10 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var initial_stability: float
 @export var initial_spawn_interval: float
 @export var final_spawn_interval: float
+@export var spawn_ramp_seconds: float = 180.0
+@export_range(0, 64, 1) var initial_small_enemy_count: int = 3
+@export_range(0, 64, 1) var initial_cluster_enemy_count: int = 0
+@export var automatic_boss_enabled: bool = true
 @export_range(0.0, 0.9, 0.01) var spawn_cadence_delay: float = DEFAULT_SPAWN_CADENCE_DELAY
 @export var enemy_health_start: float
 @export var enemy_health_end: float
@@ -34,6 +38,8 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var visible_trait_ids: Array[StringName] = []
 @export var hidden_finding_ids: Array[StringName] = []
 @export var finding_progress_target: int = 0
+@export var case_pressure_targets_stationary: bool = false
+@export var case_pressure_target_health_multiplier: float = 1.0
 ## Optional authored pressure schedule. Runtime configuration receives its own
 ## deep copy so a run cannot mutate the catalog definition.
 @export var case_pressure_plan: CasePressurePlan
@@ -105,6 +111,25 @@ func configure_case_pressure(plan: CasePressurePlan) -> LevelDefinition:
 
 func configure_spawn_cadence(delay_strength: float) -> LevelDefinition:
 	spawn_cadence_delay = clampf(delay_strength, 0.0, 0.9)
+	return self
+
+
+func configure_runtime(
+	initial_small_count: int,
+	initial_cluster_count: int = 0,
+	ramp_seconds: float = 180.0,
+	automatic_boss: bool = true
+) -> LevelDefinition:
+	initial_small_enemy_count = maxi(initial_small_count, 0)
+	initial_cluster_enemy_count = maxi(initial_cluster_count, 0)
+	spawn_ramp_seconds = maxf(ramp_seconds, 0.0)
+	automatic_boss_enabled = automatic_boss
+	return self
+
+
+func configure_case_pressure_targets(stationary: bool, health_multiplier: float = 1.0) -> LevelDefinition:
+	case_pressure_targets_stationary = stationary
+	case_pressure_target_health_multiplier = maxf(health_multiplier, 0.01)
 	return self
 
 

@@ -18,9 +18,8 @@ signal abort_cancelled
 signal retry_requested
 signal result_levels_requested
 signal result_campus_requested
-signal offline_claim_requested
-signal clinic_job_start_requested(id: StringName)
-signal clinic_job_claim_requested
+signal practice_scenario_selected(id: StringName)
+signal practice_boss_profile_selected(id: StringName)
 signal research_purchase_requested(id: StringName)
 signal research_reset_requested
 signal discovery_dismissed
@@ -32,6 +31,10 @@ signal restart_cancelled
 signal run_stats_visibility_changed(enabled: bool)
 signal ui_settings_changed(settings: UISettingsState)
 signal settings_reset_bindings_requested
+signal test_damage_immunity_changed(enabled: bool)
+signal test_outgoing_damage_bonus_percent_changed(percent: int)
+signal test_movement_speed_percent_changed(percent: int)
+signal test_values_reset_requested
 signal preparation_start_requested(loadout_snapshot: Dictionary)
 signal preparation_component_requested(id: StringName)
 signal preparation_slot_component_requested(slot_id: StringName, id: StringName)
@@ -189,6 +192,7 @@ var clinic_reward: Label
 var clinic_offers: Control
 var clinic_claim_button: Button
 var clinic_offer_buttons: Dictionary = {}
+var practice_tests_available: bool = false
 var research_overlay: Control
 var progression_screen: ProgressionScreen
 var progression_view_revision: int = 0
@@ -284,6 +288,7 @@ var pending_binding_slot: int = -1
 var pending_binding_event: InputEventKey
 var pending_binding_conflicting_action: StringName = &""
 var current_ui_settings: UISettingsState = UISettingsState.new()
+var current_test_settings: RunTestSettingsViewModel = RunTestSettingsViewModel.new()
 var input_glyph_service: InputGlyphService
 var reduced_motion_enabled: bool = false
 var preparation_overlay: Control
@@ -419,6 +424,9 @@ var result_reward_text: String = ""
 var result_reward_items: Array[ResultOverlayViewModel.RewardViewModel] = []
 var result_unlock_text: String = ""
 var result_mastery_text: String = ""
+var result_levels_action_text: String = "Fallübersicht"
+var result_retry_action_text: String = "Erneut behandeln"
+var result_campus_action_text: String = "Zum Campus"
 var end_panel: PanelContainer
 var end_title: Label
 var end_reason: Label
@@ -770,15 +778,9 @@ func _build_campus() -> Control:
 
 func _build_practice() -> Control:
 	practice_screen = PracticeScreen.new()
-	practice_screen.offline_claim_requested.connect(func() -> void: offline_claim_requested.emit())
-	practice_screen.clinic_job_start_requested.connect(func(id: StringName) -> void: clinic_job_start_requested.emit(id))
-	practice_screen.clinic_job_claim_requested.connect(func() -> void: clinic_job_claim_requested.emit())
+	practice_screen.scenario_selected.connect(func(id: StringName) -> void: practice_scenario_selected.emit(id))
+	practice_screen.boss_profile_selected.connect(func(id: StringName) -> void: practice_boss_profile_selected.emit(id))
 	practice_screen.back_requested.connect(func() -> void: back_requested.emit())
-	practice_columns = practice_screen.find_child("PracticeColumns", true, false) as GridContainer
-	clinic_offers = practice_screen.find_child("ClinicOffers", true, false) as Control
-	passive_claim_button = practice_screen.offline_claim_action()
-	clinic_claim_button = practice_screen.clinic_claim_action()
-	clinic_progress = practice_screen.clinic_progress_control()
 	return practice_screen
 
 func _build_research() -> Control:
@@ -845,6 +847,10 @@ func _build_settings() -> Control:
 	settings_screen.binding_slot_change_requested.connect(_begin_binding_capture)
 	settings_screen.binding_conflict_decided.connect(_on_binding_conflict_decided)
 	settings_screen.bindings_reset_requested.connect(func() -> void: settings_reset_bindings_requested.emit())
+	settings_screen.test_damage_immunity_changed.connect(func(enabled: bool) -> void: test_damage_immunity_changed.emit(enabled))
+	settings_screen.test_outgoing_damage_bonus_percent_changed.connect(func(percent: int) -> void: test_outgoing_damage_bonus_percent_changed.emit(percent))
+	settings_screen.test_movement_speed_percent_changed.connect(func(percent: int) -> void: test_movement_speed_percent_changed.emit(percent))
+	settings_screen.test_values_reset_requested.connect(func() -> void: test_values_reset_requested.emit())
 	settings_screen.new_game_requested.connect(func() -> void: new_game_requested.emit())
 	settings_screen.quit_requested.connect(func() -> void: quit_requested.emit())
 	settings_screen.back.connect(func() -> void: back_requested.emit())
@@ -930,7 +936,8 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 		binding_settings,
 		settings_status_text,
 		settings_show_quit,
-		conflict_view_model
+		conflict_view_model,
+		current_test_settings
 	)
 	settings_screen.apply(model)
 	_map_settings_compatibility_controls()
@@ -1875,10 +1882,15 @@ func _build_pause_overlay() -> Control:
 	pause_screen.resume_requested.connect(func() -> void: resume_requested.emit())
 	pause_screen.settings_requested.connect(func() -> void: navigate_requested.emit(&"settings"))
 	pause_screen.stats_requested.connect(_show_pause_stats)
+	pause_screen.test_values_requested.connect(_show_pause_test_values)
+	pause_screen.test_damage_immunity_changed.connect(func(enabled: bool) -> void: test_damage_immunity_changed.emit(enabled))
+	pause_screen.test_outgoing_damage_bonus_percent_changed.connect(func(percent: int) -> void: test_outgoing_damage_bonus_percent_changed.emit(percent))
+	pause_screen.test_movement_speed_percent_changed.connect(func(percent: int) -> void: test_movement_speed_percent_changed.emit(percent))
+	pause_screen.test_values_reset_requested.connect(func() -> void: test_values_reset_requested.emit())
 	pause_screen.abort_requested.connect(func() -> void: abort_requested.emit())
 	pause_screen.intro_skip_requested.connect(func() -> void: intro_skip_requested.emit())
 	pause_screen.back_requested.connect(func() -> void:
-		if pause_screen.current_mode() == PauseOverlay.Mode.STATS:
+		if pause_screen.current_mode() in [PauseOverlay.Mode.STATS, PauseOverlay.Mode.TEST]:
 			_hide_pause_stats()
 		else:
 			resume_requested.emit()
@@ -1991,10 +2003,10 @@ func _build_end_overlay() -> Control:
 	result_screen.campus.connect(func() -> void: result_campus_requested.emit())
 	return result_screen
 
-func show_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
+func show_campus(meta: MetaProgressionState) -> void:
 	_hide_all()
 	campus_overlay.modulate = Color.WHITE
-	refresh_campus(meta, jobs)
+	refresh_campus(meta)
 	campus_overlay.show()
 	_focus_first_button.call_deferred(campus_overlay)
 
@@ -2035,16 +2047,13 @@ func _position_campus_research_guidance() -> void:
 		clampf(prompt_y, 98.0, maxf(98.0, available_size.y - prompt_size.y - 18.0))
 	)
 
-func refresh_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
-	var job_status := "Kein Klinikfall aktiv"
-	if meta.active_job_id != &"" and jobs.has(meta.active_job_id):
-		job_status = "Belohnung bereit" if meta.is_job_complete() else "Klinikfall läuft"
+func refresh_campus(meta: MetaProgressionState) -> void:
 	var research_amount := "∞" if meta.is_unlimited_test_progression() else str(meta.research_points)
 	campus_research_status.text = "FORSCHUNG  %s" % research_amount
-	campus_clinic_status.text = job_status.to_upper()
+	campus_clinic_status.hide()
 	var practice_button: CampusBuildingCard = campus_buttons[&"practice"]
-	var practice_badge := "%d Forschung abholbar" % meta.claimable_research() if meta.claimable_research() > 0 else job_status
-	practice_button.set_status(practice_badge, meta.claimable_research() > 0 or meta.is_job_complete())
+	practice_button.visible = practice_tests_available
+	practice_button.set_status("3 lokale Testläufe", practice_tests_available)
 	var research_button: CampusBuildingCard = campus_buttons[&"research"]
 	var active_research := 0
 	for rank_value in meta.research_ranks.values():
@@ -2053,71 +2062,31 @@ func refresh_campus(meta: MetaProgressionState, jobs: Dictionary) -> void:
 	var research_status := "∞ · %d aktiv" % active_research if meta.is_unlimited_test_progression() else "%d Punkte · %d aktiv" % [meta.research_points, active_research]
 	research_button.set_status(research_status, meta.is_unlimited_test_progression() or meta.research_points > 0)
 	var level_button: CampusBuildingCard = campus_buttons[&"levels"]
-	level_button.set_status("%d / 4 Fälle frei" % [meta.highest_unlocked_level + 1], true)
+	level_button.set_status("%d / 7 Fälle frei" % [meta.highest_unlocked_level + 1], true)
 	var lexicon_button: CampusBuildingCard = campus_buttons[&"lexicon"]
 	lexicon_button.set_status("%d entdeckt" % meta.seen_discovery_ids.size(), meta.seen_discovery_ids.size() > 0)
 	var settings_button: CampusBuildingCard = campus_buttons[&"settings"]
 	settings_button.set_status("Anzeige · Audio", false)
 
-func show_practice(meta: MetaProgressionState, jobs: Dictionary) -> void:
+func show_practice(view_model: PracticeScreenViewModel) -> void:
 	_hide_all()
 	_show_campus_context()
 	practice_overlay.show()
-	refresh_practice(meta, jobs)
+	refresh_practice(view_model)
 	var preferred := practice_screen.default_focus_control()
 	_prepare_optional_navigation_focus.call_deferred(practice_overlay, preferred)
 
-func refresh_practice(meta: MetaProgressionState, jobs: Dictionary) -> void:
-	practice_view_revision += 1
-	var claimable := meta.claimable_research()
-	var has_job := meta.active_job_id != &"" and jobs.has(meta.active_job_id)
-	var job_complete := has_job and meta.is_job_complete()
-	var offline := PracticeScreenViewModel.OfflineResearchViewModel.create(
-		"%s gespeichert" % _format_duration(floori(meta.passive_seconds), false),
-		"8 Stunden",
-		"%d Forschung abholen" % claimable if claimable > 0 else "Noch nichts abholbar",
-		claimable,
-		claimable > 0
-	)
-	var clinic := PracticeScreenViewModel.ClinicStatusViewModel.idle()
-	if has_job:
-		var active: ClinicJobDefinition = jobs[meta.active_job_id]
-		var remaining := meta.job_seconds_remaining()
-		var elapsed := active.duration_seconds - remaining
-		clinic = PracticeScreenViewModel.ClinicStatusViewModel.create(
-			true,
-			active.id,
-			"%s abgeschlossen · Belohnung bereit" % active.title if job_complete else "%s läuft" % active.title,
-			job_complete,
-			clampi(elapsed, 0, active.duration_seconds),
-			active.duration_seconds,
-			"%s verbleibend" % _format_duration(remaining, true),
-			"+%d Forschung" % MetaProgressionState.scaled_research_gain(active.reward),
-			"Abgeschlossen um %s" % _local_time(meta.job_finishes_at) if job_complete else "Voraussichtlich fertig um %s" % _local_time(meta.job_finishes_at)
-		)
-	var offers: Array[PracticeScreenViewModel.ClinicJobOfferViewModel] = []
-	for id in [&"short_review", &"follow_up", &"complex_case"]:
-		if not jobs.has(id):
-			continue
-		var definition: ClinicJobDefinition = jobs[id]
-		offers.append(PracticeScreenViewModel.ClinicJobOfferViewModel.create(
-			id,
-			definition.title,
-			definition.duration_text(),
-			"+%d Forschung" % MetaProgressionState.scaled_research_gain(definition.reward),
-			true
-		))
-	var model := PracticeScreenViewModel.create(
-		practice_view_revision,
-		"Forschung ∞" if meta.is_unlimited_test_progression() else "Forschung %d" % meta.research_points,
-		offline,
-		clinic,
-		offers
-	)
-	practice_screen.apply_view_model(model)
-	clinic_offer_buttons.clear()
-	for offer in offers:
-		clinic_offer_buttons[offer.id()] = practice_screen.clinic_job_action(offer.id())
+func refresh_practice(view_model: PracticeScreenViewModel) -> void:
+	if view_model != null:
+		practice_screen.apply_view_model(view_model)
+
+
+func configure_practice_tests(available: bool) -> void:
+	practice_tests_available = available
+	if campus_buttons.has(&"practice"):
+		var button := campus_buttons[&"practice"] as CampusBuildingCard
+		button.visible = available
+		button.set_status("3 lokale Testläufe", available)
 
 func show_research(meta: MetaProgressionState, definitions: Array[ResearchDefinition]) -> void:
 	_hide_all()
@@ -2642,6 +2611,27 @@ func configure_ui_settings(settings: UISettingsState) -> void:
 	_apply_ui_scale()
 	_apply_reduced_motion()
 	_refresh_input_glyphs()
+
+
+func configure_test_settings(settings: RunTestSettings, available: bool) -> void:
+	var availability_changed := current_test_settings.is_available() != available
+	current_test_settings = RunTestSettingsViewModel.new(
+		available,
+		settings.damage_immunity_enabled() if settings != null else false,
+		settings.outgoing_damage_bonus_percent() if settings != null else 0,
+		settings.movement_speed_percent() if settings != null else 100
+	)
+	var settings_synced_in_place := (
+		not availability_changed
+		and settings_screen != null
+		and settings_screen.is_visible_in_tree()
+		and settings_screen.sync_test_values(current_test_settings)
+	)
+	if not settings_synced_in_place:
+		_refresh_settings_screen(settings_show_quit)
+	if pause_screen != null and pause_screen.visible:
+		pause_view_revision += 1
+		pause_screen.apply_view_model(_pause_view_model(), pause_screen.current_mode())
 
 func _on_input_method_changed(_method: StringName) -> void:
 	_refresh_input_glyphs()
@@ -3511,7 +3501,7 @@ func hide_pause() -> void:
 	run_prompt_suspended_by_pause = false
 
 func is_pause_stats_open() -> bool:
-	return pause_screen != null and pause_screen.visible and pause_screen.current_mode() == PauseOverlay.Mode.STATS
+	return pause_screen != null and pause_screen.visible and pause_screen.current_mode() != PauseOverlay.Mode.MENU
 
 func return_to_pause_menu() -> void:
 	_hide_pause_stats()
@@ -3519,6 +3509,14 @@ func return_to_pause_menu() -> void:
 func _show_pause_stats() -> void:
 	pause_view_revision += 1
 	pause_screen.apply_view_model(_pause_view_model(), PauseOverlay.Mode.STATS)
+	pause_screen.show()
+	pause_stats_overlay.show()
+	pause_screen.grab_initial_focus.call_deferred()
+
+
+func _show_pause_test_values() -> void:
+	pause_view_revision += 1
+	pause_screen.apply_view_model(_pause_view_model(), PauseOverlay.Mode.TEST)
 	pause_screen.show()
 	pause_stats_overlay.show()
 	pause_screen.grab_initial_focus.call_deferred()
@@ -3540,7 +3538,7 @@ func _pause_view_model() -> PauseOverlayViewModel:
 			float(run_hud_vitals.get("shield_current", 0.0)),
 			float(run_hud_vitals.get("shield_maximum", 0.0))
 		)
-	return PauseOverlayViewModel.create(sections, pause_view_revision, pause_is_intro)
+	return PauseOverlayViewModel.create(sections, pause_view_revision, pause_is_intro, current_test_settings)
 
 
 func _pause_stat_group_role(group: String) -> StringName:
@@ -3764,6 +3762,35 @@ func show_end(level: LevelDefinition, success: bool, reason: String, elapsed: fl
 		))
 	result_unlock_text = "Neuer Fall freigeschaltet" if unlocked_new else ""
 	result_mastery_text = ""
+	result_levels_action_text = "Fallübersicht"
+	result_retry_action_text = "Erneut behandeln"
+	result_campus_action_text = "Zum Campus"
+	_refresh_result_screen()
+	end_overlay.show()
+	result_screen.grab_initial_focus.call_deferred()
+
+
+func show_practice_end(scenario_title: String, success: bool, reason: String, elapsed: float, analysis_level: int, defeats: int) -> void:
+	_hide_all()
+	gameplay_hud.show()
+	ability_panel.hide()
+	finding_progress_panel.hide()
+	result_success = success
+	result_title_text = "Test abgeschlossen" if success else "Test beendet"
+	result_reason_text = reason
+	result_detail_text = scenario_title
+	result_stats_data = [
+		ResultOverlayViewModel.StatViewModel.new(&"time", "Zeit", _clock_text(elapsed), false),
+		ResultOverlayViewModel.StatViewModel.new(&"analysis", "Erfahrungslevel", str(analysis_level), true),
+		ResultOverlayViewModel.StatViewModel.new(&"defeats", "Bakterien", str(defeats), false),
+	]
+	result_reward_text = ""
+	result_reward_items.clear()
+	result_unlock_text = ""
+	result_mastery_text = ""
+	result_levels_action_text = "Zur Praxis"
+	result_retry_action_text = "Erneut testen"
+	result_campus_action_text = "Zum Campus"
 	_refresh_result_screen()
 	end_overlay.show()
 	result_screen.grab_initial_focus.call_deferred()
@@ -3824,7 +3851,10 @@ func _refresh_result_screen() -> void:
 		result_reward_text,
 		result_unlock_text,
 		result_mastery_text,
-		result_reward_items
+		result_reward_items,
+		result_levels_action_text,
+		result_retry_action_text,
+		result_campus_action_text
 	))
 	_map_result_compatibility_controls()
 
@@ -3962,9 +3992,6 @@ func _emit_navigation(id: StringName) -> void:
 
 func _emit_level_selected(id: StringName) -> void:
 	level_selected.emit(id)
-
-func _emit_job_start(id: StringName) -> void:
-	clinic_job_start_requested.emit(id)
 
 func _emit_research_purchase(id: StringName) -> void:
 	var button := research_buy_buttons.get(id) as Button

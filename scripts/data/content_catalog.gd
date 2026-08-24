@@ -27,31 +27,55 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Lerne Galopp, Behandlung, Erfahrung und Abwehrzellen kennen.",
 			"Das erste Lungenmodell ist stabilisiert. Die regulären Patientenfälle stehen nun bereit.",
 			"Das Modell blieb instabil. Wiederhole die Einführung in deinem eigenen Tempo."
-		).configure_case_variation([], [], 0).configure_boss(&"intro_focus", true).configure_case_pressure(CasePressurePlan.default_for_case_order(0)),
+		).configure_runtime(0, 0, 0.0, false).configure_case_variation([], [], 0).configure_boss(&"intro_focus", true).configure_case_pressure(CasePressurePlan.default_for_case_order(0)),
 		LevelDefinition.create(
-			&"localized_focus", 1, "lol - name fehlt", "Fall 01 · lokalisierter Pneumokokkenherd", false,
+			&"early_localized_focus", 1, "Früher Verlauf", "Fall 01 · beginnender Pneumokokkenherd", false,
+			-1.0, 180.0, 50.0, 0.929, 0.215, 1.05, 1.525, 1.04, 1.15, 0.06, 0.23,
+			0.75, PackedInt32Array([2]), 0.85,
+			"Ein früher lokaler Infektionsherd bildet den ersten regulären Patientenfall.",
+			"Der frühe Verlauf wurde kontrolliert.",
+			"Der frühe Verlauf konnte in diesem Versuch nicht kontrolliert werden."
+		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", false).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
+		LevelDefinition.create(
+			&"localized_focus", 2, "lol - name fehlt", "Fall 02 · lokalisierter Pneumokokkenherd", false,
 			-1.0, 180.0, 50.0, 0.827, 0.187, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
 			1.0, PackedInt32Array([3]), 1.0,
 			"Ein lokaler Bakterienherd belastet Doctor Milos. Stoppe ihn, bevor das Leben auf null fällt.",
 			"Der lokalisierte Infektionsherd wurde kontrolliert.",
 			"Die Infektionslast konnte in diesem Versuch nicht ausreichend kontrolliert werden."
-		).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", false).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", false).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
 		LevelDefinition.create(
-			&"spreading_infection", 2, "Die Ausbreitung", "Fall 02 · bakterielle Pneumonie", false,
+			&"advancing_infection", 3, "Fortschreitender Verlauf", "Fall 03 · fortschreitende Pneumonie", false,
+			-1.0, 180.0, 50.0, 0.726, 0.160, 1.25, 1.875, 1.12, 1.35, 0.14, 0.33,
+			0.60, PackedInt32Array([3, 3]), 1.175,
+			"Die Infektion breitet sich weiter aus und fordert mehr Kontrolle über den Raum.",
+			"Der fortschreitende Verlauf wurde eingegrenzt.",
+			"Der fortschreitende Verlauf blieb unkontrolliert."
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 36).configure_boss_behavior(1.20).configure_boss(&"infection_focus", true, 2.0, 68.0).configure_case_pressure(CasePressurePlan.default_for_case_order(3)),
+		LevelDefinition.create(
+			&"spreading_infection", 4, "Die Ausbreitung", "Fall 04 · bakterielle Pneumonie", false,
 			-1.0, 180.0, 50.0, 0.624, 0.132, 1.35, 2.05, 1.16, 1.45, 0.18, 0.38,
 			0.75, PackedInt32Array([4, 4]), 1.35,
 			"Mehrere Bakteriengruppen breiten sich gleichzeitig aus. Galopp und Ausbau werden jetzt entscheidend.",
 			"Die ausbreitende Infektion wurde eingegrenzt.",
 			"Doctor Milos verlor sein gesamtes Leben."
-		).configure_case_variation(all_traits, all_findings, 42).configure_boss_behavior(1.35).configure_boss(&"infection_focus", true, 2.5, 92.0).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 42).configure_boss_behavior(1.35).configure_boss(&"infection_focus", true, 2.5, 92.0).configure_case_pressure(CasePressurePlan.default_for_case_order(4)).configure_case_pressure_targets(true),
 		LevelDefinition.create(
-			&"severe_pneumonia", 3, "Schwerer Verlauf", "Fall 03 · schwere bakterielle Pneumonie", false,
+			&"critical_infection", 5, "Kritischer Verlauf", "Fall 05 · kritische Pneumonie", false,
+			-1.0, 180.0, 50.0, 0.576, 0.120, 1.45, 2.225, 1.20, 1.55, 0.215, 0.43,
+			1.05, PackedInt32Array([5, 6]), 1.525,
+			"Stationäre Herde verengen den Raum, während die bakterielle Belastung weiter steigt.",
+			"Der kritische Verlauf wurde kontrolliert.",
+			"Der kritische Verlauf blieb außerhalb des kontrollierbaren Therapiefensters."
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 48).configure_boss(&"infection_focus", false).configure_case_pressure(CasePressurePlan.default_for_case_order(5)).configure_case_pressure_targets(true),
+		LevelDefinition.create(
+			&"severe_pneumonia", 6, "Schwerer Verlauf", "Fall 06 · schwere bakterielle Pneumonie", false,
 			-1.0, 180.0, 50.0, 0.528, 0.108, 1.55, 2.40, 1.24, 1.65, 0.25, 0.48,
 			1.35, PackedInt32Array([6, 8]), 1.70,
 			"Die Belastung steigt schnell. Du brauchst einen starken Ausbau und konsequenten Galopp.",
 			"Auch der schwere Infektionsverlauf wurde kontrolliert.",
 			"Der schwere Verlauf blieb außerhalb des kontrollierbaren Therapiefensters."
-		).configure_case_variation(all_traits, all_findings, 55).configure_boss(&"infection_focus", false).configure_case_pressure(CasePressurePlan.default_for_case_order(3))
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 55).configure_boss(&"infection_focus", false).configure_case_pressure(CasePressurePlan.default_for_case_order(6)).configure_case_pressure_targets(true)
 	]
 
 static func tutorial_hint_definitions() -> Dictionary:
@@ -210,8 +234,11 @@ static func _number_text(value: float) -> String:
 static func arena_visual_definitions() -> Dictionary:
 	return {
 		&"intro": ArenaVisualDefinition.create(&"intro", Color("b87b84"), Color("c99096"), Color("f2d1c4"), Color("74465b"), Color("da6f74"), 3101, 0.12, "res://assets/art/visual_restart/alveolar_tissue_day.png"),
+		&"early_localized_focus": ArenaVisualDefinition.create(&"early_localized_focus", Color("b1717d"), Color("c5848e"), Color("efd0c2"), Color("704055"), Color("df665f"), 4101, 0.34, "res://assets/art/visual_restart/alveolar_tissue_day.png"),
 		&"localized_focus": ArenaVisualDefinition.create(&"localized_focus", Color("b1717d"), Color("c5848e"), Color("efd0c2"), Color("704055"), Color("df665f"), 4202, 0.34, "res://assets/art/visual_restart/alveolar_tissue_day.png"),
+		&"advancing_infection": ArenaVisualDefinition.create(&"advancing_infection", Color("a96878"), Color("bd7888"), Color("ecc7bd"), Color("63364f"), Color("e25f5d"), 5202, 0.56, "res://assets/art/visual_restart/alveolar_tissue_day.png"),
 		&"spreading_infection": ArenaVisualDefinition.create(&"spreading_infection", Color("a96878"), Color("bd7888"), Color("ecc7bd"), Color("63364f"), Color("e25f5d"), 5303, 0.56, "res://assets/art/visual_restart/alveolar_tissue_day.png"),
+		&"critical_infection": ArenaVisualDefinition.create(&"critical_infection", Color("945c70"), Color("aa697e"), Color("e4bdb6"), Color("562f49"), Color("e04f58"), 6303, 0.78, "res://assets/art/visual_restart/alveolar_tissue_day.png"),
 		&"severe_pneumonia": ArenaVisualDefinition.create(&"severe_pneumonia", Color("945c70"), Color("aa697e"), Color("e4bdb6"), Color("562f49"), Color("e04f58"), 6404, 0.78, "res://assets/art/visual_restart/alveolar_tissue_day.png")
 	}
 
@@ -280,11 +307,9 @@ static func _run_upgrade_multi(
 	return definition
 
 static func clinic_job_definitions() -> Dictionary:
-	return {
-		&"short_review": ClinicJobDefinition.create(&"short_review", "Kurzbefund", 5 * 60, 6),
-		&"follow_up": ClinicJobDefinition.create(&"follow_up", "Verlaufskontrolle", 20 * 60, 18),
-		&"complex_case": ClinicJobDefinition.create(&"complex_case", "Komplexer Fall", 60 * 60, 42)
-	}
+	# Timed clinic work and offline research were retired. The empty compatibility
+	# catalog keeps old callers harmless while the Practice UI is now test-only.
+	return {}
 
 static func research_definitions() -> Array[ResearchDefinition]:
 	return [
@@ -314,7 +339,7 @@ static func loadout_module_definitions() -> Dictionary:
 	}
 
 static func case_trait_definitions() -> Dictionary:
-	var all_levels: Array[StringName] = [&"localized_focus", &"spreading_infection", &"severe_pneumonia"]
+	var all_levels: Array[StringName] = [&"early_localized_focus", &"localized_focus", &"advancing_infection", &"spreading_infection", &"critical_infection", &"severe_pneumonia"]
 	return {
 		&"monster_resistance_20": CaseTraitDefinition.create(&"monster_resistance_20", "Resistente Erreger", "+20 Prozentpunkte auf alle effektiven Gegnerresistenzen.", [{"stat_id": &"enemy_resistance_effective", "operation": &"add", "value": 20.0}], all_levels, &"negative"),
 		&"monster_defense_10": CaseTraitDefinition.create(&"monster_defense_10", "Gepanzerte Erreger", "+10 Gegnerverteidigung.", [{"stat_id": &"enemy_defense", "operation": &"add", "value": 10.0}], all_levels, &"negative"),
@@ -327,7 +352,7 @@ static func case_trait_definitions() -> Dictionary:
 	}
 
 static func finding_definitions() -> Dictionary:
-	var all_levels: Array[StringName] = [&"localized_focus", &"spreading_infection", &"severe_pneumonia"]
+	var all_levels: Array[StringName] = [&"early_localized_focus", &"localized_focus", &"advancing_infection", &"spreading_infection", &"critical_infection", &"severe_pneumonia"]
 	return {
 		&"grouping": FindingDefinition.create(&"grouping", "Gruppenbildung", "Platzhalter für einen später ausgearbeiteten medizinischen Befund.", "Platzhalter · dieser Befund verändert den aktuellen Run nicht.", FindingDefinition.Behavior.NONE, 0.0, [&"group_area", &"group_control", &"group_safety"], all_levels),
 		&"hidden_nests": FindingDefinition.create(&"hidden_nests", "Verdeckte Nester", "Platzhalter für einen später ausgearbeiteten medizinischen Befund.", "Platzhalter · dieser Befund verändert den aktuellen Run nicht.", FindingDefinition.Behavior.NONE, 0.0, [&"nest_damage", &"nest_range", &"nest_samples"], all_levels),

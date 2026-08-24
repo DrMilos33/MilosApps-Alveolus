@@ -27,38 +27,70 @@ func _test_default_schedules() -> void:
 	var fall_one := CasePressurePlanScript.default_for_case_order(1)
 	_equal(
 		fall_one.target_focus_times,
-		PackedFloat32Array([25.0, 60.0, 95.0, 130.0]),
-		"Fall 1 plant kleine Herde exakt bei 25/60/95/130 Sekunden"
+		PackedFloat32Array([60.0, 120.0]),
+		"Fall 1 plant kleine Herde exakt bei 60/120 Sekunden"
 	)
 	_equal(fall_one.projectile_gate_times, PackedFloat32Array(), "Fall 1 plant keine Projektiltore")
-	_equal(fall_one.max_active_targets, 2, "Fall 1 erlaubt höchstens zwei aktive Zielherde")
+	_equal(fall_one.max_active_targets, 1, "Fall 1 erlaubt höchstens einen aktiven Zielherd")
 
 	var fall_two := CasePressurePlanScript.default_for_case_order(2)
 	_equal(
 		fall_two.target_focus_times,
-		PackedFloat32Array([20.0, 60.0, 100.0, 140.0]),
-		"Fall 2 plant Zielherde exakt bei 20/60/100/140 Sekunden"
+		PackedFloat32Array([25.0, 60.0, 95.0, 130.0]),
+		"Fall 2 bewahrt Zielherde exakt bei 25/60/95/130 Sekunden"
 	)
 	_equal(fall_two.projectile_gate_times, PackedFloat32Array(), "Fall 2 plant keine Projektiltore")
-	_equal(fall_two.max_active_targets, 1, "Fall 2 erlaubt höchstens einen aktiven Zielherd")
+	_equal(fall_two.max_active_targets, 2, "Fall 2 bewahrt höchstens zwei aktive Zielherde")
 
 	var fall_three := CasePressurePlanScript.default_for_case_order(3)
-	_equal(fall_three.target_focus_times, fall_two.target_focus_times, "Fall 3 übernimmt den Zielrhythmus aus Fall 2")
 	_equal(
-		fall_three.projectile_gate_times,
-		PackedFloat32Array([45.0, 85.0, 125.0]),
-		"Fall 3 ergänzt Projektiltore exakt bei 45/85/125 Sekunden"
+		fall_three.target_focus_times,
+		PackedFloat32Array([22.5, 60.0, 97.5, 135.0]),
+		"Fall 3 plant seinen Zwischenrhythmus exakt bei 22,5/60/97,5/135 Sekunden"
 	)
+	_equal(fall_three.projectile_gate_times, PackedFloat32Array(), "Fall 3 plant keine Projektiltore")
 	_equal(fall_three.max_active_targets, 1, "Fall 3 erlaubt höchstens einen aktiven Zielherd")
+
+	var fall_four := CasePressurePlanScript.default_for_case_order(4)
+	_equal(
+		fall_four.target_focus_times,
+		PackedFloat32Array([20.0, 60.0, 100.0, 140.0]),
+		"Fall 4 bewahrt Zielherde exakt bei 20/60/100/140 Sekunden"
+	)
+	_equal(fall_four.projectile_gate_times, PackedFloat32Array(), "Fall 4 plant keine Projektiltore")
+	_equal(fall_four.max_active_targets, 1, "Fall 4 erlaubt höchstens einen aktiven Zielherd")
+
+	var fall_five := CasePressurePlanScript.default_for_case_order(5)
+	_equal(
+		fall_five.target_focus_times,
+		PackedFloat32Array([20.0, 60.0, 100.0, 140.0]),
+		"Fall 5 plant Zielherde explizit bei 20/60/100/140 Sekunden"
+	)
+	_equal(
+		fall_five.projectile_gate_times,
+		PackedFloat32Array([65.0, 105.0]),
+		"Fall 5 ergänzt Projektiltore exakt bei 65/105 Sekunden"
+	)
+	_equal(fall_five.max_active_targets, 1, "Fall 5 erlaubt höchstens einen aktiven Zielherd")
+
+	var fall_six := CasePressurePlanScript.default_for_case_order(6)
+	_equal(fall_six.target_focus_times, fall_four.target_focus_times, "Fall 6 bewahrt den Zielrhythmus des bisherigen Endfalls")
+	_equal(
+		fall_six.projectile_gate_times,
+		PackedFloat32Array([45.0, 85.0, 125.0]),
+		"Fall 6 bewahrt Projektiltore exakt bei 45/85/125 Sekunden"
+	)
+	_equal(fall_six.max_active_targets, 1, "Fall 6 erlaubt höchstens einen aktiven Zielherd")
 
 	var intro := CasePressurePlanScript.default_for_case_order(0)
 	_equal(intro.target_focus_times, PackedFloat32Array(), "Die Einführung erhält keinen Druckplan")
 	_equal(intro.projectile_gate_times, PackedFloat32Array(), "Die Einführung erhält keine Projektiltore")
+	_equal(intro.max_active_targets, 0, "Die Einführung erlaubt keine Druckziele")
 
 
 func _test_level_and_run_config_transfer() -> void:
 	var levels := ContentCatalog.level_definitions()
-	_equal(levels.size(), 4, "Der Katalog enthält Einführung und drei Hauptfälle")
+	_equal(levels.size(), 7, "Der Katalog enthält Einführung und sechs Hauptfälle")
 	for order in range(levels.size()):
 		var level := levels[order] as LevelDefinition
 		var expected := CasePressurePlanScript.default_for_case_order(order)
@@ -69,10 +101,10 @@ func _test_level_and_run_config_transfer() -> void:
 		_equal(level.case_pressure_plan.projectile_gate_times, expected.projectile_gate_times, "Fall %d übernimmt die Projektiltortermine" % order)
 		_equal(level.case_pressure_plan.max_active_targets, expected.max_active_targets, "Fall %d übernimmt den Zielherddeckel" % order)
 
-	var source := levels[3] as LevelDefinition
+	var source := levels[6] as LevelDefinition
 	var config := RunConfig.from_level(source)
 	var quick_config := RunConfig.from_level(source, true)
-	_true(config.case_pressure_plan != null, "RunConfig übernimmt den Fall-3-Druckplan")
+	_true(config.case_pressure_plan != null, "RunConfig übernimmt den Fall-6-Druckplan")
 	_true(config.case_pressure_plan != source.case_pressure_plan, "RunConfig besitzt keinen Alias auf den Katalogplan")
 	_true(quick_config.case_pressure_plan != null, "Quick-Run behält den Druckplan")
 	if quick_config.case_pressure_plan != null:
@@ -86,7 +118,7 @@ func _test_level_and_run_config_transfer() -> void:
 
 func _test_exact_once_delivery() -> void:
 	var director := CasePressureDirectorScript.new().configure(
-		CasePressurePlanScript.default_for_case_order(1),
+		CasePressurePlanScript.default_for_case_order(2),
 		317_021
 	)
 	var signal_times := PackedFloat32Array()
@@ -102,16 +134,16 @@ func _test_exact_once_delivery() -> void:
 	var events: Array[Dictionary] = []
 	for elapsed in [25.0, 25.0, 59.999, 60.0, 95.0, 130.0, 130.0, 240.0]:
 		events.append_array(director.advance(elapsed, 0, false, false))
-	_equal(_event_times(events), PackedFloat32Array([25.0, 60.0, 95.0, 130.0]), "Jeder Fall-1-Termin wird exakt einmal geliefert")
+	_equal(_event_times(events), PackedFloat32Array([25.0, 60.0, 95.0, 130.0]), "Jeder erhaltene Fall-2-Termin wird exakt einmal geliefert")
 	_equal(signal_times, PackedFloat32Array([25.0, 60.0, 95.0, 130.0]), "Das Signal wird für dieselben Ereignisse exakt einmal emittiert")
 	_equal(director.pending_event_count(), 0, "Nach dem letzten Termin bleibt kein Druckereignis offen")
 	for event in events:
-		_equal(int(event[&"kind"]), CasePressureDirectorScript.EventKind.TARGET_FOCUS, "Fall 1 liefert ausschließlich Zielherde")
+		_equal(int(event[&"kind"]), CasePressureDirectorScript.EventKind.TARGET_FOCUS, "Fall 2 liefert ausschließlich Zielherde")
 
 
 func _test_target_capacity_consumes_blocked_slot() -> void:
 	var director := CasePressureDirectorScript.new().configure(
-		CasePressurePlanScript.default_for_case_order(1),
+		CasePressurePlanScript.default_for_case_order(2),
 		19
 	)
 	_equal(director.advance(25.0, 2, false, false).size(), 0, "Ein voller Zielherddeckel unterdrückt den fälligen Termin")
@@ -121,7 +153,7 @@ func _test_target_capacity_consumes_blocked_slot() -> void:
 
 
 func _test_intro_and_boss_cancel_remaining_plan() -> void:
-	var plan := CasePressurePlanScript.default_for_case_order(3)
+	var plan := CasePressurePlanScript.default_for_case_order(6)
 	var intro_director := CasePressureDirectorScript.new().configure(plan, 77)
 	_equal(intro_director.advance(20.0, 0, true, false).size(), 0, "Introstatus unterdrückt einen fälligen Zieldruck")
 	_true(intro_director.is_cancelled(), "Introstatus storniert den verbleibenden Plan")
@@ -138,7 +170,7 @@ func _test_intro_and_boss_cancel_remaining_plan() -> void:
 
 func _test_reset_and_reconfigure() -> void:
 	var director := CasePressureDirectorScript.new().configure(
-		CasePressurePlanScript.default_for_case_order(1),
+		CasePressurePlanScript.default_for_case_order(2),
 		1_337
 	)
 	var first_delivery: Array[Dictionary] = director.advance(25.0, 0, false, false)
@@ -147,15 +179,15 @@ func _test_reset_and_reconfigure() -> void:
 	_equal(_event_signatures(reset_delivery), _event_signatures(first_delivery), "Reset reproduziert denselben ersten Termin samt Seed-Geometrie")
 
 	director.cancel()
-	director.configure(CasePressurePlanScript.default_for_case_order(3), 8_181)
+	director.configure(CasePressurePlanScript.default_for_case_order(6), 8_181)
 	var reconfigured: Array[Dictionary] = director.advance(45.0, 0, false, false)
 	_equal(_event_times(reconfigured), PackedFloat32Array([20.0, 45.0]), "Configure ersetzt den alten Plan und hebt eine vorherige Stornierung auf")
 	if reconfigured.size() == 2:
-		_equal(int(reconfigured[1][&"kind"]), CasePressureDirectorScript.EventKind.PROJECTILE_GATE, "Der neu konfigurierte Fall-3-Termin behält seinen Tortyp")
+		_equal(int(reconfigured[1][&"kind"]), CasePressureDirectorScript.EventKind.PROJECTILE_GATE, "Der neu konfigurierte Fall-6-Termin behält seinen Tortyp")
 
 
 func _test_movement_independent_timing_and_seed_output() -> void:
-	var plan := CasePressurePlanScript.default_for_case_order(3)
+	var plan := CasePressurePlanScript.default_for_case_order(6)
 	var still_director := CasePressureDirectorScript.new().configure(plan, 2_026_082_4)
 	var moving_director := CasePressureDirectorScript.new().configure(plan, 2_026_082_4)
 	var still_events: Array[Dictionary] = []
@@ -186,7 +218,7 @@ func _test_movement_independent_timing_and_seed_output() -> void:
 
 func _test_sector_exclusion_and_gate_orientation() -> void:
 	var director := CasePressureDirectorScript.new().configure(
-		CasePressurePlanScript.default_for_case_order(3),
+		CasePressurePlanScript.default_for_case_order(6),
 		941_107,
 		12
 	)
@@ -207,10 +239,10 @@ func _test_sector_exclusion_and_gate_orientation() -> void:
 			_true(orientation >= 0 and orientation < 12, "Ein Projektiltor besitzt eine deterministische gültige Orientierung")
 		else:
 			_equal(int(event[&"gate_orientation"]), CasePressureDirectorScript.NO_GATE_ORIENTATION, "Ein Zielherd erfindet keine Tororientierung")
-	_equal(gate_count, 3, "Fall 3 liefert exakt drei Projektiltore")
+	_equal(gate_count, 3, "Fall 6 liefert exakt drei Projektiltore")
 
 	var replay := CasePressureDirectorScript.new().configure(
-		CasePressurePlanScript.default_for_case_order(3),
+		CasePressurePlanScript.default_for_case_order(6),
 		941_107,
 		12
 	)

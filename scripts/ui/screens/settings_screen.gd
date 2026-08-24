@@ -134,6 +134,55 @@ func control_for_setting(setting_key: StringName) -> Control:
 	return _controls.get(setting_key) as Control
 
 
+## Live test sliders must keep their Control identity while the pointer is
+## dragging them. Rebuilding the settings document from a new immutable model
+## would cancel the drag after its first snapped value, so this narrow refresh
+## synchronizes only the three debug controls and advances the stored content
+## hash without touching the tree.
+func sync_test_values(settings: RunTestSettingsViewModel) -> bool:
+	if settings == null or not settings.is_available() or _view_model == null or not _view_model.has_test_settings():
+		return false
+	var immunity := control_for_setting(&"test.damage_immunity") as CheckButton
+	var damage := control_for_setting(&"test.outgoing_damage_bonus_percent") as HSlider
+	var movement := control_for_setting(&"test.movement_speed_percent") as HSlider
+	var damage_label := find_child("TestOutgoingDamageBonusValue", true, false) as Label
+	var movement_label := find_child("TestMovementSpeedValue", true, false) as Label
+	if immunity == null or damage == null or movement == null or damage_label == null or movement_label == null:
+		return false
+	immunity.set_pressed_no_signal(settings.damage_immunity_enabled())
+	immunity.text = "Ein" if settings.damage_immunity_enabled() else "Aus"
+	_update_test_immunity_accessibility(immunity, settings.damage_immunity_enabled())
+	damage.set_value_no_signal(settings.outgoing_damage_bonus_percent())
+	_update_test_percent_label(
+		damage_label,
+		damage,
+		settings.outgoing_damage_bonus_percent(),
+		"Ausgehender Schaden",
+		true
+	)
+	movement.set_value_no_signal(settings.movement_speed_percent())
+	_update_test_percent_label(
+		movement_label,
+		movement,
+		settings.movement_speed_percent(),
+		"Galopp",
+		false
+	)
+	_view_model = SettingsScreenViewModel.new(
+		_view_model.get_revision(),
+		_view_model.get_audio_settings(),
+		_view_model.get_option_settings(),
+		_view_model.get_toggle_settings(),
+		_view_model.get_binding_settings(),
+		_view_model.get_status_text(),
+		_view_model.should_show_quit(),
+		_view_model.get_binding_conflict(),
+		settings
+	)
+	_applied_content_hash = _view_model.get_content_hash()
+	return true
+
+
 func is_binding_conflict_open() -> bool:
 	return (
 		_conflict_layer != null

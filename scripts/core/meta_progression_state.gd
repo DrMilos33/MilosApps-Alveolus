@@ -14,10 +14,8 @@ signal mastery_changed(new_ids: Array[StringName], earned_points: int)
 signal loadouts_changed(level_id: StringName)
 signal settings_changed
 
-const SAVE_VERSION := 6
-# Research income is globally 150 percent higher. Reducing the interval keeps
-# offline income exact over time without introducing a saved fractional carry.
-const PASSIVE_INTERVAL_SECONDS := 240.0
+const SAVE_VERSION := 7
+const PASSIVE_INTERVAL_SECONDS := 240.0 # V6 API compatibility; offline income is retired.
 const PASSIVE_CAP_SECONDS := 28800.0
 const UNLIMITED_TEST_POINT_POOL := 1_000_000_000
 const TALENT_TREE_REVISION := 4
@@ -106,64 +104,28 @@ func reset_defaults(now: int = -1) -> void:
 	talents_changed.emit()
 
 func accrue_time(now: int = -1) -> void:
-	var current_time := _now() if now < 0 else now
-	if last_seen_unix <= 0:
-		last_seen_unix = current_time
-		return
-	var elapsed := maxi(0, current_time - last_seen_unix)
-	if elapsed > 0:
-		passive_seconds = minf(PASSIVE_CAP_SECONDS, passive_seconds + float(elapsed))
-		last_seen_unix = current_time
-		research_changed.emit(research_points, claimable_research())
-	elif current_time > last_seen_unix:
-		last_seen_unix = current_time
+	# Offline research and timed clinic work were retired with Save v7. Keep the
+	# callable as a harmless compatibility surface for older screen flows.
+	last_seen_unix = _now() if now < 0 else now
+	passive_seconds = 0.0
 
 func claimable_research() -> int:
-	return floori(passive_seconds / PASSIVE_INTERVAL_SECONDS)
+	return 0
 
 func claim_passive() -> int:
-	var amount := claimable_research()
-	if amount <= 0:
-		return 0
-	passive_seconds -= float(amount) * PASSIVE_INTERVAL_SECONDS
-	research_points += amount
-	research_changed.emit(research_points, claimable_research())
-	return amount
+	return 0
 
 func start_job(definition: ClinicJobDefinition, now: int = -1) -> bool:
-	if definition == null or active_job_id != &"":
-		return false
-	var current_time := _now() if now < 0 else now
-	active_job_id = definition.id
-	job_started_at = current_time
-	job_finishes_at = current_time + definition.duration_seconds
-	clinic_changed.emit()
-	return true
+	return false
 
 func is_job_complete(now: int = -1) -> bool:
-	if active_job_id == &"":
-		return false
-	var current_time := _now() if now < 0 else now
-	return current_time >= job_finishes_at
+	return false
 
 func job_seconds_remaining(now: int = -1) -> int:
-	if active_job_id == &"":
-		return 0
-	var current_time := _now() if now < 0 else now
-	return maxi(0, job_finishes_at - current_time)
+	return 0
 
 func claim_job(definitions: Dictionary, now: int = -1) -> int:
-	if not is_job_complete(now) or not definitions.has(active_job_id):
-		return 0
-	var definition: ClinicJobDefinition = definitions[active_job_id]
-	var reward := scaled_research_gain(definition.reward)
-	research_points += reward
-	active_job_id = &""
-	job_started_at = 0
-	job_finishes_at = 0
-	research_changed.emit(research_points, claimable_research())
-	clinic_changed.emit()
-	return reward
+	return 0
 
 func purchase(definition: ResearchDefinition) -> bool:
 	if definition == null:
@@ -524,11 +486,6 @@ func to_dict() -> Dictionary:
 	return {
 		"version": SAVE_VERSION,
 		"research_points": research_points,
-		"passive_seconds": passive_seconds,
-		"last_seen_unix": last_seen_unix,
-		"active_job_id": String(active_job_id),
-		"job_started_at": job_started_at,
-		"job_finishes_at": job_finishes_at,
 		"research_ranks": research_ranks.duplicate(true),
 		"lifetime_runs": lifetime_runs,
 		"prologue_seen": prologue_seen,
@@ -563,11 +520,11 @@ func load_dict(data: Dictionary) -> bool:
 		data = LoadoutSlotSaveAdapter.migrate_v4_save(data)
 		version = int(data.get("version", version))
 	research_points = maxi(0, int(data.get("research_points", 0)))
-	passive_seconds = clampf(float(data.get("passive_seconds", 0.0)), 0.0, PASSIVE_CAP_SECONDS)
-	last_seen_unix = int(data.get("last_seen_unix", _now()))
-	active_job_id = StringName(str(data.get("active_job_id", "")))
-	job_started_at = maxi(0, int(data.get("job_started_at", 0)))
-	job_finishes_at = maxi(0, int(data.get("job_finishes_at", 0)))
+	passive_seconds = 0.0
+	last_seen_unix = _now()
+	active_job_id = &""
+	job_started_at = 0
+	job_finishes_at = 0
 	var loaded_ranks: Variant = data.get("research_ranks", {})
 	research_ranks = {}
 	if typeof(loaded_ranks) == TYPE_DICTIONARY:
@@ -575,7 +532,8 @@ func load_dict(data: Dictionary) -> bool:
 			research_ranks[StringName(str(id))] = maxi(0, int(loaded_ranks[id]))
 	lifetime_runs = maxi(0, int(data.get("lifetime_runs", 0)))
 	prologue_seen = bool(data.get("prologue_seen", false)) if version >= 2 else false
-	highest_unlocked_level = clampi(int(data.get("highest_unlocked_level", 0)), 0, ContentCatalog.level_definitions().size() - 1) if version >= 2 else 0
+	var stored_unlock := int(data.get("highest_unlocked_level", 0)) if version >= 2 else 0
+	highest_unlocked_level = _migrated_unlocked_order(stored_unlock, version)
 	level_records = {}
 	if version >= 2:
 		var loaded_records: Variant = data.get("level_records", {})
@@ -646,9 +604,26 @@ func set_ui_settings(settings: UISettingsState) -> void:
 	settings_changed.emit()
 
 func _ensure_default_loadouts() -> void:
-	for level_id in [&"localized_focus", &"spreading_infection", &"severe_pneumonia"]:
+	for level_id in [&"early_localized_focus", &"localized_focus", &"advancing_infection", &"spreading_infection", &"critical_infection", &"severe_pneumonia"]:
 		if not prepared_loadouts.has(level_id):
 			prepared_loadouts[level_id] = _default_loadout_from_research()
+
+
+static func _migrated_unlocked_order(stored_order: int, source_version: int) -> int:
+	var maximum := ContentCatalog.level_definitions().size() - 1
+	if source_version >= 7:
+		return clampi(stored_order, 0, maximum)
+	# V6 and older exposed three campaign anchors at orders 1/2/3. Their stable
+	# IDs now live at 2/4/6; intermediate cases below the mapped anchor become
+	# available without rewriting records, seeds or loadouts.
+	match clampi(stored_order, 0, 3):
+		1:
+			return 2
+		2:
+			return 4
+		3:
+			return 6
+	return 0
 
 func _default_loadout_from_research() -> PreparedLoadout:
 	# Research ownership remains stored, but passive modules are intentionally

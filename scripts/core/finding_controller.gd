@@ -21,6 +21,15 @@ func configure(finding: FindingDefinition, required_progress: int) -> void:
 	selected_reaction_id = &""
 	progress_changed.emit(progress, target)
 
+
+func clear() -> void:
+	definition = null
+	target = 0
+	progress = 0
+	revealed = false
+	resolved = false
+	selected_reaction_id = &""
+
 func add_progress(amount: int, multiplier: float = 1.0) -> bool:
 	if definition == null or revealed or amount <= 0:
 		return false

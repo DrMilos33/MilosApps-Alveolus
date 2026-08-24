@@ -34,9 +34,8 @@ const BASELINE_SIGNALS := {
 	"retry_requested": "",
 	"result_levels_requested": "",
 	"result_campus_requested": "",
-	"offline_claim_requested": "",
-	"clinic_job_start_requested": "id:StringName",
-	"clinic_job_claim_requested": "",
+	"practice_scenario_selected": "id:StringName",
+	"practice_boss_profile_selected": "id:StringName",
 	"research_purchase_requested": "id:StringName",
 	"discovery_dismissed": "",
 	"intro_skip_requested": "",
@@ -47,6 +46,10 @@ const BASELINE_SIGNALS := {
 	"run_stats_visibility_changed": "enabled:bool",
 	"ui_settings_changed": "settings:UISettingsState",
 	"settings_reset_bindings_requested": "",
+	"test_damage_immunity_changed": "enabled:bool",
+	"test_outgoing_damage_bonus_percent_changed": "percent:int",
+	"test_movement_speed_percent_changed": "percent:int",
+	"test_values_reset_requested": "",
 	"preparation_start_requested": "loadout_snapshot:Dictionary",
 	"preparation_component_requested": "id:StringName",
 	"preparation_slot_component_requested": "slot_id:StringName,id:StringName",
@@ -64,10 +67,10 @@ const BASELINE_SIGNALS := {
 }
 
 const BASELINE_METHODS := {
-	"show_campus": "meta:MetaProgressionState,jobs:Dictionary->void",
-	"refresh_campus": "meta:MetaProgressionState,jobs:Dictionary->void",
-	"show_practice": "meta:MetaProgressionState,jobs:Dictionary->void",
-	"refresh_practice": "meta:MetaProgressionState,jobs:Dictionary->void",
+	"show_campus": "meta:MetaProgressionState->void",
+	"refresh_campus": "meta:MetaProgressionState->void",
+	"show_practice": "view_model:PracticeScreenViewModel->void",
+	"refresh_practice": "view_model:PracticeScreenViewModel->void",
 	"show_research": "meta:MetaProgressionState,definitions:Array[ResearchDefinition]->void",
 	"show_research_tabs": "meta:MetaProgressionState,definitions:Array[ResearchDefinition],talent_view:Variant->void",
 	"refresh_research": "meta:MetaProgressionState,definitions:Array[ResearchDefinition]->void",
@@ -138,7 +141,7 @@ func _run() -> void:
 		_finish(0, 0)
 		return
 	var source := file.get_as_text()
-	_check(BASELINE_SIGNALS.size() == 41, "Checkpoint snapshot contains all 41 baseline signals")
+	_check(BASELINE_SIGNALS.size() == 44, "Checkpoint snapshot contains all 44 baseline signals")
 	_check(BASELINE_METHODS.size() == 57, "Checkpoint snapshot contains all 57 facade methods")
 	_check(source.contains("class_name GameHUD"), "Facade keeps the GameHUD class identity")
 
@@ -167,6 +170,9 @@ func _run() -> void:
 		actual_methods.get("set_target_focus_direction_indicator", "<missing>") == "visible:bool,direction:Vector2,countdown_text:String->void",
 		"GameHUD exposes the additive target-focus direction indicator contract"
 	)
+	_check(actual_methods.get("configure_practice_tests", "<missing>") == "available:bool->void", "GameHUD exposes the local-practice availability gate")
+	_check(actual_methods.get("configure_test_settings", "<missing>") == "settings:RunTestSettings,available:bool->void", "GameHUD exposes debug test values without UISettings coupling")
+	_check(actual_methods.get("show_practice_end", "<missing>") == "scenario_title:String,success:bool,reason:String,elapsed:float,analysis_level:int,defeats:int->void", "GameHUD exposes the neutral practice result")
 
 	_finish(
 		maxi(0, actual_signals.size() - BASELINE_SIGNALS.size()),

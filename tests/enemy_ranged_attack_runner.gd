@@ -9,7 +9,7 @@ func _init() -> void:
 
 
 func _run() -> void:
-	_test_case_two_boss_contract()
+	_test_anchor_case_boss_contract()
 	await _test_intro_boss_normal_attack()
 	await _test_generation_safe_attack_director()
 	await _test_hostile_projectile_geometry()
@@ -21,12 +21,13 @@ func _run() -> void:
 		quit(1)
 
 
-func _test_case_two_boss_contract() -> void:
+func _test_anchor_case_boss_contract() -> void:
 	var levels := ContentCatalog.level_definitions()
-	var second_case := levels[2] as LevelDefinition
-	_near(second_case.boss_speed_multiplier, 1.35, "Der Fall-2-Boss besitzt den datengetriebenen Geschwindigkeitsfaktor")
-	_equal(second_case.boss_phase_minions, PackedInt32Array([4, 4]), "Der Fall-2-Boss ruft in beiden Phasen vier Adds")
-	var config := RunConfig.from_level(second_case)
+	var anchor_case := levels[4] as LevelDefinition
+	_equal(anchor_case.id, &"spreading_infection", "Der erhaltene Rautenboss bleibt über seine stabile Fall-ID adressierbar")
+	_near(anchor_case.boss_speed_multiplier, 1.35, "Der Fall-4-Boss besitzt den datengetriebenen Geschwindigkeitsfaktor")
+	_equal(anchor_case.boss_phase_minions, PackedInt32Array([4, 4]), "Der Fall-4-Boss ruft in beiden Phasen vier Adds")
+	var config := RunConfig.from_level(anchor_case)
 	_near(config.boss_speed_multiplier, 1.35, "RunConfig bewahrt den Bossfaktor")
 	var enemies := ContentCatalog.enemy_definitions()
 	var boss := enemies[&"infection_focus"] as EnemyDefinition

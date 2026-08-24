@@ -22,7 +22,7 @@ $tests = [ordered]@{
     intro = @{ script = 'res://tests/intro_runner.gd'; args = @('--quick-run') }
     intro_runtime_contract = @{ script = 'res://tests/intro_runtime_contract_runner.gd'; args = @('--quick-run') }
     tactical_flow = @{ script = 'res://tests/tactical_flow_runner.gd'; args = @() }
-    save_v6_progression = @{ script = 'res://tests/new_save_v6_progression_runner.gd'; args = @() }
+    save_v7_campaign = @{ script = 'res://tests/save_v7_campaign_runner.gd'; args = @() }
     loadout_navigation = @{ script = 'res://tests/ui_navigation_loadout_runner.gd'; args = @() }
     loadout_availability = @{ script = 'res://tests/loadout_availability_runner.gd'; args = @() }
     style_gallery = @{ script = 'res://tests/style_gallery_runner.gd'; args = @() }
@@ -30,8 +30,12 @@ $tests = [ordered]@{
     ui_screen_host = @{ script = 'res://tests/ui_screen_host_runner.gd'; args = @() }
     story_screen = @{ script = 'res://tests/story_screen_module_runner.gd'; args = @() }
     practice_screen = @{ script = 'res://tests/practice_screen_module_runner.gd'; args = @() }
+    practice_scenarios = @{ script = 'res://tests/practice_scenario_contract_runner.gd'; args = @() }
+    practice_runtime = @{ script = 'res://tests/practice_runtime_contract_runner.gd'; args = @() }
     case_archive_screen = @{ script = 'res://tests/case_archive_screen_module_runner.gd'; args = @() }
     settings_screen = @{ script = 'res://tests/settings_screen_module_runner.gd'; args = @() }
+    run_test_settings = @{ script = 'res://tests/run_test_settings_runner.gd'; args = @() }
+    run_test_settings_runtime = @{ script = 'res://tests/run_test_settings_runtime_runner.gd'; args = @() }
     progression_screen = @{ script = 'res://tests/progression_screen_module_runner.gd'; args = @() }
     pause_overlay = @{ script = 'res://tests/pause_overlay_module_runner.gd'; args = @() }
     confirmation_overlay = @{ script = 'res://tests/confirmation_overlay_module_runner.gd'; args = @() }
@@ -91,10 +95,10 @@ $tests = [ordered]@{
 
 $groups = [ordered]@{
     Quick = @('core')
-    Flow = @('core', 'flow', 'intro', 'intro_runtime_contract', 'tactical_flow', 'save_v6_progression', 'endless_cases', 'loadout_navigation', 'loadout_availability', 'ui_audio_settings')
-    UI = @('game_hud_facade_contract', 'ui_screen_dependency', 'style_gallery', 'context_detail', 'ui_screen_host', 'story_screen', 'practice_screen', 'case_archive_screen', 'settings_screen', 'progression_screen', 'pause_overlay', 'confirmation_overlay', 'result_overlay', 'upgrade_overlay', 'finding_overlay', 'run_hud_overlay', 'plain_run_prompt', 'discovery_modal', 'ui_component_churn', 'ui_polish', 'ui_accessibility', 'campus', 'campus_building_chrome', 'lexicon_catalog', 'lexicon_stats', 'lexicon_view', 'tactical_ui', 'loadout_navigation', 'ui_audio_settings', 'ui_settings_hud')
+    Flow = @('core', 'flow', 'intro', 'intro_runtime_contract', 'tactical_flow', 'save_v7_campaign', 'practice_scenarios', 'practice_runtime', 'run_test_settings', 'run_test_settings_runtime', 'endless_cases', 'loadout_navigation', 'loadout_availability', 'ui_audio_settings')
+    UI = @('game_hud_facade_contract', 'ui_screen_dependency', 'style_gallery', 'context_detail', 'ui_screen_host', 'story_screen', 'practice_screen', 'practice_scenarios', 'case_archive_screen', 'settings_screen', 'run_test_settings', 'progression_screen', 'pause_overlay', 'confirmation_overlay', 'result_overlay', 'upgrade_overlay', 'finding_overlay', 'run_hud_overlay', 'plain_run_prompt', 'discovery_modal', 'ui_component_churn', 'ui_polish', 'ui_accessibility', 'campus', 'campus_building_chrome', 'lexicon_catalog', 'lexicon_stats', 'lexicon_view', 'tactical_ui', 'loadout_navigation', 'ui_audio_settings', 'ui_settings_hud')
     Combat = @('core', 'combat', 'upgrades', 'damage_types', 'case_modifiers', 'feedback_architecture', 'lexicon_presentation', 'combat_progression', 'latest_progression_balance', 'enemy_ranged_attack', 'case_pressure_director', 'crowd_collision_stun', 'static_flow_obstacle', 'treatment_aim', 'treatment_beam', 'ability_pipeline', 'tactical_flow', 'loadout_availability', 'determinism')
-    Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'hidden_nest_spawn', 'spawn_lifecycle', 'enemy_spawn_cadence', 'case_pressure_director', 'case_pressure_runtime', 'crowd_collision_stun', 'static_flow_obstacle', 'bounded_arena', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
+    Runtime = @('runtime_architecture', 'runtime_churn', 'enemy_reuse', 'hidden_nest_spawn', 'spawn_lifecycle', 'enemy_spawn_cadence', 'case_pressure_director', 'case_pressure_runtime', 'practice_runtime', 'run_test_settings_runtime', 'crowd_collision_stun', 'static_flow_obstacle', 'bounded_arena', 'crowd_renderer', 'projectile_renderer', 'feedback_renderer', 'arena_backdrop', 'render_telemetry', 'browser_harness', 'determinism')
     Performance = @('ability_stress', 'pressure_ai', 'performance', 'performance_soak')
 }
 
@@ -238,7 +242,7 @@ if (-not $failed -and $Visual) {
         }).Count
     } else { 0 }
     $completionMarker = @($visualLines | Where-Object { $_ -like 'ALVEOLUS_VISUAL_CAPTURE_OK*' }).Count -eq $visualSetups.Count
-    $minimumCaptureCount = $visualSetups.Count * 21
+    $minimumCaptureCount = $visualSetups.Count * 31
     if ($exitCode -ne 0 -or -not $completionMarker -or $captureCount -lt $minimumCaptureCount) {
         $failed = $true
     }

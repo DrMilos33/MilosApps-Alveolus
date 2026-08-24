@@ -19,7 +19,7 @@ func _run() -> void:
 	_test_static_pressure_limits()
 	_test_pure_salvo_and_gate_seams()
 	await _test_live_target_and_gate_contract()
-	await _test_case_one_target_remains_mobile()
+	await _test_case_two_target_remains_mobile()
 	_finish()
 
 
@@ -36,6 +36,13 @@ func _test_static_pressure_limits() -> void:
 		GameScript.MAX_ACTIVE_PROJECTILES,
 		"Reguläre Projektilgrenze und Falldruckreserve teilen die Gesamtkapazität exakt auf"
 	)
+	var levels := ContentCatalog.level_definitions()
+	var order_five := _level_by_id(levels, &"critical_infection")
+	var order_six := _level_by_id(levels, &"severe_pneumonia")
+	_true(order_five != null and order_five.order == 5 and order_five.case_pressure_targets_stationary, "Fall 5 aktiviert stationäre Druckziele absichtlich")
+	_true(order_six != null and order_six.order == 6 and order_six.case_pressure_targets_stationary, "Fall 6 aktiviert stationäre Druckziele absichtlich")
+	_equal(order_five.case_pressure_plan.projectile_gate_times.size(), 2, "Fall 5 besitzt genau zwei projektierte Tore")
+	_equal(order_six.case_pressure_plan.projectile_gate_times.size(), 3, "Fall 6 besitzt genau drei projektierte Tore")
 
 
 func _test_pure_salvo_and_gate_seams() -> void:
@@ -72,7 +79,8 @@ func _test_live_target_and_gate_contract() -> void:
 	game.persistence_enabled = false
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(discovery_id)
-	game.selected_level = game.levels[3]
+	game.selected_level = _level_by_id(game.levels, &"severe_pneumonia")
+	_true(game.selected_level != null and game.selected_level.order == 6, "Live-Drucktest verwendet den erhaltenen Order-6-Anker")
 	game.start_run()
 	game.set_physics_process(false)
 
@@ -84,7 +92,7 @@ func _test_live_target_and_gate_contract() -> void:
 	await process_frame
 
 
-func _test_case_one_target_remains_mobile() -> void:
+func _test_case_two_target_remains_mobile() -> void:
 	var game := MAIN_SCENE.instantiate()
 	get_root().add_child(game)
 	await process_frame
@@ -92,22 +100,23 @@ func _test_case_one_target_remains_mobile() -> void:
 	game.persistence_enabled = false
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(discovery_id)
-	game.selected_level = game.levels[1]
+	game.selected_level = _level_by_id(game.levels, &"localized_focus")
+	_true(game.selected_level != null and game.selected_level.order == 2, "Mobiler Druckzieltest verwendet den erhaltenen Order-2-Anker")
 	game.start_run()
 	game.set_physics_process(false)
 	game._spawn_case_pressure_target({&"spawn_sector": 2})
-	_equal(game.case_pressure_target_states.size(), 1, "Fall 1 erzeugt genau einen beweglichen kleinen Herd")
+	_equal(game.case_pressure_target_states.size(), 1, "Fall 2 erzeugt genau einen beweglichen kleinen Herd")
 	if not game.case_pressure_target_states.is_empty():
 		var handle := int(game.case_pressure_target_states.keys()[0])
 		var target := game.enemy_world.resolve(handle) as InfectionEnemy
-		_true(is_instance_valid(target), "Der Fall-1-Herd besitzt einen gültigen Handle")
+		_true(is_instance_valid(target), "Der Fall-2-Herd besitzt einen gültigen Handle")
 		if is_instance_valid(target):
 			var runtime: Dictionary = game.case_pressure_target_states[handle]
-			_equal(StringName(runtime.get(&"behavior", &"")), &"ambient_focus", "Fall 1 behält den beweglichen Herdvertrag")
-			_true(not target.is_static_flow_obstacle(), "Der kleine Fall-1-Herd wird kein stationäres Hindernis")
-			_equal(target.body_role, EnemySpawnRequest.BodyRole.MOBILE, "Fall 1 behält die normale mobile Körperrolle")
-			_true(target.speed_multiplier > 0.0, "Der Fall-1-Herd behält seine normale Bewegung")
-			_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.MINOR_FOCUS, "Der bewegliche Fall-1-Herd schießt unverändert")
+			_equal(StringName(runtime.get(&"behavior", &"")), &"ambient_focus", "Fall 2 behält den beweglichen Herdvertrag")
+			_true(not target.is_static_flow_obstacle(), "Der kleine Fall-2-Herd wird kein stationäres Hindernis")
+			_equal(target.body_role, EnemySpawnRequest.BodyRole.MOBILE, "Fall 2 behält die normale mobile Körperrolle")
+			_true(target.speed_multiplier > 0.0, "Der Fall-2-Herd behält seine normale Bewegung")
+			_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.MINOR_FOCUS, "Der bewegliche Fall-2-Herd schießt unverändert")
 	game.queue_free()
 	await process_frame
 
@@ -130,7 +139,7 @@ func _spawn_and_assert_gate(game) -> void:
 			continue
 		gate_projectiles.append(projectile)
 		lanes.append(projectile.global_position.y)
-	_true(not gate_projectiles.is_empty(), "Ein Fall-3-Tor erzeugt echte feindliche Projektile")
+	_true(not gate_projectiles.is_empty(), "Ein Fall-6-Tor erzeugt echte feindliche Projektile")
 	_true(gate_projectiles.size() <= GameScript.CASE_PRESSURE_GATE_MAX_PROJECTILES, "Das echte Tor überschreitet den 24-Projektildeckel nicht")
 	_equal(int(game.pressure_gate_projectile_counts.get(gate_id, 0)), gate_projectiles.size(), "Gate-Telemetrie zählt alle erzeugten Reihenprojektile")
 
@@ -168,12 +177,12 @@ func _spawn_and_assert_target(game) -> void:
 		return
 	var runtime: Dictionary = game.case_pressure_target_states[handle]
 	_equal(target.definition.id, &"minor_focus", "Der Falldruck verwendet den kleinen Herd als Ziel")
-	_equal(StringName(runtime.get(&"behavior", &"")), &"stationary_fan", "Fall 3 markiert den Zielherd als stationären Fächer")
+	_equal(StringName(runtime.get(&"behavior", &"")), &"stationary_fan", "Fall 6 markiert den Zielherd als stationären Fächer")
 	_equal(StringName(runtime.get(&"phase", &"")), &"active", "Der Zielherd beginnt in der aktiven Lebensphase")
 	_equal(float(runtime.get(&"remaining", 0.0)), GameScript.CASE_PRESSURE_TARGET_ACTIVE_SECONDS, "Der Zielherd erhält seine vollen 20 Sekunden")
 	_equal(int(runtime.get(&"reward_points", 0)), 7, "Der Zielherd führt nur seine sieben zusätzlichen Belohnungspunkte getrennt")
 	_equal(target.speed_multiplier, 0.0, "Der stationäre Zielherd erhält keine Bewegungsmultiplikation")
-	_true(target.is_static_flow_obstacle(), "Fall-3-Zielherde veröffentlichen ihre stationäre Hindernisrolle")
+	_true(target.is_static_flow_obstacle(), "Fall-6-Zielherde veröffentlichen ihre stationäre Hindernisrolle")
 	_equal(target.body_role, EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE, "Die Zielherdrolle erreicht InfectionEnemy unverändert")
 	_equal(target.obstacle_traversal, EnemySpawnRequest.ObstacleTraversal.DEFAULT, "Zielherde verwenden die normale Nichtboss-Umlaufregel")
 	_true(not bool(game.enemy_world.bulk_member_state(handle).get("active", true)), "Stationäre Zielherde sind keine Pulkmitglieder")
@@ -241,12 +250,19 @@ func _assert_intro_and_boss_exclusion(game) -> void:
 	_equal(game.case_pressure_target_states.size(), target_count_before, "Die Einführung erzeugt keine Zielherde")
 	_equal(game.case_pressure_pending_gates.size(), gate_count_before, "Die Einführung erzeugt keine Projektiltore")
 
-	game.selected_level = game.levels[3]
+	game.selected_level = _level_by_id(game.levels, &"severe_pneumonia")
 	game.case_pressure_director.configure(game.config.case_pressure_plan, game.config.random_seed, GameScript.WAVE_SPAWN_SECTOR_COUNT)
 	game.state.boss_spawned = true
 	game._case_pressure_step(200.0)
 	_equal(game.case_pressure_target_states.size(), target_count_before, "Ein aktiver Boss unterdrückt neue Zielherde")
 	_equal(game.case_pressure_pending_gates.size(), gate_count_before, "Ein aktiver Boss unterdrückt neue Projektiltore")
+
+
+func _level_by_id(levels: Array[LevelDefinition], id: StringName) -> LevelDefinition:
+	for level in levels:
+		if level.id == id:
+			return level
+	return null
 
 
 func _true(condition: bool, message: String) -> void:

@@ -40,6 +40,7 @@ var speed_multiplier: float = 1.0
 var damage_multiplier: float = 1.0
 var runtime_resistance_profile: ResistanceProfile
 var runtime_defense: float = 0.0
+var incoming_player_damage_multiplier: float = 1.0
 var body_role: int = EnemySpawnRequest.BodyRole.MOBILE
 var obstacle_traversal: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 var phase_minions: PackedInt32Array = PackedInt32Array()
@@ -120,6 +121,7 @@ func configure(
 	damage_multiplier = contact_scale
 	runtime_resistance_profile = resistance_profile if resistance_profile != null else definition.resistance_profile
 	runtime_defense = maxf(0.0, defense_rating)
+	incoming_player_damage_multiplier = 1.0
 	body_role = body_role_value
 	obstacle_traversal = obstacle_traversal_value
 	phase_minions = boss_phases
@@ -168,6 +170,7 @@ func recycle() -> void:
 	_bounded_maximum = Vector2.ZERO
 	runtime_resistance_profile = null
 	runtime_defense = 0.0
+	incoming_player_damage_multiplier = 1.0
 	body_role = EnemySpawnRequest.BodyRole.MOBILE
 	obstacle_traversal = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 	phase_minions = PackedInt32Array()
@@ -627,12 +630,13 @@ func _refresh_status_products() -> void:
 		_cached_status_contact_multiplier *= float(status_contact_multipliers[source])
 
 func take_damage(amount: float, source: StringName = &"therapy") -> void:
-	if amount <= 0.0 or not is_targetable():
+	var resolved_amount := amount * incoming_player_damage_multiplier
+	if resolved_amount <= 0.0 or not is_targetable():
 		return
-	var applied := minf(amount, health)
+	var applied := minf(resolved_amount, health)
 	last_damage_source = source
 	_relocation_interaction_lock = maxf(_relocation_interaction_lock, RELOCATION_INTERACTION_LOCK_SECONDS)
-	health -= amount
+	health -= resolved_amount
 	hit_flash = HIT_REACTION_SECONDS
 	_sync_visual_appearance()
 	damage_applied.emit(self, applied, source)
@@ -645,6 +649,10 @@ func take_damage(amount: float, source: StringName = &"therapy") -> void:
 		_complete_defeat()
 		return
 	queue_redraw()
+
+
+func set_incoming_player_damage_multiplier(value: float) -> void:
+	incoming_player_damage_multiplier = maxf(value, 0.0)
 
 func hit_reaction_amount() -> float:
 	return clampf(hit_flash / HIT_REACTION_SECONDS, 0.0, 1.0)

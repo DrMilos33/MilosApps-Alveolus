@@ -10,15 +10,15 @@ func _init() -> void:
 
 func _run() -> void:
 	_test_ranked_talent_contract()
-	_test_v6_roundtrip()
+	_test_v7_roundtrip()
 	_test_v6_revision3_refunds_retired_tree()
 	_test_v5_migration_refunds_retired_tree()
 	_test_independent_resets_and_seed_advance()
 	if failures == 0:
-		print("ALVEOLUS_SAVE_V6_PROGRESSION_OK assertions=%d" % assertions)
+		print("ALVEOLUS_SAVE_V7_PROGRESSION_OK assertions=%d" % assertions)
 		quit(0)
 	else:
-		printerr("ALVEOLUS_SAVE_V6_PROGRESSION_FAILED failures=%d assertions=%d" % [failures, assertions])
+		printerr("ALVEOLUS_SAVE_V7_PROGRESSION_FAILED failures=%d assertions=%d" % [failures, assertions])
 		quit(1)
 
 
@@ -43,7 +43,7 @@ func _test_ranked_talent_contract() -> void:
 	_equal(meta.available_talent_points(), meta.talent_points_earned(), "Nach dem Reset sind alle verdienten Punkte verfügbar")
 
 
-func _test_v6_roundtrip() -> void:
+func _test_v7_roundtrip() -> void:
 	var source := _fully_funded_meta(2000)
 	_true(source.set_talent_rank(&"treatment_damage_training", 1), "Wurzeltalent wird gesetzt")
 	_true(source.set_talent_rank(&"spread_penetration", 3), "Mehrere Ränge werden atomar gesetzt")
@@ -54,18 +54,18 @@ func _test_v6_roundtrip() -> void:
 	source.case_seed_nonce = 9
 
 	var saved := source.to_dict()
-	_equal(int(saved.get("version", 0)), 6, "Neue Spielstände verwenden Save-Version 6")
+	_equal(int(saved.get("version", 0)), 7, "Neue Spielstände verwenden Save-Version 7")
 	_equal(int(saved.get("talent_tree_revision", 0)), 4, "Save markiert Talentbaumrevision 4")
 	_equal((saved.get("talent_ranks", {}) as Dictionary).get("spread_penetration", 0), 3, "Save schreibt Talentstufen als Dictionary")
 
 	var restored := MetaProgressionState.new(func() -> int: return 2000)
-	_true(restored.load_dict(saved), "Save-Version 6 wird geladen")
-	_equal(restored.talent_rank(&"spread_penetration"), 3, "V6 bewahrt den dreistufigen Streuimpuls")
-	_equal(restored.talent_rank(&"piercing_persistence"), 2, "V6 bewahrt den zweistufigen Laserbestand")
+	_true(restored.load_dict(saved), "Save-Version 7 wird geladen")
+	_equal(restored.talent_rank(&"spread_penetration"), 3, "V7 bewahrt den dreistufigen Streuimpuls")
+	_equal(restored.talent_rank(&"piercing_persistence"), 2, "V7 bewahrt den zweistufigen Laserbestand")
 	_true(restored.has_talent(&"treatment_damage_training"), "Kompatible Aktivabfrage erkennt Rangtalente")
-	_equal(restored.research_points, 77, "V6 bewahrt Forschungspunkte")
-	_equal(restored.rank(&"stability_reserve"), 3, "V6 bewahrt Forschungsränge")
-	_equal(restored.get_or_create_case_seed(&"localized_focus"), 424242, "V6 bewahrt den aktuellen Fallseed")
+	_equal(restored.research_points, 77, "V7 bewahrt Forschungspunkte")
+	_equal(restored.rank(&"stability_reserve"), 3, "V7 bewahrt Forschungsränge")
+	_equal(restored.get_or_create_case_seed(&"localized_focus"), 424242, "V7 bewahrt den aktuellen Fallseed")
 
 	var context := restored.create_run_context(&"localized_focus")
 	_equal(context.talent_rank(&"spread_penetration"), 3, "RunContext übernimmt den exakten Talentrang")
@@ -82,7 +82,7 @@ func _test_v6_revision3_refunds_retired_tree() -> void:
 		"talent_ranks": {"manual_treatment_aim": 1, "spread_penetration": 3, "piercing_persistence": 2, "piercing_return": 1},
 	}
 	var migrated := MetaProgressionState.new(func() -> int: return 2500)
-	_true(migrated.load_dict(revision3), "Ein V6-Spielstand mit Revisionsbaum 3 wird geladen")
+	_true(migrated.load_dict(revision3), "Ein V6-Spielstand mit Revisionsbaum 3 wird nach V7 geladen")
 	_true(migrated.talent_ranks.is_empty(), "Revision-3-Auswahl wird atomar zurückgesetzt")
 	_true(migrated.talent_tree_refund_pending, "Revision-3-Auswahl markiert die Rückerstattung")
 	_equal(migrated.talent_points_earned(), 0, "Intro und Fall 1 geben nach der Migration keine Talentpunkte")
@@ -102,7 +102,7 @@ func _test_v5_migration_refunds_retired_tree() -> void:
 		"case_seed_nonce": 4,
 	}
 	var migrated := MetaProgressionState.new(func() -> int: return 3000)
-	_true(migrated.load_dict(legacy_v5), "Ein V5-Spielstand wird nach V6 migriert")
+	_true(migrated.load_dict(legacy_v5), "Ein V5-Spielstand wird nach V7 migriert")
 	_true(migrated.talent_ranks.is_empty(), "IDs des entfernten Talentbaums werden nicht neu interpretiert")
 	_true(migrated.talent_tree_refund_pending, "Die Migration kennzeichnet zurückgegebene Altverteilung")
 	_equal(migrated.talent_points_earned(), 0, "Alte Intro- und Fall-1-Abschlüsse geben keine Talentpunkte")

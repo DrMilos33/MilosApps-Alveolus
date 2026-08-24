@@ -23,6 +23,7 @@ func _run() -> void:
 
 	_test_prompt_icons_and_text_fallback(hud, glyphs)
 	_test_dual_keyboard_capture_and_conflict_popup(hud)
+	_test_live_test_slider_identity(hud)
 	_test_visible_settings_and_reduced_motion(hud)
 	_test_restart_confirmation_setting(hud)
 	_test_semantic_sounds(hud, sound)
@@ -131,6 +132,27 @@ func _test_visible_settings_and_reduced_motion(hud: GameHUD) -> void:
 	campus_card._set_mouse_over(true)
 	campus_card._process(0.016)
 	_equal(campus_card.building_sprite.scale, Vector2.ONE, "Campusgebäude behalten bei reduzierter Bewegung ihre feste Größe")
+
+
+func _test_live_test_slider_identity(hud: GameHUD) -> void:
+	var settings := RunTestSettings.new(false, 0, 100)
+	hud.configure_test_settings(settings, true)
+	hud.show_settings(false)
+	var slider := hud.settings_screen.control_for_setting(&"test.outgoing_damage_bonus_percent") as HSlider
+	_true(slider != null, "Debug-Einstellungen stellen den Schadensregler im HUD bereit")
+	if slider == null:
+		return
+	var slider_instance := slider.get_instance_id()
+	var relay := func(percent: int) -> void:
+		if settings.set_outgoing_damage_bonus_percent(percent):
+			hud.configure_test_settings(settings, true)
+	hud.test_outgoing_damage_bonus_percent_changed.connect(relay)
+	slider.value = 10.0
+	slider.value = 20.0
+	_true(is_instance_valid(slider) and slider.get_instance_id() == slider_instance, "Live-Integratorrefresh ersetzt den gezogenen Testregler nicht")
+	_equal(slider.value, 20.0, "Ein Testregler verarbeitet mehr als einen Wert desselben Pointer-Drags")
+	_equal(settings.outgoing_damage_bonus_percent(), 20, "Der zweite Live-Wert erreicht die persistierbare Testkonfiguration")
+	hud.test_outgoing_damage_bonus_percent_changed.disconnect(relay)
 
 func _test_restart_confirmation_setting(hud: GameHUD) -> void:
 	var settings := hud.current_ui_settings.duplicate_settings()
