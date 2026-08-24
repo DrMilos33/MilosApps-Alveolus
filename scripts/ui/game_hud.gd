@@ -203,7 +203,7 @@ var progression_talent_balance: String = "0 Talentpunkte"
 var progression_talent_reset_enabled: bool = false
 var progression_first_case_complete: bool = false
 var progression_talents_unlocked: bool = true
-var progression_talent_lock_text: String = "Schließe zuerst die Einführung ab."
+var progression_talent_lock_text: String = "Schließe Fall 2 ab, um Talente freizuschalten."
 var progression_context_sources: Array[Control] = []
 var research_points_label: Label
 var research_rank_labels: Dictionary = {}

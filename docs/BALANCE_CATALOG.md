@@ -117,7 +117,7 @@ ohne stabile IDs aus älteren Spielständen umzubenennen.
 
 | Behandlung | Verfügbarkeit | Typ | Schaden | Intervall | Reichweite | Projektile | Treffer je Projektil |
 |---|---|---|---:|---:|---:|---:|---:|
-| Impuls | sofort | Wasser | 13 | 0,965 s | Stufe 16 | 1 | 1 |
+| Impuls | sofort | Wasser | 10 | 0,965 s | Stufe 16 | 1 | 1 |
 | Streuimpuls | Forschung für 300 | Feuer | 5 je Strahl | 1,00 s | Stufe 15 | 3 | 1 |
 | Durchdringender Impuls | Forschung für 500 | Luft | 9 je Treffer | 1,65 s | Stufe 17 | 1 | 4 |
 
@@ -187,8 +187,8 @@ Talentpunkt wird mit dem Abschluss von Fall 2 verdient. Forschungs- und
 Talentreset erstatten beziehungsweise befreien alle investierten Punkte. Die
 Einführung verwendet ihre feste Lehrkonfiguration.
 
-Der Talentbaum ist bis zum Abschluss oder Überspringen des Intros vollständig
-gesperrt. Vor dem ersten Sieg in Fall 1 zeigt `Fetter lazer` Fragezeichen,
+Der Talentbaum ist bis zum ersten erfolgreichen Abschluss von Fall 2 vollständig
+gesperrt; Introabschluss, Intro-Skip und Fall 1 umgehen die Sperre nicht. Vor dem ersten Sieg in Fall 1 zeigt `Fetter lazer` Fragezeichen,
 Schloss und die Meilensteinbedingung; gespeicherte Forschungsränge umgehen sie
 nicht.
 
@@ -294,11 +294,11 @@ Attack-Speed-Ausbaupfade reserviert.
 
 | Gegner | Leben | Tempo | Berührungsschaden | Projektil | Schadenstyp | Erfahrung | Größenklasse | Resistenzen (Rating; positiv effektiv) |
 |---|---:|---:|---:|---:|---|---:|---:|---|
-| Bakterium | 22 | 54 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
-| Bakteriengruppe | 74 | 54 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
-| Kleiner Herd | 180 | 24 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
-| Bakterienkern | 900 | 42 | 6 | – | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
-| Infektionsherd | 2.200 | 45 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Bakterium | 22 | 62 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
+| Bakteriengruppe | 74 | 62 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
+| Kleiner Herd | 180 | 28 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
+| Bakterienkern | 900 | 48 | 6 | – | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Infektionsherd | 2.200 | 52 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
 erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
@@ -311,8 +311,9 @@ Bahnen. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
 Sekunden weitere vier; ihre Projektile fliegen mit 322,5 Tempo. Der Fall-1-
 Bakterienkern ruft ab Bossspawn alle 15 Sekunden vier gewöhnliche kleine
-Bakterien. Seine Aura besitzt 40 Prozent Bildschirmdurchmesser und erhöht Tempo
-und Schaden naher Nichtbosse um 30 Prozent. Gegnerschaden wird mit dem Fallfaktor multipliziert und
+Bakterien. Seine Aura besitzt 120 Prozent Bildschirmdurchmesser beziehungsweise
+60 Prozent der kürzeren Bildschirmkante als Radius und erhöht Tempo und Schaden
+naher Nichtbosse um 45 Prozent. Gegnerschaden wird mit dem Fallfaktor multipliziert und
 anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
 aufgelöst. Nach einem gültigen Treffer schützt die globale 0,5-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.

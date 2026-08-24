@@ -205,9 +205,9 @@ func _run() -> void:
 	_check(screen.default_focus_control() == screen.talent_tab_action(), "Standardfokus folgt dem sichtbaren Tab")
 
 	var locked_talents: Variant = _talent_lock_fixture(5)
-	_check(screen.apply_view_model(locked_talents), "Intro-Sperre wird als eigener Fortschrittszustand angewendet")
+	_check(screen.apply_view_model(locked_talents), "Fall-2-Sperre wird als eigener Fortschrittszustand angewendet")
 	await process_frame
-	_check(not screen.talents_unlocked(), "Talente bleiben vor Introabschluss semantisch gesperrt")
+	_check(not screen.talents_unlocked(), "Talente bleiben vor Fall-2-Abschluss semantisch gesperrt")
 	_check(screen.talent_lock_panel().is_visible_in_tree(), "Talente zeigen die vollflächige Padlock-Sperrfläche")
 	var talent_host := screen.find_child("TalentViewHost", true, false) as Control
 	_check(talent_host != null and screen.talent_lock_panel().get_global_rect().is_equal_approx(talent_host.get_global_rect()), "Padlock bedeckt die komplette Talent-Inhaltsfläche")
@@ -215,13 +215,13 @@ func _run() -> void:
 	_check(not screen.talent_reset_action().visible and not screen.talent_branch(&"treatment").is_visible_in_tree(), "Gesperrte Talente legen weder Reset noch Talentbaum unter die Sperrfläche")
 	var lock_icon := screen.talent_lock_panel().find_child("TalentLockIcon", true, false) as SimpleIcon
 	var lock_copy := screen.talent_lock_panel().find_child("TalentLockCopy", true, false) as Label
-	_check(lock_icon != null and lock_icon.kind == &"locked", "Intro-Sperre verwendet die zentrale Padlock-Glyphe")
-	_check(lock_copy != null and lock_copy.text.contains("Einführung"), "Intro-Sperre erklärt ihre Freischaltbedingung sichtbar")
+	_check(lock_icon != null and lock_icon.kind == &"locked", "Fall-2-Sperre verwendet die zentrale Padlock-Glyphe")
+	_check(lock_copy != null and lock_copy.text.contains("Fall 2"), "Fall-2-Sperre erklärt ihre Freischaltbedingung sichtbar")
 	intents["talent"] = StringName()
 	screen.talent_action(&"manual_treatment_aim").pressed.emit()
-	_check(intents["talent"] == StringName(), "Verdeckte Talentknoten emittieren vor Introabschluss keine Absicht")
+	_check(intents["talent"] == StringName(), "Verdeckte Talentknoten emittieren vor Fall-2-Abschluss keine Absicht")
 	screen.talent_reset_action().pressed.emit()
-	_check(int(intents["reset"]) == 1, "Intro-Sperre blockiert auch direkte Resetabsichten")
+	_check(int(intents["reset"]) == 1, "Fall-2-Sperre blockiert auch direkte Resetabsichten")
 
 	_check_source_contracts()
 	screen.free()
@@ -340,7 +340,7 @@ func _talent_lock_fixture(revision: int) -> Variant:
 		source.research_items(),
 		source.talent_branches(),
 		false,
-		"Schließe die Einführung ab, um Talente freizuschalten."
+		"Schließe Fall 2 ab, um Talente freizuschalten."
 	)
 
 

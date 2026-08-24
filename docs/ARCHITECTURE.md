@@ -538,8 +538,8 @@ larger authored amplitude; ranged phase adds use 322.5. The intro boss emits one
 ordinary hostile projectile per attack interval. The Fall-1 boss configures a
 projectile-free director lease that requests four ordinary small bacteria every
 15 seconds from phase zero. Its Game-owned 10 Hz aura query reuses the existing
-enemy collision grid, applies one named 1.30 speed/damage status to nearby
-nonbosses inside a radius equal to 20 percent of the shorter visible dimension,
+enemy collision grid, applies one named 1.45 speed/damage status to nearby
+nonbosses inside a radius equal to 60 percent of the shorter visible dimension,
 and removes that status on exit, death, reuse or run cleanup. Boss locomotion remains direct and ignores all
 enemy-enemy contact circles in both directions; Doctor contact, damage, stun,
 knockback and bounded-arena constraints remain unchanged. The HUD resolves at

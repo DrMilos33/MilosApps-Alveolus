@@ -31,7 +31,7 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var boss_projectile_damage_multiplier: float = 1.0
 @export var boss_wave_amplitude: float = 44.0
 @export var boss_phase_minions: PackedInt32Array
-@export_range(0.0, 1.0, 0.01) var boss_aura_screen_diameter_fraction: float = 0.0
+@export_range(0.0, 2.0, 0.01) var boss_aura_screen_diameter_fraction: float = 0.0
 @export var boss_aura_speed_multiplier: float = 1.0
 @export var boss_aura_damage_multiplier: float = 1.0
 @export var boss_reinforcement_interval: float = 0.0
@@ -149,7 +149,7 @@ func configure_boss_aura(
 	movement_multiplier: float,
 	damage_multiplier: float
 ) -> LevelDefinition:
-	boss_aura_screen_diameter_fraction = clampf(screen_diameter_fraction, 0.0, 1.0)
+	boss_aura_screen_diameter_fraction = clampf(screen_diameter_fraction, 0.0, 2.0)
 	boss_aura_speed_multiplier = maxf(movement_multiplier, 0.0)
 	boss_aura_damage_multiplier = maxf(damage_multiplier, 0.0)
 	return self

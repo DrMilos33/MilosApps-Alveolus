@@ -406,7 +406,7 @@ static func create(
 	model._talents_unlocked = talents_unlocked_value
 	model._talent_lock_text = talent_lock_text_value.strip_edges()
 	if not model._talents_unlocked and model._talent_lock_text.is_empty():
-		model._talent_lock_text = "Schließe die Einführung ab, um Talente freizuschalten."
+		model._talent_lock_text = "Schließe Fall 2 ab, um Talente freizuschalten."
 	for item_value in research_item_values:
 		if item_value is ResearchItemViewModel:
 			model._research_items.append((item_value as ResearchItemViewModel).duplicate_value())

@@ -4849,7 +4849,7 @@ func _talent_view_model() -> Dictionary:
 		"unlimited": meta.is_unlimited_test_progression(),
 		"tree_refunded": meta.talent_tree_refund_pending,
 		"tree_unlocked": _talents_unlocked(),
-		"tree_lock_text": "Schließe zuerst die Einführung ab.",
+		"tree_lock_text": "Schließe Fall 2 ab, um Talente freizuschalten.",
 		"talents": cards,
 	}
 
@@ -4863,7 +4863,7 @@ func _sync_progression_availability() -> void:
 
 
 func _talents_unlocked() -> bool:
-	return meta != null and (meta.has_completed_level(&"intro") or meta.intro_skipped)
+	return meta != null and meta.has_completed_level(&"localized_focus")
 
 func _nearest_targets(max_range: float, count: int) -> Array[InfectionEnemy]:
 	var nearest: Array[InfectionEnemy] = []

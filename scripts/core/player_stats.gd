@@ -4,7 +4,7 @@ extends RefCounted
 const BASE_MAX_HEALTH := 50.0
 const BASE_DEFENSE := 0.0
 const BASE_LIFE_REGENERATION := 0.0
-const BASE_TREATMENT_DAMAGE := 13.0
+const BASE_TREATMENT_DAMAGE := 10.0
 const BASE_MOVEMENT_SPEED := 180.0
 
 var therapy_damage: float = BASE_TREATMENT_DAMAGE

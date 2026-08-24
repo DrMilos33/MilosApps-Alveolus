@@ -57,15 +57,16 @@ func _test_catalog_contract() -> void:
 			_near(levels[order].spawn_ramp_seconds, 300.0, "Order %d verteilt die Standardwelle über fünf Minuten" % order)
 
 	var enemies := ContentCatalog.enemy_definitions()
-	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 54.0, "Bakterium verwendet die um 20 Prozent erhöhte Basisgeschwindigkeit")
-	_near((enemies[&"bacterial_cluster"] as EnemyDefinition).speed, 54.0, "Bakteriengruppe verwendet die um 20 Prozent erhöhte Basisgeschwindigkeit")
-	_near((enemies[&"minor_focus"] as EnemyDefinition).speed, 24.0, "Kleiner Herd verwendet die um 20 Prozent erhöhte Basisgeschwindigkeit")
-	_near((enemies[&"infection_focus"] as EnemyDefinition).speed, 45.0, "Infektionsherd verwendet die um 50 Prozent erhöhte Bossgeschwindigkeit")
-	_near((enemies[&"localized_boss"] as EnemyDefinition).speed, 42.0, "Bakterienkern verwendet die um 50 Prozent erhöhte Bossgeschwindigkeit")
+	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 62.0, "Bakterium verwendet die zusätzlich um 15 Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
+	_near((enemies[&"bacterial_cluster"] as EnemyDefinition).speed, 62.0, "Bakteriengruppe verwendet die zusätzlich um 15 Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
+	_near((enemies[&"minor_focus"] as EnemyDefinition).speed, 28.0, "Kleiner Herd verwendet die zusätzlich um 15 Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
+	_near((enemies[&"infection_focus"] as EnemyDefinition).speed, 52.0, "Infektionsherd verwendet die zusätzlich um 15 Prozent erhöhte ganzzahlige Bossgeschwindigkeit")
+	_near((enemies[&"localized_boss"] as EnemyDefinition).speed, 48.0, "Bakterienkern verwendet die zusätzlich um 15 Prozent erhöhte ganzzahlige Bossgeschwindigkeit")
+	_near((enemies[&"intro_focus"] as EnemyDefinition).speed, 52.0, "Intro-Boss erbt dieselbe zusätzliche Monsterbeschleunigung")
 	_near(PlayerStats.BASE_MOVEMENT_SPEED, 180.0, "Doctor Milos verwendet die neue Basisgeschwindigkeit")
 
 	var treatments := TreatmentDefinition.catalog()
-	_near((treatments[&"treatment_precision"] as TreatmentDefinition).base_damage, 13.0, "Impuls verwendet ganzzahligen Basisschaden")
+	_near((treatments[&"treatment_precision"] as TreatmentDefinition).base_damage, 10.0, "Impuls verwendet den um drei reduzierten ganzzahligen Basisschaden")
 	_near((treatments[&"treatment_spread"] as TreatmentDefinition).base_damage, 5.0, "Streuimpuls verwendet den neuen Schaden")
 	_near((treatments[&"treatment_pierce"] as TreatmentDefinition).base_damage, 9.0, "Durchdringender Impuls verwendet den neuen Schaden")
 

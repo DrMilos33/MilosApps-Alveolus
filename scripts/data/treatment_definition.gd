@@ -64,7 +64,7 @@ static func catalog() -> Dictionary:
 	return {
 		&"treatment_precision": create(
 			&"treatment_precision", "Impuls", Mode.PRECISE,
-			13.0, 0.965, 480.0, 1, 1, 0,
+			10.0, 0.965, 480.0, 1, 1, 0,
 			PackedStringArray(["treatment", "precise", "tracking"]),
 			"Verfolgt automatisch das nächste Ziel.", "Gezielte antibiotische Therapie",
 			DamageProfile.single(&"treatment_precision_damage", &"water")

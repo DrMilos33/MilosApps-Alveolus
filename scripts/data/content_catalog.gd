@@ -35,7 +35,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein früher lokaler Infektionsherd bildet den ersten regulären Patientenfall.",
 			"Der frühe Verlauf wurde kontrolliert.",
 			"Der frühe Verlauf konnte in diesem Versuch nicht kontrolliert werden."
-		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", false).configure_boss_aura(0.40, 1.30, 1.30).configure_boss_reinforcements(15.0, 4).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
+		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", false).configure_boss_aura(1.20, 1.45, 1.45).configure_boss_reinforcements(15.0, 4).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
 		LevelDefinition.create(
 			&"localized_focus", 2, "lol - name fehlt", "Fall 02 · lokalisierter Pneumokokkenherd", false,
 			-1.0, 300.0, 50.0, 1.03375, 0.23375, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
@@ -90,22 +90,22 @@ static func tutorial_hint_definitions() -> Dictionary:
 static func enemy_definitions() -> Dictionary:
 	var result := {
 		&"pneumococcus": EnemyDefinition.create(
-			&"pneumococcus", "Bakterium", 22.0, 54.0, 2.0, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
+			&"pneumococcus", "Bakterium", 22.0, 62.0, 2.0, 1, 18.0, Color("72b64a"), false, &"pneumococcus", &"pneumococcus", "Pneumokokke"
 		).configure_contact_radius(17.0),
 		&"bacterial_cluster": EnemyDefinition.create(
-			&"bacterial_cluster", "Bakteriengruppe", 74.0, 54.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"
+			&"bacterial_cluster", "Bakteriengruppe", 74.0, 62.0, 5.0, 4, 30.0, Color("4e9338"), false, &"bacterial_cluster", &"bacterial_cluster", "Bakterienverband"
 		).configure_contact_radius(23.0),
 		&"minor_focus": EnemyDefinition.create(
-			&"minor_focus", "Kleiner Herd", 180.0, 24.0, 0.0, 8, 38.0, Color("9a5bbb"), false, &"minor_focus", &"infection_focus", "Kleiner Infektionsherd"
+			&"minor_focus", "Kleiner Herd", 180.0, 28.0, 0.0, 8, 38.0, Color("9a5bbb"), false, &"minor_focus", &"infection_focus", "Kleiner Infektionsherd"
 		).configure_contact_radius(31.0).configure_projectile_attack(2.0, 2.6, &"normal", false),
 		&"infection_focus": EnemyDefinition.create(
-			&"infection_focus", "Infektionsherd", 2200.0, 45.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
+			&"infection_focus", "Infektionsherd", 2200.0, 52.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
 		).configure_contact_radius(56.0).configure_projectile_attack(4.0, 1.6, &"diamond", true),
 		&"localized_boss": EnemyDefinition.create(
-			&"localized_boss", "Bakterienkern", 900.0, 42.0, 6.0, 20, 60.0, Color("d45d64"), true, &"localized_boss", &"infection_focus", "Lokaler Bakterienkern"
+			&"localized_boss", "Bakterienkern", 900.0, 48.0, 6.0, 20, 60.0, Color("d45d64"), true, &"localized_boss", &"infection_focus", "Lokaler Bakterienkern"
 		).configure_contact_radius(47.0),
 		&"intro_focus": EnemyDefinition.create(
-			&"intro_focus", "Infektionsherd", 2200.0, 45.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
+			&"intro_focus", "Infektionsherd", 2200.0, 52.0, 9.0, 30, 72.0, Color("9a5bbb"), true, &"infection_focus", &"infection_focus", "Lokaler Infektionsherd"
 		).configure_contact_radius(56.0).configure_projectile_attack(6.0, 2.6, &"normal", true)
 	}
 	return result
@@ -247,9 +247,9 @@ static func upgrade_definitions() -> Array[UpgradeDefinition]:
 	return [
 		# Schaden, Attack Speed und Galopp sind endlose Familien. Pro Auswahl
 		# erscheint höchstens eine Raritätsstufe derselben Familie.
-		_run_upgrade(&"precision_refinement", "Behandlungsschaden", "+3 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 3.0, "Präzisionssteigerung", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 13.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
-		_run_upgrade(&"treatment_damage_magic", "Behandlungsschaden", "+5 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 5.0, "Vertiefte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 5.0, &"delta", "Schaden", "Schaden", 13.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
-		_run_upgrade(&"potency", "Behandlungsschaden", "+7 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"damage", 7.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 13.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
+		_run_upgrade(&"precision_refinement", "Behandlungsschaden", "+3 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 3.0, "Präzisionssteigerung", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
+		_run_upgrade(&"treatment_damage_magic", "Behandlungsschaden", "+5 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 5.0, "Vertiefte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 5.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
+		_run_upgrade(&"potency", "Behandlungsschaden", "+7 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"damage", 7.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
 		_run_upgrade(&"rhythm", "Attack Speed", "+3 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.03, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.03, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
 		_run_upgrade(&"rhythm_magic", "Attack Speed", "+5 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.05, "Beschleunigter Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.05, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
 		_run_upgrade(&"rhythm_rare", "Attack Speed", "+7 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.07, "Hochfrequenter Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.07, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
