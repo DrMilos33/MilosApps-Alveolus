@@ -330,19 +330,22 @@ Large ordinary contact islands use an additive bulk-flow layer above that
 single-body contract. Every 0.25 seconds `EnemyWorld` derives connected
 components from the same authored contact circles with at most four world units
 of surface gap. A small bacterium contributes weight one and a bacterial cluster
-weight two. Two consecutive snapshots with weight at least 18 and at least 45
+weight two. Two completed snapshots with weight at least six and at least 25
 percent queued weight activate one generation-safe lease; four snapshots below
-weight 12 or below 20 percent queued weight release it. The lease chooses the
+weight four or below ten percent queued weight release it. The lease chooses the
 less occupied lateral side once and blends a maximum 20-degree arc into the
-unchanged direct-pursuit step. The accepted endpoint is still bounded by the
-arena, the Doctor-distance monotonicity check and the cached contact circles, so
-the layer cannot add speed, retreat, overlap, teleportation or combat state.
+unchanged direct-pursuit step.
+The accepted endpoint is still bounded by the arena, the Doctor-distance
+monotonicity check and the cached contact circles, so the layer cannot add speed,
+retreat, overlap, teleportation or combat state.
 
 The topology snapshot is built into a double buffer over four fixed ticks. Its
-limited broad-phase query retains the nearest eight exact bodies per member;
+limited broad-phase query retains the nearest six exact bodies per member;
 front-to-back resolution consumes only that packed cache and commits through the
-existing spatial grid. Profiling counters expose snapshot count, active ticks,
-examined projection candidates and solve time without production dictionaries.
+existing spatial grid. A routed mover with cached group neighbors uses this same
+bounded solver even while an obstacle temporarily splits the connected
+component. Profiling counters expose snapshot count, active ticks, examined
+projection candidates and solve time without production dictionaries.
 Bosses, minor foci, ranged roles and tutorial enemies are disabled at
 registration. An explicit relocation invalidates only the current lease and
 cache while preserving whether an ordinary enemy may join a later island.
@@ -363,22 +366,25 @@ before it may represent another generation.
 
 Every four fixed ticks, `EnemyWorld` queries outward from each active obstacle
 through the existing `CombatSpatialGrid` and retains at most four obstacle
-handles per nearby mover. A newly blocked route chooses one stable circular
-side from the mover's existing direct-guard or bulk-neighbor cache; clearance
-wins, then Doctor progress, then deterministic slot parity. A short packed
-direction cache starts from a contact-safe one-tick chord at the authoritative
-current position; later cached steps extend beyond that circle rather than
-subdividing a multi-tick chord through it. Only the locally clear front mover
-may blend from base speed to 1.25x over 0.15 seconds; the blend leaves over 0.20
-seconds and a body-blocked follower remains at base speed.
+handles per nearby mover. A finite sweep entry at the current fixed-step length,
+not mere presence in the discovery horizon, starts a route and chooses one stable
+circular side from the mover's existing direct-guard or bulk-neighbor cache;
+clearance wins, then Doctor progress, then deterministic slot parity. Each tick
+reconstructs an exact constant-time chord from the authoritative position toward
+the Minkowski circle consisting of mover radius, obstacle radius and 0.05 skin.
+Once the direct Doctor segment is tangent-clear, the lease releases immediately.
+Only the locally clear front mover may blend from base speed to 1.25x over 0.15
+seconds; the blend leaves over 0.20 seconds and a body-blocked follower remains at
+base speed.
 
-If such a route achieves less than 20 percent of its expected travel for
-exactly 0.8 seconds without a mobile-body block, it enters fail-open. Until the
-mover has cleared every active static obstacle plus the release margin, only
-those obstacle bodies are ignored; ordinary enemy bodies, Doctor contact,
-arena bounds, statuses and generation remain authoritative. This path adds no
-teleport, global steering target, per-entity process or timer, dictionary or
-second spatial index.
+A geometrically open route never waits: the exact chord is recomputed every tick
+and the group solver consumes relative same-tick motion. If both sides are sealed
+only by static geometry, the object-only fail-open begins at the actual blocked
+contact instead of after a visible 0.8-second stall. Until the mover has cleared
+every active static obstacle plus the release margin, only those obstacle bodies
+are ignored; ordinary enemy bodies, Doctor contact, arena bounds, statuses and
+generation remain authoritative. This path adds no teleport, global steering
+target, per-entity process or timer, dictionary or second spatial index.
 
 `CasePressurePlan` is authored on `LevelDefinition`, copied defensively into
 `RunConfig` and consumed by one seed-isolated `CasePressureDirector` after the

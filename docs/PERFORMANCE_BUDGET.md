@@ -101,20 +101,23 @@ and required status feedback are never degraded.
   one Doctor-distance check per distant enemy.
 - The bulk-flow overlay snapshots connected ordinary melee components every
   0.25 seconds into a double buffer spread over four fixed ticks. Each member
-  retains at most eight exact cached neighbors from a bounded 24-candidate
-  broad-phase query. Its movement hot path performs one projection pass plus
-  final validation over that cache; it must not restore a query, sort or dynamic
-  neighbor allocation per member and tick.
+  retains at most six exact cached neighbors from a bounded 24-candidate
+  broad-phase query. Components activate at weighted size six plus 25 percent
+  queued weight after two snapshots and release below four or ten percent queued
+  weight after four snapshots. Its movement hot path performs one projection
+  pass, plus one bounded refinement for an active obstacle route, and final
+  validation over the cache; it must not restore a query, sort or dynamic neighbor
+  allocation per member and tick.
 - Static-flow obstacle discovery queries outward from each active obstacle
   through the existing `CombatSpatialGrid` once every four fixed ticks after
   immediate lifecycle updates and stores at most four packed generation-safe
   guards per nearby mover. Side choice consumes the existing direct-guard or
-  bulk-neighbor cache, and its contact-safe direction is reused for at most four
-  fixed ticks. Normal routing adds no per-mover/per-tick broad-phase query,
-  sort, allocation, dictionary, timer, node or second spatial index; only
-  fail-open may perform its bounded local clearance query until the mover is
-  outside every obstacle body. Speed blend, stall tracking and fail-open remain
-  packed O(1) state.
+  bulk-neighbor cache, while one allocation-free chord is rebuilt from packed
+  state at the authoritative position each active tick. Normal routing adds no
+  per-mover/per-tick broad-phase query, sort, allocation, dictionary, timer, node
+  or second spatial index; only an actually sealed static pocket may enter the
+  bounded object-clearance fail-open. Speed blend and fail-open remain packed
+  O(1) state.
 - Offscreen relocation uses the incrementally maintained EnemyWorld broad
   phase before its exact body-distance check and falls back to the complete
   `CombatQuery` registry while materializing bodies exist. Candidate placement

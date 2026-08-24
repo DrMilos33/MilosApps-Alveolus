@@ -113,6 +113,7 @@ var _bulk_root_release_snapshots := PackedByteArray()
 var _bulk_root_side_signs := PackedInt32Array()
 var _bulk_root_lease_epochs := PackedInt64Array()
 var _bulk_root_active := PackedByteArray()
+var _bulk_root_flow_routes := PackedByteArray()
 var _bulk_neighbor_counts := PackedByteArray()
 var _bulk_neighbor_handles := PackedInt64Array()
 var _bulk_neighbor_distances := PackedFloat32Array()
@@ -155,7 +156,6 @@ const MAX_CROWD_QUERY_CANDIDATES := 21
 const MAX_CROWD_MOTION_GUARDS := 16
 const MAX_FLOW_OBSTACLE_GUARDS := 4
 const FLOW_OBSTACLE_REFRESH_TICKS := 4
-const FLOW_ROUTE_DIRECTION_TICKS := 4
 const MAX_AVATAR_NEIGHBORS := 12
 const SMALL_ENEMY_ID := &"pneumococcus"
 const CROWD_NEIGHBOR_MARGIN := 18.0
@@ -186,14 +186,13 @@ const DIRECT_COLLISION_BYPASS_CLEAR_TICKS := 5
 const DIRECT_COLLISION_CORRIDOR_RADII := 3.0
 const DIRECT_COLLISION_CORRIDOR_DIRECTION_DOT := 0.98
 const FLOW_OBSTACLE_LOOKAHEAD := 64.0
-const FLOW_OBSTACLE_ACTIVATION_MARGIN := 8.0
+const FLOW_OBSTACLE_ACTIVATION_MARGIN := 0.25
 const FLOW_OBSTACLE_RELEASE_MARGIN := 4.0
 const FLOW_OBSTACLE_CLEAR_TICKS := 5
 const FLOW_OBSTACLE_MAX_CHORD_FACTOR := 0.2493494668
 const FLOW_OBSTACLE_MAX_SPEED_MULTIPLIER := 1.25
 const FLOW_OBSTACLE_BLEND_IN_SECONDS := 0.15
 const FLOW_OBSTACLE_BLEND_OUT_SECONDS := 0.20
-const FLOW_OBSTACLE_STALL_SECONDS := 0.80
 const FLOW_OBSTACLE_MINIMUM_PROGRESS_RATIO := 0.20
 const AVATAR_BODY_COLLISION_PASSES := 3
 const AVATAR_BODY_COLLISION_SKIN := 0.05
@@ -214,10 +213,10 @@ const CONTACT_RING_RECLAIM_HOLD_UPDATES := 6
 const CLUSTER_ENEMY_ID := &"bacterial_cluster"
 const BULK_CONTACT_MARGIN := 4.0
 const BULK_SNAPSHOT_SECONDS := 0.25
-const BULK_ENTER_WEIGHT := 18
-const BULK_EXIT_WEIGHT := 12
-const BULK_ENTER_QUEUED_RATIO := 0.45
-const BULK_EXIT_QUEUED_RATIO := 0.20
+const BULK_ENTER_WEIGHT := 6
+const BULK_EXIT_WEIGHT := 4
+const BULK_ENTER_QUEUED_RATIO := 0.25
+const BULK_EXIT_QUEUED_RATIO := 0.10
 const BULK_ENTER_SNAPSHOTS := 2
 const BULK_EXIT_SNAPSHOTS := 4
 const BULK_ARC_RADIANS := deg_to_rad(20.0)
@@ -226,7 +225,7 @@ const BULK_BLEND_OUT_SECONDS := 0.35
 const BULK_PROJECTION_PASSES := 1
 const BULK_BLEND_EPSILON := 0.001
 const BULK_PAIR_LOOKAHEAD := 34.0
-const MAX_BULK_NEIGHBORS := 8
+const MAX_BULK_NEIGHBORS := 6
 const MAX_BULK_SNAPSHOT_CANDIDATES := 24
 const BULK_SNAPSHOT_BUILD_PHASES := 4
 
@@ -381,6 +380,8 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_bulk_root_lease_epochs.fill(0)
 	_bulk_root_active.resize(combat_capacity.max_enemies)
 	_bulk_root_active.fill(0)
+	_bulk_root_flow_routes.resize(combat_capacity.max_enemies)
+	_bulk_root_flow_routes.fill(0)
 	_bulk_neighbor_counts.resize(combat_capacity.max_enemies)
 	_bulk_neighbor_counts.fill(0)
 	_bulk_neighbor_handles.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
@@ -1197,12 +1198,14 @@ func step_fixed(delta: float, session: RunSession = null) -> void:
 			var handle := EntityHandle.make(slot, _generations[slot])
 			var movement_origin := enemy.global_position
 			var occupied_before := _direct_collision_active[slot] != 0
+			var routed_group_motion := (
+				EntityHandle.is_valid(int(_flow_lease_handles[slot]))
+				and int(_bulk_neighbor_counts[slot]) > 0
+			)
 			var bulk_motion := (
 				occupied_before
-				and _bulk_blends[slot] > BULK_BLEND_EPSILON
+				and (_bulk_blends[slot] > BULK_BLEND_EPSILON or routed_group_motion)
 				and _bulk_enemy_eligible(enemy)
-				and not EntityHandle.is_valid(int(_flow_lease_handles[slot]))
-				and _flow_fail_open[slot] == 0
 			)
 			var suppress_direct_chase := (
 				occupied_before
@@ -1320,6 +1323,7 @@ func _start_bulk_component_refresh() -> void:
 	_bulk_root_side_signs.fill(0)
 	_bulk_root_lease_epochs.fill(0)
 	_bulk_root_active.fill(0)
+	_bulk_root_flow_routes.fill(0)
 	_bulk_build_neighbor_counts.fill(0)
 	_bulk_refresh_handles.clear()
 	for slot_value in _active_slots:
@@ -1329,8 +1333,6 @@ func _start_bulk_component_refresh() -> void:
 			_retiring[slot] == 0
 			and _bulk_allowed[slot] != 0
 			and _bulk_enemy_eligible(enemy)
-			and not EntityHandle.is_valid(int(_flow_lease_handles[slot]))
-			and _flow_fail_open[slot] == 0
 		)
 		_bulk_eligible[slot] = 1 if eligible else 0
 		if eligible:
@@ -1447,6 +1449,8 @@ func _finalize_bulk_component_refresh() -> void:
 		)
 		if _bulk_active[slot] != 0:
 			_bulk_root_active[root] = 1
+		if EntityHandle.is_valid(int(_flow_lease_handles[slot])):
+			_bulk_root_flow_routes[root] = 1
 		if _bulk_active[slot] != 0 or (_bulk_blends[slot] > BULK_BLEND_EPSILON and _bulk_lease_epochs[slot] > 0):
 			var lease_epoch := int(_bulk_lease_epochs[slot])
 			if _bulk_root_lease_epochs[root] == 0 or lease_epoch < int(_bulk_root_lease_epochs[root]):
@@ -1461,7 +1465,10 @@ func _finalize_bulk_component_refresh() -> void:
 		var candidate_snapshots := 0
 		var release_snapshots := 0
 		if active_component:
-			var below_exit := weight < BULK_EXIT_WEIGHT or queued_ratio < BULK_EXIT_QUEUED_RATIO
+			var below_exit := (
+				_bulk_root_flow_routes[root] == 0
+				and (weight < BULK_EXIT_WEIGHT or queued_ratio < BULK_EXIT_QUEUED_RATIO)
+			)
 			release_snapshots = mini(int(_bulk_root_release_snapshots[root]) + 1, BULK_EXIT_SNAPSHOTS) if below_exit else 0
 			if release_snapshots >= BULK_EXIT_SNAPSHOTS:
 				active_component = false
@@ -1796,6 +1803,47 @@ func _bulk_project_cached_proposal(slot: int) -> Vector2:
 				own_radius + float(_direct_collision_radii[other_slot]) + DIRECT_COLLISION_SKIN
 			)
 		resolved_delta = _bulk_limit_resolved_delta(slot, resolved_delta)
+	var flow_guard_count := mini(int(_flow_guard_counts[slot]), MAX_FLOW_OBSTACLE_GUARDS)
+	var needs_static_projection := (
+		_flow_motion_active[slot] != 0
+		or EntityHandle.is_valid(_flow_first_obstacle_on_delta(slot, origin, resolved_delta))
+	)
+	if _flow_fail_open[slot] == 0 and flow_guard_count > 0 and needs_static_projection:
+		var flow_guard_offset := slot * MAX_FLOW_OBSTACLE_GUARDS
+		var static_projection_passes := 2 if flow_guard_count > 1 else 1
+		for _static_pass in range(static_projection_passes):
+			for guard_index in range(flow_guard_count):
+				var obstacle_handle := int(_flow_guard_handles[flow_guard_offset + guard_index])
+				var obstacle := _active_flow_obstacle(obstacle_handle)
+				if obstacle == null:
+					continue
+				var obstacle_slot := EntityHandle.slot(obstacle_handle)
+				resolved_delta = _bulk_clip_delta_against_circle(
+					slot,
+					origin,
+					resolved_delta,
+					obstacle_slot,
+					obstacle.global_position,
+					own_radius + float(_direct_collision_radii[obstacle_slot]) + DIRECT_COLLISION_SKIN
+				)
+			resolved_delta = _bulk_limit_resolved_delta(slot, resolved_delta)
+		for guard_index in range(flow_guard_count):
+			var obstacle_handle := int(_flow_guard_handles[flow_guard_offset + guard_index])
+			var obstacle := _active_flow_obstacle(obstacle_handle)
+			if obstacle == null:
+				continue
+			var obstacle_slot := EntityHandle.slot(obstacle_handle)
+			var obstacle_spacing := (
+				own_radius
+				+ float(_direct_collision_radii[obstacle_slot])
+				+ DIRECT_COLLISION_SKIN
+				- DIRECT_COLLISION_EPSILON
+			)
+			if _crowd_topology.distance_squared(
+				origin + resolved_delta,
+				obstacle.global_position
+			) < obstacle_spacing * obstacle_spacing:
+				return Vector2.ZERO
 	# Projection against a later neighbor can re-enter an earlier one. Waiting at
 	# the already valid origin is the deterministic no-retreat fallback.
 	for neighbor_index in range(neighbor_count):
@@ -2138,10 +2186,14 @@ func _prepare_direct_collision_guards() -> void:
 		# without contributing to their movement result. Mark them stale so the first
 		# ordinary chase tick after blend-out refreshes immediately.
 		if (
-			_bulk_blends[slot] > BULK_BLEND_EPSILON
+			(
+				_bulk_blends[slot] > BULK_BLEND_EPSILON
+				or (
+					EntityHandle.is_valid(int(_flow_lease_handles[slot]))
+					and int(_bulk_neighbor_counts[slot]) > 0
+				)
+			)
 			and _bulk_enemy_eligible(enemy)
-			and not EntityHandle.is_valid(int(_flow_lease_handles[slot]))
-			and _flow_fail_open[slot] == 0
 		):
 			_crowd_motion_guard_counts[slot] = 0
 			_direct_collision_mixed_guard_sets[slot] = 0
@@ -2610,6 +2662,8 @@ func _flow_first_obstacle_on_delta(
 			obstacle.global_position,
 			minimum_distance
 		)
+		if is_inf(entry):
+			continue
 		if entry < selected_entry or (
 			is_equal_approx(entry, selected_entry)
 			and (selected_handle == EntityHandle.INVALID or obstacle_handle < selected_handle)
@@ -2744,13 +2798,30 @@ func _flow_orbit_delta(
 		current_radius = 1.0
 	var orbit_radius := maxf(current_radius, minimum_radius)
 	var radial := from_obstacle / current_radius
-	# Exact chord construction avoids a per-body trigonometric rotation while
-	# preserving the same 0.25-radian maximum arc and circular contact boundary.
+	# Approach the Minkowski contact circle while following it. The target radius
+	# can shrink by at most one quarter of this tick's travel, leaving the rest as
+	# a stable tangential chord. Recomputing this exact construction from the
+	# authoritative position every tick prevents a cached straight vector from
+	# drifting away from the visible hitbox.
 	var chord_length := minf(step_length, orbit_radius * FLOW_OBSTACLE_MAX_CHORD_FACTOR)
-	var chord_ratio := chord_length / maxf(orbit_radius, 0.001)
-	var cosine := 1.0 - chord_ratio * chord_ratio * 0.5
+	var target_radius := maxf(
+		minimum_radius,
+		orbit_radius - minf(maxf(orbit_radius - minimum_radius, 0.0), chord_length * 0.25)
+	)
+	var radial_change := orbit_radius - target_radius
+	if chord_length <= radial_change + DIRECT_COLLISION_EPSILON:
+		return radial * -chord_length
+	var cosine := clampf(
+		(
+			orbit_radius * orbit_radius
+			+ target_radius * target_radius
+			- chord_length * chord_length
+		) / maxf(2.0 * orbit_radius * target_radius, 0.001),
+		-1.0,
+		1.0
+	)
 	var sine := sqrt(maxf(1.0 - cosine * cosine, 0.0)) * float(sign_value)
-	var target_offset := (radial * cosine + radial.orthogonal() * sine) * orbit_radius
+	var target_offset := (radial * cosine + radial.orthogonal() * sine) * target_radius
 	var target_position := obstacle.global_position + target_offset
 	var result := (
 		target_position - origin
@@ -2959,7 +3030,10 @@ func _static_flow_desired_delta(
 		var surface_clearance := (
 			_crowd_topology.distance(origin, obstacle.global_position) - minimum_distance
 		)
-		if direct_is_clear and surface_clearance >= FLOW_OBSTACLE_RELEASE_MARGIN:
+		# Once the line to Doctor is tangent-clear, leave the contact circle
+		# immediately. Requiring an outer clearance margin here would trap a tight
+		# hitbox-hugging route on a full orbit around the object.
+		if direct_is_clear and surface_clearance >= -DIRECT_COLLISION_EPSILON:
 			_clear_flow_route(slot)
 			_flow_fade_speed(slot, delta)
 			return _flow_direct_delta_with_speed_blend(slot, enemy, origin, direct_delta)
@@ -2989,22 +3063,30 @@ func _static_flow_desired_delta(
 		float(_flow_speed_blends[slot])
 	)
 	var step_length := direct_length * speed_multiplier
-	if (
-		_flow_route_directions[slot].is_zero_approx()
-		or posmod(_direct_collision_prepare_epoch + slot, FLOW_ROUTE_DIRECTION_TICKS) == 0
-	):
-		var route_chord := _flow_orbit_delta(
-			slot, origin, lease_handle, side_sign, step_length
-		)
-		_flow_route_directions[slot] = (
-			route_chord.normalized() if not route_chord.is_zero_approx() else Vector2.ZERO
-		)
-	var orbit_delta := _flow_route_directions[slot] * step_length
+	var orbit_delta := _flow_orbit_delta(
+		slot, origin, lease_handle, side_sign, step_length
+	)
+	_flow_route_directions[slot] = (
+		orbit_delta.normalized() if not orbit_delta.is_zero_approx() else Vector2.ZERO
+	)
 	if _crowd_bounded and not _crowd_topology.contains_position(
 		origin + orbit_delta,
 		float(_direct_collision_radii[slot])
 	):
 		orbit_delta = Vector2.ZERO
+	if orbit_delta.is_zero_approx() and _flow_dynamic_clearance(
+		slot, origin, direct_delta, use_bulk_neighbors
+	) >= -DIRECT_COLLISION_EPSILON:
+		# A static-only pocket has no geometric route. Enter the existing controlled
+		# object-only pass-through immediately, so an authored dead end cannot create
+		# a visible waiting window. Doctor, enemy and arena collision remain active.
+		_flow_fail_open[slot] = 1
+		_flow_motion_active[slot] = 0
+		_flow_expected_progress[slot] = 0.0
+		_flow_speed_blends[slot] = 0.0
+		if _crowd_profile_enabled:
+			_crowd_profile_counters[CrowdProfileCounter.FLOW_FAIL_OPEN_STARTS] += 1
+		return direct_delta
 	var chained_handle := EntityHandle.INVALID
 	if int(_flow_guard_counts[slot]) > 1:
 		chained_handle = _flow_first_obstacle_on_delta(
@@ -3023,9 +3105,9 @@ func _static_flow_desired_delta(
 		_flow_route_directions[slot] = (
 			chained_chord.normalized() if not chained_chord.is_zero_approx() else Vector2.ZERO
 		)
-		orbit_delta = _flow_route_directions[slot] * step_length
+		orbit_delta = chained_chord
 	_flow_motion_active[slot] = 1
-	_flow_expected_progress[slot] = step_length
+	_flow_expected_progress[slot] = orbit_delta.length()
 	if _crowd_profile_enabled:
 		_crowd_profile_counters[CrowdProfileCounter.FLOW_ACTIVE_TICKS] += 1
 	return orbit_delta
@@ -3035,7 +3117,7 @@ func _update_flow_after_motion(
 	slot: int,
 	enemy: InfectionEnemy,
 	origin: Vector2,
-	delta: float
+	_delta: float
 ) -> void:
 	if (
 		_flow_motion_active[slot] == 0
@@ -3059,14 +3141,14 @@ func _update_flow_after_motion(
 	var dynamic_body_blocked := _direct_collision_queued[slot] != 0
 	if dynamic_body_blocked or actual + DIRECT_COLLISION_EPSILON >= expected * FLOW_OBSTACLE_MINIMUM_PROGRESS_RATIO:
 		_flow_stall_seconds[slot] = 0.0
-	else:
-		_flow_stall_seconds[slot] += delta
-	if float(_flow_stall_seconds[slot]) + DIRECT_COLLISION_EPSILON >= FLOW_OBSTACLE_STALL_SECONDS:
-		_flow_fail_open[slot] = 1
-		_flow_stall_seconds[slot] = 0.0
-		_flow_speed_blends[slot] = 0.0
-		if _crowd_profile_enabled:
-			_crowd_profile_counters[CrowdProfileCounter.FLOW_FAIL_OPEN_STARTS] += 1
+		return
+	# Any remaining shortfall has no mobile-body cause. Start the object-only
+	# fallback immediately instead of accumulating a visible stationary window.
+	_flow_fail_open[slot] = 1
+	_flow_stall_seconds[slot] = 0.0
+	_flow_speed_blends[slot] = 0.0
+	if _crowd_profile_enabled:
+		_crowd_profile_counters[CrowdProfileCounter.FLOW_FAIL_OPEN_STARTS] += 1
 
 
 ## Clips one proposed fixed-tick displacement against nearby enemy contact

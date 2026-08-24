@@ -739,7 +739,10 @@ func _run() -> void:
 				< float(mixed_initial_distances[index]),
 			"Jeder gemischte Verfolger beendet die Probe näher am Doctor (%d)" % index
 		)
-	_true(mixed_small_hits == 0 and mixed_cluster_hits == 0, "Ein geschlossener gemischter Ring verursacht keine Treffer durch Vorderkörper hindurch")
+	_true(
+		mixed_small_hits + mixed_cluster_hits > 0,
+		"Der frühere stabile Pulk führt einen physisch freien Vorderkörper bis zum Doctor (klein %d, Gruppe %d)" % [mixed_small_hits, mixed_cluster_hits]
+	)
 
 	# A one-sided dense pack against a stationary Doctor must keep feeding its
 	# physically open frontier instead of freezing the complete rear mass.

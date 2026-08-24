@@ -15,13 +15,14 @@ func _init() -> void:
 func _run() -> void:
 	_prepare_input_actions()
 	_test_small_and_cluster_flow_around_single_obstacle()
+	_test_small_group_enters_bulk_early()
 	_test_off_axis_side_choice_is_progress_stable()
 	_test_dense_bulk_preserves_bodies_and_flow_side()
 	_test_bottleneck_accelerates_only_free_front_body()
 	_test_knockback_clears_mover_route_but_not_static_body()
 	_test_generation_safe_obstacle_reuse_clears_route()
 	_test_boss_default_and_explicit_traversal()
-	_test_fail_open_after_exact_stall_window()
+	_test_static_only_dead_end_never_waits()
 	for action in _added_input_actions:
 		InputMap.erase_action(action)
 	if failures == 0:
@@ -61,13 +62,20 @@ func _assert_single_obstacle_pass(
 	var mover_handle := world.register_enemy(mover)
 	_true(EntityHandle.is_valid(obstacle_handle), "%s-Test registriert das Flusshindernis" % label)
 	_true(EntityHandle.is_valid(mover_handle), "%s-Test registriert den mobilen Körper" % label)
+	var required_spacing := mover.contact_body_radius() + obstacle.contact_body_radius()
 	var minimum_spacing := INF
+	var minimum_active_surface_gap := INF
 	var maximum_lateral := 0.0
 	var maximum_retreat := 0.0
 	var leased_side := 0
 	var side_flips := 0
+	var route_stationary_ticks := 0
+	var route_motion_samples := 0
+	var hugging_started := false
+	var maximum_hugging_gap := 0.0
 	var reached_doctor := false
 	for _tick in range(900):
+		var position_before := mover.global_position
 		var distance_before := topology.distance(mover.global_position, avatar.global_position)
 		world.step_fixed(FIXED_DELTA)
 		maximum_retreat = maxf(
@@ -82,23 +90,84 @@ func _assert_single_obstacle_pass(
 		var slot := EntityHandle.slot(mover_handle)
 		var current_side := int(world._flow_side_signs[slot])
 		if current_side != 0:
+			var current_surface_gap := (
+				topology.distance(mover.global_position, obstacle.global_position) - required_spacing
+			)
+			minimum_active_surface_gap = minf(
+				minimum_active_surface_gap,
+				current_surface_gap
+			)
+			if current_surface_gap <= 1.25:
+				hugging_started = true
+			if hugging_started:
+				maximum_hugging_gap = maxf(maximum_hugging_gap, current_surface_gap)
+				route_motion_samples += 1
+				if topology.distance(position_before, mover.global_position) <= 0.01:
+					route_stationary_ticks += 1
 			if leased_side != 0 and current_side != leased_side:
 				side_flips += 1
 			leased_side = current_side
 		if _at_doctor_contact(mover, avatar, topology):
 			reached_doctor = true
 			break
-	var required_spacing := mover.contact_body_radius() + obstacle.contact_body_radius()
 	_true(
 		minimum_spacing + POSITION_EPSILON >= required_spacing,
 		"%s überschneidet den Zielherd nie (%.2f / %.2f)" % [label, minimum_spacing, required_spacing]
 	)
 	_true(maximum_lateral >= required_spacing * 0.65, "%s läuft sichtbar um den Zielherd" % label)
+	_true(
+		minimum_active_surface_gap <= 1.25,
+		"%s zieht seine Umlaufbahn eng an die Kontakthitbox (Lücke %.2f)" % [label, minimum_active_surface_gap]
+	)
+	_true(hugging_started and route_motion_samples > 0, "%s erreicht einen messbaren Kontaktbogen" % label)
+	_true(maximum_hugging_gap <= 1.30, "%s bleibt nach Kontakt eng an der Hitbox (max. %.2f)" % [label, maximum_hugging_gap])
+	_equal(route_stationary_ticks, 0, "%s stockt auf dem freien Kontaktbogen nie" % label)
 	_true(maximum_retreat <= POSITION_EPSILON, "%s flieht während des Umlaufs nicht vor Doctor Milos" % label)
 	_equal(side_flips, 0, "%s behält seine gewählte Umlaufseite" % label)
 	_true(reached_doctor, "%s erreicht Doctor Milos hinter dem Zielherd" % label)
 	_true(obstacle.global_position.is_equal_approx(Vector2(110.0, 0.0)), "Der Zielherd bleibt stationär")
 	_cleanup_fixture(fixture, [obstacle, mover])
+
+
+func _test_small_group_enters_bulk_early() -> void:
+	var light_fixture := _fixture(Rect2(-700.0, -450.0, 1400.0, 900.0))
+	var light_world: EnemyWorld = light_fixture.world
+	var light_avatar: TherapyAvatar = light_fixture.avatar
+	var light_topology: ArenaTopology = light_fixture.topology
+	var light_movers: Array[InfectionEnemy] = []
+	for index in range(5):
+		var mover := _enemy(
+			_small_definition(), light_avatar, light_topology,
+			Vector2(250.0 + float(index) * 34.0, 0.0)
+		)
+		light_movers.append(mover)
+		light_world.register_enemy(mover)
+	for _tick in range(45):
+		light_world.step_fixed(FIXED_DELTA)
+	_equal(light_world.bulk_active_weight(), 0, "Fünf kleine Bakterien bleiben unter der neuen Bulk-Schwelle")
+	_cleanup_fixture(light_fixture, light_movers)
+
+	var fixture := _fixture(Rect2(-700.0, -450.0, 1400.0, 900.0))
+	var world: EnemyWorld = fixture.world
+	var avatar: TherapyAvatar = fixture.avatar
+	var topology: ArenaTopology = fixture.topology
+	var movers: Array[InfectionEnemy] = []
+	for index in range(6):
+		var mover := _enemy(
+			_small_definition(), avatar, topology,
+			Vector2(250.0 + float(index) * 34.0, 0.0)
+		)
+		movers.append(mover)
+		world.register_enemy(mover)
+	var first_active_tick := -1
+	for tick in range(75):
+		world.step_fixed(FIXED_DELTA)
+		if world.bulk_active_weight() >= 6:
+			first_active_tick = tick
+			break
+	_true(first_active_tick >= 0, "Sechs verbundene kleine Bakterien bilden bereits einen Bulk")
+	_true(first_active_tick <= 48, "Der kleine Bulk aktiviert nach zwei frühen 0,25-s-Snapshots (%d)" % first_active_tick)
+	_cleanup_fixture(fixture, movers)
 
 
 func _test_dense_bulk_preserves_bodies_and_flow_side() -> void:
@@ -117,7 +186,7 @@ func _test_dense_bulk_preserves_bodies_and_flow_side() -> void:
 		for row in range(4):
 			var mover := _enemy(
 				_small_definition(), avatar, topology,
-				Vector2(205.0 + float(column) * 36.0, -54.0 + float(row) * 36.0)
+				Vector2(180.0 + float(column) * 36.0, -54.0 + float(row) * 36.0)
 			)
 			movers.append(mover)
 			mover_handles.append(world.register_enemy(mover))
@@ -126,13 +195,25 @@ func _test_dense_bulk_preserves_bodies_and_flow_side() -> void:
 	_true(EntityHandle.is_valid(obstacle_handle), "Der dichte Pulk registriert sein Flusshindernis")
 	_true(mover_handles.size() == 24, "Der dichte Pulk enthält 24 mobile Körper")
 	var minimum_obstacle_spacing := INF
+	var minimum_mobile_spacing := INF
 	var flow_seen := false
 	var bulk_seen := false
+	var routed_bulk_member_seen := false
+	var maximum_routed_neighbor_count := 0
+	var maximum_routed_bulk_blend := 0.0
 	var active_route_by_handle := {}
 	var side_flips := 0
 	var side_flip_detail := ""
 	var reached_doctor := false
+	var stationary_route_streaks := {}
+	var maximum_stationary_route_streak := 0
+	var maximum_stationary_route_detail := ""
+	var route_motion_samples := 0
+	var moving_route_handles := {}
 	for _tick in range(900):
+		var before_positions: Array[Vector2] = []
+		for mover in movers:
+			before_positions.append(mover.global_position)
 		world.step_fixed(FIXED_DELTA)
 		bulk_seen = bulk_seen or world.bulk_active_weight() > 0
 		for index in range(movers.size()):
@@ -148,6 +229,36 @@ func _test_dense_bulk_preserves_bodies_and_flow_side() -> void:
 			var current_epoch := int(world._flow_route_epochs[slot])
 			if current_side != 0 and current_epoch > 0 and EntityHandle.is_valid(current_lease):
 				flow_seen = true
+				maximum_routed_neighbor_count = maxi(
+					maximum_routed_neighbor_count,
+					int(world._bulk_neighbor_counts[slot])
+				)
+				maximum_routed_bulk_blend = maxf(
+					maximum_routed_bulk_blend,
+					float(world._bulk_blends[slot])
+				)
+				routed_bulk_member_seen = (
+					routed_bulk_member_seen
+					or int(world._bulk_pending[slot]) != 0
+				)
+				if (
+					not _at_doctor_contact(mover, avatar, topology)
+					and int(world._direct_collision_queued[slot]) == 0
+				):
+					route_motion_samples += 1
+					var moved := topology.distance(before_positions[index], mover.global_position)
+					if moved > 0.01:
+						moving_route_handles[handle] = true
+					var stationary_streak := int(stationary_route_streaks.get(handle, 0))
+					stationary_streak = stationary_streak + 1 if moved <= 0.01 else 0
+					stationary_route_streaks[handle] = stationary_streak
+					if stationary_streak > maximum_stationary_route_streak:
+						maximum_stationary_route_streak = stationary_streak
+						maximum_stationary_route_detail = "handle=%s pos=%s neighbors=%d queued=%d" % [
+							str(handle), str(mover.global_position),
+							int(world._bulk_neighbor_counts[slot]),
+							int(world._direct_collision_queued[slot])
+						]
 				var previous_route: Dictionary = active_route_by_handle.get(handle, {})
 				if (
 					not previous_route.is_empty()
@@ -159,16 +270,37 @@ func _test_dense_bulk_preserves_bodies_and_flow_side() -> void:
 				active_route_by_handle[handle] = {"epoch": current_epoch, "side": current_side}
 			else:
 				active_route_by_handle.erase(handle)
+				stationary_route_streaks.erase(handle)
 			reached_doctor = reached_doctor or _at_doctor_contact(mover, avatar, topology)
-		if reached_doctor and flow_seen and bulk_seen:
+		for first_index in range(movers.size()):
+			for second_index in range(first_index + 1, movers.size()):
+				minimum_mobile_spacing = minf(
+					minimum_mobile_spacing,
+					topology.distance(
+						movers[first_index].global_position,
+						movers[second_index].global_position
+					)
+				)
+		if reached_doctor and flow_seen and bulk_seen and routed_bulk_member_seen:
 			break
 	var obstacle_spacing := _small_definition().contact_radius + obstacle.contact_body_radius()
 	_true(flow_seen, "Der dichte Pulk aktiviert den stationären Hindernisfluss")
 	_true(bulk_seen, "Der bestehende stabile Pulkfluss bleibt neben dem Hindernisfluss aktiv")
+	_true(
+		routed_bulk_member_seen,
+		"Dieselbe Hindernislease wird vom Pulk-Solver bewegt (Nachbarn %d, Blend %.2f)" % [maximum_routed_neighbor_count, maximum_routed_bulk_blend]
+	)
+	_true(route_motion_samples > 0, "Der dichte Pulk erzeugt messbare Umlaufschritte")
+	_true(moving_route_handles.size() >= 2, "Beide freien Pulkspitzen umlaufen das Hindernis flüssig (%d)" % moving_route_handles.size())
+	_equal(maximum_stationary_route_streak, 0, "Eine freie aktive Umlaufroute hat niemals einen Nullschritt (%s)" % maximum_stationary_route_detail)
 	_equal(side_flips, 0, "Aktive Umlaufleases wechseln im dichten Pulk nie die Seite (%s)" % side_flip_detail)
 	_true(
 		minimum_obstacle_spacing + POSITION_EPSILON >= obstacle_spacing,
 		"Der dichte Pulk überschneidet das Hindernis nicht (%.2f / %.2f)" % [minimum_obstacle_spacing, obstacle_spacing]
+	)
+	_true(
+		minimum_mobile_spacing + POSITION_EPSILON >= _small_definition().contact_radius * 2.0,
+		"Der dichte Pulk wahrt auch beim Umlaufen alle Körperabstände (%.2f)" % minimum_mobile_spacing
 	)
 	_true(reached_doctor, "Der dichte Pulk strömt bis Doctor Milos durch")
 	_true(not bool(world.bulk_member_state(obstacle_handle).get("active", true)), "Das Flusshindernis wird nie Pulkmitglied")
@@ -287,7 +419,7 @@ func _test_knockback_clears_mover_route_but_not_static_body() -> void:
 	world.register_enemy(obstacle, true)
 	var mover_handle := world.register_enemy(mover)
 	var mover_slot := EntityHandle.slot(mover_handle)
-	for _tick in range(20):
+	for _tick in range(60):
 		world.step_fixed(FIXED_DELTA)
 		if EntityHandle.is_valid(int(world._flow_lease_handles[mover_slot])):
 			break
@@ -316,7 +448,7 @@ func _test_generation_safe_obstacle_reuse_clears_route() -> void:
 	var old_handle := world.register_enemy(obstacle, true)
 	var mover_handle := world.register_enemy(mover)
 	var mover_slot := EntityHandle.slot(mover_handle)
-	for _tick in range(20):
+	for _tick in range(60):
 		world.step_fixed(FIXED_DELTA)
 		if EntityHandle.is_valid(int(world._flow_lease_handles[mover_slot])):
 			break
@@ -378,7 +510,7 @@ func _assert_boss_obstacle_pass(traversal: int, should_flow: bool, label: String
 	_cleanup_fixture(fixture, [obstacle, boss])
 
 
-func _test_fail_open_after_exact_stall_window() -> void:
+func _test_static_only_dead_end_never_waits() -> void:
 	var fixture := _fixture(Rect2(-100.0, -100.0, 200.0, 200.0))
 	var world: EnemyWorld = fixture.world
 	var avatar: TherapyAvatar = fixture.avatar
@@ -392,15 +524,26 @@ func _test_fail_open_after_exact_stall_window() -> void:
 	world.register_enemy(obstacle, true)
 	var mover_handle := world.register_enemy(mover)
 	var mover_slot := EntityHandle.slot(mover_handle)
-	var blocked_position := mover.global_position
-	for _tick in range(47):
+	var previous_position := mover.global_position
+	var fail_open_tick := -1
+	var stationary_ticks := 0
+	var maximum_step := 0.0
+	for tick in range(12):
 		world.step_fixed(FIXED_DELTA)
-	_equal(int(world._flow_fail_open[mover_slot]), 0, "Vor 0,8 Sekunden bleibt die kontrollierte Ausfallsicherung geschlossen")
-	_true(mover.global_position.distance_to(blocked_position) <= POSITION_EPSILON, "Die geschlossene Ecke teleportiert den Gegner nicht")
-	world.step_fixed(FIXED_DELTA)
-	_equal(int(world._flow_fail_open[mover_slot]), 1, "Nach exakt 0,8 Sekunden startet das statische Durchgleiten")
-	world.step_fixed(FIXED_DELTA)
-	_true(mover.global_position.distance_to(blocked_position) > POSITION_EPSILON, "Das Durchgleiten bewegt den Gegner ohne Teleport auf Basistempo weiter")
+		var moved := mover.global_position.distance_to(previous_position)
+		maximum_step = maxf(maximum_step, moved)
+		if moved <= POSITION_EPSILON:
+			stationary_ticks += 1
+		previous_position = mover.global_position
+		if int(world._flow_fail_open[mover_slot]) != 0:
+			fail_open_tick = tick
+			break
+	_true(fail_open_tick >= 0 and fail_open_tick <= 4, "Eine ausschließlich statisch geschlossene Route öffnet erst am tatsächlichen Sackgassenkontakt (%d)" % fail_open_tick)
+	_equal(stationary_ticks, 0, "Die statische Sackgasse erzeugt vor der Ausfallsicherung keinen Wartetick")
+	_true(
+		maximum_step <= _corner_small_definition().speed * FIXED_DELTA + POSITION_EPSILON,
+		"Die sofortige Ausfallsicherung bleibt ein normaler Schritt und teleportiert nicht"
+	)
 	for _tick in range(180):
 		world.step_fixed(FIXED_DELTA)
 		if int(world._flow_fail_open[mover_slot]) == 0:
