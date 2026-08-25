@@ -3,7 +3,7 @@ extends RefCounted
 
 const RESEARCH_GAIN_MULTIPLIER := 3.75
 const BOSS_RESEARCH_MULTIPLIER_PER_DEFEAT := 0.25
-const INTRO_RESEARCH_REWARD := 113
+const INTRO_RESEARCH_REWARD := 30
 
 signal research_changed(points: int, claimable: int)
 signal clinic_changed
@@ -216,8 +216,8 @@ static func boss_research_multiplier(bosses_defeated: int) -> float:
 	return 1.0 + float(maxi(bosses_defeated, 0)) * BOSS_RESEARCH_MULTIPLIER_PER_DEFEAT
 
 
-static func intro_research_reward(bosses_defeated: int = 0) -> int:
-	return roundi(float(INTRO_RESEARCH_REWARD) * boss_research_multiplier(bosses_defeated))
+static func intro_research_reward(_bosses_defeated: int = 0) -> int:
+	return INTRO_RESEARCH_REWARD
 
 func is_level_unlocked(order: int) -> bool:
 	return order <= highest_unlocked_level

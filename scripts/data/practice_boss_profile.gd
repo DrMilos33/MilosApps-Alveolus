@@ -27,6 +27,11 @@ var _projectile_damage_multiplier: float
 var _wave_amplitude: float
 var _phase_minions: PackedInt32Array
 var _boss_count: int
+var _projectile_attack_speed_multiplier: float
+var _reinforcement_interval: float
+var _reinforcement_count: int
+var _reinforcement_minimum_phase: int
+var _add_defense_burst_shooting_lock_seconds: float
 
 
 func _init(
@@ -44,7 +49,12 @@ func _init(
 	projectile_damage_multiplier_value: float,
 	wave_amplitude_value: float,
 	phase_minions_value: PackedInt32Array,
-	boss_count_value: int = 1
+	boss_count_value: int = 1,
+	projectile_attack_speed_multiplier_value: float = 1.0,
+	reinforcement_interval_value: float = 0.0,
+	reinforcement_count_value: int = 0,
+	reinforcement_minimum_phase_value: int = 0,
+	add_defense_burst_shooting_lock_seconds_value: float = 0.0
 ) -> void:
 	_id = id_value
 	_title = title_value
@@ -61,6 +71,11 @@ func _init(
 	_wave_amplitude = maxf(wave_amplitude_value, 0.0)
 	_phase_minions = phase_minions_value.duplicate()
 	_boss_count = maxi(1, boss_count_value)
+	_projectile_attack_speed_multiplier = maxf(projectile_attack_speed_multiplier_value, 0.01)
+	_reinforcement_interval = maxf(reinforcement_interval_value, 0.0)
+	_reinforcement_count = maxi(reinforcement_count_value, 0)
+	_reinforcement_minimum_phase = clampi(reinforcement_minimum_phase_value, 0, 2)
+	_add_defense_burst_shooting_lock_seconds = add_defense_burst_shooting_lock_seconds_value
 
 
 func get_id() -> StringName:
@@ -127,6 +142,26 @@ func get_boss_count() -> int:
 	return _boss_count
 
 
+func get_projectile_attack_speed_multiplier() -> float:
+	return _projectile_attack_speed_multiplier
+
+
+func get_reinforcement_interval() -> float:
+	return _reinforcement_interval
+
+
+func get_reinforcement_count() -> int:
+	return _reinforcement_count
+
+
+func get_reinforcement_minimum_phase() -> int:
+	return _reinforcement_minimum_phase
+
+
+func get_add_defense_burst_shooting_lock_seconds() -> float:
+	return _add_defense_burst_shooting_lock_seconds
+
+
 func duplicate_immutable() -> PracticeBossProfile:
 	return PracticeBossProfile.new(
 		_id,
@@ -143,7 +178,12 @@ func duplicate_immutable() -> PracticeBossProfile:
 		_projectile_damage_multiplier,
 		_wave_amplitude,
 		_phase_minions,
-		_boss_count
+		_boss_count,
+		_projectile_attack_speed_multiplier,
+		_reinforcement_interval,
+		_reinforcement_count,
+		_reinforcement_minimum_phase,
+		_add_defense_burst_shooting_lock_seconds
 	)
 
 
@@ -168,7 +208,7 @@ static func catalog() -> Array[PracticeBossProfile]:
 		PracticeBossProfile.new(
 			BACTERIAL_CORE_ID,
 			"Bakterienkern",
-			"Lokalisierter Boss mit einer Dreier-Verstärkung",
+			"Fernkampf-Boss mit Doppelkurven und regelmäßiger Verstärkung",
 			&"localized_focus",
 			&"localized_boss",
 			&"infection_focus",
@@ -176,10 +216,16 @@ static func catalog() -> Array[PracticeBossProfile]:
 			1.08,
 			1.0,
 			1.25,
-			false,
+			true,
 			1.0,
 			44.0,
-			PackedInt32Array([3])
+			PackedInt32Array([3]),
+			1,
+			1.8,
+			15.0,
+			4,
+			0,
+			-1.0
 		),
 		PracticeBossProfile.new(
 			DIAMOND_INFECTION_FOCUS_ID,

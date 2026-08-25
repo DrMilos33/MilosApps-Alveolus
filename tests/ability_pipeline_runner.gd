@@ -11,6 +11,7 @@ class FakeEnemy extends Node2D:
 	var movement_multiplier: float = 1.0
 	var contact_multiplier: float = 1.0
 	var displacement: Vector2 = Vector2.ZERO
+	var shooting_locks: int = 0
 
 	func is_targetable() -> bool:
 		return targetable and health > 0.0
@@ -29,6 +30,9 @@ class FakeEnemy extends Node2D:
 	func apply_displacement(offset: Vector2) -> void:
 		displacement += offset
 		global_position += offset
+
+	func apply_defense_burst_shooting_lock() -> void:
+		shooting_locks += 1
 
 class FakeAvatar extends Node2D:
 	var last_facing := Vector2.RIGHT
@@ -162,6 +166,7 @@ func _test_command_pipeline_and_geometry() -> void:
 	_true(queued_results[0].success and queued_results[0].length > 600.0, "Line result publishes exact geometry")
 	_true(queued_results[0].affected_handles.has(enemy_handle), "Line query returns generation-safe hit handle")
 	_true(queued_results[1].affected_handles.has(enemy_handle), "Area query returns generation-safe hit handle")
+	_equal(enemy.shooting_locks, 1, "Stoß applies its shooting lock even while its damage remains zero")
 	for index in range(AbilityController.MAX_QUEUED_COMMANDS):
 		_true(controller.enqueue_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2.ZERO, 30 + index)), "Bounded queue accepts command %d" % index)
 	_true(not controller.enqueue_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2.ZERO, 1000)), "Bounded queue rejects overflow without allocation")

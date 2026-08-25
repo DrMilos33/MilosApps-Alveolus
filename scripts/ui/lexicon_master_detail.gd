@@ -230,7 +230,7 @@ func _build_layout() -> void:
 
 	category_bar = GridContainer.new()
 	category_bar.name = "CategoryBar"
-	category_bar.columns = 4
+	category_bar.columns = LexiconCatalog.CATEGORY_ORDER.size()
 	category_bar.custom_minimum_size.y = 48.0
 	category_bar.add_theme_constant_override("separation", 10)
 	page.add_child(category_bar)
@@ -801,6 +801,8 @@ func _category_accent(category: StringName) -> Color:
 			return AlveolusVisualTheme.COBALT
 		LexiconEntryDefinition.CATEGORY_GAMEPLAY:
 			return AlveolusVisualTheme.TEAL
+		LexiconEntryDefinition.CATEGORY_ABILITIES:
+			return AlveolusVisualTheme.TURQUOISE
 		_:
 			return AlveolusVisualTheme.GOLD
 
@@ -811,6 +813,8 @@ func _category_icon_kind(category: StringName) -> StringName:
 		LexiconEntryDefinition.CATEGORY_CHARACTER:
 			return &"clinic"
 		LexiconEntryDefinition.CATEGORY_GAMEPLAY:
+			return &"ability"
+		LexiconEntryDefinition.CATEGORY_ABILITIES:
 			return &"ability"
 		_:
 			return &"lexicon"
@@ -859,8 +863,9 @@ func _apply_responsive_layout() -> void:
 	)
 	if not compact:
 		page_scroll.scroll_vertical = 0
-	category_bar.columns = 2 if compact else 4
-	category_bar.custom_minimum_size.y = 96.0 if compact else 48.0
+	category_bar.columns = 2 if compact else LexiconCatalog.CATEGORY_ORDER.size()
+	var category_rows := ceili(float(LexiconCatalog.CATEGORY_ORDER.size()) / float(category_bar.columns))
+	category_bar.custom_minimum_size.y = float(category_rows * 46 + maxi(category_rows - 1, 0) * 10)
 	content_row.custom_minimum_size.y = COMPACT_CONTENT_MIN_HEIGHT if compact else 0.0
 	list_panel.custom_minimum_size.x = 0.0 if compact else LIST_WIDTH
 	list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if compact else Control.SIZE_FILL

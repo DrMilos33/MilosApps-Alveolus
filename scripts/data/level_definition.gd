@@ -29,6 +29,7 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var boss_enemy_id: StringName = &"infection_focus"
 @export var boss_ranged_enabled: bool = false
 @export var boss_projectile_damage_multiplier: float = 1.0
+@export var boss_projectile_attack_speed_multiplier: float = 1.0
 @export var boss_wave_amplitude: float = 44.0
 @export var boss_phase_minions: PackedInt32Array
 @export_range(0.0, 2.0, 0.01) var boss_aura_screen_diameter_fraction: float = 0.0
@@ -37,6 +38,7 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var boss_reinforcement_interval: float = 0.0
 @export_range(0, 64, 1) var boss_reinforcement_count: int = 0
 @export_range(0, 2, 1) var boss_reinforcement_minimum_phase: int = 0
+@export var boss_add_defense_burst_shooting_lock_seconds: float = 0.0
 @export var reward_multiplier: float
 @export_multiline var briefing_text: String
 @export_multiline var victory_text: String
@@ -163,6 +165,15 @@ func configure_boss_reinforcements(
 	boss_reinforcement_interval = maxf(interval_seconds, 0.0)
 	boss_reinforcement_count = maxi(count, 0)
 	boss_reinforcement_minimum_phase = clampi(minimum_phase, 0, 2)
+	return self
+
+
+func configure_boss_projectile_contract(
+	attack_speed_multiplier: float,
+	add_shooting_lock_seconds: float = 0.0
+) -> LevelDefinition:
+	boss_projectile_attack_speed_multiplier = maxf(attack_speed_multiplier, 0.01)
+	boss_add_defense_burst_shooting_lock_seconds = add_shooting_lock_seconds
 	return self
 
 func configure_boss(

@@ -181,8 +181,8 @@ Ein zehntes Forschungsfeld zeigt den nicht käuflichen Fall-1-Meilenstein für
 
 Der reguläre kaufbare Vollausbau kostet insgesamt **9.481 Forschungspunkte**. Ein neuer
 Spielstand startet mit 0 Forschung. Introabschluss oder Überspringen vergeben einmalig
-113 Basisforschung und keinen Talentpunkt; der besiegte Introboss erhöht einen echten
-Abschluss auf 141. Der erste
+exakt 30 Forschung und keinen Talentpunkt. Der Introboss erhöht diesen Sondergrant
+nicht; 30 entspricht genau dem Kaufpreis von Stoß. Der erste
 Talentpunkt wird mit dem Abschluss von Fall 2 verdient. Forschungs- und
 Talentreset erstatten beziehungsweise befreien alle investierten Punkte. Die
 Einführung verwendet ihre feste Lehrkonfiguration.
@@ -294,33 +294,45 @@ Attack-Speed-Ausbaupfade reserviert.
 
 | Gegner | Leben | Tempo | Berührungsschaden | Projektil | Schadenstyp | Erfahrung | Größenklasse | Resistenzen (Rating; positiv effektiv) |
 |---|---:|---:|---:|---:|---|---:|---:|---|
-| Bakterium | 22 | 71 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
-| Bakteriengruppe | 74 | 71 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
-| Kleiner Herd | 180 | 32 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
-| Bakterienkern | 900 | 55 | 6 | – | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
-| Infektionsherd | 2.200 | 60 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Bakterium | 22 | 85 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
+| Bakteriengruppe | 74 | 85 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
+| Kleiner Herd | 180 | 38 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
+| Bakterienkern | 900 | 66 | 6 | 4 alle 0,89 s in Fall 2 | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Infektionsherd | 2.200 | 72 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
 erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
 sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
 Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
 Der geskriptete mobile Eventherd in Fall 1 bildet die einzige Ausnahme: Er
-verwendet ganzzahliges Basistempo 46, feuert alle 2,08 Sekunden und seine
-normalen Projektile besitzen 1,5-fache Querbreite und Trefferfläche. Andere
-kleine Herde behalten das Tabellenprofil.
+verwendet ganzzahliges Basistempo 60, feuert alle 1,39 Sekunden und seine
+normalen Projektile besitzen 1,5-fache Geschwindigkeit sowie 1,5-fache
+Querbreite und Trefferfläche. Ein Treffer mit Stoß sperrt seinen Beschuss zehn
+Sekunden; Bewegung und sonstiger Status laufen unverändert weiter. Andere kleine
+Herde behalten das Tabellenprofil. Das mobile Fall-2-Event besitzt 1.800
+gemeinsames Leben, erscheint als Verbund kleiner Bakterien mit neun gleich
+gefüllten symbolischen Lebensbalken und nimmt ausschließlich von `Fetter lazer`
+zehnfachen Schaden.
 
 Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile mit 212,5 Tempo auf
 gespiegelten, gegenüber dem vorherigen Stand um 25 Prozent weiter ausgelenkten
 Bahnen. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
 Sekunden weitere vier; ihre Projektile fliegen mit 322,5 Tempo. Der Fall-1-
-Bakterienkern ruft ab Bossspawn alle 15 Sekunden vier gewöhnliche kleine
+Bakterienkern aus Fall 1 ruft ab Bossspawn alle 15 Sekunden vier gewöhnliche kleine
 Bakterien. Seine Aura besitzt 120 Prozent Bildschirmdurchmesser beziehungsweise
 60 Prozent der kürzeren Bildschirmkante als Radius und erhöht Tempo und Schaden
 naher Nichtbosse um 45 Prozent. Gegnerschaden wird mit dem Fallfaktor multipliziert und
 anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
 aufgelöst. Nach einem gültigen Treffer schützt die globale 0,5-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.
+
+Der Bakterienkern aus Fall 2 schießt alle 0,89 Sekunden ein Projektil. Nach 50
+Prozent der kürzeren sichtbaren Bildschirmkante biegt es um 90 Grad nach links
+oder rechts ab, nach weiteren 20 Prozent erneut in dieselbe Richtung. Die Seite
+wechselt deterministisch zwischen den Schüssen. Alle 15 Sekunden sowie in seiner
+Lebensphase entstehen vier schießende Bakterien; ein Stoß beendet ihren Beschuss
+für den restlichen Lebenszyklus.
 
 ## 13. Fälle und Fortschrittskurven
 
@@ -373,11 +385,13 @@ bestätigt ein Linksklick den Angriff. Genau drei normale Ein-Punkt-Erfahrungen 
 eine Auswahl aus drei gültigen Ausbauten für `treatment_precision` aus; nach der
 Auswahl wartet der einfache Altboss erneut in einer Linksklick-Pause. Er besitzt
 effektiv 198 Leben und sein einzelnes normales Projektil verursacht effektiv 3
-Schaden. Der erste Sieg kehrt direkt zum Campus zurück und vergibt 141 Forschung,
-der Intro-Skip 113; beide vergeben keinen Talentpunkt.
+Schaden. Der erste Sieg kehrt direkt zum Campus zurück und vergibt exakt 30
+Forschung; der Intro-Skip vergibt ebenfalls exakt 30. Beide vergeben keinen
+Talentpunkt.
 
 Alle positiven Run-Forschungseinnahmen werden zentral mit 3,75 multipliziert;
-die separate Introgrundbelohnung beträgt 113. Kosten und Rückerstattungen bleiben
+die separate Introgrundbelohnung beträgt exakt 30 und verwendet keinen
+Bossmultiplikator. Kosten und Rückerstattungen bleiben
 unverändert. Zusätzlich gilt am Rundenende der
 Bossmultiplikator `1 + 0,25 × besiegte Bosse`; gerundet wird genau einmal am Ende.
 

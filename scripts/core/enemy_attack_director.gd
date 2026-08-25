@@ -20,6 +20,7 @@ enum Role {
 enum Pattern {
 	NORMAL,
 	DIAMOND,
+	DOUBLE_TURN,
 }
 
 const PHASE_ADD_INTERVAL := 2.8
@@ -31,6 +32,7 @@ var _resolver: Callable
 var _generation := PackedInt32Array()
 var _roles := PackedByteArray()
 var _shot_timers := PackedFloat32Array()
+var _shot_sequences := PackedInt32Array()
 var _reinforcement_timers := PackedFloat32Array()
 var _boss_phases := PackedByteArray()
 var _projectile_enabled := PackedByteArray()
@@ -50,6 +52,8 @@ func configure(capacity: int, resolver: Callable) -> EnemyAttackDirector:
 	_roles.fill(Role.NONE)
 	_shot_timers.resize(_capacity)
 	_shot_timers.fill(0.0)
+	_shot_sequences.resize(_capacity)
+	_shot_sequences.fill(0)
 	_reinforcement_timers.resize(_capacity)
 	_reinforcement_timers.fill(0.0)
 	_boss_phases.resize(_capacity)
@@ -81,6 +85,7 @@ func register_enemy(handle: int, role: int) -> bool:
 	_generation[slot] = EntityHandle.generation(handle)
 	_roles[slot] = role
 	_shot_timers[slot] = _initial_delay(role)
+	_shot_sequences[slot] = 0
 	_reinforcement_timers[slot] = 0.0
 	_boss_phases[slot] = 0
 	_projectile_enabled[slot] = 1
@@ -161,7 +166,7 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 		if not enemy.is_targetable() or enemy.is_stunned():
 			dense_index += 1
 			continue
-		if _projectile_enabled[slot] != 0:
+		if _projectile_enabled[slot] != 0 and not enemy.projectiles_suppressed():
 			_shot_timers[slot] -= delta
 			if _shot_timers[slot] <= 0.0:
 				var interval := _shot_interval(enemy, int(_roles[slot]))
@@ -179,6 +184,7 @@ func clear() -> void:
 	_generation.fill(0)
 	_roles.fill(Role.NONE)
 	_shot_timers.fill(0.0)
+	_shot_sequences.fill(0)
 	_reinforcement_timers.fill(0.0)
 	_boss_phases.fill(0)
 	_projectile_enabled.fill(0)
@@ -194,6 +200,12 @@ func _emit_attack(handle: int, role: int, enemy: InfectionEnemy) -> void:
 	if role == Role.BOSS and pattern == &"diamond":
 		projectile_requested.emit(handle, Pattern.DIAMOND, 0.25, role)
 		projectile_requested.emit(handle, Pattern.DIAMOND, 0.75, role)
+		return
+	if role == Role.BOSS and pattern == &"double_turn":
+		var slot := EntityHandle.slot(handle)
+		var turn_side := 0.5 * float((int(_shot_sequences[slot]) + slot) & 1)
+		_shot_sequences[slot] += 1
+		projectile_requested.emit(handle, Pattern.DOUBLE_TURN, turn_side, role)
 		return
 	projectile_requested.emit(handle, Pattern.NORMAL, 0.0, role)
 
@@ -249,6 +261,7 @@ func _release_slot(slot: int) -> void:
 	_generation[slot] = 0
 	_roles[slot] = Role.NONE
 	_shot_timers[slot] = 0.0
+	_shot_sequences[slot] = 0
 	_reinforcement_timers[slot] = 0.0
 	_boss_phases[slot] = 0
 	_projectile_enabled[slot] = 0

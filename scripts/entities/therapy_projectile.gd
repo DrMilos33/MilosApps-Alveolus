@@ -8,6 +8,7 @@ signal hostile_hit(projectile: TherapyProjectile, amount: float, profile: Damage
 const DEFAULT_SPEED := 576.0
 const HOSTILE_NORMAL := 0
 const HOSTILE_DIAMOND := 1
+const HOSTILE_DOUBLE_TURN := 2
 const HOSTILE_HIT_RADIUS := 10.0
 const BOUNDARY_RADIUS := 14.0
 
@@ -43,6 +44,10 @@ var hostile_right: Vector2 = Vector2.DOWN
 var hostile_wave_amplitude: float = 0.0
 var hostile_wave_length: float = 180.0
 var hostile_width_multiplier: float = 1.0
+var hostile_first_turn_distance: float = 0.0
+var hostile_second_leg_distance: float = 0.0
+var hostile_turn_sign: float = 1.0
+var hostile_turn_count: int = 0
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -141,7 +146,9 @@ func configure_hostile(
 	max_distance: float = 1050.0,
 	wave_amplitude: float = 44.0,
 	wave_length: float = 180.0,
-	width_multiplier: float = 1.0
+	width_multiplier: float = 1.0,
+	first_turn_distance: float = 0.0,
+	second_leg_distance: float = 0.0
 ) -> void:
 	target = null
 	damage = maxf(0.0, amount)
@@ -169,6 +176,10 @@ func configure_hostile(
 	hostile_wave_amplitude = maxf(0.0, wave_amplitude) if pattern == HOSTILE_DIAMOND else 0.0
 	hostile_wave_length = maxf(32.0, wave_length)
 	hostile_width_multiplier = maxf(width_multiplier, 0.1)
+	hostile_first_turn_distance = maxf(first_turn_distance, 0.0)
+	hostile_second_leg_distance = maxf(second_leg_distance, 0.0)
+	hostile_turn_sign = -1.0 if hostile_pattern_phase < 0.5 else 1.0
+	hostile_turn_count = 0
 	_apply_visual_width()
 	rotation = direction.angle()
 	reset_visual_motion()
@@ -240,6 +251,9 @@ func step_fixed(delta: float) -> void:
 
 
 func _step_hostile(delta: float) -> void:
+	if hostile_pattern == HOSTILE_DOUBLE_TURN:
+		_step_hostile_double_turn(delta)
+		return
 	var previous_position := global_position
 	travelled_distance = minf(maximum_distance, travelled_distance + speed * delta)
 	var lateral_offset := 0.0
@@ -261,15 +275,56 @@ func _step_hostile(delta: float) -> void:
 	else:
 		visual_current_position = global_position
 		visual_current_angle = rotation
+	_finish_hostile_if_hit_or_complete()
+
+
+func _step_hostile_double_turn(delta: float) -> void:
+	var previous_position := global_position
+	var remaining := minf(speed * delta, maximum_distance - travelled_distance)
+	while remaining > 0.0001:
+		var next_turn_distance := INF
+		if hostile_turn_count == 0 and hostile_first_turn_distance > 0.0:
+			next_turn_distance = hostile_first_turn_distance
+		elif hostile_turn_count == 1 and hostile_second_leg_distance > 0.0:
+			next_turn_distance = hostile_first_turn_distance + hostile_second_leg_distance
+		var segment := remaining
+		if is_finite(next_turn_distance):
+			segment = minf(segment, maxf(next_turn_distance - travelled_distance, 0.0))
+		if segment > 0.0001:
+			var next_position := global_position + direction * segment
+			if _finish_if_outside_bounded_arena(next_position):
+				return
+			global_position = topology.resolve_position(next_position) if topology != null else next_position
+			travelled_distance += segment
+			remaining -= segment
+		if is_finite(next_turn_distance) and travelled_distance >= next_turn_distance - 0.0001:
+			direction = direction.rotated(hostile_turn_sign * PI * 0.5).normalized()
+			hostile_turn_count += 1
+			rotation = direction.angle()
+			continue
+		break
+	var motion := topology.shortest_delta(previous_position, global_position) if topology != null else global_position - previous_position
+	var crossed_torus := not (global_position - previous_position).is_equal_approx(motion)
+	if crossed_torus:
+		reset_visual_motion()
+	else:
+		visual_current_position = global_position
+		visual_current_angle = rotation
+	_finish_hostile_if_hit_or_complete()
+
+
+func _finish_hostile_if_hit_or_complete() -> bool:
 	if is_instance_valid(hostile_target):
 		var hit_radius := TherapyAvatar.BODY_RADIUS + HOSTILE_HIT_RADIUS * hostile_width_multiplier
 		var distance_squared := topology.distance_squared(global_position, hostile_target.global_position) if topology != null else global_position.distance_squared_to(hostile_target.global_position)
 		if distance_squared <= hit_radius * hit_radius:
 			hostile_hit.emit(self, damage, hostile_damage_profile)
 			_finish()
-			return
+			return true
 	if travelled_distance >= maximum_distance:
 		_finish()
+		return true
+	return false
 
 func _draw() -> void:
 	draw_line(Vector2(-15.0, 2.0), Vector2(5.0, 2.0), Color(AlveolusVisualTheme.PETROL, 0.16), 7.0, true)
@@ -318,6 +373,10 @@ func recycle() -> void:
 	hostile_wave_amplitude = 0.0
 	hostile_wave_length = 180.0
 	hostile_width_multiplier = 1.0
+	hostile_first_turn_distance = 0.0
+	hostile_second_leg_distance = 0.0
+	hostile_turn_sign = 1.0
+	hostile_turn_count = 0
 	_apply_visual_width()
 
 

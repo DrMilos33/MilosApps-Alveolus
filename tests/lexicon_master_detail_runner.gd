@@ -61,7 +61,8 @@ func _run() -> void:
 
 func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.theme != null, "Die eigenständig geladene Lexikonszene erhält ein lokales Fallback-Theme")
-	_check(lexicon.category_buttons.size() == 4, "Vier übergeordnete Kategorien sind sichtbar")
+	_check(lexicon.category_buttons.size() == 5, "Fünf übergeordnete Kategorien einschließlich Fähigkeiten sind sichtbar")
+	_check(lexicon.category_bar.columns == 5, "Die fünf breiten Lexikonreiter stehen in einer gemeinsamen Reihe")
 	var surface := lexicon.get_node("Surface") as PanelContainer
 	_check(surface != null and surface.theme_type_variation == AlveolusVisualTheme.TYPE_PAGE_CANVAS, "Die Lexikonbühne verwendet die zentrale PageCanvas-Rolle")
 	_check(lexicon.list_panel.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Die Eintragsliste verwendet die zentrale Dokumentfläche")
@@ -236,6 +237,7 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	for type_grid in lexicon._detail_type_grids:
 		_check(type_grid.columns == 1, "Kompakte Schadenstypgruppen bleiben als einzelne lesbare Zeilen erhalten")
 	_check(lexicon.category_bar.columns == 2, "Kompaktes Lexikon ordnet auch die Kategorien in zwei Spalten")
+	_check(lexicon.category_bar.custom_minimum_size.y >= 158.0, "Drei kompakte Kategorienreihen reservieren ihre vollständige Höhe")
 	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Kompaktes Lexikon aktiviert den vertikalen Seitenscroll")
 	_check(lexicon.content_row.custom_minimum_size.y >= LexiconMasterDetail.COMPACT_CONTENT_MIN_HEIGHT, "Liste und Detail kollabieren bei kompakter Höhe nicht zu einem leeren Streifen")
 
@@ -260,6 +262,7 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	await process_frame
 	await process_frame
 	_check(lexicon.detail_stats_grid.columns == 2, "Nach Rückkehr zur breiten Ansicht werden wieder zwei Wertkarten je Zeile gezeigt")
+	_check(lexicon.category_bar.columns == 5, "Nach Rückkehr zur breiten Ansicht stehen wieder alle fünf Reiter in einer Reihe")
 	for type_grid in lexicon._detail_type_grids:
 		_check(type_grid.columns == 2, "Nach Rückkehr zur breiten Ansicht nutzen auch Schadenstypen wieder zwei Spalten")
 

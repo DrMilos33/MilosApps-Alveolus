@@ -1971,7 +1971,7 @@ func _apply_intro_skip_confirmation() -> void:
 	intro_skip_confirmation.apply_view_model(ConfirmationOverlayViewModel.new(
 		intro_skip_confirmation_revision,
 		"Einführung überspringen?",
-		"Fall 1 wird freigeschaltet und du erhältst %d Forschung. Es gibt keinen Sieg und keinen Versuchseintrag. Die Einführung bleibt wiederholbar." % MetaProgressionState.INTRO_RESEARCH_REWARD,
+		"Fall 1 wird freigeschaltet und du erhältst %d Forschung. Es gibt keinen Sieg und keinen Versuchseintrag. Die Einführung bleibt wiederholbar." % MetaProgressionState.intro_research_reward(),
 		"Intro überspringen",
 		"Zurück",
 		false
@@ -2831,24 +2831,27 @@ func _refresh_preparation_case_facts(view_model: Variant, trait_data: Variant) -
 	for child in preparation_case_facts.get_children():
 		preparation_case_facts.remove_child(child)
 		child.queue_free()
-	var duration_text := String(_view_value(view_model, &"duration_text", "–"))
-	if bool(_view_value(view_model, &"tutorial_locked", false)):
-		# The guided case has no clock. Keep the dossier fact compact and
-		# unambiguous instead of leaking the old implementation label
-		# "Ereignisgesteuert" (or the generic "Ohne Zeitlimit") into planning.
-		duration_text = "∞"
-	preparation_level_facts = _case_fact_chip(
-		&"clock",
-		"Dauer %s" % duration_text,
-		Color("7eb5ff")
-	)
-	preparation_case_facts.add_child(preparation_level_facts)
-	preparation_boss_fact = _case_fact_chip(
-		&"diamond",
-		"Boss %s" % String(_view_value(view_model, &"boss_time_text", "–")),
-		Color("f0bc57")
-	)
-	preparation_case_facts.add_child(preparation_boss_fact)
+	preparation_level_facts = null
+	preparation_boss_fact = null
+	if bool(_view_value(view_model, &"timing_intel_revealed", false)):
+		var duration_text := String(_view_value(view_model, &"duration_text", "–"))
+		if bool(_view_value(view_model, &"tutorial_locked", false)):
+			# The guided case has no clock. Keep the dossier fact compact and
+			# unambiguous instead of leaking the old implementation label
+			# "Ereignisgesteuert" (or the generic "Ohne Zeitlimit") into planning.
+			duration_text = "∞"
+		preparation_level_facts = _case_fact_chip(
+			&"clock",
+			"Dauer %s" % duration_text,
+			Color("7eb5ff")
+		)
+		preparation_case_facts.add_child(preparation_level_facts)
+		preparation_boss_fact = _case_fact_chip(
+			&"diamond",
+			"Boss %s" % String(_view_value(view_model, &"boss_time_text", "–")),
+			Color("f0bc57")
+		)
+		preparation_case_facts.add_child(preparation_boss_fact)
 	for modifier_value in _variant_array(_view_value(trait_data, &"modifiers", [])):
 		var fact := _case_modifier_fact(modifier_value)
 		if fact.is_empty():

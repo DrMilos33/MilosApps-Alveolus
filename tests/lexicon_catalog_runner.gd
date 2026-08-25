@@ -11,6 +11,7 @@ func _run() -> void:
 	_test_enemy_values_are_sourced()
 	_test_character_values_are_sourced()
 	_test_gameplay_values_are_sourced()
+	_test_ability_values_are_sourced()
 	_test_discovery_locks_and_visuals()
 	if failures.is_empty():
 		print("ALVEOLUS_LEXICON_CATALOG_OK assertions=%d" % assertions)
@@ -21,7 +22,7 @@ func _run() -> void:
 		quit(1)
 
 func _test_categories_and_terms() -> void:
-	_check(LexiconCatalog.CATEGORY_ORDER == [&"monsters", &"character", &"gameplay", &"terms"], "Kategorien besitzen die vereinbarte Reihenfolge")
+	_check(LexiconCatalog.CATEGORY_ORDER == [&"monsters", &"character", &"gameplay", &"abilities", &"terms"], "Kategorien besitzen die vereinbarte Reihenfolge")
 	var by_id := LexiconCatalog.entries_by_id()
 	_check(by_id.size() == LexiconCatalog.entries().size(), "Jeder Lexikoneintrag besitzt eine eindeutige ID")
 	for category in LexiconCatalog.CATEGORY_ORDER:
@@ -74,6 +75,11 @@ func _test_enemy_values_are_sourced() -> void:
 		_assert_text_row(model, &"resistances", enemy.id, &"resistance_profile")
 		_assert_numeric_row(model, &"sample_value", enemy.analysis_value, enemy.id, &"analysis_value")
 		_check(not model.gameplay_text.contains("GRUNDWERTE"), "%s dupliziert keine Zahlen im Beschreibungstext" % id)
+	var core_copy: String = (entries[&"localized_boss"] as LexiconEntryDefinition).gameplay_text
+	for required_copy in ["Fall 1", "Fall 2", "80 Prozent", "15 Sekunden", "Stoß"]:
+		_check(core_copy.contains(required_copy), "Bakterienkern-Lexikon erklärt %s" % required_copy)
+	var core_discovery: DiscoveryDefinition = ContentCatalog.discovery_definitions()[&"localized_boss"]
+	_check(core_discovery.gameplay_text.contains("Doppelkurven-Projektile") and core_discovery.gameplay_text.contains("dauerhaft"), "Bakterienkern-Entdeckung erklärt Projektilweg und Stoß-Sperre")
 
 	var rebound_enemies := enemies.duplicate()
 	var rebound_enemy: EnemyDefinition = (enemies[&"pneumococcus"] as EnemyDefinition).duplicate(true) as EnemyDefinition
@@ -151,6 +157,27 @@ func _test_gameplay_values_are_sourced() -> void:
 	_assert_numeric_row(regeneration_model, &"life_regeneration", regeneration_stats.life_regeneration_per_second, &"player_stats", &"life_regeneration_per_second")
 	_check(_row(regeneration_model, &"support_recovery") == null and _row(regeneration_model, &"support_interval") == null, "Regeneration verwendet keine alten Supportwerte")
 	_check(regeneration_model.medical_name == "Lebensregeneration", "Regeneration besitzt keinen alten Supportnamen")
+
+
+func _test_ability_values_are_sourced() -> void:
+	var abilities := AbilityDefinition.catalog()
+	var entries := LexiconCatalog.entries_for_category(LexiconEntryDefinition.CATEGORY_ABILITIES)
+	_check(entries.size() == abilities.size(), "Der Fähigkeitenreiter enthält exakt den vollständigen Fähigkeitskatalog")
+	var provider := LexiconViewModelProvider.create_default()
+	for entry in entries:
+		var definition := abilities.get(entry.id) as AbilityDefinition
+		_check(definition != null, "%s bindet eine echte Fähigkeitsdefinition" % entry.id)
+		_check(entry.unlocked_by_default and entry.discovery_id == &"", "%s ist im Lexikon ohne versteckte Discovery lesbar" % entry.id)
+		var model := provider.make_view_model(entry)
+		_check(not model.locked, "%s ist im Fähigkeitenreiter sofort lesbar" % entry.id)
+		_assert_numeric_row(model, &"cooldown", definition.cooldown, definition.id, &"cooldown")
+		_assert_numeric_row(model, &"capacity", definition.capacity_cost, definition.id, &"capacity_cost")
+		_assert_text_row(model, &"target_mode", definition.id, &"target_mode")
+		if float(definition.parameters.get("damage", 0.0)) > 0.0:
+			_assert_numeric_row(model, &"damage", float(definition.parameters["damage"]), definition.id, &"parameters")
+	var burst := provider.make_view_model(LexiconCatalog.entries_by_id()[&"ability_defense_burst"])
+	_check(_row(burst, &"damage") == null and _row(burst, &"damage_type") == null, "Stoß zeigt vor seinem künftigen Schadenstalent weder Schaden noch Schadenstyp")
+	_check(burst.type_presentations().is_empty(), "Ein schadensfreier Stoß erzeugt keine irreführenden Null-Prozent-Typchips")
 
 func _test_discovery_locks_and_visuals() -> void:
 	var provider := LexiconViewModelProvider.create_default()

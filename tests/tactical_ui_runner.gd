@@ -299,8 +299,13 @@ func _run() -> void:
 	var intro_view := prep_view.duplicate(true)
 	intro_view["tutorial_locked"] = true
 	intro_view["can_skip_intro"] = true
+	intro_view["timing_intel_revealed"] = false
 	hud.show_preparation(intro_view, components)
 	await process_frame
+	await process_frame
+	_check(hud.preparation_level_facts == null and hud.preparation_boss_fact == null, "Vor dem ersten Abschluss verrät die Einsatzplanung weder Zeit noch Bossspawn")
+	intro_view["timing_intel_revealed"] = true
+	hud.show_preparation(intro_view, components)
 	await process_frame
 	var intro_duration_copy := ""
 	for label_node in hud.preparation_level_facts.find_children("*", "Label", true, false):

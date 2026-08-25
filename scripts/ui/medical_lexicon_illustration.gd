@@ -86,6 +86,30 @@ func _draw() -> void:
 			draw_line(local_center + Vector2(8, -24), local_center + Vector2(8, 2), color, 4.0, true)
 			var flask := PackedVector2Array([local_center + Vector2(-8, 0), local_center + Vector2(-23, 24), local_center + Vector2(23, 24), local_center + Vector2(8, 0)])
 			draw_colored_polygon(flask, Color(color, color.a * 0.72))
+		&"ability_focus_field":
+			for radius in [7.0, 15.0, 24.0]:
+				draw_arc(local_center, radius, 0.0, TAU, 28, color, 2.5, true)
+			draw_line(local_center + Vector2(-28, 0), local_center + Vector2(28, 0), Color(color, color.a * 0.55), 2.0, true)
+		&"ability_emergency_support":
+			draw_arc(local_center, 24.0, PI * 0.12, PI * 0.88, 18, color, 3.0, true)
+			draw_line(local_center + Vector2(0, -13), local_center + Vector2(0, 13), color, 5.0, true)
+			draw_line(local_center + Vector2(-13, 0), local_center + Vector2(13, 0), color, 5.0, true)
+		&"ability_defense_burst":
+			draw_circle(local_center, 7.0, color)
+			for radius in [16.0, 26.0]:
+				draw_arc(local_center, radius, 0.0, TAU, 32, Color(color, color.a * 0.75), 3.0, true)
+		&"ability_treatment_line":
+			draw_line(local_center + Vector2(-27, 0), local_center + Vector2(27, 0), Color(color, color.a * 0.25), 12.0, true)
+			draw_line(local_center + Vector2(-27, 0), local_center + Vector2(27, 0), color, 4.0, true)
+		&"ability_protection_field":
+			draw_arc(local_center, 25.0, 0.0, TAU, 32, color, 3.0, true)
+			draw_colored_polygon(PackedVector2Array([local_center + Vector2(0, -17), local_center + Vector2(15, -8), local_center + Vector2(11, 13), local_center, local_center + Vector2(-11, 13), local_center + Vector2(-15, -8)]), Color(color, color.a * 0.55))
+		&"ability_sample_pull":
+			draw_colored_polygon(PackedVector2Array([local_center + Vector2(0, -12), local_center + Vector2(10, 0), local_center + Vector2(0, 12), local_center + Vector2(-10, 0)]), color)
+			for angle in [0.0, PI * 0.5, PI, PI * 1.5]:
+				var outer := local_center + Vector2.from_angle(angle) * 27.0
+				var inner := local_center + Vector2.from_angle(angle) * 17.0
+				draw_line(outer, inner, color, 3.0, true)
 		_:
 			draw_circle(local_center, 20.0, color)
 	_draw_lock_mark(local_center)

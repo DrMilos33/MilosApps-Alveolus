@@ -45,6 +45,11 @@ var body_role: int = EnemySpawnRequest.BodyRole.MOBILE
 var obstacle_traversal: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 var projectile_attack_speed_multiplier: float = 1.0
 var projectile_width_multiplier: float = 1.0
+var projectile_speed_multiplier: float = 1.0
+var defense_burst_shooting_lock_seconds: float = 0.0
+var treatment_line_damage_multiplier: float = 1.0
+var symbolic_health_bar_count: int = 0
+var runtime_visual_id: StringName = &""
 var phase_minions: PackedInt32Array = PackedInt32Array()
 var next_phase_index: int = 0
 var contact_cooldown: float = 0.0
@@ -88,6 +93,8 @@ var _topology_bounded: bool = false
 var _bounded_minimum := Vector2.ZERO
 var _bounded_maximum := Vector2.ZERO
 var _boss_aura_radius: float = 0.0
+var _shooting_lock_remaining: float = 0.0
+var _shooting_lock_permanent: bool = false
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -105,7 +112,8 @@ func configure(
 	resistance_profile: ResistanceProfile = null,
 	defense_rating: float = 0.0,
 	body_role_value: int = EnemySpawnRequest.BodyRole.MOBILE,
-	obstacle_traversal_value: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
+	obstacle_traversal_value: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT,
+	visual_id_override: StringName = &""
 ) -> void:
 	activation_generation += 1
 	activation_active = true
@@ -127,8 +135,15 @@ func configure(
 	incoming_player_damage_multiplier = 1.0
 	body_role = body_role_value
 	obstacle_traversal = obstacle_traversal_value
+	runtime_visual_id = visual_id_override if visual_id_override != &"" else definition.visual_id
 	projectile_attack_speed_multiplier = 1.0
 	projectile_width_multiplier = 1.0
+	projectile_speed_multiplier = 1.0
+	defense_burst_shooting_lock_seconds = 0.0
+	treatment_line_damage_multiplier = 1.0
+	symbolic_health_bar_count = 0
+	_shooting_lock_remaining = 0.0
+	_shooting_lock_permanent = false
 	phase_minions = boss_phases
 	next_phase_index = 0
 	contact_cooldown = 0.0
@@ -179,8 +194,15 @@ func recycle() -> void:
 	incoming_player_damage_multiplier = 1.0
 	body_role = EnemySpawnRequest.BodyRole.MOBILE
 	obstacle_traversal = EnemySpawnRequest.ObstacleTraversal.DEFAULT
+	runtime_visual_id = &""
 	projectile_attack_speed_multiplier = 1.0
 	projectile_width_multiplier = 1.0
+	projectile_speed_multiplier = 1.0
+	defense_burst_shooting_lock_seconds = 0.0
+	treatment_line_damage_multiplier = 1.0
+	symbolic_health_bar_count = 0
+	_shooting_lock_remaining = 0.0
+	_shooting_lock_permanent = false
 	phase_minions = PackedInt32Array()
 	status_speed_multipliers.clear()
 	status_contact_multipliers.clear()
@@ -223,9 +245,40 @@ func resolved_obstacle_traversal() -> int:
 	return EnemySpawnRequest.ObstacleTraversal.FLOW_AROUND
 
 
-func configure_projectile_modifiers(attack_speed_multiplier: float, width_multiplier: float) -> void:
+func configure_projectile_modifiers(
+	attack_speed_multiplier: float,
+	width_multiplier: float,
+	travel_speed_multiplier: float = 1.0,
+	burst_shooting_lock_seconds: float = 0.0
+) -> void:
 	projectile_attack_speed_multiplier = maxf(attack_speed_multiplier, 0.01)
 	projectile_width_multiplier = maxf(width_multiplier, 0.1)
+	projectile_speed_multiplier = maxf(travel_speed_multiplier, 0.1)
+	defense_burst_shooting_lock_seconds = burst_shooting_lock_seconds
+
+
+func configure_damage_presentation(
+	line_damage_multiplier: float,
+	health_bar_count: int
+) -> void:
+	treatment_line_damage_multiplier = maxf(line_damage_multiplier, 0.01)
+	symbolic_health_bar_count = clampi(health_bar_count, 0, 16)
+	queue_redraw()
+
+
+func apply_defense_burst_shooting_lock() -> void:
+	if defense_burst_shooting_lock_seconds < 0.0:
+		_shooting_lock_permanent = true
+		_shooting_lock_remaining = 0.0
+	elif defense_burst_shooting_lock_seconds > 0.0:
+		_shooting_lock_remaining = maxf(
+			_shooting_lock_remaining,
+			defense_burst_shooting_lock_seconds
+		)
+
+
+func projectiles_suppressed() -> bool:
+	return activation_active and (_shooting_lock_permanent or _shooting_lock_remaining > 0.0)
 
 
 func resolved_projectile_interval() -> float:
@@ -337,7 +390,7 @@ func get_highlight_body() -> UnitBody2D:
 func _configure_visual() -> void:
 	if definition == null:
 		return
-	visual_texture = VisualAssetCatalog.gameplay_sprite(definition.visual_id)
+	visual_texture = VisualAssetCatalog.gameplay_sprite(resolved_visual_id())
 	if visual_body != null:
 		visual_body.configure_circle(definition.radius * (1.08 if not definition.is_boss else 1.04), Vector2.ZERO, 32)
 
@@ -348,9 +401,17 @@ func _visual_rect() -> Rect2:
 func visual_extent() -> float:
 	if definition == null:
 		return 0.0
+	if resolved_visual_id() == &"bacterial_swarm":
+		return definition.radius * 2.65
 	if definition.id == &"bacterial_cluster":
 		return definition.radius * 2.15
 	return definition.radius * (2.25 if definition.is_boss else 2.35)
+
+
+func resolved_visual_id() -> StringName:
+	if runtime_visual_id != &"":
+		return runtime_visual_id
+	return definition.visual_id if definition != null else &""
 
 
 func contact_body_radius() -> float:
@@ -395,6 +456,7 @@ func step_queued_fixed(delta: float, defer_contact_check: bool = false) -> void:
 		return
 	_begin_visual_step()
 	_relocation_interaction_lock = maxf(0.0, _relocation_interaction_lock - delta)
+	_step_shooting_lock(delta)
 	if hit_flash > 0.0:
 		hit_flash = maxf(0.0, hit_flash - delta)
 		_sync_visual_appearance()
@@ -411,6 +473,7 @@ func step_fixed(delta: float, defer_contact_check: bool = false) -> void:
 		return
 	_begin_visual_step()
 	_relocation_interaction_lock = maxf(0.0, _relocation_interaction_lock - delta)
+	_step_shooting_lock(delta)
 	if topology != null and definition != null:
 		var bounded_position := global_position
 		if _topology_bounded:
@@ -671,7 +734,8 @@ func _refresh_status_products() -> void:
 		_cached_status_contact_multiplier *= float(status_contact_multipliers[source])
 
 func take_damage(amount: float, source: StringName = &"therapy") -> void:
-	var resolved_amount := amount * incoming_player_damage_multiplier
+	var source_multiplier := treatment_line_damage_multiplier if source == &"ability_treatment_line" else 1.0
+	var resolved_amount := amount * source_multiplier * incoming_player_damage_multiplier
 	if resolved_amount <= 0.0 or not is_targetable():
 		return
 	var applied := minf(resolved_amount, health)
@@ -763,8 +827,32 @@ func _draw() -> void:
 		draw_circle(Vector2(8.0, 0.0), definition.radius * 0.72, body_color.darkened(0.08))
 		draw_arc(Vector2.ZERO, definition.radius + 2.0, 0.0, TAU, 20, Color(body_color.lightened(0.25), 0.55 * alpha), 2.0, true)
 
-	if (definition.is_boss or health < max_health) and not dying:
+	if symbolic_health_bar_count > 0 and not dying and spawn_timer <= 0.0:
+		_draw_symbolic_health_bars(alpha)
+	elif (definition.is_boss or health < max_health) and not dying:
 		var width := definition.radius * 2.0
 		var fraction := clampf(health / max_health, 0.0, 1.0)
 		draw_rect(Rect2(-width * 0.5, -definition.radius - 17.0, width, 6.0), Color(AlveolusVisualTheme.IVORY_DEEP, alpha), true)
 		draw_rect(Rect2(-width * 0.5, -definition.radius - 17.0, width * fraction, 6.0), Color(AlveolusVisualTheme.CORAL, alpha), true)
+
+
+func _draw_symbolic_health_bars(alpha: float) -> void:
+	var fraction := clampf(health / maxf(max_health, 0.001), 0.0, 1.0)
+	var columns := mini(5, symbolic_health_bar_count)
+	var rows := ceili(float(symbolic_health_bar_count) / float(columns))
+	var bar_size := Vector2(16.0, 3.0)
+	var gap := Vector2(3.0, 3.0)
+	var full_width := float(columns) * bar_size.x + float(columns - 1) * gap.x
+	var start := Vector2(-full_width * 0.5, -visual_extent() * 0.5 - 10.0 - float(rows - 1) * (bar_size.y + gap.y))
+	for index in range(symbolic_health_bar_count):
+		var column := index % columns
+		var row := index / columns
+		var position := start + Vector2(float(column) * (bar_size.x + gap.x), float(row) * (bar_size.y + gap.y))
+		draw_rect(Rect2(position, bar_size), Color(AlveolusVisualTheme.IVORY_DEEP, alpha), true)
+		draw_rect(Rect2(position, Vector2(bar_size.x * fraction, bar_size.y)), Color(AlveolusVisualTheme.CORAL, alpha), true)
+
+
+func _step_shooting_lock(delta: float) -> void:
+	if _shooting_lock_permanent or _shooting_lock_remaining <= 0.0:
+		return
+	_shooting_lock_remaining = maxf(0.0, _shooting_lock_remaining - maxf(delta, 0.0))

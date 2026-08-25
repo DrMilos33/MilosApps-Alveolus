@@ -4,11 +4,13 @@ extends Resource
 const CATEGORY_MONSTERS: StringName = &"monsters"
 const CATEGORY_CHARACTER: StringName = &"character"
 const CATEGORY_GAMEPLAY: StringName = &"gameplay"
+const CATEGORY_ABILITIES: StringName = &"abilities"
 const CATEGORY_TERMS: StringName = &"terms"
 
 const SOURCE_ENEMY: StringName = &"enemy"
 const SOURCE_PLAYER: StringName = &"player"
 const SOURCE_DISCOVERY: StringName = &"discovery"
+const SOURCE_ABILITY: StringName = &"ability"
 const SOURCE_TERMINOLOGY: StringName = &"terminology"
 
 @export var id: StringName

@@ -88,6 +88,11 @@ func _check_practice_run_configs() -> void:
 		_check(is_equal_approx(boss.boss_wave_amplitude, profile.get_wave_amplitude()), "Bossprofil %s überträgt die Projektilamplitude" % profile.get_id())
 		_check(boss.boss_phase_minions == profile.get_phase_minions(), "Bossprofil %s überträgt alle Phasen" % profile.get_id())
 		_check(boss.boss_count == profile.get_boss_count(), "Bossprofil %s überträgt die Bossanzahl" % profile.get_id())
+		_check(is_equal_approx(boss.boss_projectile_attack_speed_multiplier, profile.get_projectile_attack_speed_multiplier()), "Bossprofil %s überträgt die Schussrate" % profile.get_id())
+		_check(is_equal_approx(boss.boss_reinforcement_interval, profile.get_reinforcement_interval()), "Bossprofil %s überträgt das Verstärkungsintervall" % profile.get_id())
+		_check(boss.boss_reinforcement_count == profile.get_reinforcement_count(), "Bossprofil %s überträgt die Verstärkungsmenge" % profile.get_id())
+		_check(boss.boss_reinforcement_minimum_phase == profile.get_reinforcement_minimum_phase(), "Bossprofil %s überträgt die Verstärkungsphase" % profile.get_id())
+		_check(is_equal_approx(boss.boss_add_defense_burst_shooting_lock_seconds, profile.get_add_defense_burst_shooting_lock_seconds()), "Bossprofil %s überträgt die Stoß-Sperre der Adds" % profile.get_id())
 
 
 func _configured_practice_run(scenario_id: StringName, profile_id: StringName = &"") -> RunConfig:

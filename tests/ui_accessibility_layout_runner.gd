@@ -36,6 +36,7 @@ func _run() -> void:
 		"level_description": "Eine zunehmende Belastung erfordert einen klaren Plan.",
 		"duration_text": "Ohne Zeitlimit",
 		"boss_time_text": "3:00 Min.",
+		"timing_intel_revealed": true,
 		"trait": ContentCatalog.case_trait_definitions()[&"monster_spawn_10"],
 		"validation": LoadoutValidator.validate(prepared, loadout_modules, {}, 8),
 	}

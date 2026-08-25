@@ -362,7 +362,9 @@ recommit the same origin and could freeze the slot indefinitely after knockback
 or a phased guard update. The check is allocation-free and adds no query.
 
 The topology snapshot is built into a double buffer over four fixed ticks. Its
-limited broad-phase query retains the nearest six exact bodies per member;
+limited broad-phase query retains the nearest seven exact bodies per member
+inside a 41-world-unit surface horizon; this scales the cache to the current
+85-world-unit maximum ordinary base speed without changing steering;
 front-to-back resolution consumes only that packed cache and commits through the
 existing spatial grid. A routed mover with cached group neighbors uses this same
 bounded solver even while an obstacle temporarily splits the connected
@@ -473,8 +475,9 @@ the only arithmetic used by `award_run()`. A loss preview therefore shares the
 same multiplier, rounding and minimum with the eventual mutation. All positive
 research income uses the central 3.75 gain factor; purchases and refunds do not.
 Run rewards apply `1 + 0.25 * bosses_defeated` once before the single final
-rounding. The one-time intro base grant is 113 for completion or skip and uses
-the same boss multiplier only when a boss was actually defeated.
+rounding. The one-time intro grant is exactly 30 for completion or skip and
+deliberately bypasses the boss multiplier, so it equals the canonical Stoß
+unlock cost without creating surplus research.
 
 `UISettingsState.show_discovery_info` is an additive Save-v7 setting with a
 default of `true`. When disabled, `Game` drains requested discoveries through
@@ -530,7 +533,7 @@ from the saved case seed. That seed advances only after a successful non-intro
 result, so failure and cancellation cannot silently reroll the case.
 
 `minor_focus` participates in the normal centralized enemy movement path with
-base speed 32 before case modifiers. It remains a detailed,
+base speed 38 before case modifiers. It remains a detailed,
 generation-safe spawning objective and releases four bacteria after its
 20-second lifecycle if it survives; mobility does not authorize a per-entity
 process loop or a second renderer.
@@ -555,6 +558,29 @@ enemy-enemy contact circles in both directions; Doctor contact, damage, stun,
 knockback and bounded-arena constraints remain unchanged. The HUD resolves at
 most the active boss handles once per fixed snapshot and drives one process-free
 edge arrow only while a boss body is fully outside the actual camera rectangle.
+
+Case-pressure combat and presentation modifiers are copied from the immutable
+plan into scalar activation fields on `InfectionEnemy` and cleared on recycle.
+The Fall-1 target resolves to speed 60, 1.875 attack-rate, 1.5 projectile-speed
+and width multipliers; a zero-damage Stoß control hit pauses only its projectile
+timer for ten seconds. The Fall-2 target remains one gameplay entity with shared
+health: its composed bacteria texture and repeated bars are presentation-only,
+while only source `ability_treatment_line` receives its 10x incoming multiplier.
+
+The Fall-2 boss uses one pooled `HOSTILE_DOUBLE_TURN` projectile per shot. The
+first and second leg distances are frozen from the shorter visible world extent
+at spawn, and the fixed-step projectile consumes overshoot piecewise before each
+same-direction 90-degree turn. A packed per-handle sequence alternates turn side.
+Its periodic and phase adds receive a per-activation permanent Stoß shooting
+lock; generations, recycle and director release clear every timer and sequence.
+
+The Lexicon catalog has five stable presentation categories, including
+`abilities`; its entries are derived from the complete `AbilityDefinition`
+catalog and its view-model facts remain stage- and data-driven. Preparation
+publishes timing intelligence separately from the values: campaign duration and
+boss facts are created only after `has_completed_level(exact_id)`, while debug
+practice scenarios keep their timing visible. Trait facts are never hidden by
+this progressive reveal.
 
 The relocation director snapshots the complete eligible offscreen backlog every
 0.5 seconds instead of deriving sources from the local target-pressure window.

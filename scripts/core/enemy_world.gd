@@ -234,8 +234,8 @@ const BULK_BLEND_IN_SECONDS := 0.20
 const BULK_BLEND_OUT_SECONDS := 0.35
 const BULK_PROJECTION_PASSES := 1
 const BULK_BLEND_EPSILON := 0.001
-const BULK_PAIR_LOOKAHEAD := 34.0
-const MAX_BULK_NEIGHBORS := 6
+const BULK_PAIR_LOOKAHEAD := 41.0
+const MAX_BULK_NEIGHBORS := 7
 const MAX_BULK_SNAPSHOT_CANDIDATES := 24
 const BULK_SNAPSHOT_BUILD_PHASES := 4
 
@@ -1738,7 +1738,15 @@ func _insert_bulk_build_neighbor(slot: int, handle: int, surface_gap: float) -> 
 func _bulk_enemy_eligible(enemy: InfectionEnemy) -> bool:
 	if enemy == null or enemy.definition == null or not enemy.can_be_relocated():
 		return false
-	if not enemy.definition.contact_enabled or enemy.definition.speed <= 0.0:
+	# Zero-speed bodies can still block moving enemies through the ordinary
+	# collision grid, but cannot contribute motion to a shared bulk. Excluding
+	# them avoids rebuilding useless bulk snapshots for stationary stress/test
+	# arrangements while preserving their physical body.
+	if (
+		not enemy.definition.contact_enabled
+		or enemy.definition.speed <= 0.0
+		or enemy.speed_multiplier <= 0.0
+	):
 		return false
 	return enemy.definition.id == SMALL_ENEMY_ID or enemy.definition.id == CLUSTER_ENEMY_ID
 

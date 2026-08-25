@@ -29,6 +29,7 @@ const GERM_REGIONS := {
 
 const GAMEPLAY_INTERFACE_VISUALS := {
 	&"analysis_pickup": true,
+	&"bacterial_swarm": true,
 }
 
 const CAMPUS_TILE_PATHS := {
@@ -118,6 +119,8 @@ static func gameplay_sprite(id: StringName) -> Texture2D:
 		return null
 	if id == &"doctor":
 		return doctor_frame(Vector2.DOWN, 0, false)
+	if id == &"bacterial_swarm":
+		return _bacterial_swarm_texture()
 	if GERM_REGIONS.has(id):
 		return _cropped_texture_region(GERMS_SHEET_PATH, GERM_REGIONS[id], true)
 	return _normalized_texture(ANALYSIS_SAMPLE_PATH, true)
@@ -137,6 +140,8 @@ static func doctor_frame(direction: Vector2, frame: int, moving: bool = true) ->
 static func gameplay_batch_texture(id: StringName) -> Texture2D:
 	if not has_gameplay_visual(id):
 		return null
+	if id == &"bacterial_swarm":
+		return _bacterial_swarm_texture()
 	if GERM_REGIONS.has(id):
 		return _cropped_texture_region(GERMS_SHEET_PATH, GERM_REGIONS[id], true)
 	if id == &"doctor":
@@ -240,6 +245,39 @@ static func _exact_square_texture_region(path: String, source_rect: Rect2i) -> T
 	canvas.blend_rect(content, Rect2i(Vector2i.ZERO, content.get_size()), offset)
 	var texture := ImageTexture.create_from_image(canvas)
 	_cache[key] = texture
+	return texture
+
+
+## One shared-health event body composed from the existing documented
+## pneumococcus sprite. This stays presentation-only: no child entities, nodes
+## or additional simulation loops are created for the visible swarm.
+static func _bacterial_swarm_texture() -> Texture2D:
+	const CACHE_KEY := "gameplay:bacterial_swarm"
+	if _cache.has(CACHE_KEY):
+		return _cache[CACHE_KEY]
+	var source_texture := _cropped_texture_region(GERMS_SHEET_PATH, GERM_REGIONS[&"pneumococcus"], true)
+	if source_texture == null:
+		return null
+	var source := source_texture.get_image()
+	if source == null or source.is_empty():
+		return null
+	if source.get_format() != Image.FORMAT_RGBA8:
+		source.convert(Image.FORMAT_RGBA8)
+	var canvas := Image.create(256, 224, false, Image.FORMAT_RGBA8)
+	canvas.fill(Color.TRANSPARENT)
+	var placements := [
+		[Vector2i(91, 2), 68], [Vector2i(139, 18), 62],
+		[Vector2i(45, 34), 72], [Vector2i(96, 48), 70], [Vector2i(158, 54), 66],
+		[Vector2i(20, 91), 67], [Vector2i(71, 99), 72], [Vector2i(129, 104), 69], [Vector2i(178, 104), 61],
+		[Vector2i(50, 151), 65], [Vector2i(108, 151), 70], [Vector2i(161, 150), 62],
+	]
+	for placement in placements:
+		var image := source.duplicate()
+		var edge := int(placement[1])
+		image.resize(edge, edge, Image.INTERPOLATE_LANCZOS)
+		canvas.blend_rect(image, Rect2i(Vector2i.ZERO, image.get_size()), placement[0])
+	var texture := ImageTexture.create_from_image(_normalize_visible_image(canvas, true))
+	_cache[CACHE_KEY] = texture
 	return texture
 
 static func _normalized_texture(path: String, pad_square: bool) -> Texture2D:

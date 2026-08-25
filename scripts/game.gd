@@ -1405,11 +1405,13 @@ func _refresh_preparation() -> void:
 	var scenario := pending_run_context.practice_scenario as PracticeScenarioDefinition if practice_mode else null
 	var case_trait_value: Variant = null if practice_mode else case_traits.get(pending_run_context.visible_trait_id)
 	var available_ids := _practice_available_loadout_ids() if practice_mode else LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
+	var timing_intel_revealed := practice_mode or meta.has_completed_level(selected_level.id)
 	var view_model := {
 		"level_title": scenario.get_title() if scenario != null else selected_level.title,
 		"level_description": scenario.get_description() if scenario != null else selected_level.briefing_text,
 		"duration_text": "∞" if scenario != null and scenario.is_endless() else ("Bis zum Boss-Sieg" if scenario != null else selected_level.duration_text()),
 		"boss_time_text": "Nach 2 Sekunden" if scenario != null and scenario.requires_boss_profile() else ("Kein Boss" if scenario != null else selected_level.boss_time_text()),
+		"timing_intel_revealed": timing_intel_revealed,
 		"tutorial_locked": false if practice_mode else selected_level.is_tutorial,
 		"can_skip_intro": false if practice_mode else selected_level.is_tutorial and not meta.intro_skipped,
 		"trait": case_trait_value,
@@ -1925,6 +1927,8 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_reinforcement_interval = 0.0
 	config.boss_reinforcement_count = 0
 	config.boss_reinforcement_minimum_phase = 0
+	config.boss_projectile_attack_speed_multiplier = 1.0
+	config.boss_add_defense_burst_shooting_lock_seconds = 0.0
 	config.initial_small_enemy_count = scenario.get_initial_small_count()
 	config.initial_cluster_enemy_count = scenario.get_initial_medium_count()
 	config.regular_spawn_weight_cap = scenario.get_ongoing_weighted_cap()
@@ -1951,6 +1955,11 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_wave_amplitude = profile.get_wave_amplitude()
 	config.boss_phase_minions = profile.get_phase_minions()
 	config.boss_count = profile.get_boss_count()
+	config.boss_projectile_attack_speed_multiplier = profile.get_projectile_attack_speed_multiplier()
+	config.boss_reinforcement_interval = profile.get_reinforcement_interval()
+	config.boss_reinforcement_count = profile.get_reinforcement_count()
+	config.boss_reinforcement_minimum_phase = profile.get_reinforcement_minimum_phase()
+	config.boss_add_defense_burst_shooting_lock_seconds = profile.get_add_defense_burst_shooting_lock_seconds()
 
 
 func _is_practice_test() -> bool:
@@ -2503,23 +2512,34 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 	elif role == EnemyAttackDirector.Role.BOSS:
 		amount *= config.boss_projectile_damage_multiplier
 		move_speed = 212.5 if pattern == EnemyAttackDirector.Pattern.DIAMOND else 250.0
+	move_speed *= source.projectile_speed_multiplier
 	amount *= source.status_contact_multiplier()
 	amount = float(roundi(amount))
 	if amount <= 0.0:
 		return
+	var hostile_pattern := TherapyProjectile.HOSTILE_NORMAL
+	if pattern == EnemyAttackDirector.Pattern.DIAMOND:
+		hostile_pattern = TherapyProjectile.HOSTILE_DIAMOND
+	elif pattern == EnemyAttackDirector.Pattern.DOUBLE_TURN:
+		hostile_pattern = TherapyProjectile.HOSTILE_DOUBLE_TURN
+	var turn_distances := Vector2.ZERO
+	if pattern == EnemyAttackDirector.Pattern.DOUBLE_TURN:
+		var screen_extent := minf(_visible_world_rect().size.x, _visible_world_rect().size.y)
+		turn_distances = Vector2(screen_extent * 0.5, screen_extent * 0.2)
 	_spawn_hostile_projectile(
 		source.global_position,
 		heading,
 		amount,
 		source.definition.damage_profile,
-		TherapyProjectile.HOSTILE_DIAMOND if pattern == EnemyAttackDirector.Pattern.DIAMOND else TherapyProjectile.HOSTILE_NORMAL,
+		hostile_pattern,
 		phase,
 		move_speed,
 		1050.0,
 		config.boss_wave_amplitude if role == EnemyAttackDirector.Role.BOSS else 44.0,
 		false,
 		-1,
-		source.projectile_width_multiplier
+		source.projectile_width_multiplier,
+		turn_distances
 	)
 
 
@@ -2535,7 +2555,8 @@ func _spawn_hostile_projectile(
 	wave_amplitude: float = 44.0,
 	critical_pressure: bool = false,
 	gate_id: int = -1,
-	projectile_width_multiplier: float = 1.0
+	projectile_width_multiplier: float = 1.0,
+	turn_distances: Vector2 = Vector2.ZERO
 ) -> bool:
 	if projectile_world == null or hostile_projectile_renderer == null or not is_instance_valid(avatar):
 		return false
@@ -2566,7 +2587,9 @@ func _spawn_hostile_projectile(
 		max_distance,
 		wave_amplitude,
 		180.0,
-		projectile_width_multiplier
+		projectile_width_multiplier,
+		turn_distances.x,
+		turn_distances.y
 	)
 	projectile.global_position = origin
 	projectile.reset_visual_motion()
@@ -2881,7 +2904,8 @@ func _spawn_enemy(
 		enemy_runtime_resistance_profiles.get(type) as ResistanceProfile,
 		config.enemy_defense,
 		body_role,
-		obstacle_traversal
+		obstacle_traversal,
+		spawn_request.resolved_visual_id() if spawn_request != null else definition.visual_id
 	)
 	if test_tools_available:
 		enemy.set_incoming_player_damage_multiplier(run_test_settings.outgoing_damage_multiplier())
@@ -2915,7 +2939,13 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 		return
 	enemy.configure_projectile_modifiers(
 		float(request.metadata.get("projectile_attack_speed_multiplier", 1.0)),
-		float(request.metadata.get("projectile_width_multiplier", 1.0))
+		float(request.metadata.get("projectile_width_multiplier", 1.0)),
+		float(request.metadata.get("projectile_speed_multiplier", 1.0)),
+		float(request.metadata.get("defense_burst_shooting_lock_seconds", 0.0))
+	)
+	enemy.configure_damage_presentation(
+		float(request.metadata.get("treatment_line_damage_multiplier", 1.0)),
+		int(request.metadata.get("symbolic_health_bar_count", 0))
 	)
 	if bool(request.metadata.get("case_pressure_target", false)):
 		_register_case_pressure_target(enemy, StringName(request.metadata.get("pressure_behavior", &"stationary_fan")))
@@ -2951,6 +2981,7 @@ func _spawn_boss() -> void:
 			EnemySpawnRequest.Priority.CRITICAL,
 			&"boss"
 		)
+		request.metadata["projectile_attack_speed_multiplier"] = config.boss_projectile_attack_speed_multiplier
 		var boss := _spawn_enemy(
 			config.boss_enemy_id,
 			request.position,
@@ -3184,6 +3215,8 @@ func _apply_minions_requested(origin: Vector2, count: int, source_handle: int = 
 			&"boss_phase_add"
 		)
 		request.metadata["ranged_shooter"] = EntityHandle.is_valid(source_handle)
+		if EntityHandle.is_valid(source_handle):
+			request.metadata["defense_burst_shooting_lock_seconds"] = config.boss_add_defense_burst_shooting_lock_seconds
 		_spawn_enemy(&"pneumococcus", position, health_scale, true, true, request)
 
 func _on_boss_phase_changed(phase: int, enemy: InfectionEnemy) -> void:
@@ -4130,8 +4163,8 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 	var request := EnemySpawnRequest.create(
 		&"minor_focus",
 		spawn_position,
-		&"infection_focus",
-		config.case_pressure_target_health_multiplier,
+		pressure_plan.target_visual_id if pressure_plan != null and pressure_plan.target_visual_id != &"" else &"infection_focus",
+		config.case_pressure_target_health_multiplier * (pressure_plan.target_health_multiplier if pressure_plan != null else 1.0),
 		0.0 if stationary_fan else config.enemy_speed_multiplier * target_movement_multiplier,
 		config.contact_damage_multiplier,
 		PackedInt32Array(),
@@ -4148,6 +4181,10 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 	request.metadata["projectile_width_multiplier"] = (
 		pressure_plan.target_projectile_width_multiplier if pressure_plan != null else 1.0
 	)
+	request.metadata["projectile_speed_multiplier"] = pressure_plan.target_projectile_speed_multiplier if pressure_plan != null else 1.0
+	request.metadata["defense_burst_shooting_lock_seconds"] = pressure_plan.defense_burst_shooting_lock_seconds if pressure_plan != null else 0.0
+	request.metadata["treatment_line_damage_multiplier"] = pressure_plan.treatment_line_damage_multiplier if pressure_plan != null else 1.0
+	request.metadata["symbolic_health_bar_count"] = pressure_plan.symbolic_health_bar_count if pressure_plan != null else 0
 	if stationary_fan:
 		request.configure_body_interaction(
 			EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE,
@@ -4155,7 +4192,7 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 		)
 	# A full critical pool consumes this authored slot without creating delayed
 	# pressure after a boss has already cancelled the remaining plan.
-	_spawn_enemy(&"minor_focus", spawn_position, config.case_pressure_target_health_multiplier, true, false, request)
+	_spawn_enemy(&"minor_focus", spawn_position, request.health_scale, true, false, request)
 
 
 func _case_pressure_spawn_position(planned_sector: int, body_radius: float) -> Vector2:

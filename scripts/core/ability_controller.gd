@@ -473,6 +473,8 @@ func _apply_damage_and_displacement(
 	damage_profile: DamageProfile = null,
 	stun_duration: float = 0.0
 ) -> void:
+	if source == &"ability_defense_burst" and enemy.has_method("apply_defense_burst_shooting_lock"):
+		enemy.apply_defense_burst_shooting_lock()
 	var resolved_amount := amount
 	if _enemy_definition_id(enemy) == &"bacterial_cluster":
 		resolved_amount *= build.value(&"group_area_effect", 1.0)

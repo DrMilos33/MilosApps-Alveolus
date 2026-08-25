@@ -1127,6 +1127,8 @@ func _run() -> void:
 	rear_window_movers.fill(0)
 	var rear_entered_neck: Dictionary = {}
 	var rear_minimum_margin := INF
+	var rear_minimum_tick := -1
+	var rear_minimum_pair := Vector2i(-1, -1)
 	var rear_maximum_retreat := 0.0
 	var rear_neck_plane_x := -315.0
 	for tick in range(240):
@@ -1155,8 +1157,7 @@ func _run() -> void:
 				rear_entered_neck[rear_enemies[index].get_instance_id()] = true
 		for first_index in range(rear_enemies.size()):
 			for second_index in range(first_index + 1, rear_enemies.size()):
-				rear_minimum_margin = minf(
-					rear_minimum_margin,
+				var pair_margin := (
 					topology.distance(
 						rear_enemies[first_index].global_position,
 						rear_enemies[second_index].global_position
@@ -1164,6 +1165,10 @@ func _run() -> void:
 						- rear_enemies[first_index].contact_body_radius()
 						- rear_enemies[second_index].contact_body_radius()
 				)
+				if pair_margin < rear_minimum_margin:
+					rear_minimum_margin = pair_margin
+					rear_minimum_tick = tick
+					rear_minimum_pair = Vector2i(first_index, second_index)
 		if posmod(tick + 1, 60) == 0:
 			var window_index := int(tick / 60)
 			for index in range(rear_enemies.size()):
@@ -1202,7 +1207,7 @@ func _run() -> void:
 			rear_deep_progressed_eight += 1
 	rear_progress_values.sort()
 	var rear_median_progress := float(rear_progress_values[int(rear_progress_values.size() / 2)])
-	_true(rear_minimum_margin >= -0.06, "Der zweilappige Rückpulk wahrt alle Schadenshitboxen (Margin %.3f)" % rear_minimum_margin)
+	_true(rear_minimum_margin >= -0.06, "Der zweilappige Rückpulk wahrt alle Schadenshitboxen (Margin %.3f, Tick %d, Paar %s)" % [rear_minimum_margin, rear_minimum_tick, rear_minimum_pair])
 	_true(rear_maximum_retreat <= 0.001, "Der zweilappige Rückpulk erzeugt keine Fluchtbewegung (%.5f)" % rear_maximum_retreat)
 	_true(rear_window_movers[1] >= 8, "Im 1–2-s-Fenster laufen mehrere echte Rückkörper nach (%d / 28)" % rear_window_movers[1])
 	_true(rear_window_movers[2] >= 8, "Im 2–3-s-Fenster bleibt der hintere Pulk in Bewegung (%d / 28)" % rear_window_movers[2])

@@ -119,6 +119,16 @@ func _test_case_two_target_remains_mobile() -> void:
 			_true(target.speed_multiplier > 0.0, "Der Fall-2-Herd behält seine normale Bewegung")
 			_near(target.projectile_attack_speed_multiplier, 1.0, "Der Fall-2-Herd übernimmt nicht die schnellere Fall-1-Kadenz")
 			_near(target.projectile_width_multiplier, 1.0, "Der Fall-2-Herd übernimmt nicht die breiteren Fall-1-Projektile")
+			_equal(target.resolved_visual_id(), &"bacterial_swarm", "Der Fall-2-Herd zeigt viele kleine Bakterien als ein gemeinsames Visual")
+			_near(target.max_health, target.definition.max_health * 10.0, "Der Fall-2-Schwarm besitzt zehnfaches gemeinsames Leben")
+			_equal(target.symbolic_health_bar_count, 9, "Der Fall-2-Schwarm veröffentlicht neun gleichlaufende Lebensbalken")
+			target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+			var health_before_laser := target.health
+			target.take_damage(10.0, &"ability_treatment_line")
+			_near(target.health, health_before_laser - 100.0, "Fetter lazer verursacht am Fall-2-Schwarm zehnfachen Schaden")
+			var health_before_impulse := target.health
+			target.take_damage(10.0, &"treatment_precision")
+			_near(target.health, health_before_impulse - 10.0, "Andere Treffer behalten am Fall-2-Schwarm ihren normalen Schaden")
 			_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.MINOR_FOCUS, "Der bewegliche Fall-2-Herd schießt unverändert")
 	game.queue_free()
 	await process_frame
@@ -145,12 +155,14 @@ func _test_case_one_event_target_profile() -> void:
 		if is_instance_valid(target):
 			_near(
 				target.definition.speed * target.speed_multiplier,
-				46.0 * game.config.enemy_speed_multiplier,
-				"Der Fall-1-Eventherd besitzt nach diesem Patch ganzzahliges Basistempo 46"
+				60.0 * game.config.enemy_speed_multiplier,
+				"Der Fall-1-Eventherd besitzt nach diesem Patch ganzzahliges Basistempo 60"
 			)
-			_near(target.projectile_attack_speed_multiplier, 1.25, "Der Fall-1-Eventherd schießt 25 Prozent schneller")
-			_near(target.resolved_projectile_interval(), 2.08, "25 Prozent mehr Schussrate ergeben linear 2,08 Sekunden Intervall")
+			_near(target.projectile_attack_speed_multiplier, 1.875, "Der Fall-1-Eventherd besitzt die um weitere 50 Prozent erhöhte Schussrate")
+			_near(target.resolved_projectile_interval(), 2.6 / 1.875, "Die lineare Feuerrate ergibt ein Intervall von rund 1,39 Sekunden")
 			_near(target.projectile_width_multiplier, 1.5, "Der Fall-1-Eventherd veröffentlicht 50 Prozent breitere Projektile")
+			_near(target.projectile_speed_multiplier, 1.5, "Der Fall-1-Eventherd veröffentlicht 50 Prozent schnellere Projektile")
+			_near(target.defense_burst_shooting_lock_seconds, 10.0, "Der Fall-1-Eventherd übernimmt die zehnsekündige Stoßsperre")
 			target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 			var projectiles_before: int = game.projectiles.size()
 			game.enemy_attack_director.step_fixed(0.899)
@@ -160,10 +172,18 @@ func _test_case_one_event_target_profile() -> void:
 			if game.projectiles.size() > projectiles_before:
 				var projectile := game.projectiles[-1] as TherapyProjectile
 				_near(projectile.hostile_width_multiplier, 1.5, "Das echte Eventherdprojektil übernimmt die breitere Darstellung und Trefferfläche")
-			game.enemy_attack_director.step_fixed(2.078)
-			_equal(game.projectiles.size(), projectiles_before + 1, "Die lineare Kadenz feuert nicht vor Ablauf von 2,08 Sekunden erneut")
+				_near(projectile.speed, 307.5, "Das echte Eventherdprojektil fliegt 50 Prozent schneller")
+			target.apply_defense_burst_shooting_lock()
+			_true(target.projectiles_suppressed(), "Ein Stoß sperrt den Eventherdbeschuss sofort")
+			target.step_fixed(9.999)
+			game.enemy_attack_director.step_fixed(9.999)
+			_equal(game.projectiles.size(), projectiles_before + 1, "Während zehn Sekunden Stoßsperre entsteht kein neues Projektil")
+			target.step_fixed(0.002)
+			_true(not target.projectiles_suppressed(), "Die Eventherdsperre endet nach exakt zehn Sekunden")
+			game.enemy_attack_director.step_fixed(2.6 / 1.875 - 0.002)
+			_equal(game.projectiles.size(), projectiles_before + 1, "Die pausierte Kadenz feuert nicht vor ihrem verbleibenden Intervall")
 			game.enemy_attack_director.step_fixed(0.002)
-			_equal(game.projectiles.size(), projectiles_before + 2, "Der Eventherd feuert nach 2,08 Sekunden erneut")
+			_equal(game.projectiles.size(), projectiles_before + 2, "Der Eventherd nimmt nach der Sperre seine Kadenz wieder auf")
 	game.queue_free()
 	await process_frame
 

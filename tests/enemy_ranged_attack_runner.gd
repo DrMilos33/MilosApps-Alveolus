@@ -11,6 +11,7 @@ func _init() -> void:
 func _run() -> void:
 	_test_anchor_case_boss_contract()
 	await _test_intro_boss_normal_attack()
+	await _test_case_two_boss_attack_and_add_lock()
 	await _test_configurable_boss_contract()
 	await _test_generation_safe_attack_director()
 	await _test_hostile_projectile_geometry()
@@ -34,6 +35,7 @@ func _test_anchor_case_boss_contract() -> void:
 	var boss := enemies[&"infection_focus"] as EnemyDefinition
 	var nest := enemies[&"minor_focus"] as EnemyDefinition
 	var intro_boss := enemies[&"intro_focus"] as EnemyDefinition
+	var localized_boss := enemies[&"localized_boss"] as EnemyDefinition
 	_near(boss.projectile_damage, 4.0, "Der Boss besitzt Projektilschaden")
 	_near(boss.projectile_interval, 1.6, "Der Boss feuert fortlaufend")
 	_equal(boss.projectile_pattern, &"diamond", "Der Boss verwendet das Rautenmuster")
@@ -42,6 +44,67 @@ func _test_anchor_case_boss_contract() -> void:
 	_near(intro_boss.projectile_damage, 6.0, "Der Intro-Boss besitzt dreifachen Projektil-Basiswert")
 	_near(intro_boss.projectile_interval, 2.6, "Der Intro-Boss feuert im ruhigen Normaltakt")
 	_equal(intro_boss.projectile_pattern, &"normal", "Der Intro-Boss verwendet ausdrücklich das normale Projektil")
+	_near(localized_boss.projectile_damage, 4.0, "Der Fall-2-Bakterienkern besitzt Projektilschaden")
+	_near(localized_boss.projectile_interval, 1.6, "Der Fall-2-Bakterienkern verwendet die etablierte Bossbasisrate")
+	_equal(localized_boss.projectile_pattern, &"double_turn", "Der Fall-2-Bakterienkern verwendet die doppelte 90-Grad-Bahn")
+	var case_two := levels[2] as LevelDefinition
+	_true(case_two.boss_ranged_enabled, "Fall 2 aktiviert den neuen Projektilboss")
+	_near(case_two.boss_projectile_attack_speed_multiplier, 1.8, "Fall 2 erhöht die Bossrate linear um 80 Prozent")
+	_near(case_two.boss_reinforcement_interval, 15.0, "Fall 2 ruft alle 15 Sekunden Adds")
+
+
+func _test_case_two_boss_attack_and_add_lock() -> void:
+	var topology := ArenaTopology.new(Rect2(-600.0, -400.0, 1200.0, 800.0))
+	var avatar := TherapyAvatar.new()
+	avatar.global_position = Vector2(300.0, 0.0)
+	get_root().add_child(avatar)
+	var world := EnemyWorld.new().configure_enemy_world()
+	var boss := InfectionEnemy.new()
+	get_root().add_child(boss)
+	boss.configure(ContentCatalog.enemy_definitions()[&"localized_boss"], avatar, topology)
+	boss.configure_projectile_modifiers(1.8, 1.0)
+	boss.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	var handle := world.register_enemy(boss, true)
+	var director := EnemyAttackDirector.new().configure(CombatCapacity.defaults().max_enemies, world.resolve)
+	var shots: Array[Dictionary] = []
+	director.projectile_requested.connect(func(_source: int, pattern: int, phase: float, _role: int) -> void:
+		shots.append({"pattern": pattern, "phase": phase})
+	)
+	_true(director.register_enemy(handle, EnemyAttackDirector.Role.BOSS), "Fall-2-Boss wird als Schütze registriert")
+	_true(director.configure_boss_contract(handle, true, 15.0, 4, 0), "Fall-2-Boss übernimmt den 15-Sekunden-Addvertrag")
+	director.step_fixed(0.65)
+	_equal(shots.size(), 1, "Der Fall-2-Boss feuert pro Takt ein Doppelkurvenprojektil")
+	_equal(int(shots[0]["pattern"]), EnemyAttackDirector.Pattern.DOUBLE_TURN, "Der echte Director emittiert das Doppelkurvenmuster")
+	_near(boss.resolved_projectile_interval(), 1.6 / 1.8, "80 Prozent Rate ergeben rund 0,89 Sekunden Intervall")
+	director.step_fixed(1.6 / 1.8)
+	_equal(shots.size(), 2, "Nach rund 0,89 Sekunden feuert der Fall-2-Boss erneut")
+	_true(float(shots[0]["phase"]) != float(shots[1]["phase"]), "Aufeinanderfolgende Projektile teilen sich deterministisch 50/50 auf beide Kurvenseiten")
+	director.release(handle)
+	world.release(handle, false)
+	world.flush_deferred()
+	boss.queue_free()
+	shots.clear()
+
+	var add := InfectionEnemy.new()
+	get_root().add_child(add)
+	add.configure(ContentCatalog.enemy_definitions()[&"pneumococcus"], avatar, topology)
+	add.configure_projectile_modifiers(1.0, 1.0, 1.0, -1.0)
+	add.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	var add_handle := world.register_enemy(add, true)
+	_true(director.register_enemy(add_handle, EnemyAttackDirector.Role.PHASE_ADD), "Fall-2-Add wird als Schütze registriert")
+	add.apply_defense_burst_shooting_lock()
+	_true(add.projectiles_suppressed(), "Stoß sperrt den Fall-2-Boss-Add dauerhaft")
+	director.step_fixed(30.0)
+	_equal(shots.size(), 0, "Ein dauerhaft gesperrter Add feuert auch nach 30 Sekunden nicht")
+	director.release(add_handle)
+	world.release(add_handle, false)
+	world.flush_deferred()
+	add.recycle()
+	_true(not add.projectiles_suppressed(), "Pool-Recycling entfernt die dauerhafte Schusssperre")
+	world.clear()
+	add.queue_free()
+	avatar.queue_free()
+	await process_frame
 
 
 func _test_intro_boss_normal_attack() -> void:
@@ -253,7 +316,27 @@ func _test_hostile_projectile_geometry() -> void:
 	_near(upper.global_position.x, lower.global_position.x, "Rautenprojektile besitzen denselben Vorwärtsfortschritt")
 	_near(upper.global_position.y, -lower.global_position.y, "Rautenprojektile bewegen sich sichtbar spiegelbildlich")
 	_true(absf(upper.global_position.y) > 1.0, "Das Rautenmuster besitzt eine erkennbare seitliche Auslenkung")
-	for node in [normal, default_width, wide, upper, lower, avatar]:
+
+	var left_turn := TherapyProjectile.new()
+	var right_turn := TherapyProjectile.new()
+	get_root().add_child(left_turn)
+	get_root().add_child(right_turn)
+	for projectile in [left_turn, right_turn]:
+		projectile.global_position = Vector2.ZERO
+	left_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.0, 100.0, 500.0, 0.0, 180.0, 1.0, 100.0, 40.0)
+	right_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.5, 100.0, 500.0, 0.0, 180.0, 1.0, 100.0, 40.0)
+	left_turn.step_fixed(1.0)
+	right_turn.step_fixed(1.0)
+	_near(left_turn.global_position.x, 100.0, "Erste Kurve beginnt nach exakt 100 Test-Weltpunkten")
+	_true(left_turn.direction.y < -0.99 and right_turn.direction.y > 0.99, "Erste 90-Grad-Kurve verteilt Projektile auf beide Seiten")
+	left_turn.step_fixed(0.4)
+	right_turn.step_fixed(0.4)
+	_true(left_turn.direction.x < -0.99 and right_turn.direction.x < -0.99, "Die zweite Kurve dreht in derselben Richtung weiter")
+	_near(absf(left_turn.global_position.y), 40.0, "Die zweite Kurve folgt nach weiteren 40 Test-Weltpunkten")
+	left_turn.recycle()
+	_near(left_turn.hostile_first_turn_distance, 0.0, "Pool-Recycling löscht die erste Kurvendistanz")
+	_equal(left_turn.hostile_turn_count, 0, "Pool-Recycling löscht den Kurvenfortschritt")
+	for node in [normal, default_width, wide, upper, lower, left_turn, right_turn, avatar]:
 		node.queue_free()
 	await process_frame
 

@@ -5,6 +5,7 @@ const CATEGORY_ORDER: Array[StringName] = [
 	LexiconEntryDefinition.CATEGORY_MONSTERS,
 	LexiconEntryDefinition.CATEGORY_CHARACTER,
 	LexiconEntryDefinition.CATEGORY_GAMEPLAY,
+	LexiconEntryDefinition.CATEGORY_ABILITIES,
 	LexiconEntryDefinition.CATEGORY_TERMS,
 ]
 
@@ -12,6 +13,7 @@ const CATEGORY_NAMES := {
 	LexiconEntryDefinition.CATEGORY_MONSTERS: "Monster",
 	LexiconEntryDefinition.CATEGORY_CHARACTER: "Charakter",
 	LexiconEntryDefinition.CATEGORY_GAMEPLAY: "Spielelemente",
+	LexiconEntryDefinition.CATEGORY_ABILITIES: "Fähigkeiten",
 	LexiconEntryDefinition.CATEGORY_TERMS: "Begriffe",
 }
 
@@ -41,6 +43,7 @@ static func entries() -> Array[LexiconEntryDefinition]:
 	_append_enemy_entries(result)
 	_append_character_entries(result)
 	_append_gameplay_entries(result)
+	_append_ability_entries(result)
 	_append_terminology_entries(result)
 	return result
 
@@ -66,7 +69,7 @@ static func _append_enemy_entries(result: Array[LexiconEntryDefinition]) -> void
 		&"pneumococcus": ["Schneller Einzelerreger", "Bewegt sich direkt auf Doctor Milos zu und verursacht Schaden, wenn er ihn erreicht."],
 		&"bacterial_cluster": ["Widerstandsfähige Gruppe", "Bewegt sich langsamer, hält mehr aus und hinterlässt mehr Erfahrung."],
 		&"minor_focus": ["Langsames Nebenziel", "Bewegt sich langsam und setzt nach einiger Zeit weitere Bakterien frei, wenn es nicht rechtzeitig kontrolliert wird."],
-		&"localized_boss": ["Erster Bossgegner", "Ein einfacher lokaler Boss. Bei 70 Prozent Leben erscheinen drei Bakterien."],
+		&"localized_boss": ["Bakterienkern aus Fall 1 und 2", "In Fall 1 verstärkt seine Aura nahe Monster und ruft alle 15 Sekunden vier Bakterien. In Fall 2 feuert er 80 Prozent schneller Doppelkurven-Projektile; bei 70 Prozent Leben erscheinen drei Bakterien und alle 15 Sekunden vier weitere schießende Bakterien. Ein Stoß beendet deren Beschuss dauerhaft."],
 		&"infection_focus": ["Bossgegner", "Seine Phasen erhöhen den Druck im Fall. Die tatsächlichen Werte werden je Fall skaliert."],
 	}
 	for id in [&"pneumococcus", &"bacterial_cluster", &"minor_focus", &"localized_boss", &"infection_focus"]:
@@ -133,6 +136,36 @@ static func _append_gameplay_entries(result: Array[LexiconEntryDefinition]) -> v
 			discovery.id,
 			discovery.id == &"supportive_oxygenation" or ContentCatalog.is_discovery_unlocked_by_default(discovery.id),
 			_gameplay_related_ids(discovery.id)
+		))
+
+
+static func _append_ability_entries(result: Array[LexiconEntryDefinition]) -> void:
+	var abilities := AbilityDefinition.catalog()
+	for id in [
+		&"ability_focus_field",
+		&"ability_emergency_support",
+		&"ability_defense_burst",
+		&"ability_treatment_line",
+		&"ability_protection_field",
+		&"ability_sample_pull",
+	]:
+		var ability := abilities.get(id) as AbilityDefinition
+		if ability == null:
+			continue
+		result.append(LexiconEntryDefinition.create(
+			ability.id,
+			LexiconEntryDefinition.CATEGORY_ABILITIES,
+			ability.display_name,
+			ability.medical_name if ability.medical_name != ability.display_name else "",
+			ability.description,
+			ability.description,
+			"",
+			ability.id,
+			LexiconEntryDefinition.SOURCE_ABILITY,
+			ability.id,
+			&"",
+			true,
+			[&"active_ability", &"cooldown", &"capacity"]
 		))
 
 static func _append_terminology_entries(result: Array[LexiconEntryDefinition]) -> void:

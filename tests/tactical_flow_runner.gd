@@ -54,6 +54,7 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	game._on_level_selected(&"localized_focus")
 	_check(game.selected_level != null and game.selected_level.order == 2, "localized_focus bleibt als Fall-2-Anker erhalten")
 	_check(game.flow_state == GameFlowState.State.PREPARATION, "Fall 2 öffnet direkt die Einsatzplanung")
+	_check(game.hud.preparation_level_facts == null and game.hud.preparation_boss_fact == null, "Ein noch nicht abgeschlossener Fall verbirgt Dauer und Bossspawn")
 	_check(game.pending_run_context != null, "Vorbereitung erzeugt einen RunContext")
 	_check(game.pending_preparation_loadout.treatment_id == &"treatment_spread", "Die aktuelle Planung bewahrt eine der drei erlaubten Behandlungen")
 	_check(game.pending_preparation_loadout.ability_ids.is_empty(), "Die aktuelle Planung entfernt alte Aktive, ohne freie Plätze heimlich zu befüllen")
@@ -75,9 +76,13 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	_check(first_case.id == &"early_localized_focus" and first_case.order == 1, "Der neue Fall 1 besitzt seinen eigenen Fortschrittsanker")
 	_check(level.id == &"localized_focus" and level.order == 2, "Die deterministische Taktikspur verwendet localized_focus als Fall 2")
 	game.meta.register_level_result(first_case, true, 120.0, 3, 20)
+	game._on_level_selected(&"localized_focus")
+	_check(game.hud.preparation_level_facts == null and game.hud.preparation_boss_fact == null, "Der Sieg eines anderen Falls enthüllt Dauer und Bosszeit von Fall 2 nicht")
+	game._on_back_requested()
 	game.meta.register_level_result(level, true, 120.0, 3, 20)
 	game.meta.advance_case_seed(level.id)
 	game._on_level_selected(&"localized_focus")
+	_check(game.hud.preparation_level_facts != null and game.hud.preparation_boss_fact != null, "Nur der konkrete abgeschlossene Fall enthüllt Dauer und Bossspawn")
 	first_seed = game.pending_run_context.seed
 	var first_trait: StringName = game.pending_run_context.visible_trait_id
 	var first_finding: StringName = game.pending_run_context.hidden_finding_id

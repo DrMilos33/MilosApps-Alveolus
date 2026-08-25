@@ -104,7 +104,8 @@ and required status feedback are never degraded.
   one Doctor-distance check per distant enemy.
 - The bulk-flow overlay snapshots connected ordinary melee components every
   0.25 seconds into a double buffer spread over four fixed ticks. Each member
-  retains at most six exact cached neighbors from a bounded 24-candidate
+  retains at most seven exact cached neighbors inside the 41-world-unit surface
+  horizon from a bounded 24-candidate
   broad-phase query. Components activate at weighted size six plus 25 percent
   queued weight after two snapshots and release below four or ten percent queued
   weight after four snapshots. Its movement hot path performs one projection

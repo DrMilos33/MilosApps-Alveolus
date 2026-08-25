@@ -70,12 +70,18 @@ func _test_research_and_intro_rewards() -> void:
 	meta.reset_defaults(1_700_000_000)
 	_equal(meta.research_points, 0, "Ein neuer Spielstand startet mit null Forschung")
 	_true(meta.grant_intro_completion_rewards(), "Der erste Introabschluss vergibt die Startressourcen")
-	_equal(meta.research_points, 113, "Intro oder Intro-Skip vergibt die um 50 Prozent erhöhte Basisforschung")
-	_equal(MetaProgressionState.intro_research_reward(1), 141, "Ein besiegter Intro-Boss erhöht die neue Introbelohnung um 25 Prozent")
+	var burst_unlock: ResearchDefinition
+	for definition in definitions:
+		if definition.id == &"unlock_defense_burst":
+			burst_unlock = definition
+			break
+	_true(burst_unlock != null, "Stoß besitzt eine kanonische Forschungsdefinition")
+	_equal(meta.research_points, burst_unlock.cost_for_rank(0), "Intro oder Intro-Skip vergibt exakt den Preis von Stoß")
+	_equal(MetaProgressionState.intro_research_reward(1), burst_unlock.cost_for_rank(0), "Der Intro-Boss erzeugt keinen Überschuss über den Stoß-Preis")
 	_equal(meta.talent_points_earned(), 0, "Nach dem Intro steht noch kein Talentpunkt bereit")
 	_true(bool(meta.tutorial_status.get(&"research_guidance_pending", false)), "Intro aktiviert den einmaligen Forschungshinweis")
 	_true(not meta.grant_intro_completion_rewards(), "Introbelohnung ist idempotent")
-	_equal(meta.research_points, 113, "Wiederholtes Gewähren verdoppelt Forschung nicht")
+	_equal(meta.research_points, 30, "Wiederholtes Gewähren verdoppelt Forschung nicht")
 	var restored := MetaProgressionState.new(func() -> int: return 1_700_000_001)
 	_true(restored.load_dict(meta.to_dict()), "Introressourcen überstehen den Save-Roundtrip")
 	_equal(restored.talent_points_earned(), 0, "Der Save-Roundtrip erzeugt keinen alten Intro-Talentpunkt")
@@ -122,7 +128,11 @@ func _test_boss_and_finding_contract() -> void:
 	_near(case_one.boss_reinforcement_interval, 15.0, "Fall-1-Boss ruft alle 15 Sekunden Verstärkung")
 	_equal(case_one.boss_reinforcement_count, 4, "Fall-1-Boss ruft vier kleine Bakterien")
 	_equal(case_two.boss_enemy_id, &"localized_boss", "Erhaltener Bakterienkern liegt auf Order 2")
-	_true(not case_two.boss_ranged_enabled and case_two.boss_phase_minions == PackedInt32Array([3]), "Fall 2 bewahrt die einfache Dreierphase")
+	_true(case_two.boss_ranged_enabled and case_two.boss_phase_minions == PackedInt32Array([3]), "Fall 2 ergänzt seine Dreierphase um den neuen Projektilvertrag")
+	_near(case_two.boss_projectile_attack_speed_multiplier, 1.8, "Fall-2-Boss schießt mit 80 Prozent zusätzlicher Rate")
+	_near(case_two.boss_reinforcement_interval, 15.0, "Fall-2-Boss ruft alle 15 Sekunden Verstärkung")
+	_equal(case_two.boss_reinforcement_count, 4, "Fall-2-Boss ruft pro Verstärkung vier Schützen")
+	_near(case_two.boss_add_defense_burst_shooting_lock_seconds, -1.0, "Stoß beendet den Beschuss seiner Adds dauerhaft")
 	_equal(case_three.boss_enemy_id, &"infection_focus", "Fall 3 führt den Infektionsherd ein")
 	_true(case_three.boss_ranged_enabled, "Fall 3 führt die Rautenprojektile ein")
 	_near(case_three.boss_projectile_damage_multiplier, 2.0, "Fall 3 verwendet den neuen Zwischen-Projektilfaktor")

@@ -76,6 +76,8 @@ Alle Werte liegen in `AlveolusVisualTheme`:
 - Registrierte Kontextquellen besitzen stabile IDs und werden differenziell synchronisiert. Bestehende Controls und offene Inhalte werden bei Rang- oder Wertänderungen an Ort und Stelle aktualisiert; ein pauschales Abmelden und erneutes Registrieren aller Quellen sowie Close/Open-Flackern sind unzulässig.
 - Jede automatische Kontextkarte liegt bevorzugt diagonal rechts oberhalb ihres tatsächlichen Source-Controls, danach diagonal links oberhalb, rechts unterhalb und links unterhalb. Erst wenn keine dieser vollständigen Positionen passt, wird sie deterministisch viewportgebunden geklemmt, ohne die Quelle zu überdecken. Befund, Fähigkeiten, Progression und Lexikon-Verweise verwenden denselben Controllerpfad ohne Sonderanker.
 - Verwandte Begriffe im Lexikon sind echte fokussierbare Detailquellen statt einer zusammengefügten Textzeile. Maus-Hover zeigt ihre zentral gelieferte Erklärung; reiner Fokus öffnet nichts und `ui_info` zeigt dieselbe Erklärung mit erhaltenem Fokus.
+- Das Lexikon ordnet seine Reiter als `Monster`, `Charakter`, `Spielelemente`, `Fähigkeiten`, `Begriffe`. Der Fähigkeitsreiter enthält den vollständigen Ability-Katalog mit unterscheidbaren vorhandenen Fähigkeitssymbolen; gesperrte Loadout-Verfügbarkeit darf Nachschlagewissen nicht verstecken.
+- Eine Fähigkeit mit aktuell null Schaden zeigt im Lexikon weder eine Schadenszeile noch Schadenstypanteile. Kontrolltyp und künftiges Talentpotenzial dürfen keinen tatsächlich verursachten Schaden vortäuschen.
 
 ## Einsatzplanung
 
@@ -93,7 +95,7 @@ Im Intro ist der gesamte Planbereich schreibgeschützt. Eine flächendeckende Sc
 
 Die ereignisgesteuerte Intro-Dauer erscheint in der Fallkurzinfo ausschließlich als `Dauer ∞`. Die Formulierungen „Ereignisgesteuert“ und „Ohne Zeitlimit“ werden dafür nicht verwendet.
 
-Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht aus Falltitel, höchstens einer Kurzzeile und umbruchfähigen Fakten: Dauer blau, Boss gold, negatives Fallmerkmal und negativer Startzustand korallrot, positive Unterstützung wie Atemhilfe türkis. Die vollständige Erklärung bleibt per Maus-Hover als Tooltip und per `ui_info` als zugängliche Detailkarte verfügbar.
+Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht aus Falltitel, höchstens einer Kurzzeile und umbruchfähigen Fakten: Dauer blau, Boss gold, negatives Fallmerkmal und negativer Startzustand korallrot, positive Unterstützung wie Atemhilfe türkis. Dauer und Bosszeit eines Kampagnenfalls bleiben bis zu dessen erstem erfolgreichen Abschluss verborgen; Fallmerkmale bleiben trotzdem sichtbar. Editor-Praxis zeigt ihre Testzeit immer. Die vollständige Erklärung bleibt per Maus-Hover als Tooltip und per `ui_info` als zugängliche Detailkarte verfügbar.
 
 ## Run-HUD
 

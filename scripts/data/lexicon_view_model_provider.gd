@@ -5,17 +5,20 @@ var enemy_definitions: Dictionary
 var discovery_definitions: Dictionary
 var player_stats: PlayerStats
 var treatment_definitions: Dictionary
+var ability_definitions: Dictionary
 
 func _init(
 	enemies: Dictionary = {},
 	discoveries: Dictionary = {},
 	stats: PlayerStats = null,
-	treatments: Dictionary = {}
+	treatments: Dictionary = {},
+	abilities: Dictionary = {}
 ) -> void:
 	enemy_definitions = ContentCatalog.enemy_definitions() if enemies.is_empty() else enemies
 	discovery_definitions = ContentCatalog.discovery_definitions() if discoveries.is_empty() else discoveries
 	player_stats = PlayerStats.new() if stats == null else stats
 	treatment_definitions = TreatmentDefinition.catalog() if treatments.is_empty() else treatments
+	ability_definitions = AbilityDefinition.catalog() if abilities.is_empty() else abilities
 
 static func create_default() -> LexiconViewModelProvider:
 	return LexiconViewModelProvider.new()
@@ -42,6 +45,8 @@ func make_view_model(entry: LexiconEntryDefinition, seen_discovery_ids: Variant 
 		_apply_player_source(view_model)
 	elif entry.source_kind == LexiconEntryDefinition.SOURCE_DISCOVERY:
 		_apply_discovery_source(view_model, entry.source_id)
+	elif entry.source_kind == LexiconEntryDefinition.SOURCE_ABILITY:
+		_apply_ability_source(view_model, entry.source_id)
 	elif entry.source_kind == LexiconEntryDefinition.SOURCE_TERMINOLOGY:
 		_apply_terminology_source(view_model, entry.source_id)
 	view_model.set_related_term_presentations(related_term_presentations(entry.related_ids))
@@ -158,6 +163,67 @@ func _apply_terminology_source(view_model: LexiconEntryViewModel, terminology_id
 	view_model.medical_name = terminology.medical_name
 	view_model.summary = terminology.summary
 	view_model.gameplay_text = terminology.gameplay_text
+
+
+func _apply_ability_source(view_model: LexiconEntryViewModel, ability_id: StringName) -> void:
+	var definition := ability_definitions.get(ability_id) as AbilityDefinition
+	if definition == null:
+		return
+	view_model.display_name = definition.display_name
+	view_model.medical_name = "" if definition.medical_name == definition.display_name else definition.medical_name
+	view_model.summary = definition.description
+	view_model.gameplay_text = definition.description
+	var damage_amount := float(definition.parameters.get("damage", 0.0))
+	if damage_amount > 0.0:
+		view_model.set_type_presentations(_damage_type_presentations(definition.damage_profile))
+	var target_mode_text := "Zielgebiet"
+	match definition.target_mode:
+		AbilityDefinition.TargetMode.SELF:
+			target_mode_text = "Doctor Milos"
+		AbilityDefinition.TargetMode.CURSOR_DIRECTION:
+			target_mode_text = "Zielrichtung"
+	view_model.stat_rows = [
+		StatRowViewModel.text(&"target_mode", "Ziel", target_mode_text, definition.id, &"target_mode"),
+		StatRowViewModel.number(&"cooldown", "Abklingzeit", definition.cooldown, "s", 1, definition.id, &"cooldown"),
+		StatRowViewModel.integer(&"capacity", "Kapazität", definition.capacity_cost, "", definition.id, &"capacity_cost"),
+	]
+	if damage_amount > 0.0 and definition.damage_profile != null and definition.damage_profile.is_valid():
+		view_model.stat_rows.append(StatRowViewModel.text(
+			&"damage_type", "Schadenstyp", _damage_profile_text(definition.damage_profile), definition.id, &"damage_profile"
+		))
+	if damage_amount > 0.0:
+		view_model.stat_rows.append(StatRowViewModel.number(
+			&"damage", "Schaden", damage_amount, "", 0, definition.id, &"parameters"
+		))
+	for distance_id in [&"radius", &"range", &"width"]:
+		var distance_key := String(distance_id)
+		if not definition.parameters.has(distance_key):
+			continue
+		var label := "Radius" if distance_id == &"radius" else ("Reichweite" if distance_id == &"range" else "Breite")
+		view_model.stat_rows.append(StatRowViewModel.integer(
+			distance_id, label, definition.parameter_stage(distance_id), "", definition.id, &"parameters"
+		))
+	for numeric_data in [
+		[&"duration", "Dauer", "s", 1],
+		[&"recovery", "Heilung", "", 0],
+		[&"shield", "Schild", "", 0],
+		[&"knockback", "Rückstoß", "", 0],
+		[&"stun_duration", "Betäubung", "s", 1],
+		[&"finding_progress", "Befundfortschritt", "", 0],
+	]:
+		var parameter_id: StringName = numeric_data[0]
+		var parameter_key := String(parameter_id)
+		if not definition.parameters.has(parameter_key):
+			continue
+		view_model.stat_rows.append(StatRowViewModel.number(
+			parameter_id,
+			String(numeric_data[1]),
+			float(definition.parameters[parameter_key]),
+			String(numeric_data[2]),
+			int(numeric_data[3]),
+			definition.id,
+			&"parameters"
+		))
 
 func _treatment_rows(definition: TreatmentDefinition) -> Array[StatRowViewModel]:
 	return [
