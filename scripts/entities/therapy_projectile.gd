@@ -11,6 +11,7 @@ const HOSTILE_DIAMOND := 1
 const HOSTILE_DOUBLE_TURN := 2
 const HOSTILE_HIT_RADIUS := 10.0
 const BOUNDARY_RADIUS := 14.0
+const TIME_BOUNDED_DOUBLE_TURN_TAIL_SECONDS := 1.50
 
 var target: InfectionEnemy
 var topology: ArenaTopology
@@ -186,7 +187,7 @@ func configure_hostile(
 	hostile_turn_count = 0
 	hostile_time_bounded_double_turn = hostile_pattern == HOSTILE_DOUBLE_TURN and time_bounded_double_turn
 	if hostile_time_bounded_double_turn:
-		lifetime = maxf(lifetime, hostile_first_turn_seconds + hostile_second_leg_seconds + 0.75)
+		lifetime = maxf(lifetime, hostile_first_turn_seconds + hostile_second_leg_seconds + TIME_BOUNDED_DOUBLE_TURN_TAIL_SECONDS)
 	_apply_visual_width()
 	rotation = direction.angle()
 	reset_visual_motion()

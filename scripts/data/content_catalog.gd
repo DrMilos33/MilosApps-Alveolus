@@ -51,7 +51,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Die Infektion breitet sich weiter aus und fordert mehr Kontrolle über den Raum.",
 			"Der fortschreitende Verlauf wurde eingegrenzt.",
 			"Der fortschreitende Verlauf blieb unkontrolliert."
-		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 36).configure_boss_behavior(1.20).configure_boss(&"infection_focus", true, 2.0, 136.0, 260.0).configure_boss_projectile_contract(1.0, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.26).configure_case_pressure(CasePressurePlan.default_for_case_order(3)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 36).configure_boss_behavior(1.20).configure_boss(&"infection_focus", true, 2.0, 136.0, 400.0).configure_boss_projectile_contract(1.0, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.26).configure_case_pressure(CasePressurePlan.default_for_case_order(3)),
 		LevelDefinition.create(
 			&"spreading_infection", 4, "Die Ausbreitung", "Fall 04 · bakterielle Pneumonie", false,
 			-1.0, 300.0, 50.0, 0.780, 0.165, 1.35, 2.05, 1.16, 1.45, 0.18, 0.38,

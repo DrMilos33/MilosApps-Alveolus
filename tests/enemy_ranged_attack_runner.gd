@@ -103,7 +103,7 @@ func _test_anchor_case_boss_contract() -> void:
 	_near(case_two.boss_projectile_turn_time_variation, 0.10, "Die Kurvenvariation gehört zum Fall-2-Projektil")
 	_near(case_three.boss_projectile_speed_multiplier, 1.26, "Fall-3-Rautenprojektile tragen den um 30 Prozent reduzierten Tempofaktor")
 	_near(case_three.boss_wave_amplitude, 136.0, "Fall-3-Rautenprojektile tragen die 60 Prozent breitere Bahn")
-	_near(case_three.boss_wave_length, 260.0, "Fall-3-Rautenprojektile treffen sich erst nach 130 Weltpunkten")
+	_near(case_three.boss_wave_length, 400.0, "Fall-3-Rautenprojektile treffen sich erst nach 200 Weltpunkten")
 
 
 func _test_case_one_normal_and_case_two_turn_variation() -> void:
@@ -301,6 +301,7 @@ func _test_case_two_runtime_projectile_contract() -> void:
 			_true(projectile.hostile_first_turn_seconds >= expected_first * 0.9 and projectile.hostile_first_turn_seconds <= expected_first * 1.1, "Der erste Knick friert 55 Prozent Bildschirmbreite mit ±10 Prozent Variation als Zeit ein")
 			_true(projectile.hostile_second_leg_seconds >= expected_second * 0.9 and projectile.hostile_second_leg_seconds <= expected_second * 1.1, "Der zweite Knick friert weitere 32 Prozent Bildschirmbreite mit ±10 Prozent Variation als Zeit ein")
 			_true(projectile.hostile_time_bounded_double_turn, "Nur der Fall-2-Vertrag darf seine beiden Zeitkurven unabhängig von der Distanzgrenze vollenden")
+			_near(projectile.lifetime, maxf(1050.0 / 375.0 + 0.35, projectile.hostile_first_turn_seconds + projectile.hostile_second_leg_seconds + 1.50), "Das Fall-2-Projektil lebt nach dem zweiten Knick weitere 1,5 Sekunden")
 			var actual_first := projectile.hostile_first_turn_seconds
 			projectile.speed *= 0.5
 			projectile.step_fixed(actual_first - 0.001)
@@ -337,11 +338,11 @@ func _test_case_three_runtime_projectile_contract() -> void:
 			for projectile in [first, second]:
 				_near(projectile.speed, 267.75, "Fall-3-Projektiltempo ist relativ um 30 Prozent reduziert")
 				_near(projectile.hostile_wave_amplitude, 136.0, "Die 60 Prozent breitere Fall-3-Auslenkung bleibt erhalten")
-				_near(projectile.hostile_wave_length, 260.0, "Die Fall-3-Rautenlänge steigt auf 260")
-			var meet_seconds := 130.0 / first.speed
+				_near(projectile.hostile_wave_length, 400.0, "Die Fall-3-Rautenlänge steigt deutlich auf 400")
+			var meet_seconds := 200.0 / first.speed
 			first.step_fixed(meet_seconds)
 			second.step_fixed(meet_seconds)
-			_near(first.global_position.distance_to(second.global_position), 0.0, "Die beiden Fall-3-Projektile treffen sich nach 130 Vorwärts-Weltpunkten wieder")
+			_near(first.global_position.distance_to(second.global_position), 0.0, "Die beiden Fall-3-Projektile treffen sich nach 200 Vorwärts-Weltpunkten wieder")
 	game.queue_free()
 	await process_frame
 
@@ -597,6 +598,16 @@ func _test_hostile_projectile_geometry() -> void:
 	overshoot_turn.step_fixed(1.5)
 	_equal(overshoot_turn.hostile_turn_count, 2, "Ein großer Fixed-Step darf beide Zeitkurven exakt konsumieren")
 	_true(overshoot_turn.global_position.is_equal_approx(Vector2(90.0, -40.0)), "Der Restweg wird nach beiden Kurven auf den jeweils neuen Segmenten fortgesetzt")
+	var tail_turn := TherapyProjectile.new()
+	var tail_finishes: Array[int] = []
+	get_root().add_child(tail_turn)
+	tail_turn.finished.connect(func(_projectile: TherapyProjectile) -> void: tail_finishes.append(1))
+	tail_turn.global_position = Vector2.ZERO
+	tail_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.0, 100.0, 1.0, 0.0, 180.0, 1.0, 1.0, 0.4, true)
+	tail_turn.step_fixed(2.89)
+	_equal(tail_finishes.size(), 0, "Das zeitgebundene Boss-2-Projektil bleibt bis knapp vor 1,5 Sekunden Nachflug aktiv")
+	tail_turn.step_fixed(0.02)
+	_equal(tail_finishes.size(), 1, "Das zeitgebundene Boss-2-Projektil endet nach 1,5 Sekunden Nachflug")
 	var bounded_turn := TherapyProjectile.new()
 	get_root().add_child(bounded_turn)
 	bounded_turn.global_position = Vector2.ZERO
@@ -614,7 +625,7 @@ func _test_hostile_projectile_geometry() -> void:
 	_true(overshoot_turn.hostile_time_bounded_double_turn, "Der zeitgebundene Testkörper trägt vor Recycling den Fall-2-Vertrag")
 	overshoot_turn.recycle()
 	_true(not overshoot_turn.hostile_time_bounded_double_turn, "Pool-Recycling löscht den Fall-2-Zeitvertrag")
-	for node in [normal, default_width, wide, upper, lower, left_turn, right_turn, faster_turn, overshoot_turn, bounded_turn, avatar]:
+	for node in [normal, default_width, wide, upper, lower, left_turn, right_turn, faster_turn, overshoot_turn, tail_turn, bounded_turn, avatar]:
 		node.queue_free()
 	await process_frame
 

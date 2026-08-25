@@ -577,7 +577,7 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase. Projectile geometry is data-driven: the Fall-3 boss emits its two
 phased diamond shots at 267.75 world units per second with 136 world units of
-authored amplitude and a 260-unit wave length, so both shots reunite every 130
+authored amplitude and a 400-unit wave length, so both shots reunite every 200
 forward world units. The Fall-4 anchor retains its independent 212.5/115/180
 contract; ranged phase adds use 322.5. The intro and Fall-1 bosses emit one
 ordinary hostile projectile per attack interval. The Fall-1 boss configures a
@@ -620,7 +620,8 @@ distance but never the turn schedule. One authored
 80-percent health phase emits the first three adds and arms the existing
 15-second four-add schedule. A packed per-handle sequence alternates turn side.
 Only this Fall-2 contract is lifetime-bounded so both timed turns can complete;
-other double-turn projectiles retain their authored maximum-distance cutoff.
+after its second turn it retains a 1.5-second collision- and arena-bounded tail.
+Other double-turn projectiles retain their authored maximum-distance cutoff.
 Every projectile-capable nonboss receives a ten-second Stoß shooting lock by
 default, including all periodic and phase adds. Repeated hits refresh the same
 bounded timer. Spawn metadata may select another positive duration, explicit
