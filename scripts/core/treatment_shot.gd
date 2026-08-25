@@ -101,6 +101,35 @@ func resolve_query_snapshot(query: CombatQuery) -> PackedInt64Array:
 	_apply_resolved_length(ranked)
 	return resolved_handles.duplicate()
 
+## Spread volleys share this exclusion set so a target hit by an earlier ray
+## does not consume a later ray's penetration budget. The later ray keeps
+## searching front-to-back and can therefore still damage another enemy.
+func resolve_query_snapshot_excluding(query: CombatQuery, excluded_handles: Dictionary) -> PackedInt64Array:
+	resolved_targets.clear()
+	resolved_handles.clear()
+	resolution_valid = mode == Mode.LINE or mode == Mode.DIRECTIONAL
+	impact_distance = -1.0
+	range_value = requested_range_value
+	if not resolution_valid or query == null:
+		return resolved_handles
+	var query_limit := max_hits + excluded_handles.size()
+	var ranked := query.line_hits(origin, direction, requested_range_value, hit_radius, query_limit)
+	var accepted: Array[Dictionary] = []
+	for item in ranked:
+		var handle := int(item.get("handle", EntityHandle.INVALID))
+		if not EntityHandle.is_valid(handle) or excluded_handles.has(handle):
+			continue
+		excluded_handles[handle] = true
+		resolved_handles.append(handle)
+		accepted.append(item)
+		var resolved: Variant = query.resolve(handle)
+		if typeof(resolved) == TYPE_OBJECT and is_instance_valid(resolved):
+			resolved_targets.append(resolved)
+		if resolved_handles.size() >= max_hits:
+			break
+	_apply_resolved_length(accepted)
+	return resolved_handles.duplicate()
+
 ## Resolves a torus-aware line without allocating physics bodies. This keeps
 ## broad and piercing treatments cheap even in the 600-enemy stress scenario.
 func resolve_line_hits(candidates: Array, topology: ArenaTopology) -> Array:

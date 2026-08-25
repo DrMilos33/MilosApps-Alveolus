@@ -21,7 +21,7 @@ im Kampf ist dagegen vollständig enthalten.
   Vier weitere aktive Fähigkeiten bleiben mit ihren Werten sichtbar, aber gesperrt.
 - Es gibt derzeit **keine Passivmodule** im aktiven Produktkatalog.
 - Dauerhafte Progression besteht aus zehn globalen Forschungen und vier
-  Rangtalenten in einem Behandlungsbaum.
+  Talenten in einem Behandlungsbaum.
 - Ein Run enthält 32 Ausbaudefinitionen; endlose Familien besitzen kein Rangmaximum.
 - Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 300 Sekunden.
 - Die harte Hauptarena misst **8.640 × 4.860 Weltpunkte**. Spawnraten und
@@ -129,9 +129,12 @@ Besonderheiten:
 - **Impuls** verfolgt ohne Talent automatisch die nächsten gültigen
   Ziele. Der Run-Ausbau `Zusätzliches Projektil` kann bis zu fünf weitere
   eigenständige Projektile erzeugen.
-- **Streuimpuls** erzeugt Strahlen bei −14, 0 und +14 Grad. Jeder Strahl wird
-  unabhängig aufgelöst und endet am ersten getroffenen Gegner. Das Rangtalent
-  kann jeden Strahl bis zu drei zusätzliche Gegner durchdringen lassen.
+- **Streuimpuls** erzeugt Strahlen bei −14, 0 und +14 Grad. Ohne Schrotwirkung
+  kann ein Gegner pro Salve nur von einem Strahl Schaden erhalten. Weitere
+  überlappende Strahlen verschwinden nicht, sondern suchen entlang ihrer Bahn
+  nach einem anderen Ziel. Rare Run-Auswahlen erhöhen die Durchdringung jedes
+  Strahls; das Talent `Schrotwirkung` erlaubt mehrere Treffer derselben Salve
+  auf dasselbe Ziel.
 - **Durchdringender Impuls** ist zunächst ein einmaliger Linientreffer. Das
   Rangtalent `Anhaltender Laser` macht daraus einen 0,5 oder 1,0 Sekunden langen
   Strahl mit Trefferticks alle 0,25 Sekunden.
@@ -202,15 +205,16 @@ bereits durch den Fallabschluss verfügbar.
 | Talent | Max. Rang | Kosten | Voraussetzung | Wirkung |
 |---|---:|---:|---|---|
 | Behandlungsgrundlage | 1 | 1 | keine | +2 Schaden aller drei Grundbehandlungen. |
-| Durchdringende Streuung | 3 | 1 je Rang | Behandlungsgrundlage | +1 möglicher Gegner je Streuimpuls-Strahl und Rang. |
+| Schrotwirkung | 1 | 1 | Behandlungsgrundlage | Mehrere Strahlen derselben Streuimpuls-Salve dürfen dasselbe Ziel treffen. |
 | Manuelle Zielsteuerung | 1 | 1 | Behandlungsgrundlage | Alle Behandlungen schießen zur Maus. |
 | Anhaltender Laser | 2 | 1 je Rang | Behandlungsgrundlage | +0,5 s Strahldauer je Rang; Tick alle 0,25 s. |
 
-Der vollständige Baum kostet **7 Talentpunkte**. Bei 0,5 Sekunden Dauer trifft
+Der vollständige Baum kostet **5 Talentpunkte**. Bei 0,5 Sekunden Dauer trifft
 eine Phase zu 0,00 und 0,25 Sekunden; bei 1,0 Sekunde zu 0,00, 0,25, 0,50 und
 0,75 Sekunden. `piercing_return` bleibt entfernt und reserviert. Savegame-
-Version 6 und Talentbaum-Revision 4 setzen Revision-3-Belegungen atomar zurück
-und bewahren Meisterschaft sowie Forschung.
+Version 7 und Talentbaum-Revision 5 setzen ältere Baumbelegungen atomar zurück
+und bewahren Meisterschaft sowie Forschung. Die pensionierte ID
+`spread_penetration` wird nicht als Schrotwirkung neu interpretiert.
 
 Der Baum kann über den Fortschrittsscreen zurückgesetzt werden.
 
@@ -253,7 +257,7 @@ der Karte angezeigt.
 
 | Ausbau | Wahlen | Pro Wahl | Maximum | Voraussetzung |
 |---|---:|---|---|---|
-| Dichter Streuimpuls | 3 | +1 Projektil | 6 Projektile | Streuimpuls |
+| Durchdringender Streuimpuls | 3 | +1 Durchdringung | 4 Treffer je Strahl | Streuimpuls; Rare |
 | Tieferer Impuls | 2 | +2 maximale Treffer | 8 Treffer | Durchdringender Impuls |
 
 ### Aktive Fähigkeiten
@@ -263,7 +267,7 @@ der Karte angezeigt.
 | Breiter Stoß | 2 Wahlen | +1 Radius | Radius 7 | Stoß ausgerüstet |
 | Lazerschaden | Common / Magic / Rare | +9 / +15 / +21 Schaden | unbegrenzt | Fetter lazer ausgerüstet |
 | Breiterer Lazer | 2 Wahlen | +16 Breite | 70 Breite | Fetter lazer ausgerüstet |
-| Galopp | Common / Magic / Rare | +3 / +5 / +7 Galopp | unbegrenzt | keine |
+| Galopp | Common / Magic / Rare | +6 / +10 / +14 Galopp | unbegrenzt | keine |
 
 Stoß besitzt 0 Schaden und hat keinen Schadensausbau. Ein späterer Talentknoten
 darf diese Familie ausdrücklich freischalten; in diesem Meilenstein existiert
@@ -316,7 +320,7 @@ erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
 sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
 Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
 Der geskriptete mobile Eventherd in Fall 1 bildet die einzige Ausnahme: Er
-verwendet ganzzahliges Basistempo 66, feuert alle 1,39 Sekunden und seine
+besitzt 135 Leben, verwendet ganzzahliges Basistempo 66, feuert alle 1,39 Sekunden und seine
 normalen Projektile besitzen 1,95-fache Geschwindigkeit sowie 1,5-fache
 Querbreite und Trefferfläche. Ein Treffer mit Stoß unterbindet seinen Beschuss
 zehn Sekunden lang; Bewegung und sonstiger Status laufen unverändert

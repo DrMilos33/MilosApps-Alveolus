@@ -90,6 +90,7 @@ func _test_entity_owned_cluster_materialization_and_relocation() -> void:
 	var slot := int(record.get("slot", CrowdRenderer.INVALID_SLOT))
 	var batch := renderer.batch_for_visual_id(cluster_definition.visual_id)
 	_assert_true(slot >= 0 and batch != null, "Bacterial cluster leases the production MultiMesh path")
+	_assert_true(batch.multimesh.custom_aabb == CrowdRenderer.BATCH_CUSTOM_AABB, "Enemy archetype batch owns the explicit arena-wide culling box")
 
 	cluster.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	_assert_vector(cluster.visual_previous_size, cluster.visual_current_size, "Materialization atomically collapses cluster size endpoints")
@@ -250,6 +251,7 @@ func _test_count_path(renderer: CrowdRenderer, enemies: Array[InfectionEnemy], p
 	renderer.flush_render_state(1.0)
 	var batch := renderer.batch_for_visual_id(regular_definition.visual_id)
 	_assert_true(batch != null, "%d path creates the expected visual batch" % expected_count)
+	_assert_true(batch.multimesh.custom_aabb == CrowdRenderer.BATCH_CUSTOM_AABB, "%d path cannot be culled by the default local batch box" % expected_count)
 	_assert_equal(batch.multimesh.visible_instance_count, expected_count, "%d path exposes exactly the highest owned slot range" % expected_count)
 	_assert_equal(_unique_slot_count(renderer, enemies), expected_count, "%d path owns one unique slot per enemy" % expected_count)
 	_assert_true(renderer.is_batching(), "%d path stays on the stable batch representation" % expected_count)

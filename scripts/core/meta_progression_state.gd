@@ -19,7 +19,7 @@ const SAVE_VERSION := 7
 const PASSIVE_INTERVAL_SECONDS := 240.0 # V6 API compatibility; offline income is retired.
 const PASSIVE_CAP_SECONDS := 28800.0
 const UNLIMITED_TEST_POINT_POOL := 1_000_000_000
-const TALENT_TREE_REVISION := 4
+const TALENT_TREE_REVISION := 5
 const SHARED_CAMPAIGN_LOADOUT_ID := &"campaign_shared"
 const CAMPAIGN_LEVEL_IDS: Array[StringName] = [
 	&"early_localized_focus", &"localized_focus", &"advancing_infection",
@@ -588,7 +588,10 @@ func load_dict(data: Dictionary) -> bool:
 				talent_tree_refund_pending = bool(data.get("talent_tree_refund_pending", false))
 			else:
 				talent_ranks = {}
-				talent_tree_refund_pending = not requested_ranks.is_empty()
+				# Inspect the serialized ranks as well as the current catalog view.
+				# A retired-only branch must still surface the refund instead of
+				# disappearing silently during ID filtering.
+				talent_tree_refund_pending = not _any_positive_dictionary(data.get("talent_ranks", {})).is_empty()
 		else:
 			# V5 and older stored boolean node IDs from the retired tree. Mastery
 			# remains untouched, so every earned point is immediately available.

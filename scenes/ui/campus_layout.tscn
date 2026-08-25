@@ -481,43 +481,6 @@ mouse_filter = 2
 script = ExtResource("2_slot")
 building_id = "settings"
 
-[node name="RuntimeStaff" type="Control" parent="." unique_id=892336316]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 18.0
-offset_top = -243.0
-offset_right = 18.0
-offset_bottom = -243.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-
-[node name="StaffMarkers" type="Node2D" parent="." unique_id=1467889411]
-editor_description = "Je Route die Marker Start und End verschieben. phase und speed liegen als Metadaten am Routenknoten."
-position = Vector2(0, 48)
-
-[node name="RouteA" type="Node2D" parent="StaffMarkers" unique_id=1873230906]
-metadata/phase = 0.1
-metadata/speed = 0.08
-
-[node name="Start" type="Marker2D" parent="StaffMarkers/RouteA" unique_id=698782787]
-position = Vector2(557.76, 301)
-
-[node name="End" type="Marker2D" parent="StaffMarkers/RouteA" unique_id=1338594649]
-position = Vector2(652, 338.2)
-
-[node name="RouteB" type="Node2D" parent="StaffMarkers" unique_id=918067650]
-metadata/phase = 0.58
-metadata/speed = 0.065
-
-[node name="Start" type="Marker2D" parent="StaffMarkers/RouteB" unique_id=397573487]
-position = Vector2(724.24, 375.4)
-
-[node name="End" type="Marker2D" parent="StaffMarkers/RouteB" unique_id=81676066]
-position = Vector2(778.48, 411.6)
-
 [node name="HeaderVeil" type="ColorRect" parent="." unique_id=1100708715]
 layout_mode = 0
 offset_right = 1280.0

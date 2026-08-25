@@ -2107,7 +2107,7 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 		return
 	var talent_context := active_run_context
 	var damage_rank := talent_context.talent_rank(&"treatment_damage_training") if talent_context != null else 0
-	var spread_rank := talent_context.talent_rank(&"spread_penetration") if talent_context != null else 0
+	var spread_shotgun_rank := talent_context.talent_rank(&"spread_shotgun") if talent_context != null else 0
 	var persistence_rank := talent_context.talent_rank(&"piercing_persistence") if talent_context != null else 0
 	var manual_rank := talent_context.talent_rank(&"manual_treatment_aim") if talent_context != null else 0
 	if damage_rank > 0:
@@ -2117,8 +2117,8 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 			"value": TalentDefinition.magnitude_for(&"treatment_damage_training", 2.0) * float(damage_rank),
 			"required_tags": PackedStringArray(["treatment"]),
 		})
-	if treatment.id == &"treatment_spread" and spread_rank > 0:
-		build_state.set_base(RunBuildState.TREATMENT_MAX_HITS, float(treatment.max_hits + spread_rank))
+	if treatment.id == &"treatment_spread":
+		build_state.set_base(RunBuildState.TREATMENT_SPREAD_SHOTGUN, 1.0 if spread_shotgun_rank > 0 else 0.0)
 	if treatment.id == &"treatment_pierce":
 		build_state.set_base(RunBuildState.TREATMENT_BEAM_DURATION, float(persistence_rank) * 0.5)
 		build_state.set_base(RunBuildState.TREATMENT_BEAM_TICK, 0.25)
@@ -2406,6 +2406,11 @@ func _on_treatment_shots_requested(shots: Array[TreatmentShot]) -> void:
 		return
 	if not shots.is_empty():
 		avatar.show_treatment_impulse()
+	var spread_volley_hits: Dictionary = {}
+	var spread_shotgun_enabled := (
+		build_state != null
+		and build_state.value(RunBuildState.TREATMENT_SPREAD_SHOTGUN, 0.0, PackedStringArray(["spread"])) > 0.5
+	)
 	for shot in shots:
 		if shot == null:
 			continue
@@ -2454,9 +2459,13 @@ func _on_treatment_shots_requested(shots: Array[TreatmentShot]) -> void:
 				_spawn_treatment_beam(shot, beam_duration)
 				continue
 			# Resolve once. Damage and feedback consume this exact generation-safe
-			# snapshot, including each spread ray's independent shortened endpoint.
+			# snapshot. Without the Shotgun talent, spread rays share a per-volley
+			# target set and continue through duplicates to the next valid enemy.
 			_ensure_combat_query()
-			shot.resolve_query_snapshot(combat_query)
+			if shot.source_id == &"treatment_spread" and not spread_shotgun_enabled:
+				shot.resolve_query_snapshot_excluding(combat_query, spread_volley_hits)
+			else:
+				shot.resolve_query_snapshot(combat_query)
 			if shot.mode == TreatmentShot.Mode.DIRECTIONAL:
 				_spawn_directional_treatment_projectile(shot)
 				continue

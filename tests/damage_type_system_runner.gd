@@ -100,15 +100,15 @@ func _test_ranked_talent_catalog() -> void:
 	_equal(talents.size(), 4, "Der aktive Talentkatalog enthält nur den neuen Einzelbaum")
 	for retired_id in [&"organization_1", &"rapid_evaluation", &"alternating_rhythm", &"emergency_window"]:
 		_true(not talents.has(retired_id), "%s ist aus dem aktiven Katalog entfernt" % String(retired_id))
-	_equal(talents[&"spread_penetration"].max_rank, 3, "Streudurchdringung besitzt drei Ränge")
+	_equal(talents[&"spread_shotgun"].max_rank, 1, "Schrotwirkung ist ein einzelnes Freischalttalent")
 	_equal(talents[&"piercing_persistence"].max_rank, 2, "Laserpersistenz besitzt zwei Ränge")
 	_near(talents[&"piercing_persistence"].magnitude, 0.5, "Laserpersistenz gewährt 0,5 Sekunden pro Rang")
 	_true(not talents.has(&"piercing_return"), "Rückkehr ist aus dem aktiven Katalog entfernt und bleibt reserviert")
 	_equal(talents[&"treatment_damage_training"].max_rank, 1, "Die Behandlungsgrundlage ist ein Einzelrang")
 	_near(talents[&"treatment_damage_training"].magnitude, 2.0, "Die Behandlungsgrundlage gewährt zwei Prozentpunkte")
 	_equal(talents[&"manual_treatment_aim"].max_rank, 1, "Mausziel ist ein Einzelrang")
-	_equal(talents[&"spread_penetration"].cost_for_rank(2), 1, "Rangkosten sind über die kompatible API abrufbar")
-	_equal(TalentDefinition.total_cost(), 7, "Der vollständige neue Baum kostet sieben Punkte")
+	_equal(talents[&"spread_shotgun"].cost_for_rank(0), 1, "Talentkosten sind über die kompatible API abrufbar")
+	_equal(TalentDefinition.total_cost(), 5, "Der vollständige neue Baum kostet fünf Punkte")
 
 
 func _test_catalog_validation() -> void:

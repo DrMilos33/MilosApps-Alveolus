@@ -95,10 +95,13 @@ func _test_treatment_preview_application() -> void:
 	spread_stats.bind_run_build(spread_build, spread, [])
 	var density := _find(definitions, &"spread_density")
 	preview = spread_stats.preview_upgrade(density)
-	_assert_equal(preview.effect_text, "+1 Projektil", "Spread-specific card names the projectile increase")
-	_assert_equal(preview.before_after_text, "3  >  4 Projektile", "Spread preview starts at its actual three projectiles")
+	_assert_equal(preview.effect_text, "+1 Durchdringung", "Spread-specific card names the penetration increase")
+	_assert_equal(preview.before_after_text, "1  >  2 Treffer", "Spread preview starts at its actual one hit per ray")
 	spread_stats.apply_upgrade(density)
-	_assert_near(spread_build.value(RunBuildState.TREATMENT_PROJECTILES, 0.0, spread.tags), 4.0, "Spread strategy receives four projectiles")
+	_assert_near(spread_build.value(RunBuildState.TREATMENT_PROJECTILES, 0.0, spread.tags), 3.0, "Spread keeps its three authored rays")
+	_assert_near(spread_build.value(RunBuildState.TREATMENT_MAX_HITS, 0.0, spread.tags), 2.0, "Spread strategy receives one additional penetration")
+	_assert_equal(density.rarity_role(), &"rare", "Spread penetration is a Rare upgrade")
+	_assert_near(density.rarity_weight, 5.0, "Spread penetration uses the Rare offer weight")
 
 func _test_active_preview_application() -> void:
 	var definitions := ContentCatalog.upgrade_definitions()

@@ -145,6 +145,22 @@ func _test_packed_query_records() -> void:
 	_assert_near(float(records[0].entry_distance), 77.0, "Packed contact exposes body-surface entry distance")
 	_assert_equal(query.line(Vector2.ZERO, Vector2.RIGHT, 300.0, 13.0, 1)[0], first, "Legacy handle facade uses the same contact ordering")
 
+	var volley_hits: Dictionary = {}
+	var first_ray := TreatmentShot.line(Vector2.ZERO, Vector2.RIGHT, 5.0, 300.0, 1, &"treatment_spread", true)
+	first_ray.resolve_query_snapshot_excluding(query, volley_hits)
+	_assert_equal(first_ray.resolved_handles, PackedInt64Array([first]), "First spread ray claims the front target for this volley")
+	var overlapping_ray := TreatmentShot.line(Vector2.ZERO, Vector2.RIGHT, 5.0, 300.0, 1, &"treatment_spread", true)
+	overlapping_ray.resolve_query_snapshot_excluding(query, volley_hits)
+	_assert_equal(overlapping_ray.resolved_handles, PackedInt64Array([second]), "Overlapping spread ray skips the already-hit target and continues")
+	_assert_near(overlapping_ray.range_value, 177.0, "Continuing spread ray ends at the later target instead of disappearing")
+	var exhausted_ray := TreatmentShot.line(Vector2.ZERO, Vector2.RIGHT, 5.0, 300.0, 1, &"treatment_spread", true)
+	exhausted_ray.resolve_query_snapshot_excluding(query, volley_hits)
+	_assert_true(exhausted_ray.resolved_handles.is_empty(), "Base spread cannot shotgun either target within one volley")
+	_assert_near(exhausted_ray.range_value, 300.0, "A non-damaging duplicate ray remains visible at full range")
+	var shotgun_ray := TreatmentShot.line(Vector2.ZERO, Vector2.RIGHT, 5.0, 300.0, 1, &"treatment_spread", true)
+	shotgun_ray.resolve_query_snapshot(query)
+	_assert_equal(shotgun_ray.resolved_handles, PackedInt64Array([first]), "Shotgun talent path restores independent per-ray hits")
+
 func _assert_true(condition: bool, message: String) -> void:
 	assertions += 1
 	if condition:

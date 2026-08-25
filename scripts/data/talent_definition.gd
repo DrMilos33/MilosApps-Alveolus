@@ -88,16 +88,14 @@ static func definitions() -> Array[TalentDefinition]:
 			2.0
 		).place_in_tree(0, 1),
 		create(
-			&"spread_penetration",
-			"Durchdringende Streuung",
-			"Jeder Strahl des Streuimpulses durchdringt einen zusätzlichen Gegner pro Rang.",
+			&"spread_shotgun",
+			"Schrotwirkung",
+			"Mehrere Strahlen derselben Streuimpuls-Salve können dasselbe Ziel treffen.",
 			Category.DEPLOYMENT,
 			1,
-			&"spread_max_hits_per_rank",
+			&"spread_shotgun",
 			1.0,
-			PackedStringArray(["treatment_damage_training"]),
-			3,
-			PackedInt32Array([1, 1, 1])
+			PackedStringArray(["treatment_damage_training"])
 		).place_in_tree(1, 0),
 		create(
 			&"manual_treatment_aim",

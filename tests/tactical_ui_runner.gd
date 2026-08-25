@@ -391,13 +391,13 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var treatment_root := hud.talent_buttons[&"treatment_damage_training"] as Button
-	var spread_branch := hud.talent_buttons[&"spread_penetration"] as Button
+	var spread_branch := hud.talent_buttons[&"spread_shotgun"] as Button
 	var manual_branch := hud.talent_buttons[&"manual_treatment_aim"] as Button
 	var persistence_branch := hud.talent_buttons[&"piercing_persistence"] as Button
 	_check(
 		int(treatment_root.get_meta(&"talent_rank_maximum", 0)) == 1
-		and int(spread_branch.get_meta(&"talent_rank_maximum", 0)) == 3
-		and String(spread_branch.get_meta(&"alveolus_accessible_name", "")).contains("Rang 0 von 3"),
+		and int(spread_branch.get_meta(&"talent_rank_maximum", 0)) == 1
+		and String(spread_branch.get_meta(&"alveolus_accessible_name", "")).contains("Rang 0 von 1"),
 		"Produktive Talentwerte steuern Rangpips und Accessible Name direkt"
 	)
 	var root_child := treatment_root.get_node_or_null(treatment_root.focus_neighbor_bottom) as Button
@@ -415,7 +415,7 @@ func _run() -> void:
 	await process_frame
 	var talent_payload := hud.context_detail_controller.current_payload()
 	_check(hud.context_detail_controller.is_explicit() and talent_payload.get("title", "") == "Anhaltender Laser" and String(talent_payload.get("body", "")).contains("0,5"), "Die ausdrückliche Talentdetailkarte ist vollständig")
-	_check(String(talent_payload.get("meta", "")).contains("Behandlungsgrundlage"), "Die Talentdetailkarte nennt die Revision-4-Wurzel als konkrete Voraussetzung")
+	_check(String(talent_payload.get("meta", "")).contains("Behandlungsgrundlage"), "Die Talentdetailkarte nennt die aktuelle Wurzel als konkrete Voraussetzung")
 	hud.close_context_detail()
 	_check(hud.talent_points_label.text.to_lower().contains("0 frei"), "Freie Talentpunkte werden in Sentence Case gezeigt")
 	var reset_caption := (hud.talent_reset_button as IconTextButton).caption.text

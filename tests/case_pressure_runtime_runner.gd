@@ -168,6 +168,7 @@ func _test_case_one_event_target_profile() -> void:
 		var target := game.enemy_world.resolve(handle) as InfectionEnemy
 		_true(is_instance_valid(target), "Der Fall-1-Eventherd besitzt einen gültigen Handle")
 		if is_instance_valid(target):
+			_near(target.max_health, 135.0, "Der Fall-1-Eventherd besitzt 25 Prozent weniger Leben")
 			_near(
 				target.definition.speed * target.speed_multiplier,
 				66.0 * game.config.enemy_speed_multiplier,

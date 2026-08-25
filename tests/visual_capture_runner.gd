@@ -89,15 +89,15 @@ func _capture_suite(game: Node) -> void:
 		return
 	await _capture("talents")
 	game.meta.talent_ranks[&"treatment_damage_training"] = 1
-	game.meta.talent_ranks[&"spread_penetration"] = 1
+	game.meta.talent_ranks[&"spread_shotgun"] = 1
 	game.hud.refresh_talents(game._talent_view_model())
 	await _settle()
-	var ranked_talent: Button = game.hud.progression_screen.talent_action(&"spread_penetration")
+	var ranked_talent: Button = game.hud.progression_screen.talent_action(&"spread_shotgun")
 	var rank_pips := ranked_talent.find_child("TalentRankPips", true, false) as Control if ranked_talent != null else null
 	if ranked_talent == null \
 		or int(ranked_talent.get_meta(&"talent_rank_current", 0)) != 1 \
-		or int(ranked_talent.get_meta(&"talent_rank_maximum", 0)) != 3 \
-		or not String(ranked_talent.get_meta(&"alveolus_accessible_name", "")).contains("Rang 1 von 3") \
+		or int(ranked_talent.get_meta(&"talent_rank_maximum", 0)) != 1 \
+		or not String(ranked_talent.get_meta(&"alveolus_accessible_name", "")).contains("Rang 1 von 1") \
 		or rank_pips == null:
 		capture_failed = true
 		push_error("Talentbaum aktualisiert Mehrfachrang/Pips/Accessibility nicht in-place")
@@ -381,7 +381,7 @@ func _verify_talent_tree(screen: ProgressionScreen) -> bool:
 		return false
 	var ids: Array[StringName] = [
 		&"treatment_damage_training",
-		&"spread_penetration",
+		&"spread_shotgun",
 		&"manual_treatment_aim",
 		&"piercing_persistence",
 	]

@@ -58,4 +58,10 @@ Connect `AbilityController.feedback_requested` to
 `TreatmentController.feedback_requested` to
 `AbilityFeedbackWorld.spawn_treatment_shots`.
 
+Streuimpuls-Salven share one generation-safe target set at the gameplay
+integration boundary unless `spread_shotgun` is active. A ray skips handles
+already damaged by the same volley without spending its own penetration count,
+so it remains visible and may continue to a later target. Individual ray
+penetration stays a regular `TREATMENT_MAX_HITS` build value.
+
 The regression entrypoint is `tests/ability_pipeline_runner.gd`.

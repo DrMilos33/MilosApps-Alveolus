@@ -20,6 +20,9 @@ func _run() -> void:
 	if layout.get_node_or_null("EnvironmentBackdrop") == null:
 		_fail("campus environment backdrop is missing")
 		return
+	if layout.get_node_or_null("RuntimeStaff") != null or layout.get_node_or_null("StaffMarkers") != null:
+		_fail("campus still contains the retired walking doctor layer")
+		return
 	for id in [&"practice", &"research", &"levels", &"lexicon", &"settings"]:
 		var slot := layout.get_node_or_null("BuildingSlots/%s" % id) as Control
 		if slot == null:
@@ -42,6 +45,10 @@ func _run() -> void:
 	await process_frame
 	if host.get_child_count() != 1:
 		_fail("campus runtime host did not instantiate exactly one layout")
+		return
+	var runtime_layout := host.get_child(0)
+	if runtime_layout.get_node_or_null("RuntimeStaff") != null or runtime_layout.get_node_or_null("StaffMarkers") != null:
+		_fail("campus runtime recreated walking doctors")
 		return
 	host.queue_free()
 	print("ALVEOLUS_CAMPUS_LAYOUT_OK")

@@ -24,7 +24,7 @@ const RESEARCH_WIDE_COLUMNS := 4
 const TALENT_SYMBOLS_BY_ID := {
 	&"treatment_damage_training": &"treatment",
 	&"manual_treatment_aim": &"target",
-	&"spread_penetration": &"treatment_spread",
+	&"spread_shotgun": &"treatment_spread",
 	&"piercing_persistence": &"treatment_pierce",
 }
 const TALENT_SYMBOL_FALLBACKS: Array[StringName] = [

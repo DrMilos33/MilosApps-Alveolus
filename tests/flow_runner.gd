@@ -32,8 +32,12 @@ func _run_flow() -> void:
 	_check(game.flow_state == GameFlowState.State.RESEARCH, "Forschung ist eine eigene Campusansicht")
 	game._on_back_requested()
 	game._on_navigate_requested(&"lexicon")
-	_check(game.flow_state == GameFlowState.State.LEXICON, "Das medizinische Lexikon besitzt ein eigenes Campusgebäude")
+	_check(game.flow_state == GameFlowState.State.CAMPUS, "Das medizinische Lexikon bleibt vor Fall 1 gesperrt")
+	game.meta.get_level_record(&"early_localized_focus").victories = 1
+	game._on_navigate_requested(&"lexicon")
+	_check(game.flow_state == GameFlowState.State.LEXICON, "Nach Fall 1 besitzt das medizinische Lexikon ein eigenes Campusgebäude")
 	game._on_back_requested()
+	game.meta.get_level_record(&"early_localized_focus").victories = 0
 	game._on_navigate_requested(&"levels")
 	_check(game.flow_state == GameFlowState.State.LEVEL_SELECT, "Fallarchiv ist vom Campus erreichbar")
 

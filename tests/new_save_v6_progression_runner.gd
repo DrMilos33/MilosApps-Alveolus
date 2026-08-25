@@ -11,6 +11,7 @@ func _init() -> void:
 func _run() -> void:
 	_test_ranked_talent_contract()
 	_test_v7_roundtrip()
+	_test_v7_revision4_refunds_penetration_tree()
 	_test_v6_revision3_refunds_retired_tree()
 	_test_v5_migration_refunds_retired_tree()
 	_test_independent_resets_and_seed_advance()
@@ -25,18 +26,16 @@ func _run() -> void:
 func _test_ranked_talent_contract() -> void:
 	var definitions := TalentDefinition.definitions()
 	_equal(definitions.size(), 4, "Der neue Baum enthält genau vier Talente")
-	_equal(TalentDefinition.catalog()[&"spread_penetration"].max_rank, 3, "Streuimpuls besitzt drei Ränge")
+	_equal(TalentDefinition.catalog()[&"spread_shotgun"].max_rank, 1, "Schrotwirkung besitzt einen Rang")
 	_equal(TalentDefinition.catalog()[&"piercing_persistence"].max_rank, 2, "Laserbestand besitzt zwei Ränge")
 
 	var meta := _fully_funded_meta(1000)
-	_true(not meta.purchase_talent_rank(&"spread_penetration"), "Ein Kind kann seine Voraussetzung nicht überspringen")
+	_true(not meta.purchase_talent_rank(&"spread_shotgun"), "Ein Kind kann seine Voraussetzung nicht überspringen")
 	_true(meta.purchase_talent_rank(&"treatment_damage_training"), "Das Wurzeltalent kann gekauft werden")
-	_true(meta.purchase_talent_rank(&"spread_penetration"), "Der erste Streuungsrang kann gekauft werden")
-	_true(meta.purchase_talent_rank(&"spread_penetration"), "Der zweite Streuungsrang kann gekauft werden")
-	_true(meta.purchase_talent_rank(&"spread_penetration"), "Der dritte Streuungsrang kann gekauft werden")
-	_true(not meta.purchase_talent_rank(&"spread_penetration"), "Der Streuungsrang bleibt am Maximum gedeckelt")
-	_equal(meta.talent_rank(&"spread_penetration"), 3, "Rangabfrage liefert den vollständigen Ausbau")
-	_equal(meta.talent_points_spent(), 4, "Rangkosten werden einzeln summiert")
+	_true(meta.purchase_talent_rank(&"spread_shotgun"), "Schrotwirkung kann gekauft werden")
+	_true(not meta.purchase_talent_rank(&"spread_shotgun"), "Schrotwirkung bleibt am Maximum gedeckelt")
+	_equal(meta.talent_rank(&"spread_shotgun"), 1, "Rangabfrage liefert die aktive Schrotwirkung")
+	_equal(meta.talent_points_spent(), 2, "Rangkosten werden einzeln summiert")
 	_true(not meta.set_talent_active(&"treatment_damage_training", false), "Eine belegte Voraussetzung wird nicht still entfernt")
 	meta.clear_talents()
 	_equal(meta.talent_points_spent(), 0, "Talentreset gibt alle Rangkosten frei")
@@ -46,7 +45,7 @@ func _test_ranked_talent_contract() -> void:
 func _test_v7_roundtrip() -> void:
 	var source := _fully_funded_meta(2000)
 	_true(source.set_talent_rank(&"treatment_damage_training", 1), "Wurzeltalent wird gesetzt")
-	_true(source.set_talent_rank(&"spread_penetration", 3), "Mehrere Ränge werden atomar gesetzt")
+	_true(source.set_talent_rank(&"spread_shotgun", 1), "Schrotwirkung wird atomar gesetzt")
 	_true(source.set_talent_rank(&"piercing_persistence", 2), "Laserbestand wird vollständig gesetzt")
 	source.research_points = 77
 	source.research_ranks = {&"stability_reserve": 3, &"therapy_precision": 2}
@@ -55,12 +54,12 @@ func _test_v7_roundtrip() -> void:
 
 	var saved := source.to_dict()
 	_equal(int(saved.get("version", 0)), 7, "Neue Spielstände verwenden Save-Version 7")
-	_equal(int(saved.get("talent_tree_revision", 0)), 4, "Save markiert Talentbaumrevision 4")
-	_equal((saved.get("talent_ranks", {}) as Dictionary).get("spread_penetration", 0), 3, "Save schreibt Talentstufen als Dictionary")
+	_equal(int(saved.get("talent_tree_revision", 0)), 5, "Save markiert Talentbaumrevision 5")
+	_equal((saved.get("talent_ranks", {}) as Dictionary).get("spread_shotgun", 0), 1, "Save schreibt Schrotwirkung als Dictionary")
 
 	var restored := MetaProgressionState.new(func() -> int: return 2000)
 	_true(restored.load_dict(saved), "Save-Version 7 wird geladen")
-	_equal(restored.talent_rank(&"spread_penetration"), 3, "V7 bewahrt den dreistufigen Streuimpuls")
+	_equal(restored.talent_rank(&"spread_shotgun"), 1, "V7 bewahrt die Schrotwirkung")
 	_equal(restored.talent_rank(&"piercing_persistence"), 2, "V7 bewahrt den zweistufigen Laserbestand")
 	_true(restored.has_talent(&"treatment_damage_training"), "Kompatible Aktivabfrage erkennt Rangtalente")
 	_equal(restored.research_points, 77, "V7 bewahrt Forschungspunkte")
@@ -68,8 +67,25 @@ func _test_v7_roundtrip() -> void:
 	_equal(restored.get_or_create_case_seed(&"localized_focus"), 424242, "V7 bewahrt den aktuellen Fallseed")
 
 	var context := restored.create_run_context(&"localized_focus")
-	_equal(context.talent_rank(&"spread_penetration"), 3, "RunContext übernimmt den exakten Talentrang")
+	_equal(context.talent_rank(&"spread_shotgun"), 1, "RunContext übernimmt den exakten Schrotwirkungsrang")
 	_true(context.has_talent(&"piercing_persistence"), "RunContext hält die boolesche Kompatibilitätsabfrage")
+
+
+func _test_v7_revision4_refunds_penetration_tree() -> void:
+	var revision4 := {
+		"version": 7,
+		"research_points": 88,
+		"research_ranks": {"movement_training": 1},
+		"completed_mastery_ids": ["fall_2_first_victory"],
+		"talent_tree_revision": 4,
+		"talent_ranks": {"spread_penetration": 3},
+	}
+	var migrated := MetaProgressionState.new(func() -> int: return 2400)
+	_true(migrated.load_dict(revision4), "Ein V7-Spielstand mit Revisionsbaum 4 wird geladen")
+	_true(migrated.talent_ranks.is_empty(), "Revision-4-Durchdringung wird nicht still als Schrotwirkung interpretiert")
+	_true(migrated.talent_tree_refund_pending, "Revision-4-Auswahl markiert die zurückgegebenen Talentpunkte")
+	_equal(migrated.research_points, 88, "Forschung bleibt beim Wechsel auf Schrotwirkung erhalten")
+	_equal(migrated.rank(&"movement_training"), 1, "Forschungsränge bleiben beim Talentwechsel erhalten")
 
 
 func _test_v6_revision3_refunds_retired_tree() -> void:

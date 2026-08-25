@@ -65,7 +65,7 @@ func _test_balance_and_movement_plumbing() -> void:
 	var mobility := _upgrade(&"mobility")
 	for rank in range(3):
 		_true(stats.apply_upgrade(mobility), "Mobilitätsausbau Rang %d wird angewandt" % (rank + 1))
-	_near(stats.movement_speed, 195.0, "Common-Galoppausbau addiert je Wahl drei und bleibt ganzzahlig")
+	_near(stats.movement_speed, 204.0, "Common-Galoppausbau addiert je Wahl sechs und bleibt ganzzahlig")
 	_equal(PlayerStats.BASE_MOVEMENT_SPEED, 171.0, "Doctor-Basisgeschwindigkeit ist zentral 171")
 	_equal(TherapyAvatar.MOVE_SPEED, PlayerStats.BASE_MOVEMENT_SPEED, "Avatar-Fallback ist an die zentrale Doctor-Basis gekoppelt")
 	_equal(TherapyProjectile.DEFAULT_SPEED, 576.0, "Impuls-Projektile verwenden die um zwanzig Prozent reduzierte Geschwindigkeit")

@@ -72,7 +72,9 @@ content definitions do not depend on scene nodes.
   Because ordinary enemy nodes are hidden while batched, the renderer also owns
   their damaged-health bars. Health signals are generation-bound, and release
   removes the corresponding bar synchronously; detailed enemies keep their own
-  node-drawn bar and are never drawn twice.
+  node-drawn bar and are never drawn twice. Every enemy archetype batch owns
+  an explicit arena-wide custom AABB; health rails must never outlive a
+  body merely because the engine's default local batch bounds culled it.
 - `ProjectileRenderer` owns one generation-bound MultiMesh slot for every
   gameplay projectile. Projectile nodes remain process-free state shells and
   never duplicate their batched body.
@@ -87,14 +89,19 @@ entire activation. Fixed ticks publish previous/current position, size, angle,
 and tint snapshots. The renderers interpolate those immutable snapshots using
 `Engine.get_physics_interpolation_fraction()` and submit one packed buffer per
 visual archetype. A topology relocation or newly reserved generation snaps both
-CPU snapshots to the same position; release clears the visible slot synchronously
-before a node may return to a pool.
+CPU snapshots to the same position; release clears the authoritative CPU slot
+synchronously before a node may return to a pool. The next packed publication
+transfers that state without mixing deferred per-instance setters into the same
+MultiMesh.
 
 Godot 4.7.1's Windows GL Compatibility path must not own physics interpolation
 for dynamically updated `MultiMeshInstance2D` objects: under sustained updates
 it can corrupt native memory during shutdown. Therefore every mass-render node
 sets `PHYSICS_INTERPOLATION_MODE_OFF` before insertion, disables interpolation
-on its RID again after insertion, and uses only `MultiMesh.set_buffer()`. Do not
+on its RID again after insertion, and uses only `MultiMesh.set_buffer()`. Even
+release and recycling mutate only the CPU-side packed buffer; per-instance
+transform or color setters are forbidden on those same dynamic batches because
+deferred Compatibility commands can overwrite a newer packed snapshot. Do not
 replace this with `set_buffer_interpolated()` or per-slot engine interpolation
 without a native and Web regression on the exact supported Godot version.
 

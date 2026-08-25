@@ -244,6 +244,7 @@ func _test_runtime_config_and_double_boss() -> void:
 		if discovery_id != &"boss_phases":
 			seen_without_boss_phase[discovery_id] = true
 	game.discovery_manager.configure(game.discovery_definitions, seen_without_boss_phase)
+	game.meta.ui_settings.show_discovery_info = true
 	first.take_damage(first.max_health * 0.31)
 	_equal(game.boss_aggregate_phase, 1, "Die erste erreichte Doppelbossphase wird aggregiert")
 	_equal(game.discovery_manager.active.get("target"), first, "Bossphasen-Discovery verwendet den tatsächlich emittierenden Boss")

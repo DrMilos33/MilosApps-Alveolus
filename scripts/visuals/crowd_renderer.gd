@@ -16,6 +16,11 @@ const PICKUP_BASE_EXTENT := 28.0
 const INVALID_SLOT := -1
 const MULTIMESH_STRIDE_2D := 8
 const MULTIMESH_STRIDE_2D_COLOR := 12
+## MultiMeshInstance2D culls one complete archetype batch from this local box.
+## It must cover the authored arena plus every supported camera margin; relying
+## on the engine default can hide a whole enemy archetype while its separately
+## drawn health bars remain visible.
+const BATCH_CUSTOM_AABB := AABB(Vector3(-8192.0, -8192.0, -1.0), Vector3(16384.0, 16384.0, 2.0))
 const STUN_ICON_TEXTURE := preload("res://assets/vendor/kenney_game_icons/star.png")
 
 
@@ -1062,29 +1067,23 @@ func _hide_enemy_slot(visual_id: StringName, slot: int) -> void:
 	if state == null or slot < 0:
 		return
 	_write_hidden_buffer_slot(state.render_buffer, slot)
-	# Release must be visible to RenderingServer before a pooled node can be
-	# reconfigured. Resetting interpolation makes both server snapshots hidden;
-	# the ordinary fixed-tick path still uses one bulk publication per batch.
-	_hide_slot(state.node.multimesh, slot)
+	# Keep one authoritative write path. The next packed batch publication makes
+	# the cleared slot visible to RenderingServer; pooled reactivation cannot
+	# inherit it because the new generation starts transparent in the same CPU
+	# buffer. Mixing per-instance setters with set_buffer() caused deferred GL
+	# commands to restore hidden transforms after later packed publications.
 
 
 func _hide_pickup_slot(slot: int) -> void:
 	if _pickup_batch_node == null or slot < 0:
 		return
 	_write_hidden_buffer_slot(_pickup_render_buffer, slot, MULTIMESH_STRIDE_2D)
-	_hide_slot(_pickup_batch_node.multimesh, slot, false)
 
 
 func _write_hidden_buffer_slot(buffer: PackedFloat32Array, slot: int, stride: int = MULTIMESH_STRIDE_2D_COLOR) -> void:
 	var offset := slot * stride
 	for index in range(stride):
 		buffer[offset + index] = 0.0
-
-
-func _hide_slot(multimesh: MultiMesh, slot: int, uses_colors: bool = true) -> void:
-	multimesh.set_instance_transform_2d(slot, Transform2D(0.0, Vector2.ZERO, 0.0, Vector2.ZERO))
-	if uses_colors:
-		multimesh.set_instance_color(slot, Color.TRANSPARENT)
 
 
 func _initialize_enemy_debug_state(record: EnemyRecord) -> void:
@@ -1204,6 +1203,7 @@ func _create_batch(texture: Texture2D, capacity: int, layer: int, uses_colors: b
 	var quad := QuadMesh.new()
 	quad.size = Vector2.ONE * UNIT_QUAD_SIZE
 	multimesh.mesh = quad
+	multimesh.custom_aabb = BATCH_CUSTOM_AABB
 	multimesh.instance_count = capacity
 	multimesh.visible_instance_count = 0
 	# Slot order is stable for an entity's complete activation, so Godot's

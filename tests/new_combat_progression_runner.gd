@@ -138,12 +138,12 @@ func _test_ranked_talent_contract_and_reset() -> void:
 	var expected_max_ranks := {
 		&"treatment_damage_training": 1,
 		&"manual_treatment_aim": 1,
-		&"spread_penetration": 3,
+		&"spread_shotgun": 1,
 		&"piercing_persistence": 2,
 	}
 	var definitions := TalentDefinition.definitions()
 	_equal(definitions.size(), expected_max_ranks.size(), "Der Behandlungstalentbaum enthält exakt vier Talente")
-	_equal(TalentDefinition.total_cost(), 7, "Der vollständige Talentbaum kostet sieben Rangpunkte")
+	_equal(TalentDefinition.total_cost(), 5, "Der vollständige Talentbaum kostet fünf Rangpunkte")
 	for definition in definitions:
 		_true(expected_max_ranks.has(definition.id), "Der Talentbaum enthält keine entfernten Talent-IDs")
 		if not expected_max_ranks.has(definition.id):
@@ -153,17 +153,16 @@ func _test_ranked_talent_contract_and_reset() -> void:
 	var meta := MetaProgressionState.new(func() -> int: return 0)
 	meta.reset_defaults(0)
 	meta.set_unlimited_test_progression(true)
-	_true(not meta.purchase_talent_rank(&"spread_penetration"), "Ein Rangtalent kann seine Voraussetzung nicht überspringen")
+	_true(not meta.purchase_talent_rank(&"spread_shotgun"), "Das Schrotwirkungstalent kann seine Voraussetzung nicht überspringen")
 	_true(meta.purchase_talent_rank(&"treatment_damage_training"), "Die Behandlungsgrundlage kann gekauft werden")
 	_true(meta.purchase_talent_rank(&"manual_treatment_aim"), "Die manuelle Zielsteuerung kann unter der Grundlage gekauft werden")
-	for _rank in range(3):
-		_true(meta.purchase_talent_rank(&"spread_penetration"), "Alle drei Streuimpulsränge können gekauft werden")
-	_true(not meta.purchase_talent_rank(&"spread_penetration"), "Der Streuimpuls bleibt bei drei Rängen gedeckelt")
+	_true(meta.purchase_talent_rank(&"spread_shotgun"), "Schrotwirkung kann nach der Grundlage gekauft werden")
+	_true(not meta.purchase_talent_rank(&"spread_shotgun"), "Schrotwirkung bleibt auf einen Rang gedeckelt")
 	for _rank in range(2):
 		_true(meta.purchase_talent_rank(&"piercing_persistence"), "Beide Laserdauerränge können gekauft werden")
 	_true(not meta.purchase_talent_rank(&"piercing_persistence"), "Die Laserdauer bleibt bei zwei Rängen gedeckelt")
 	_true(not TalentDefinition.catalog().has(&"piercing_return"), "Der rückkehrende Laser bleibt aus dem aktiven Katalog entfernt")
-	_equal(meta.talent_points_spent(), 7, "Alle Talentränge werden einzeln berechnet")
+	_equal(meta.talent_points_spent(), 5, "Alle Talentränge werden einzeln berechnet")
 
 	meta.clear_talents()
 	_equal(meta.talent_points_spent(), 0, "Der Talentreset gibt alle Rangpunkte frei")

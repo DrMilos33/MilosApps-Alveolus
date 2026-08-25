@@ -133,7 +133,7 @@ func _run() -> void:
 	_check(planning_tree != null and planning_tree.edge_count() == 3, "Root zeichnet alle drei Voraussetzungen als Abwärtsverbindungen")
 	_check(screen.find_child("TalentBranch_treatment", true, false) is VBoxContainer, "Talentbaum verzichtet auf eine große umgebende ActionCard")
 	var root_talent := screen.talent_action(&"treatment_damage_training")
-	var left_talent := screen.talent_action(&"spread_penetration")
+	var left_talent := screen.talent_action(&"spread_shotgun")
 	var child_talent := screen.talent_action(&"manual_treatment_aim")
 	var right_talent := screen.talent_action(&"piercing_persistence")
 	var bottom_target := root_talent.get_node_or_null(root_talent.focus_neighbor_bottom)
@@ -153,7 +153,7 @@ func _run() -> void:
 	_check(_state_icon_kind(locked_talent) == &"locked", "Gesperrtes Talent besitzt Schloss plus gedämpfte Farbe")
 	_check(locked_talent.theme_type_variation == AlveolusVisualTheme.TYPE_TALENT_NODE and locked_talent.focus_mode == Control.FOCUS_ALL, "Gesperrtes Talent bewahrt die fokussierbare zentrale Talentrolle")
 	var talent_symbols: Dictionary = {}
-	for talent_id in [&"treatment_damage_training", &"spread_penetration", &"manual_treatment_aim", &"piercing_persistence"]:
+	for talent_id in [&"treatment_damage_training", &"spread_shotgun", &"manual_treatment_aim", &"piercing_persistence"]:
 		var talent_button := screen.talent_action(talent_id)
 		var symbol := talent_button.find_child("TalentSymbol", true, false) as SimpleIcon
 		_check(symbol != null, "Jeder Talentknoten besitzt ein eigenes Hauptsymbol")
@@ -272,7 +272,7 @@ func _rank_change_fixture(revision: int, tab: StringName) -> Variant:
 	var branches := _fixture_branches()
 	branches[0] = _branch(&"treatment", "Behandlung", &"treatment", AlveolusVisualTheme.TEAL, [
 		_talent(&"treatment_damage_training", "Behandlungstraining", "1/1 · Max", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.ACTIVE, false, 1, 1),
-		_talent(&"spread_penetration", "Streudurchdringung", "0/3 · 1 P", 1, 0, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.AVAILABLE, true, 0, 3),
+		_talent(&"spread_shotgun", "Schrotwirkung", "0/1 · 1 P", 1, 0, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.AVAILABLE, true, 0, 1),
 		ProgressionViewModelScript.TalentNodeViewModel.create(
 			&"manual_treatment_aim",
 			"Manuelles Behandlungsziel",
@@ -329,7 +329,7 @@ func _fixture_branches() -> Array:
 	return [
 		_branch(&"treatment", "Behandlung", &"treatment", AlveolusVisualTheme.TEAL, [
 			_talent(&"treatment_damage_training", "Behandlungstraining", "1/1 · Max", 0, 1, PackedStringArray(), ProgressionViewModelScript.ItemState.ACTIVE, false, 1, 1),
-			_talent(&"spread_penetration", "Streudurchdringung", "0/3 · 1 P", 1, 0, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.AVAILABLE, true, 0, 3),
+			_talent(&"spread_shotgun", "Schrotwirkung", "0/1 · 1 P", 1, 0, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.AVAILABLE, true, 0, 1),
 			_talent(&"manual_treatment_aim", "Manuelles Behandlungsziel", "0/1 · 1 P", 1, 1, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.AVAILABLE, true, 0, 1),
 			_talent(&"piercing_persistence", "Durchdringende Ausdauer", "0/2 · 1 P", 1, 2, PackedStringArray(["treatment_damage_training"]), ProgressionViewModelScript.ItemState.LOCKED, false, 0, 2),
 		]),

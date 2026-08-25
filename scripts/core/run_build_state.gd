@@ -12,6 +12,7 @@ const TREATMENT_RANGE := &"therapy_range"
 const TREATMENT_TARGETS := &"therapy_targets"
 const TREATMENT_PROJECTILES := &"therapy_projectiles"
 const TREATMENT_MAX_HITS := &"treatment_max_hits"
+const TREATMENT_SPREAD_SHOTGUN := &"treatment_spread_shotgun"
 const TREATMENT_SPREAD := &"treatment_spread"
 const TREATMENT_BEAM_DURATION := &"treatment_beam_duration"
 const TREATMENT_BEAM_TICK := &"treatment_beam_tick"
@@ -57,6 +58,7 @@ static func from_treatment(definition: TreatmentDefinition) -> RunBuildState:
 		TREATMENT_TARGETS: definition.base_targets,
 		TREATMENT_PROJECTILES: definition.base_projectiles,
 		TREATMENT_MAX_HITS: definition.max_hits,
+		TREATMENT_SPREAD_SHOTGUN: 0.0,
 		TREATMENT_SPREAD: definition.spread_degrees,
 		TREATMENT_BEAM_DURATION: 0.0,
 		TREATMENT_BEAM_TICK: 0.25,

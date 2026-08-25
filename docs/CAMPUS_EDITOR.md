@@ -28,9 +28,6 @@ verschoben, dupliziert und gespeichert werden.
   den ganzen Slot verschieben, nicht nur eine einzelne Dach- oder Wandebene.
   Das goldene Kreuz markiert den unteren Mittelpunkt. Genau dieser Punkt wird
   automatisch als Position für Grafik, Hoverkontur und Klickfläche verwendet.
-- `StaffMarkers`: Unter `RouteA` und `RouteB` liegen jeweils die Marker
-  `Start` und `End`. Diese Marker bestimmen die Laufstrecken der kleinen
-  Campusmitarbeiter. `phase` und `speed` stehen als Metadaten am Routenknoten.
 - `Sky`, `Horizon` und `HeaderVeil`: Farben und Höhe des Hintergrunds sowie
   der obere Lesbarkeitsbereich.
 
@@ -57,5 +54,6 @@ verschoben, dupliziert und gespeichert werden.
    Koordinatenliste mehr.
 
 Die Skripte `campus_layout.gd` und `campus_building_slot.gd` kümmern sich nur
-um Laufanimationen und Editorvorschauen. Die eigentliche Komposition bleibt in
-der `.tscn`-Datei sichtbar und bearbeitbar.
+um Eingabeverhalten und Editorvorschauen. Die eigentliche Komposition bleibt
+in der `.tscn`-Datei sichtbar und bearbeitbar. Bewegte Doctor-Figuren gehören
+nicht mehr zur Campuskomposition.
