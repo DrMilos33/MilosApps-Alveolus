@@ -81,9 +81,29 @@ func _check_boss_configs(
 		_check(not config.regular_spawns_enabled and config.case_pressure_plan == null, "Bossprofil %s läuft ohne Wellen und Events" % profile.get_id())
 		_check(config.boss_enemy_id == source.boss_enemy_id, "Bossprofil %s übernimmt die aktuelle Gegner-ID" % profile.get_id())
 		_check(is_equal_approx(config.boss_health_multiplier, source.boss_health_multiplier), "Bossprofil %s übernimmt aktuelles Leben" % profile.get_id())
+		_check(is_equal_approx(config.enemy_speed_multiplier, source.enemy_speed_multiplier), "Bossprofil %s übernimmt den aktuellen Fall-Tempoanteil" % profile.get_id())
+		_check(is_equal_approx(config.boss_speed_multiplier, source.boss_speed_multiplier), "Bossprofil %s übernimmt das aktuelle Bosstempo" % profile.get_id())
+		_check(is_equal_approx(config.contact_damage_multiplier, source.contact_damage_multiplier), "Bossprofil %s übernimmt den aktuellen Kontaktschaden" % profile.get_id())
+		_check(config.boss_ranged_enabled == source.boss_ranged_enabled, "Bossprofil %s übernimmt den aktuellen Fernkampfstatus" % profile.get_id())
+		_check(is_equal_approx(config.boss_projectile_damage_multiplier, source.boss_projectile_damage_multiplier), "Bossprofil %s übernimmt den aktuellen Projektilschaden" % profile.get_id())
+		_check(is_equal_approx(config.boss_projectile_attack_speed_multiplier, source.boss_projectile_attack_speed_multiplier), "Bossprofil %s übernimmt die aktuelle Schussrate" % profile.get_id())
+		_check(is_equal_approx(config.boss_projectile_speed_multiplier, source.boss_projectile_speed_multiplier), "Bossprofil %s übernimmt das aktuelle Projektiltempo" % profile.get_id())
+		_check(config.boss_projectile_pattern == source.boss_projectile_pattern, "Bossprofil %s übernimmt das aktuelle Projektilmuster" % profile.get_id())
+		_check(is_equal_approx(config.boss_projectile_turn_time_variation, source.boss_projectile_turn_time_variation), "Bossprofil %s übernimmt die aktuelle Knickvariation" % profile.get_id())
+		_check(is_equal_approx(config.boss_wave_amplitude, source.boss_wave_amplitude), "Bossprofil %s übernimmt die aktuelle Rautenbreite" % profile.get_id())
+		_check(is_equal_approx(config.boss_wave_length, source.boss_wave_length), "Bossprofil %s übernimmt die aktuelle Rautenlänge" % profile.get_id())
+		_check(config.boss_phase_minions == source.boss_phase_minions, "Bossprofil %s übernimmt die aktuellen Phasenadds" % profile.get_id())
+		_check(config.boss_phase_health_thresholds == source.boss_phase_health_thresholds, "Bossprofil %s übernimmt die aktuellen Phasengrenzen" % profile.get_id())
 		_check(is_equal_approx(config.boss_aura_screen_diameter_fraction, source.boss_aura_screen_diameter_fraction), "Bossprofil %s übernimmt die aktuelle Aura" % profile.get_id())
+		_check(is_equal_approx(config.boss_aura_speed_multiplier, source.boss_aura_speed_multiplier), "Bossprofil %s übernimmt den aktuellen Aura-Tempobonus" % profile.get_id())
+		_check(is_equal_approx(config.boss_aura_damage_multiplier, source.boss_aura_damage_multiplier), "Bossprofil %s übernimmt den aktuellen Aura-Schadensbonus" % profile.get_id())
 		_check(config.boss_projectiles_require_empty_aura == source.boss_projectiles_require_empty_aura, "Bossprofil %s übernimmt die aktuelle Schussbedingung" % profile.get_id())
+		_check(is_equal_approx(config.boss_reinforcement_interval, source.boss_reinforcement_interval), "Bossprofil %s übernimmt das aktuelle Verstärkungsintervall" % profile.get_id())
+		_check(config.boss_reinforcement_count == source.boss_reinforcement_count, "Bossprofil %s übernimmt die aktuelle Verstärkungsgröße" % profile.get_id())
+		_check(config.boss_reinforcement_minimum_phase == source.boss_reinforcement_minimum_phase, "Bossprofil %s übernimmt die aktuelle Verstärkungsphase" % profile.get_id())
+		_check(is_equal_approx(config.boss_add_defense_burst_shooting_lock_seconds, source.boss_add_defense_burst_shooting_lock_seconds), "Bossprofil %s übernimmt die aktuelle Stoß-Schusssperre der Adds" % profile.get_id())
 		_check(is_equal_approx(config.boss_add_projectile_attack_speed_multiplier, source.boss_add_projectile_attack_speed_multiplier), "Bossprofil %s übernimmt die aktuelle Add-Schussrate" % profile.get_id())
+		_check(config.boss_count == profile.get_boss_count(), "Bossprofil %s übernimmt die aktuelle Bossanzahl" % profile.get_id())
 
 
 func _configured_run(
@@ -99,11 +119,41 @@ func _configured_run(
 	var game := GameScript.new()
 	game.levels = levels
 	game.config = RunConfig.from_level(baseline)
+	if profile != null:
+		_poison_boss_contract(game.config, baseline)
 	var context := RunContext.create_practice(scenario, profile, 2026082400, PreparedLoadout.default_loadout())
 	game._configure_practice_run_config(context)
 	var result := game.config
 	game.free()
 	return result
+
+
+func _poison_boss_contract(config: RunConfig, source: LevelDefinition) -> void:
+	config.boss_enemy_id = &"__poison__"
+	config.boss_health_multiplier = -999.0
+	config.enemy_speed_multiplier = -999.0
+	config.boss_speed_multiplier = -999.0
+	config.contact_damage_multiplier = -999.0
+	config.boss_ranged_enabled = not source.boss_ranged_enabled
+	config.boss_projectile_damage_multiplier = -999.0
+	config.boss_projectile_attack_speed_multiplier = -999.0
+	config.boss_projectile_speed_multiplier = -999.0
+	config.boss_projectile_pattern = &"__poison__"
+	config.boss_projectile_turn_time_variation = -999.0
+	config.boss_projectiles_require_empty_aura = not source.boss_projectiles_require_empty_aura
+	config.boss_wave_amplitude = -999.0
+	config.boss_wave_length = -999.0
+	config.boss_phase_minions = PackedInt32Array([999])
+	config.boss_phase_health_thresholds = PackedFloat32Array([0.12345])
+	config.boss_aura_screen_diameter_fraction = -999.0
+	config.boss_aura_speed_multiplier = -999.0
+	config.boss_aura_damage_multiplier = -999.0
+	config.boss_reinforcement_interval = -999.0
+	config.boss_reinforcement_count = -999
+	config.boss_reinforcement_minimum_phase = -999
+	config.boss_add_defense_burst_shooting_lock_seconds = -999.0
+	config.boss_add_projectile_attack_speed_multiplier = -999.0
+	config.boss_count = 99
 
 
 func _scenario_by_id(values: Array[PracticeScenarioDefinition], id: StringName) -> PracticeScenarioDefinition:
