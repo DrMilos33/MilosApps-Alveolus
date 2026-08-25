@@ -4736,6 +4736,7 @@ func _should_offer_mandatory_defense_cells(level: int) -> bool:
 	return not _is_practice_test() \
 		and selected_level != null \
 		and selected_level.order == 3 \
+		and (meta == null or not meta.has_completed_level(selected_level.id)) \
 		and level == 1 \
 		and stats != null \
 		and stats.immune_level <= 0

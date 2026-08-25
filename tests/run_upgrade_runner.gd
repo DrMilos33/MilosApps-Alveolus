@@ -168,8 +168,9 @@ func _test_proportional_damage_contract() -> void:
 func _test_fall_three_mandatory_defense_cells() -> void:
 	var game := GameScript.new()
 	game.selected_level = ContentCatalog.level_definitions()[3]
+	game.meta = MetaProgressionState.new()
 	game.stats = PlayerStats.new()
-	_assert_true(game._should_offer_mandatory_defense_cells(1), "Fall 3 first level-up is reserved for defense cells")
+	_assert_true(game._should_offer_mandatory_defense_cells(1), "Fall 3 first level-up is reserved for defense cells before the first victory")
 	var offers: Array[UpgradeDefinition] = game._mandatory_defense_cell_options()
 	_assert_equal(offers.size(), 3, "Fall 3 produces exactly three defense-cell cards")
 	var ids: Dictionary = {}
@@ -178,6 +179,10 @@ func _test_fall_three_mandatory_defense_cells() -> void:
 		_assert_equal(offer.title, "Abwehrzellen", "Every mandatory card presents defense cells")
 	_assert_equal(ids.size(), 3, "Mandatory cards have unique transient presentation IDs")
 	_assert_equal(game._canonical_upgrade_definition(offers[0]).id, &"neutrophils", "Choosing any mandatory card applies the stable defense-cell upgrade")
+	game.meta.register_level_result(game.selected_level, false, 60.0, 1, 0)
+	_assert_true(game._should_offer_mandatory_defense_cells(1), "A failed Fall 3 attempt keeps the first-level guarantee")
+	game.meta.register_level_result(game.selected_level, true, 300.0, 4, 120)
+	_assert_true(not game._should_offer_mandatory_defense_cells(1), "The first Fall 3 victory permanently removes the first-level guarantee")
 	game.selected_level = ContentCatalog.level_definitions()[2]
 	_assert_true(not game._should_offer_mandatory_defense_cells(1), "Fall 2 never receives the mandatory defense-cell offer")
 	game.free()

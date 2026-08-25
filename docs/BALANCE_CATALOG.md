@@ -247,7 +247,7 @@ der Karte angezeigt.
 
 | Ausbau | Seltenheiten/Ränge | Wirkung | Grenze | Voraussetzung |
 |---|---|---|---|---|
-| Abwehrzellen | 1 Wahl | System aktivieren | 2 Zellen | ab Fall 3; im ersten Fall-3-Level-up drei gleiche Angebote |
+| Abwehrzellen | 1 Wahl | System aktivieren | 2 Zellen | ab Fall 3; bis zum ersten Fall-3-Sieg im ersten Level-up drei gleiche Angebote |
 | Abwehrzellenschaden | Common / Magic / Rare | +2 / +3 / +4 Schaden | unbegrenzt | Abwehrzellen |
 | Attack Speed | Common / Magic / Rare | +3 / +5 / +7 Prozentpunkte | unbegrenzt, linear | Abwehrzellen |
 | Größere Abwehrzellen | 3 Wahlen | +1 Radius | Radius 7 | Abwehrzellen |
@@ -273,10 +273,11 @@ Stoß besitzt 0 Schaden und hat keinen Schadensausbau. Ein späterer Talentknote
 darf diese Familie ausdrücklich freischalten; in diesem Meilenstein existiert
 sie nicht.
 
-Das erste Level-up in Fall 3 ist die einzige Ausnahme: Es zeigt dreimal
-Abwehrzellen und erlaubt keinen Reroll. In Fall 1/2 befinden sich Abwehrzellen
-überhaupt nicht im Pool; ab Fall 3 gelten nach der Akquisition die normalen
-Verbesserungen. Die erste Auswahl eines sonst normalen Levelaufstiegs enthält, solange noch ein
+Bis zum ersten erfolgreichen Abschluss von Fall 3 ist dessen erstes Level-up
+die einzige Ausnahme: Es zeigt dreimal Abwehrzellen und erlaubt keinen Reroll.
+Nach dem ersten Sieg gilt dort bereits beim ersten Level-up die normale Auswahl.
+In Fall 1/2 befinden sich Abwehrzellen überhaupt nicht im Pool; ab Fall 3 gelten
+nach der Akquisition die normalen Verbesserungen. Die erste Auswahl eines sonst normalen Levelaufstiegs enthält, solange noch ein
 passender Rang verfügbar ist, mindestens einen Ausbau der ausgerüsteten
 Behandlung. Ein einmaliger Reroll schließt die vorherigen Karten aus, garantiert
 derzeit aber nicht erneut einen Behandlungsausbau.

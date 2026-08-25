@@ -213,11 +213,12 @@ repeatable definition ignores `max_level`; finite utility upgrades keep their
 cap in data while `show_cap == false` prevents that implementation limit from
 leaking into the card. Reroll exclusion expands from a picked ID to its whole
 resolved family. `UpgradeDefinition.minimum_case_order` is an authored campaign
-gate evaluated by `UpgradePoolBuilder`; practice passes no campaign order. The
-first Fall-3 level-up is a scripted three-card presentation of the canonical
-`neutrophils` acquisition. Its three transient presentation IDs normalize back
-to that stable ID before `PlayerStats` mutates the run, and reroll is rejected
-both in presentation and handler.
+gate evaluated by `UpgradePoolBuilder`; practice passes no campaign order. Until
+the first successful completion of Fall 3, its first level-up is a scripted
+three-card presentation of the canonical `neutrophils` acquisition. Its three
+transient presentation IDs normalize back to that stable ID before
+`PlayerStats` mutates the run, and reroll is rejected both in presentation and
+handler. After that persisted victory, the first level-up uses the normal pool.
 
 Savegame version 7 and `talent_tree_revision` 4 are the current outer formats.
 The v6-to-v7 migration maps the old highest completed campaign order
