@@ -181,6 +181,9 @@ func _test_ability_values_are_sourced() -> void:
 
 func _test_discovery_locks_and_visuals() -> void:
 	var provider := LexiconViewModelProvider.create_default()
+	for enemy_id in [&"pneumococcus", &"bacterial_cluster", &"minor_focus", &"localized_boss", &"infection_focus"]:
+		var discovery: DiscoveryDefinition = ContentCatalog.discovery_definitions()[enemy_id]
+		_check(discovery.trigger == &"enemy_defeated", "%s schaltet seine Beschreibung erst beim Besiegen frei" % enemy_id)
 	for entry in LexiconCatalog.entries():
 		_check(not entry.visual_id.is_empty(), "%s besitzt eine Illustration ID" % entry.id)
 		var locked_model := provider.make_view_model(entry, [])
@@ -188,6 +191,10 @@ func _test_discovery_locks_and_visuals() -> void:
 			_check(not locked_model.locked, "%s ist standardmäßig lesbar" % entry.id)
 		else:
 			_check(locked_model.locked, "%s bleibt vor der Entdeckung verborgen" % entry.id)
+			if entry.category == LexiconEntryDefinition.CATEGORY_MONSTERS:
+				_check(locked_model.display_name == "Noch nicht besiegt" and locked_model.summary.contains("Besiege"), "%s erklärt die Freischaltung ohne seinen Namen zu verraten" % entry.id)
+			else:
+				_check(locked_model.display_name == "Noch nicht entdeckt" and locked_model.summary.contains("Entdecke"), "%s verwendet außerhalb der Monsterliste eine allgemeine Entdeckungskopie" % entry.id)
 			_check(locked_model.stat_rows.is_empty(), "%s verrät gesperrt keine Werte" % entry.id)
 			var seen_model := provider.make_view_model(entry, [entry.discovery_id])
 			_check(not seen_model.locked, "%s wird mit Discovery ID freigeschaltet" % entry.id)

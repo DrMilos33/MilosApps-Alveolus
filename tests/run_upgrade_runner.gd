@@ -1,5 +1,7 @@
 extends SceneTree
 
+const GameScript := preload("res://scripts/game.gd")
+
 var assertions := 0
 var failures := 0
 
@@ -9,6 +11,8 @@ func _init() -> void:
 	_test_treatment_preview_application()
 	_test_active_preview_application()
 	_test_upgrade_prerequisites()
+	_test_proportional_damage_contract()
+	_test_fall_three_mandatory_defense_cells()
 	_test_rarity_family_contract()
 	if failures == 0:
 		print("ALVEOLUS_RUN_UPGRADES_OK assertions=%d" % assertions)
@@ -114,7 +118,7 @@ func _test_active_preview_application() -> void:
 	stats.bind_run_build(build, precision, [burst, line])
 	var line_effect := _find(definitions, &"line_effect")
 	_assert_true(stats.apply_upgrade(line_effect), "Treatment-line damage upgrade applies")
-	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 30.0, line.tags), 33.0, "Treatment-line common upgrade resolves in the selected ability context")
+	_assert_near(build.value(RunBuildState.ABILITY_DAMAGE, 30.0, line.tags), 39.0, "Treatment-line common upgrade resolves proportionally in the selected ability context")
 
 func _test_upgrade_prerequisites() -> void:
 	var definitions := ContentCatalog.upgrade_definitions()
@@ -122,12 +126,58 @@ func _test_upgrade_prerequisites() -> void:
 	var tags: Array[StringName] = [&"treatment", &"precise", &"active", &"defense", &"line"]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7401
-	var before_unlock := UpgradePoolBuilder.choose(definitions, {}, rng, prepared, tags, 30)
-	_assert_true(_find(before_unlock, &"neutrophils") != null, "Defense cells can enter the run pool")
+	var before_unlock := UpgradePoolBuilder.choose(definitions, {}, rng, prepared, tags, 30, [], false, 2)
+	_assert_true(_find(before_unlock, &"neutrophils") == null, "Defense cells stay out of Fall 1 and Fall 2")
+	var fall_three := UpgradePoolBuilder.choose(definitions, {}, rng, prepared, tags, 30, [], false, 3)
+	_assert_true(_find(fall_three, &"neutrophils") != null, "Defense cells enter the pool from Fall 3 onward")
 	_assert_true(_find(before_unlock, &"phagocytosis") == null, "Defense-cell improvements wait for the cell unlock")
-	var after_unlock := UpgradePoolBuilder.choose(definitions, {&"neutrophils": 1}, rng, prepared, tags, 30)
+	var after_unlock := UpgradePoolBuilder.choose(definitions, {&"neutrophils": 1}, rng, prepared, tags, 30, [], false, 3)
 	_assert_true(_find(after_unlock, &"phagocytosis") != null, "Defense-cell damage becomes available after selection")
 	_assert_true(_find(after_unlock, &"defense_cell_radius") != null and _find(after_unlock, &"defense_cell_projectiles") != null, "Radius and projectile improvements become available after selection")
+
+
+func _test_proportional_damage_contract() -> void:
+	var definitions := ContentCatalog.upgrade_definitions()
+	var expected := {
+		&"precision_refinement": 3.0,
+		&"treatment_damage_magic": 5.0,
+		&"potency": 7.0,
+		&"spread_damage_common": 2.0,
+		&"spread_damage_magic": 3.0,
+		&"spread_damage_rare": 4.0,
+		&"pierce_damage_common": 3.0,
+		&"pierce_damage_magic": 5.0,
+		&"pierce_damage_rare": 6.0,
+		&"phagocytosis": 2.0,
+		&"defense_cell_damage_magic": 3.0,
+		&"defense_cell_damage_rare": 4.0,
+		&"line_effect": 9.0,
+		&"line_effect_magic": 15.0,
+		&"line_effect_rare": 21.0,
+	}
+	for id in expected:
+		var definition := _find(definitions, id)
+		_assert_true(definition != null, "Proportional damage variant exists: %s" % id)
+		if definition != null:
+			_assert_near(float(definition.modifiers[0].get("value", -1.0)), float(expected[id]), "Damage variant uses its integer proportional delta: %s" % id)
+
+
+func _test_fall_three_mandatory_defense_cells() -> void:
+	var game := GameScript.new()
+	game.selected_level = ContentCatalog.level_definitions()[3]
+	game.stats = PlayerStats.new()
+	_assert_true(game._should_offer_mandatory_defense_cells(1), "Fall 3 first level-up is reserved for defense cells")
+	var offers: Array[UpgradeDefinition] = game._mandatory_defense_cell_options()
+	_assert_equal(offers.size(), 3, "Fall 3 produces exactly three defense-cell cards")
+	var ids: Dictionary = {}
+	for offer in offers:
+		ids[offer.id] = true
+		_assert_equal(offer.title, "Abwehrzellen", "Every mandatory card presents defense cells")
+	_assert_equal(ids.size(), 3, "Mandatory cards have unique transient presentation IDs")
+	_assert_equal(game._canonical_upgrade_definition(offers[0]).id, &"neutrophils", "Choosing any mandatory card applies the stable defense-cell upgrade")
+	game.selected_level = ContentCatalog.level_definitions()[2]
+	_assert_true(not game._should_offer_mandatory_defense_cells(1), "Fall 2 never receives the mandatory defense-cell offer")
+	game.free()
 
 
 func _test_rarity_family_contract() -> void:

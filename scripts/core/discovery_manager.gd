@@ -10,7 +10,10 @@ var active: Dictionary = {}
 
 func configure(catalog: Dictionary, already_seen: Dictionary) -> void:
 	definitions = catalog
-	seen_ids = already_seen
+	# Runtime queue ownership stays local. The integration layer persists newly
+	# seen IDs through seen_changed instead of letting this helper mutate the
+	# meta-save dictionary behind its signals.
+	seen_ids = already_seen.duplicate()
 	queue.clear()
 	active.clear()
 

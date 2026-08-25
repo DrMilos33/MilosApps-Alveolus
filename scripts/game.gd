@@ -302,8 +302,8 @@ func _ready() -> void:
 	reaction_definitions = ContentCatalog.reaction_definitions()
 	test_tools_available = OS.is_debug_build()
 	if test_tools_available:
-		practice_scenarios = PracticeScenarioDefinition.catalog()
-		practice_boss_profiles = PracticeBossProfile.catalog()
+		practice_scenarios = PracticeScenarioDefinition.catalog(levels)
+		practice_boss_profiles = PracticeBossProfile.catalog(levels, enemy_definitions)
 		run_test_settings_repository = RunTestSettingsRepository.new()
 		run_test_settings = run_test_settings_repository.load_settings()
 	rng.seed = config.random_seed
@@ -975,7 +975,7 @@ func _practice_boss_facts(profile: PracticeBossProfile) -> String:
 func _on_practice_scenario_selected(id: StringName) -> void:
 	if not test_tools_available or flow_state != GameFlowState.State.PRACTICE:
 		return
-	var scenario := PracticeScenarioDefinition.get_by_id(id)
+	var scenario := _practice_scenario_by_id(id)
 	if scenario == null:
 		return
 	selected_practice_scenario_id = id
@@ -989,8 +989,8 @@ func _on_practice_scenario_selected(id: StringName) -> void:
 func _on_practice_boss_profile_selected(id: StringName) -> void:
 	if not test_tools_available or flow_state != GameFlowState.State.PRACTICE:
 		return
-	var scenario := PracticeScenarioDefinition.get_by_id(selected_practice_scenario_id)
-	var profile := PracticeBossProfile.get_by_id(id)
+	var scenario := _practice_scenario_by_id(selected_practice_scenario_id)
+	var profile := _practice_boss_profile_by_id(id)
 	if scenario == null or profile == null or not scenario.requires_boss_profile():
 		return
 	selected_practice_boss_profile_id = id
@@ -1029,6 +1029,10 @@ func _begin_practice_preparation(scenario: PracticeScenarioDefinition, profile: 
 
 func _practice_baseline_level(scenario: PracticeScenarioDefinition, profile: PracticeBossProfile) -> LevelDefinition:
 	var requested_order := scenario.get_spawn_baseline_case_order()
+	if scenario.get_source_case_id() != &"":
+		for level in levels:
+			if level.id == scenario.get_source_case_id():
+				return level
 	if profile != null:
 		for level in levels:
 			if level.id == profile.get_source_case_id() and not level.is_tutorial:
@@ -1045,11 +1049,25 @@ func _practice_seed(scenario_id: StringName, profile_id: StringName = &"") -> in
 		PracticeScenarioDefinition.OBSTACLE_TEST_ID: 2026082402,
 		PracticeScenarioDefinition.BOSS_TEST_ID: 2026082403,
 	}
-	var seed := int(seed_by_scenario.get(scenario_id, 2026082400))
+	var seed := int(seed_by_scenario.get(scenario_id, 2026082400 + absi(hash(String(scenario_id))) % 100000))
 	for index in range(practice_boss_profiles.size()):
 		if practice_boss_profiles[index].get_id() == profile_id:
 			return seed + index + 1
 	return seed
+
+
+func _practice_scenario_by_id(id: StringName) -> PracticeScenarioDefinition:
+	for scenario in practice_scenarios:
+		if scenario.get_id() == id:
+			return scenario
+	return null
+
+
+func _practice_boss_profile_by_id(id: StringName) -> PracticeBossProfile:
+	for profile in practice_boss_profiles:
+		if profile.get_id() == id:
+			return profile
+	return null
 
 
 func _practice_available_loadout_ids() -> Dictionary:
@@ -1946,29 +1964,27 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.regular_spawns_enabled = scenario.are_waves_enabled()
 	config.automatic_boss_enabled = scenario.requires_boss_profile()
 	config.run_duration_seconds = 2.0 if scenario.requires_boss_profile() else STRESS_RUN_SECONDS
+	if scenario.get_run_type() == PracticeScenarioDefinition.RunType.EVENT_TEST:
+		var source_level: LevelDefinition = null
+		for level in levels:
+			if level.id == scenario.get_source_case_id():
+				source_level = level
+				break
+		if source_level != null and source_level.case_pressure_plan != null:
+			config.case_pressure_plan = source_level.case_pressure_plan.duplicate(true) as CasePressurePlan
+			config.case_pressure_plan.target_focus_times = PackedFloat32Array([2.0])
+			config.case_pressure_plan.projectile_gate_times = PackedFloat32Array()
+			config.case_pressure_plan.max_active_targets = 1
+			config.case_pressure_targets_stationary = source_level.case_pressure_targets_stationary
+			config.case_pressure_target_health_multiplier = source_level.case_pressure_target_health_multiplier
+		return
 	if not scenario.requires_boss_profile():
 		return
 	var profile := context.practice_boss_profile as PracticeBossProfile
 	if profile == null:
 		config.automatic_boss_enabled = false
 		return
-	config.boss_enemy_id = profile.get_enemy_id()
-	config.boss_health_multiplier = profile.get_health_multiplier()
-	config.enemy_speed_multiplier = profile.get_enemy_speed_multiplier()
-	config.boss_speed_multiplier = profile.get_boss_speed_multiplier()
-	config.contact_damage_multiplier = profile.get_contact_damage_multiplier()
-	config.boss_ranged_enabled = profile.is_ranged_enabled()
-	config.boss_projectile_damage_multiplier = profile.get_projectile_damage_multiplier()
-	config.boss_wave_amplitude = profile.get_wave_amplitude()
-	config.boss_phase_minions = profile.get_phase_minions()
-	config.boss_count = profile.get_boss_count()
-	config.boss_projectile_attack_speed_multiplier = profile.get_projectile_attack_speed_multiplier()
-	config.boss_projectile_speed_multiplier = profile.get_projectile_speed_multiplier()
-	config.boss_phase_health_thresholds = profile.get_phase_health_thresholds()
-	config.boss_reinforcement_interval = profile.get_reinforcement_interval()
-	config.boss_reinforcement_count = profile.get_reinforcement_count()
-	config.boss_reinforcement_minimum_phase = profile.get_reinforcement_minimum_phase()
-	config.boss_add_defense_burst_shooting_lock_seconds = profile.get_add_defense_burst_shooting_lock_seconds()
+	profile.apply_boss_contract(config)
 
 
 func _is_practice_test() -> bool:
@@ -3301,9 +3317,6 @@ func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
 		elif intro_role in [INTRO_ROLE_FOLLOWUP, INTRO_ROLE_BOSS]:
 			discovery_manager.mark_seen(enemy.definition.discovery_id)
 		return
-	var requested := discovery_manager.request(enemy.definition.discovery_id, enemy, {"tutorial_boss": selected_level.is_tutorial and enemy.definition.is_boss})
-	if requested:
-		_try_present_next_discovery()
 
 
 func _on_enemy_stun_changed(enemy: InfectionEnemy, _stunned: bool) -> void:
@@ -3408,7 +3421,9 @@ func _on_discovery_dismissed() -> void:
 	if discovery_return_state == GameFlowState.State.RESULT:
 		return
 
-func _on_discovery_seen(_id: StringName) -> void:
+func _on_discovery_seen(id: StringName) -> void:
+	if meta != null and id != &"":
+		meta.mark_discovery_seen(id)
 	_save_meta()
 
 func _on_enemy_health_changed(current: float, maximum: float, enemy: InfectionEnemy) -> void:
@@ -3467,6 +3482,9 @@ func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss:
 	enemies.erase(enemy)
 	defeats += 1
 	case_pressure_reward_defeat_points += maxi(0, pressure_reward_points)
+	if not _is_practice_test() and not selected_level.is_tutorial and enemy.definition != null:
+		var discovery_id := enemy.definition.discovery_id
+		discovery_manager.mark_seen(discovery_id)
 	if enemy.definition != null and enemy.definition.id == &"minor_focus":
 		hidden_nest_timers.erase(enemy)
 		if build_state != null:
@@ -4623,6 +4641,16 @@ func _on_level_up_requested(level: int) -> void:
 		hud.show_upgrade_choices(current_upgrade_options, stats, false, false, true)
 		return
 	level_up_requested.emit(level)
+	if _should_offer_mandatory_defense_cells(level):
+		current_upgrade_options = _mandatory_defense_cell_options()
+		if current_upgrade_options.size() != 3:
+			push_error("Fall 3 must provide exactly three defense-cell offers")
+			state.resolve_level_up()
+			return
+		_set_flow(GameFlowState.State.LEVEL_UP)
+		ui_router.open_modal(&"level_up", null, get_viewport().gui_get_focus_owner())
+		hud.show_upgrade_choices(current_upgrade_options, stats, false, false)
+		return
 	# Jede Auswahl enthält mindestens einen Ausbau der ausgerüsteten
 	# Grundbehandlung. Aktive Fähigkeiten und Abwehrzellen bleiben zusätzliche
 	# Optionen, verdrängen aber nie den Auto-Angriff vollständig.
@@ -4643,7 +4671,7 @@ func _on_level_up_requested(level: int) -> void:
 	hud.show_upgrade_choices(current_upgrade_options, stats, reroll_available and not reroll_used, false)
 
 func _on_reroll_requested() -> void:
-	if flow_state != GameFlowState.State.LEVEL_UP or not reroll_available or reroll_used:
+	if flow_state != GameFlowState.State.LEVEL_UP or not reroll_available or reroll_used or _is_mandatory_defense_cell_offer():
 		return
 	reroll_used = true
 	var excluded: Array[StringName] = []
@@ -4653,8 +4681,9 @@ func _on_reroll_requested() -> void:
 	hud.show_upgrade_choices(current_upgrade_options, stats, false, false)
 
 func _choose_tactical_upgrades(excluded: Array[StringName], guarantee_treatment: bool, count: int = 3) -> Array[UpgradeDefinition]:
+	var campaign_case_order := -1 if _is_practice_test() or selected_level == null else selected_level.order
 	if active_loadout == null:
-		return ContentCatalog.choose_upgrades(stats.upgrade_levels, rng, count, guarantee_treatment, excluded)
+		return ContentCatalog.choose_upgrades(stats.upgrade_levels, rng, count, guarantee_treatment, excluded, campaign_case_order)
 	var component_ids := active_loadout.active_component_ids()
 	var tags: Array[StringName] = []
 	for id in component_ids:
@@ -4664,7 +4693,50 @@ func _choose_tactical_upgrades(excluded: Array[StringName], guarantee_treatment:
 		for tag in module.tags:
 			if not tags.has(tag):
 				tags.append(tag)
-	return UpgradePoolBuilder.choose(ContentCatalog.upgrade_definitions(), stats.upgrade_levels, rng, component_ids, tags, count, excluded, guarantee_treatment)
+	return UpgradePoolBuilder.choose(ContentCatalog.upgrade_definitions(), stats.upgrade_levels, rng, component_ids, tags, count, excluded, guarantee_treatment, campaign_case_order)
+
+
+func _should_offer_mandatory_defense_cells(level: int) -> bool:
+	return not _is_practice_test() \
+		and selected_level != null \
+		and selected_level.order == 3 \
+		and level == 1 \
+		and stats != null \
+		and stats.immune_level <= 0
+
+
+func _mandatory_defense_cell_options() -> Array[UpgradeDefinition]:
+	var canonical: UpgradeDefinition = null
+	for definition in ContentCatalog.upgrade_definitions():
+		if definition.id == &"neutrophils":
+			canonical = definition
+			break
+	var result: Array[UpgradeDefinition] = []
+	if canonical == null:
+		return result
+	for index in range(3):
+		var offer := canonical.duplicate(true) as UpgradeDefinition
+		offer.id = StringName("neutrophils_mandatory_offer_%d" % (index + 1))
+		result.append(offer)
+	return result
+
+
+func _is_mandatory_defense_cell_offer() -> bool:
+	if current_upgrade_options.size() != 3:
+		return false
+	for item in current_upgrade_options:
+		if item == null or not String(item.id).begins_with("neutrophils_mandatory_offer_"):
+			return false
+	return true
+
+
+func _canonical_upgrade_definition(definition: UpgradeDefinition) -> UpgradeDefinition:
+	if definition == null or not String(definition.id).begins_with("neutrophils_mandatory_offer_"):
+		return definition
+	for candidate in ContentCatalog.upgrade_definitions():
+		if candidate.id == &"neutrophils":
+			return candidate
+	return definition
 
 
 func _choose_intro_treatment_upgrades(count: int) -> Array[UpgradeDefinition]:
@@ -4682,6 +4754,7 @@ func _choose_intro_treatment_upgrades(count: int) -> Array[UpgradeDefinition]:
 func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 	if flow_state != GameFlowState.State.LEVEL_UP or state == null or not state.active:
 		return
+	definition = _canonical_upgrade_definition(definition)
 	if not stats.apply_upgrade(definition):
 		return
 	if definition.effect == &"max_stability":

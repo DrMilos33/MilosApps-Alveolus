@@ -151,27 +151,27 @@ static func discovery_definitions() -> Dictionary:
 	var localized_boss: EnemyDefinition = enemies[&"localized_boss"]
 	return {
 		&"pneumococcus": DiscoveryDefinition.create(
-			&"pneumococcus", &"enemy_materialized", "Bakterium",
+			&"pneumococcus", &"enemy_defeated", "Bakterium",
 			"Pneumokokken sind Bakterien, die unter anderem eine Lungenentzündung verursachen können.",
 			_enemy_values_text(bacterium, "Schneller Einzelerreger"), &"enemy", 100, &"erreger", &"pneumococcus", "Pneumokokke"
 		),
 		&"bacterial_cluster": DiscoveryDefinition.create(
-			&"bacterial_cluster", &"enemy_materialized", "Bakteriengruppe",
+			&"bacterial_cluster", &"enemy_defeated", "Bakteriengruppe",
 			"Der Verband steht vereinfacht für eine größere lokale bakterielle Belastung.",
 			_enemy_values_text(group, "Langsam und widerstandsfähig"), &"enemy", 90, &"erreger", &"bacterial_cluster", "Bakterienverband"
 		),
 		&"infection_focus": DiscoveryDefinition.create(
-			&"infection_focus", &"enemy_materialized", "Infektionsherd",
+			&"infection_focus", &"enemy_defeated", "Infektionsherd",
 			"Der Infektionsherd ist eine spielerische Darstellung der konzentrierten bakteriellen Belastung.",
 			"%s\nBoss · feuert fortlaufend zwei rautenförmig fliegende Projektile. Bei 70 %% und 40 %% Leben erscheinen je vier schießende Bakterien; nach der zweiten Phase folgen alle 20 Sekunden vier weitere." % _enemy_values_text(focus, "Bossgegner", false), &"enemy", 110, &"erreger", &"infection_focus", "Lokaler Infektionsherd"
 		),
 		&"localized_boss": DiscoveryDefinition.create(
-			&"localized_boss", &"enemy_materialized", "Bakterienkern",
+			&"localized_boss", &"enemy_defeated", "Bakterienkern",
 			"Der Bakterienkern steht vereinfacht für einen noch lokal begrenzten Schwerpunkt der Infektion.",
 			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und ruft alle 15 Sekunden vier schnell schießende Bakterien. Ist seine Aura leer, feuert der Kern selbst. In Fall 2 feuert er mit 1,8-facher Rate 50 %% schnellere und stärkere Doppelkurven-Projektile; ab 80 %% Leben erscheinen drei Bakterien und danach alle 15 Sekunden vier weitere. Ein Stoß unterbindet den Beschuss schießender Nichtbosse zehn Sekunden lang; der Kern selbst bleibt schussfähig." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
 		),
 		&"minor_focus": DiscoveryDefinition.create(
-			&"minor_focus", &"enemy_materialized", "Kleiner Herd",
+			&"minor_focus", &"enemy_defeated", "Kleiner Herd",
 			"Ein kleiner Herd steht vereinfacht für eine zusätzliche lokale Bakterienquelle.",
 			"%s\nBewegt sich langsam auf Doctor Milos zu. Je nach Fall feuert er Projektile und setzt nach 20 Sekunden vier Bakterien frei, falls er nicht kontrolliert wird; der Fall-2-Bakterienschwarm schießt nicht." % _enemy_values_text(minor_focus, "Mobiles Nebenziel", false), &"enemy", 95, &"erreger", &"infection_focus", "Kleiner Infektionsherd"
 		),
@@ -244,21 +244,30 @@ static func arena_visual_definitions() -> Dictionary:
 
 static func upgrade_definitions() -> Array[UpgradeDefinition]:
 	var treatments: Array[StringName] = [&"treatment_precision", &"treatment_spread", &"treatment_pierce"]
+	var precise_treatment: Array[StringName] = [&"treatment_precision"]
+	var spread_treatment: Array[StringName] = [&"treatment_spread"]
+	var piercing_treatment: Array[StringName] = [&"treatment_pierce"]
 	return [
 		# Schaden, Attack Speed und Galopp sind endlose Familien. Pro Auswahl
 		# erscheint höchstens eine Raritätsstufe derselben Familie.
-		_run_upgrade(&"precision_refinement", "Behandlungsschaden", "+3 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 3.0, "Präzisionssteigerung", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
-		_run_upgrade(&"treatment_damage_magic", "Behandlungsschaden", "+5 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 5.0, "Vertiefte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 5.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
-		_run_upgrade(&"potency", "Behandlungsschaden", "+7 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"damage", 7.0, "Gezielte Wirksamkeit", treatments, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
+		_run_upgrade(&"precision_refinement", "Behandlungsschaden", "+3 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 3.0, "Präzisionssteigerung", precise_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment", "precise"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
+		_run_upgrade(&"treatment_damage_magic", "Behandlungsschaden", "+5 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 5.0, "Vertiefte Wirksamkeit", precise_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 5.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment", "precise"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
+		_run_upgrade(&"potency", "Behandlungsschaden", "+7 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"damage", 7.0, "Gezielte Wirksamkeit", precise_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 10.0, 0, &"enemy", PackedStringArray(["treatment", "precise"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
+		_run_upgrade(&"spread_damage_common", "Behandlungsschaden", "+2 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 2.0, "Streuverstärkung", spread_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 2.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["treatment", "spread"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
+		_run_upgrade(&"spread_damage_magic", "Behandlungsschaden", "+3 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 3.0, "Vertiefte Streuwirkung", spread_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["treatment", "spread"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
+		_run_upgrade(&"spread_damage_rare", "Behandlungsschaden", "+4 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 4.0, "Maximale Streuwirkung", spread_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 4.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["treatment", "spread"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
+		_run_upgrade(&"pierce_damage_common", "Behandlungsschaden", "+3 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 3.0, "Durchdringungsstärkung", piercing_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 9.0, 0, &"enemy", PackedStringArray(["treatment", "piercing"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
+		_run_upgrade(&"pierce_damage_magic", "Behandlungsschaden", "+5 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 5.0, "Vertiefte Durchdringung", piercing_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 5.0, &"delta", "Schaden", "Schaden", 9.0, 0, &"enemy", PackedStringArray(["treatment", "piercing"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
+		_run_upgrade(&"pierce_damage_rare", "Behandlungsschaden", "+6 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 6.0, "Maximale Durchdringung", piercing_treatment, [&"treatment", &"damage"], RunBuildState.TREATMENT_DAMAGE, &"add", 6.0, &"delta", "Schaden", "Schaden", 9.0, 0, &"enemy", PackedStringArray(["treatment", "piercing"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
 		_run_upgrade(&"rhythm", "Attack Speed", "+3 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.03, "Verlässlicher Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.03, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
 		_run_upgrade(&"rhythm_magic", "Attack Speed", "+5 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.05, "Beschleunigter Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.05, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
 		_run_upgrade(&"rhythm_rare", "Attack Speed", "+7 % Attack Speed.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 0.07, "Hochfrequenter Therapierhythmus", treatments, [&"treatment", &"rhythm"], RunBuildState.TREATMENT_INTERVAL, &"attack_speed_add", 0.07, &"tempo", "Attack Speed", "Attack Speed", 0.965, 0, &"", PackedStringArray(["treatment"])).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
 		_run_upgrade(&"parallel_sites", "Zusätzliches Projektil", "+1 Projektil.", UpgradeDefinition.Path.ANTIBIOTIC, 5, &"targets", 1.0, "Parallele Wirkorte", [&"treatment_precision"], [&"precise", &"projectiles"], RunBuildState.TREATMENT_PROJECTILES, &"add", 1.0, &"count", "Projektil", "Projektile", 1.0, 0, &"enemy", PackedStringArray(["precise"])).configure_offer(&"projectiles", UpgradeDefinition.Rarity.RARE, false, false, 5.0, 0.60),
 
-		UpgradeDefinition.create(&"neutrophils", "Abwehrzellen", "Zwei Abwehrzellen umkreisen Doctor Milos.", UpgradeDefinition.Path.IMMUNE, 1, &"immune_level", 1.0, "Neutrophile Rekrutierung").configure_offer(&"unlock", UpgradeDefinition.Rarity.RARE, false, false),
-		_run_upgrade(&"phagocytosis", "Abwehrzellenschaden", "+3 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"immune_damage", 3.0, "Effiziente Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
-		_run_upgrade(&"defense_cell_damage_magic", "Abwehrzellenschaden", "+5 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"immune_damage", 5.0, "Vertiefte Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 5.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
-		_run_upgrade(&"defense_cell_damage_rare", "Abwehrzellenschaden", "+7 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"immune_damage", 7.0, "Maximale Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
+		UpgradeDefinition.create(&"neutrophils", "Abwehrzellen", "Zwei Abwehrzellen umkreisen Doctor Milos.", UpgradeDefinition.Path.IMMUNE, 1, &"immune_level", 1.0, "Neutrophile Rekrutierung").configure_offer(&"unlock", UpgradeDefinition.Rarity.RARE, false, false).configure_case_availability(3),
+		_run_upgrade(&"phagocytosis", "Abwehrzellenschaden", "+2 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"immune_damage", 2.0, "Effiziente Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 2.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
+		_run_upgrade(&"defense_cell_damage_magic", "Abwehrzellenschaden", "+3 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"immune_damage", 3.0, "Vertiefte Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
+		_run_upgrade(&"defense_cell_damage_rare", "Abwehrzellenschaden", "+4 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"immune_damage", 4.0, "Maximale Phagozytose", [], [&"defense_cell", &"damage"], RunBuildState.DEFENSE_CELL_DAMAGE, &"add", 4.0, &"delta", "Schaden", "Schaden", 5.0, 0, &"enemy", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
 		_run_upgrade(&"defense_cell_speed", "Attack Speed", "+3 % Attack Speed.", UpgradeDefinition.Path.IMMUNE, 0, &"run_modifier", 0.03, "Schnelle Abwehrreaktion", [], [&"defense_cell", &"rhythm"], RunBuildState.DEFENSE_CELL_HIT_INTERVAL, &"attack_speed_add", 0.03, &"tempo", "Attack Speed", "Attack Speed", 0.2, 0, &"", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
 		_run_upgrade(&"defense_cell_speed_magic", "Attack Speed", "+5 % Attack Speed.", UpgradeDefinition.Path.IMMUNE, 0, &"run_modifier", 0.05, "Beschleunigte Abwehrreaktion", [], [&"defense_cell", &"rhythm"], RunBuildState.DEFENSE_CELL_HIT_INTERVAL, &"attack_speed_add", 0.05, &"tempo", "Attack Speed", "Attack Speed", 0.2, 0, &"", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
 		_run_upgrade(&"defense_cell_speed_rare", "Attack Speed", "+7 % Attack Speed.", UpgradeDefinition.Path.IMMUNE, 0, &"run_modifier", 0.07, "Hochfrequente Abwehrreaktion", [], [&"defense_cell", &"rhythm"], RunBuildState.DEFENSE_CELL_HIT_INTERVAL, &"attack_speed_add", 0.07, &"tempo", "Attack Speed", "Attack Speed", 0.2, 0, &"", PackedStringArray(["defense_cell"])).require_upgrades([&"neutrophils"]).configure_offer(&"attack_speed", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
@@ -271,9 +280,9 @@ static func upgrade_definitions() -> Array[UpgradeDefinition]:
 
 		# Stoß bleibt bis zum späteren Talent vollständig schadensfrei.
 		_run_upgrade(&"burst_radius", "Breiter Stoß", "+1 Radius.", UpgradeDefinition.Path.IMMUNE, 2, &"run_modifier", 30.0, "Ausgedehnte Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"area"], RunBuildState.ABILITY_RADIUS, &"add", 30.0, &"distance_stage", "Radius", "Radius", 150.0, 0, &"ability", PackedStringArray(["active", "defense", "area"])).configure_offer(&"radius", UpgradeDefinition.Rarity.COMMON, false, false),
-		_run_upgrade(&"line_effect", "Lazerschaden", "+3 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 3.0, "Linienverstärkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 3.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
-		_run_upgrade(&"line_effect_magic", "Lazerschaden", "+5 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 5.0, "Vertiefte Linienwirkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 5.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
-		_run_upgrade(&"line_effect_rare", "Lazerschaden", "+7 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 7.0, "Maximale Linienwirkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 7.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
+		_run_upgrade(&"line_effect", "Lazerschaden", "+9 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 9.0, "Linienverstärkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 9.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
+		_run_upgrade(&"line_effect_magic", "Lazerschaden", "+15 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 15.0, "Vertiefte Linienwirkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 15.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
+		_run_upgrade(&"line_effect_rare", "Lazerschaden", "+21 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 21.0, "Maximale Linienwirkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 21.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
 		_run_upgrade(&"line_width", "Breiterer Lazer", "+16 Breite.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"run_modifier", 16.0, "Erweiterte Linie", [&"ability_treatment_line"], [&"active", &"line", &"area"], RunBuildState.ABILITY_WIDTH, &"add", 16.0, &"delta", "Breite", "Breite", 38.0, 0, &"ability", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"width", UpgradeDefinition.Rarity.MAGIC, false, false),
 		_run_upgrade(&"mobility", "Galopp", "+3 Galopp.", UpgradeDefinition.Path.SUPPORT, 0, &"run_modifier", 3.0, "Mobilitätsreserve", [], [&"movement"], RunBuildState.MOVEMENT_SPEED, &"add", 3.0, &"delta", "Galopp", "Galopp", PlayerStats.BASE_MOVEMENT_SPEED, 0, &"avatar", PackedStringArray()).configure_offer(&"movement", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
 		_run_upgrade(&"mobility_magic", "Galopp", "+5 Galopp.", UpgradeDefinition.Path.SUPPORT, 0, &"run_modifier", 5.0, "Vertiefte Mobilitätsreserve", [], [&"movement"], RunBuildState.MOVEMENT_SPEED, &"add", 5.0, &"delta", "Galopp", "Galopp", PlayerStats.BASE_MOVEMENT_SPEED, 0, &"avatar", PackedStringArray()).configure_offer(&"movement", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
@@ -373,7 +382,8 @@ static func choose_upgrades(
 	rng: RandomNumberGenerator,
 	count: int = 3,
 	force_all_paths: bool = false,
-	excluded_ids: Array[StringName] = []
+	excluded_ids: Array[StringName] = [],
+	campaign_case_order: int = -1
 ) -> Array[UpgradeDefinition]:
 	var definitions := upgrade_definitions()
 	var component_ids: Array[StringName] = [
@@ -391,7 +401,7 @@ static func choose_upgrades(
 			for definition in definitions:
 				if definition.path == path:
 					matching.append(definition)
-			var path_pick := UpgradePoolBuilder.choose(matching, levels, rng, component_ids, tags, 1, excluded_ids)
+			var path_pick := UpgradePoolBuilder.choose(matching, levels, rng, component_ids, tags, 1, excluded_ids, false, campaign_case_order)
 			if not path_pick.is_empty():
 				selected.append(path_pick[0])
 	var combined_excluded := excluded_ids.duplicate()
@@ -405,7 +415,9 @@ static func choose_upgrades(
 			component_ids,
 			tags,
 			count - selected.size(),
-			combined_excluded
+			combined_excluded,
+			false,
+			campaign_case_order
 		)
 		selected.append_array(remaining)
 	return selected

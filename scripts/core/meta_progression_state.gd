@@ -19,6 +19,11 @@ const PASSIVE_INTERVAL_SECONDS := 240.0 # V6 API compatibility; offline income i
 const PASSIVE_CAP_SECONDS := 28800.0
 const UNLIMITED_TEST_POINT_POOL := 1_000_000_000
 const TALENT_TREE_REVISION := 4
+const SHARED_CAMPAIGN_LOADOUT_ID := &"campaign_shared"
+const CAMPAIGN_LEVEL_IDS: Array[StringName] = [
+	&"early_localized_focus", &"localized_focus", &"advancing_infection",
+	&"spreading_infection", &"critical_infection", &"severe_pneumonia",
+]
 
 var research_points: int = 0
 var passive_seconds: float = 0.0
@@ -419,15 +424,19 @@ func has_completed_mastery(id: StringName) -> bool:
 	return bool(completed_mastery_ids.get(id, false))
 
 func get_prepared_loadout(level_id: StringName) -> PreparedLoadout:
-	if not prepared_loadouts.has(level_id) or not (prepared_loadouts[level_id] is PreparedLoadout):
-		prepared_loadouts[level_id] = _default_loadout_from_research()
-	var loadout: PreparedLoadout = prepared_loadouts[level_id]
+	var storage_id := SHARED_CAMPAIGN_LOADOUT_ID if CAMPAIGN_LEVEL_IDS.has(level_id) else level_id
+	if not prepared_loadouts.has(storage_id) or not (prepared_loadouts[storage_id] is PreparedLoadout):
+		prepared_loadouts[storage_id] = _default_loadout_from_research()
+	var loadout: PreparedLoadout = prepared_loadouts[storage_id]
 	return loadout.duplicate_loadout()
 
 func set_prepared_loadout(level_id: StringName, loadout: PreparedLoadout) -> bool:
 	if level_id == &"" or loadout == null:
 		return false
-	prepared_loadouts[level_id] = loadout.duplicate_loadout()
+	if CAMPAIGN_LEVEL_IDS.has(level_id):
+		prepared_loadouts[SHARED_CAMPAIGN_LOADOUT_ID] = loadout.duplicate_loadout()
+	else:
+		prepared_loadouts[level_id] = loadout.duplicate_loadout()
 	loadouts_changed.emit(level_id)
 	return true
 
@@ -604,9 +613,26 @@ func set_ui_settings(settings: UISettingsState) -> void:
 	settings_changed.emit()
 
 func _ensure_default_loadouts() -> void:
-	for level_id in [&"early_localized_focus", &"localized_focus", &"advancing_infection", &"spreading_infection", &"critical_infection", &"severe_pneumonia"]:
+	var shared: PreparedLoadout = prepared_loadouts.get(SHARED_CAMPAIGN_LOADOUT_ID) as PreparedLoadout
+	if shared == null:
+		for order in range(mini(highest_unlocked_level, CAMPAIGN_LEVEL_IDS.size()), 0, -1):
+			var candidate_id := CAMPAIGN_LEVEL_IDS[order - 1]
+			var candidate := prepared_loadouts.get(candidate_id) as PreparedLoadout
+			if candidate != null:
+				shared = candidate.duplicate_loadout()
+				break
+	if shared == null:
+		for level_id in CAMPAIGN_LEVEL_IDS:
+			var candidate := prepared_loadouts.get(level_id) as PreparedLoadout
+			if candidate != null:
+				shared = candidate.duplicate_loadout()
+				break
+	if shared == null:
+		shared = _default_loadout_from_research()
+	prepared_loadouts[SHARED_CAMPAIGN_LOADOUT_ID] = shared.duplicate_loadout()
+	for level_id in CAMPAIGN_LEVEL_IDS:
 		if not prepared_loadouts.has(level_id):
-			prepared_loadouts[level_id] = _default_loadout_from_research()
+			prepared_loadouts[level_id] = shared.duplicate_loadout()
 
 
 static func _migrated_unlocked_order(stored_order: int, source_version: int) -> int:

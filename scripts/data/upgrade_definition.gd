@@ -40,6 +40,7 @@ enum Rarity {
 @export var show_cap: bool = true
 @export var rarity_weight: float = 1.0
 @export var repeat_weight_decay: float = 1.0
+@export var minimum_case_order: int = 0
 
 static func create(
 	definition_id: StringName,
@@ -87,6 +88,11 @@ func configure_offer(
 
 func require_upgrades(ids: Array[StringName]) -> UpgradeDefinition:
 	required_upgrade_ids = ids.duplicate()
+	return self
+
+
+func configure_case_availability(case_order: int) -> UpgradeDefinition:
+	minimum_case_order = maxi(0, case_order)
 	return self
 
 func configure_modifiers(values: Array[Dictionary]) -> UpgradeDefinition:

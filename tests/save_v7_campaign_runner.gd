@@ -8,6 +8,7 @@ func _init() -> void:
 	_test_catalog_contract()
 	_test_v6_unlock_mapping()
 	_test_v7_roundtrip_and_retired_income()
+	_test_divergent_legacy_loadouts_are_preserved()
 	if failures == 0:
 		print("SAVE_V7_CAMPAIGN_OK assertions=%d" % assertions)
 		quit(0)
@@ -80,6 +81,12 @@ func _test_v7_roundtrip_and_retired_income() -> void:
 	source.research_ranks[&"movement_training"] = 2
 	source.level_case_seeds[&"critical_infection"] = 9191
 	source.get_level_record(&"critical_infection").register_result(true, 170.0, 8, 88)
+	var shared_plan := PreparedLoadout.create(
+		&"treatment_precision",
+		[&"ability_defense_burst", &"ability_treatment_line"]
+	)
+	_true(source.set_prepared_loadout(&"early_localized_focus", shared_plan), "Fall 1 speichert den gemeinsamen Kampagnenplan")
+	_equal(source.get_prepared_loadout(&"severe_pneumonia").to_dict(), shared_plan.to_dict(), "Der Einsatzplan wird sofort über alle Fälle hinweg gemerkt")
 	var encoded := source.to_dict()
 	_equal(int(encoded.get("version", 0)), 7, "Neue Spielstände schreiben Save v7")
 	_true(not encoded.has("passive_seconds") and not encoded.has("active_job_id"), "V7 serialisiert keine Offline- oder Klinikwerte")
@@ -88,8 +95,36 @@ func _test_v7_roundtrip_and_retired_income() -> void:
 	_equal(restored.highest_unlocked_level, 5, "V7-Reihenfolge bleibt unverändert")
 	_equal(restored.get_or_create_case_seed(&"critical_infection"), 9191, "Neue Fallseeds überleben den Roundtrip")
 	_equal(restored.get_level_record(&"critical_infection").best_defeats, 88, "Neue Fallrekorde überleben den Roundtrip")
+	_equal(restored.get_prepared_loadout(&"advancing_infection").to_dict(), shared_plan.to_dict(), "Der gemeinsame Einsatzplan überlebt den Save-v7-Roundtrip")
 	restored.accrue_time(999999)
 	_equal(restored.claimable_research(), 0, "Zeitablauf erzeugt auch nach Roundtrip keine Forschung")
+
+
+func _test_divergent_legacy_loadouts_are_preserved() -> void:
+	var state := MetaProgressionState.new(func() -> int: return 600000)
+	state.reset_defaults(600000)
+	var early_plan := PreparedLoadout.create(&"treatment_spread", [&"ability_defense_burst"])
+	var later_plan := PreparedLoadout.create(&"treatment_pierce", [&"ability_treatment_line"])
+	var legacy := state.to_dict()
+	legacy["highest_unlocked_level"] = 2
+	legacy["prepared_loadouts"] = {
+		"early_localized_focus": LoadoutSlotSaveAdapter.serialize_loadout(early_plan),
+		"localized_focus": LoadoutSlotSaveAdapter.serialize_loadout(later_plan),
+	}
+	var restored := MetaProgressionState.new(func() -> int: return 600001)
+	_true(restored.load_dict(legacy), "Divergenter Save-v7-Einsatzplan lädt")
+	_equal(restored.get_prepared_loadout(&"severe_pneumonia").to_dict(), later_plan.to_dict(), "Der höchste freigeschaltete historische Plan wird als gemeinsamer Plan übernommen")
+	var encoded_loadouts := restored.to_dict().get("prepared_loadouts", {}) as Dictionary
+	_equal(
+		LoadoutSlotSaveAdapter.deserialize_loadout(encoded_loadouts.get("early_localized_focus", {})).to_dict(),
+		early_plan.to_dict(),
+		"Der abweichende frühe Legacy-Plan bleibt beim Laden und Speichern unangetastet"
+	)
+	_equal(
+		LoadoutSlotSaveAdapter.deserialize_loadout(encoded_loadouts.get("localized_focus", {})).to_dict(),
+		later_plan.to_dict(),
+		"Der abweichende spätere Legacy-Plan bleibt beim Laden und Speichern unangetastet"
+	)
 
 
 func _level_snapshot(level: LevelDefinition) -> Dictionary:

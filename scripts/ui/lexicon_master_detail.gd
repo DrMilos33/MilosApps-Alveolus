@@ -28,6 +28,9 @@ var compact_detail_visible: bool = false
 var entry_scroll: ScrollContainer
 var entry_safe_margin: MarginContainer
 var entry_list: VBoxContainer
+var entry_filter: LineEdit
+var entry_count_label: Label
+var entry_empty_label: Label
 var detail_scroll: ScrollContainer
 var detail_safe_margin: MarginContainer
 var detail_content: VBoxContainer
@@ -84,6 +87,8 @@ func select_category(category: StringName, _focus_first_entry: bool = false) -> 
 		return
 	selected_category = category
 	selected_entry_id = &""
+	if entry_filter != null and not entry_filter.text.is_empty():
+		entry_filter.set_text("")
 	_update_category_states()
 	_rebuild_entry_list()
 	# Category changes only reveal the available entries. Selection remains an
@@ -253,12 +258,33 @@ func _build_layout() -> void:
 	list_margin.add_theme_constant_override("margin_bottom", 12)
 	list_panel.add_child(list_margin)
 
+	var list_column := VBoxContainer.new()
+	list_column.name = "ListColumn"
+	list_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_column.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	list_margin.add_child(list_column)
+
+	entry_count_label = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
+	entry_count_label.name = "EntryCount"
+	list_column.add_child(entry_count_label)
+
+	entry_filter = LineEdit.new()
+	entry_filter.name = "EntryFilter"
+	entry_filter.placeholder_text = "Einträge filtern …"
+	entry_filter.clear_button_enabled = true
+	entry_filter.custom_minimum_size.y = 42.0
+	entry_filter.set_meta(&"alveolus_accessible_name", "Lexikoneinträge filtern")
+	entry_filter.text_changed.connect(_on_entry_filter_changed)
+	list_column.add_child(entry_filter)
+
 	entry_scroll = ScrollContainer.new()
 	entry_scroll.name = "EntryScroll"
 	entry_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	entry_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	entry_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	entry_scroll.follow_focus = true
-	list_margin.add_child(entry_scroll)
+	list_column.add_child(entry_scroll)
 
 	entry_safe_margin = MarginContainer.new()
 	entry_safe_margin.name = "ScrollbarSafeInset"
@@ -408,7 +434,7 @@ func _rebuild_entry_list() -> void:
 	_clear_children(entry_list)
 	entry_buttons.clear()
 	entry_view_models.clear()
-	_context_detail_sources.clear()
+	_clear_entry_context_detail_sources()
 	var accent := _category_accent(selected_category)
 	for definition in _visible_definitions():
 		var view_model := provider.make_view_model(definition, seen_discovery_ids)
@@ -419,13 +445,11 @@ func _rebuild_entry_list() -> void:
 		)
 		button.name = "Entry_%s" % definition.id
 		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(0.0, 72.0)
+		button.custom_minimum_size = Vector2(0.0, 82.0)
 		var exposes_context_detail := view_model.category != LexiconEntryDefinition.CATEGORY_TERMS
 		button.tooltip_text = _hover_tooltip_text(view_model) if exposes_context_detail else ""
 		button.set_meta(&"lexicon_entry_id", definition.id)
 		button.pressed.connect(select_entry.bind(definition.id, true))
-		button.mouse_entered.connect(_preview_entry.bind(definition.id))
-		button.focus_entered.connect(_preview_entry.bind(definition.id))
 		entry_list.add_child(button)
 		entry_buttons[definition.id] = button
 
@@ -451,12 +475,25 @@ func _rebuild_entry_list() -> void:
 		illustration.configure(view_model.visual_id, accent)
 		illustration.set_locked(view_model.locked)
 		row.add_child(illustration)
+		var row_copy := VBoxContainer.new()
+		row_copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row_copy.alignment = BoxContainer.ALIGNMENT_CENTER
+		row_copy.add_theme_constant_override("separation", 2)
+		row.add_child(row_copy)
 		var title := AlveolusUIComponents.label(view_model.display_name, AlveolusVisualTheme.TYPE_VALUE_LABEL)
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(title)
+		row_copy.add_child(title)
+		var state_text := "Besiegen zum Freischalten" if view_model.locked else "Freigeschaltet"
+		if view_model.locked and view_model.category != LexiconEntryDefinition.CATEGORY_MONSTERS:
+			state_text = "Entdecken zum Freischalten"
+		var state_label := AlveolusUIComponents.label(state_text, AlveolusVisualTheme.TYPE_MUTED_LABEL)
+		state_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if not view_model.locked:
+			state_label.add_theme_color_override("font_color", accent)
+		row_copy.add_child(state_label)
 
 		if exposes_context_detail:
 			var content_provider := context_detail_payload.bind(definition.id)
@@ -470,15 +507,20 @@ func _rebuild_entry_list() -> void:
 				"kind": &"entry",
 			}
 			context_detail_source_available.emit(button, content_provider, false)
-
-func _preview_entry(entry_id: StringName) -> void:
-	# Hover and navigation focus preview the same detail without committing a
-	# compact list-to-detail transition. Click/accept remains the explicit action.
-	select_entry(entry_id, false)
+		if definition.id == selected_entry_id:
+			button.set_pressed_no_signal(true)
+			button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD
+	_update_entry_count()
+	entry_empty_label = AlveolusUIComponents.label("Keine passenden Einträge.", AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	entry_empty_label.name = "NoFilteredEntries"
+	entry_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	entry_empty_label.custom_minimum_size.y = 72.0
+	entry_empty_label.visible = entry_buttons.is_empty()
+	entry_list.add_child(entry_empty_label)
 
 func _show_empty_detail() -> void:
 	selected_entry_id = &""
-	detail_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	for button_value in entry_buttons.values():
 		var button := button_value as Button
 		if button == null:
@@ -504,6 +546,9 @@ func _show_empty_detail() -> void:
 	_clear_related_term_chips()
 	detail_related_title.hide()
 	detail_related_chips.hide()
+	empty_detail_label.text = "Wähle links einen Eintrag aus.\nDie Auswahl bleibt bestehen, bis du einen anderen Eintrag öffnest."
+	empty_detail_label.custom_minimum_size.y = 120.0
+	empty_detail_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	empty_detail_label.show()
 	detail_scroll.scroll_vertical = 0
 
@@ -624,6 +669,17 @@ func _clear_related_term_chips() -> void:
 		var source_id := StringName(source_id_value)
 		var registration := _context_detail_sources[source_id] as Dictionary
 		if StringName(registration.get("kind", &"")) == &"related_term":
+			stale_source_ids.append(source_id)
+	for source_id in stale_source_ids:
+		_context_detail_sources.erase(source_id)
+
+
+func _clear_entry_context_detail_sources() -> void:
+	var stale_source_ids: Array[StringName] = []
+	for source_id_value in _context_detail_sources:
+		var source_id := StringName(source_id_value)
+		var registration := _context_detail_sources[source_id] as Dictionary
+		if StringName(registration.get("kind", &"")) == &"entry":
 			stale_source_ids.append(source_id)
 	for source_id in stale_source_ids:
 		_context_detail_sources.erase(source_id)
@@ -763,15 +819,22 @@ func _configure_focus_neighbors() -> void:
 		var next := category_buttons.get(LexiconCatalog.CATEGORY_ORDER[(index + 1) % category_count]) as Button
 		button.focus_neighbor_left = button.get_path_to(previous)
 		button.focus_neighbor_right = button.get_path_to(next)
+		if entry_filter != null:
+			button.focus_neighbor_bottom = button.get_path_to(entry_filter)
+
+	if entry_filter != null:
+		var selected_category_button := category_buttons.get(selected_category) as Button
+		if selected_category_button != null:
+			entry_filter.focus_neighbor_top = entry_filter.get_path_to(selected_category_button)
 		if not visible.is_empty():
 			var first := entry_buttons.get(visible[0].id) as Button
-			button.focus_neighbor_bottom = button.get_path_to(first)
+			entry_filter.focus_neighbor_bottom = entry_filter.get_path_to(first)
 
 	for index in range(visible.size()):
 		var entry_button := entry_buttons.get(visible[index].id) as Button
 		var previous_button := entry_buttons.get(visible[(index - 1 + visible.size()) % visible.size()].id) as Button
 		var next_button := entry_buttons.get(visible[(index + 1) % visible.size()].id) as Button
-		entry_button.focus_neighbor_top = entry_button.get_path_to(previous_button) if index > 0 else entry_button.get_path_to(category_buttons[selected_category])
+		entry_button.focus_neighbor_top = entry_button.get_path_to(previous_button) if index > 0 else entry_button.get_path_to(entry_filter)
 		entry_button.focus_neighbor_bottom = entry_button.get_path_to(next_button)
 		entry_button.focus_neighbor_left = entry_button.get_path_to(category_buttons[selected_category])
 
@@ -788,10 +851,39 @@ func _update_category_states() -> void:
 
 func _visible_definitions() -> Array[LexiconEntryDefinition]:
 	var result: Array[LexiconEntryDefinition] = []
+	var query := entry_filter.text.strip_edges().to_lower() if entry_filter != null else ""
 	for definition in definitions:
-		if definition.category == selected_category:
-			result.append(definition)
+		if definition.category != selected_category:
+			continue
+		if not query.is_empty():
+			var view_model := provider.make_view_model(definition, seen_discovery_ids)
+			var searchable := "%s %s" % [view_model.display_name, view_model.summary]
+			if not searchable.to_lower().contains(query):
+				continue
+		result.append(definition)
 	return result
+
+
+func _on_entry_filter_changed(_text: String) -> void:
+	_rebuild_entry_list()
+	_configure_focus_neighbors()
+
+
+func _update_entry_count() -> void:
+	if entry_count_label == null:
+		return
+	var total := 0
+	var unlocked := 0
+	for definition in definitions:
+		if definition.category != selected_category:
+			continue
+		total += 1
+		if not provider.make_view_model(definition, seen_discovery_ids).locked:
+			unlocked += 1
+	var shown := entry_buttons.size()
+	entry_count_label.text = "%d von %d freigeschaltet" % [unlocked, total]
+	if entry_filter != null and not entry_filter.text.strip_edges().is_empty():
+		entry_count_label.text += " · %d Treffer" % shown
 
 func _category_accent(category: StringName) -> Color:
 	match category:

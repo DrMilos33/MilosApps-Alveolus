@@ -17,7 +17,8 @@ static func choose(
 	prepared_tags: Array[StringName],
 	count: int = 3,
 	excluded_ids: Array[StringName] = [],
-	guarantee_treatment: bool = false
+	guarantee_treatment: bool = false,
+	campaign_case_order: int = -1
 ) -> Array[UpgradeDefinition]:
 	var prepared_treatment_id := _prepared_treatment_id(prepared_component_ids)
 	var family_counts := _resolved_family_counts(definitions, levels, prepared_treatment_id)
@@ -28,6 +29,8 @@ static func choose(
 
 	var candidates: Array[UpgradeDefinition] = []
 	for definition in definitions:
+		if campaign_case_order >= 0 and definition.minimum_case_order > campaign_case_order:
+			continue
 		var family_key := definition.resolved_family_key(prepared_treatment_id)
 		var family_count := int(family_counts.get(family_key, 0))
 		var variant_count := int(levels.get(definition.id, 0))
@@ -41,7 +44,7 @@ static func choose(
 			continue
 		candidates.append(definition)
 	if _unique_family_count(candidates, prepared_treatment_id) < count and not excluded_ids.is_empty():
-		return choose(definitions, levels, rng, prepared_component_ids, prepared_tags, count, [], guarantee_treatment)
+		return choose(definitions, levels, rng, prepared_component_ids, prepared_tags, count, [], guarantee_treatment, campaign_case_order)
 
 	var selected: Array[UpgradeDefinition] = []
 	if guarantee_treatment and prepared_treatment_id != &"":

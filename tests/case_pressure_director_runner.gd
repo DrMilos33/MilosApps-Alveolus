@@ -27,8 +27,8 @@ func _test_default_schedules() -> void:
 	var fall_one := CasePressurePlanScript.default_for_case_order(1)
 	_equal(
 		fall_one.target_focus_times,
-		PackedFloat32Array([60.0, 120.0]),
-		"Fall 1 plant kleine Herde exakt bei 60/120 Sekunden"
+		PackedFloat32Array([60.0, 120.0, 180.0]),
+		"Fall 1 plant ein zusätzliches Eventmonster bei 180 Sekunden"
 	)
 	_equal(fall_one.projectile_gate_times, PackedFloat32Array(), "Fall 1 plant keine Projektiltore")
 	_equal(fall_one.max_active_targets, 1, "Fall 1 erlaubt höchstens einen aktiven Zielherd")

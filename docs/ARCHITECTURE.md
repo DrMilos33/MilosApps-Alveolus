@@ -205,7 +205,12 @@ stability and a separate aggregate family count for UI and weighting. A
 repeatable definition ignores `max_level`; finite utility upgrades keep their
 cap in data while `show_cap == false` prevents that implementation limit from
 leaking into the card. Reroll exclusion expands from a picked ID to its whole
-resolved family.
+resolved family. `UpgradeDefinition.minimum_case_order` is an authored campaign
+gate evaluated by `UpgradePoolBuilder`; practice passes no campaign order. The
+first Fall-3 level-up is a scripted three-card presentation of the canonical
+`neutrophils` acquisition. Its three transient presentation IDs normalize back
+to that stable ID before `PlayerStats` mutates the run, and reroll is rejected
+both in presentation and handler.
 
 Savegame version 7 and `talent_tree_revision` 4 are the current outer formats.
 The v6-to-v7 migration maps the old highest completed campaign order
@@ -218,7 +223,12 @@ Piercing Persistence. `piercing_return` is absent from the active catalog and
 its ID remains retired. Loading revision 3 discards/refunds that whole
 selection atomically while preserving mastery, research and earned points. The
 inner loadout adapter can retain its older schema version independently; it is
-not the savegame version.
+not the savegame version. Campaign cases resolve `prepared_loadouts` through the
+additive `campaign_shared` key. Intro and practice never use that shared key.
+A Save-v7 file without the key deterministically adopts the highest unlocked
+existing campaign plan, while every divergent historical case-key alias remains
+semantically preserved. The migration does not change the outer save
+version.
 
 The temporary unlimited progression mode is runtime configuration rather than
 save data and must be set on `MetaProgressionState` before deserialization. In
@@ -489,6 +499,12 @@ default of `true`. When disabled, `Game` drains requested discoveries through
 `DiscoveryManager.complete_active()` without entering `DISCOVERY_PAUSE`; IDs
 remain unlocked and cannot accumulate into a later modal backlog. It does not
 disable guided intro prompts or campus guidance.
+Enemy discovery definitions use `enemy_defeated`. Materialization only controls
+render/detail preparation; the first non-practice defeat marks the enemy
+discovery through `MetaProgressionState` before recycling. A boss defeat writes the unlock before the
+result transition, so its lexicon description depends on defeating that enemy,
+not on a separate case-completion gate. Intro retains scripted learning marks
+and practice remains discovery-neutral.
 `UISettingsState.show_character_health_bar` is another additive, default-false
 setting. `RunState.stability_changed` publishes its cached current/maximum values
 to `TherapyAvatar`, which draws a small numberless world bar only when enabled;
@@ -517,6 +533,13 @@ mastery, rewards, records and every meta-save mutation. The separate
 `user://alveolus_test_tools.cfg` owns immunity, outgoing-damage and movement
 test values; it is never serialized through `UISettingsState` or
 `MetaProgressionState` and its UI is absent outside debug builds.
+The three base scenarios are augmented at runtime with one event scenario per
+non-tutorial `LevelDefinition` carrying a target-pressure plan. Each detached
+scenario reduces that current plan to one target at two seconds and disables
+waves, gates, bosses and rewards. Boss choices are likewise derived from every
+automatic campaign boss and copy the complete `RunConfig` boss contract,
+including aura, projectile conditions, phase thresholds and add cadence. No
+practice-owned balance table is maintained.
 
 ## Case lifecycle and variation
 

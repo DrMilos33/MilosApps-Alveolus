@@ -111,7 +111,7 @@ func _test_stat_sections_and_headings() -> void:
 	var live_sections := stats.stat_sections(82.0, 100.0, 7.0, 12.0)
 	_equal(_section_value(live_sections, &"treatment:treatment_precision", &"damage"), "25", "Pausenwerte zeigen den akkumulierten Common-, Magic- und Rare-Impulsschaden")
 	_equal(_section_value(live_sections, &"ability:0:ability_defense_burst", &"damage"), "0", "Stoß bleibt in den aktuellen Charakterwerten ausdrücklich schadensfrei")
-	_equal(_section_value(live_sections, &"ability:1:ability_treatment_line", &"damage"), "33", "Pausenwerte zeigen den aktuellen Lazerwert nach Run-Ausbau")
+	_equal(_section_value(live_sections, &"ability:1:ability_treatment_line", &"damage"), "39", "Pausenwerte zeigen den proportionalen aktuellen Lazerwert nach Run-Ausbau")
 	var potency := _upgrade(&"potency")
 	_equal(potency.heading_component_id(treatment.id), treatment.id, "Allgemeines Behandlungsupgrade folgt dynamisch der vorbereiteten Behandlung")
 	_equal(potency.resolved_component_name(treatment), "Impuls", "UI erhält nur den aufgelösten Komponentennamen")

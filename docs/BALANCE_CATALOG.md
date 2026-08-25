@@ -22,7 +22,7 @@ im Kampf ist dagegen vollständig enthalten.
 - Es gibt derzeit **keine Passivmodule** im aktiven Produktkatalog.
 - Dauerhafte Progression besteht aus zehn globalen Forschungen und vier
   Rangtalenten in einem Behandlungsbaum.
-- Ein Run enthält 26 Ausbaudefinitionen; endlose Familien besitzen kein Rangmaximum.
+- Ein Run enthält 32 Ausbaudefinitionen; endlose Familien besitzen kein Rangmaximum.
 - Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 300 Sekunden.
 - Die harte Hauptarena misst **8.640 × 4.860 Weltpunkte**. Spawnraten und
   Gegnerabstände bleiben von dieser dichteren Spielfläche unberührt.
@@ -110,7 +110,9 @@ aktive Fähigkeit kostet 2; ein vollständiger produktiver Plan benötigt daher
 6. Da keine Passivmodule verfügbar sind, ist die verbleibende Kapazität zurzeit
 kein spielerischer Entscheidungswert.
 
-Der Standardplan ist zunächst nur Impuls. Alte
+Der Standardplan ist zunächst nur Impuls. Alle sechs Kampagnenfälle verwenden
+denselben gemerkten Plan; eine Änderung in einem Fall steht beim nächsten Fall
+sofort bereit. Intro und Praxis bleiben davon getrennt. Alte
 Save-Felder für Passive und Reserve werden bei einem effektiven Plan bereinigt,
 ohne stabile IDs aus älteren Spielständen umzubenennen.
 
@@ -214,8 +216,9 @@ Der Baum kann über den Fortschrittsscreen zurückgesetzt werden.
 
 ## 10. Run-Ausbaustufen
 
-Schaden, Attack Speed und Galopp besitzen je eine endlos sammelbare Familie.
-Common gewährt +3, Magic +5 und Rare +7; bei gleicher Relevanz gilt für
+Schaden, Attack Speed und Galopp besitzen endlos sammelbare Familien. Der
+Impuls bleibt die Schadensbaseline mit +3/+5/+7; andere Schadensfamilien lösen
+einmalig ganzzahlig 30/50/70 Prozent ihres Basisschadens auf. Bei gleicher Relevanz gilt für
 Angebote immer Common häufiger als Magic häufiger als Rare. Vollständige
 Dreierfamilien verwenden 70 / 25 / 5. Pro Level-up kann dieselbe
 Komponente-Wert-Familie höchstens einmal erscheinen. Karten zeigen nur den
@@ -226,7 +229,9 @@ Kobalt und Rare in Gold.
 
 | Ausbau | Seltenheiten | Wirkung | Grenze | Voraussetzung |
 |---|---|---|---|---|
-| Behandlungsschaden | Common / Magic / Rare | +3 / +5 / +7 Schaden | unbegrenzt | ausgewählte Behandlung |
+| Impulsschaden | Common / Magic / Rare | +3 / +5 / +7 Schaden | unbegrenzt | Impuls |
+| Streuimpulsschaden | Common / Magic / Rare | +2 / +3 / +4 Schaden | unbegrenzt | Streuimpuls |
+| Durchdringungsschaden | Common / Magic / Rare | +3 / +5 / +6 Schaden | unbegrenzt | Durchdringender Impuls |
 | Attack Speed | Common / Magic / Rare | +3 / +5 / +7 Prozentpunkte | unbegrenzt, linear | ausgewählte Behandlung |
 | Zusätzliches Projektil | Rare | +1 Projektil | +5, Basis 1 → maximal 6 | Impuls |
 
@@ -238,8 +243,8 @@ der Karte angezeigt.
 
 | Ausbau | Seltenheiten/Ränge | Wirkung | Grenze | Voraussetzung |
 |---|---|---|---|---|
-| Abwehrzellen | 1 Wahl | System aktivieren | 2 Zellen | keine |
-| Abwehrzellenschaden | Common / Magic / Rare | +3 / +5 / +7 Schaden | unbegrenzt | Abwehrzellen |
+| Abwehrzellen | 1 Wahl | System aktivieren | 2 Zellen | ab Fall 3; im ersten Fall-3-Level-up drei gleiche Angebote |
+| Abwehrzellenschaden | Common / Magic / Rare | +2 / +3 / +4 Schaden | unbegrenzt | Abwehrzellen |
 | Attack Speed | Common / Magic / Rare | +3 / +5 / +7 Prozentpunkte | unbegrenzt, linear | Abwehrzellen |
 | Größere Abwehrzellen | 3 Wahlen | +1 Radius | Radius 7 | Abwehrzellen |
 | Mehr Abwehrzellen | 2 Wahlen | +1 Projektil | 4 Zellen | Abwehrzellen |
@@ -256,7 +261,7 @@ der Karte angezeigt.
 | Ausbau | Seltenheiten/Wahlen | Wirkung | Grenze | Voraussetzung |
 |---|---|---|---|---|
 | Breiter Stoß | 2 Wahlen | +1 Radius | Radius 7 | Stoß ausgerüstet |
-| Lazerschaden | Common / Magic / Rare | +3 / +5 / +7 Schaden | unbegrenzt | Fetter lazer ausgerüstet |
+| Lazerschaden | Common / Magic / Rare | +9 / +15 / +21 Schaden | unbegrenzt | Fetter lazer ausgerüstet |
 | Breiterer Lazer | 2 Wahlen | +16 Breite | 70 Breite | Fetter lazer ausgerüstet |
 | Galopp | Common / Magic / Rare | +3 / +5 / +7 Galopp | unbegrenzt | keine |
 
@@ -264,7 +269,10 @@ Stoß besitzt 0 Schaden und hat keinen Schadensausbau. Ein späterer Talentknote
 darf diese Familie ausdrücklich freischalten; in diesem Meilenstein existiert
 sie nicht.
 
-Die erste Auswahl eines normalen Levelaufstiegs enthält, solange noch ein
+Das erste Level-up in Fall 3 ist die einzige Ausnahme: Es zeigt dreimal
+Abwehrzellen und erlaubt keinen Reroll. In Fall 1/2 befinden sich Abwehrzellen
+überhaupt nicht im Pool; ab Fall 3 gelten nach der Akquisition die normalen
+Verbesserungen. Die erste Auswahl eines sonst normalen Levelaufstiegs enthält, solange noch ein
 passender Rang verfügbar ist, mindestens einen Ausbau der ausgerüsteten
 Behandlung. Ein einmaliger Reroll schließt die vorherigen Karten aus, garantiert
 derzeit aber nicht erneut einen Behandlungsausbau.
@@ -276,7 +284,7 @@ Nach Wahl des Ausbaus `Abwehrzellen` gelten:
 | Wert | Basis | Voll ausgebaut |
 |---|---:|---:|
 | Zellen | 2 | 4 |
-| Schaden je Treffer | 5 Wasser | 17 Wasser |
+| Schaden je Treffer | 5 Wasser | abhängig von unbegrenzt stapelbaren +2/+3/+4-Auswahlen |
 | Trefferkörper je Zelle | feste sichtbare Zellgröße | unverändert |
 | Orbit-Radius um Doctor Milos | Radius 4 | Radius 7 |
 | Orbit-Geschwindigkeit | 1,7 rad/s | 1,7 rad/s |

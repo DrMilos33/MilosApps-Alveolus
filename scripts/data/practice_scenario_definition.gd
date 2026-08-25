@@ -10,6 +10,7 @@ enum RunType {
 	SPAWN_TEST,
 	OBSTACLE_TEST,
 	BOSS_TEST,
+	EVENT_TEST,
 }
 
 const SPAWN_TEST_ID := &"spawn_test"
@@ -126,6 +127,7 @@ var _spawn_rate_multiplier: float
 var _waves_enabled: bool
 var _requires_boss_profile: bool
 var _obstacles: Array[ObstacleDefinition] = []
+var _source_case_id: StringName = &""
 
 
 func _init(
@@ -143,7 +145,8 @@ func _init(
 	spawn_rate_multiplier_value: float,
 	waves_enabled_value: bool,
 	requires_boss_profile_value: bool,
-	obstacle_values: Array[ObstacleDefinition] = []
+	obstacle_values: Array[ObstacleDefinition] = [],
+	source_case_id_value: StringName = &""
 ) -> void:
 	_id = id_value
 	_title = title_value
@@ -161,6 +164,7 @@ func _init(
 	_spawn_rate_multiplier = maxf(0.0, spawn_rate_multiplier_value)
 	_waves_enabled = waves_enabled_value
 	_requires_boss_profile = requires_boss_profile_value
+	_source_case_id = source_case_id_value
 	for obstacle in obstacle_values:
 		if obstacle != null:
 			_obstacles.append(obstacle.duplicate_immutable())
@@ -230,6 +234,10 @@ func requires_boss_profile() -> bool:
 	return _requires_boss_profile
 
 
+func get_source_case_id() -> StringName:
+	return _source_case_id
+
+
 func get_obstacles() -> Array[ObstacleDefinition]:
 	var result: Array[ObstacleDefinition] = []
 	for obstacle in _obstacles:
@@ -263,12 +271,13 @@ func duplicate_immutable() -> PracticeScenarioDefinition:
 		_spawn_rate_multiplier,
 		_waves_enabled,
 		_requires_boss_profile,
-		_obstacles
+		_obstacles,
+		_source_case_id
 	)
 
 
-static func catalog() -> Array[PracticeScenarioDefinition]:
-	return [
+static func catalog(level_definitions: Array[LevelDefinition] = []) -> Array[PracticeScenarioDefinition]:
+	var result: Array[PracticeScenarioDefinition] = [
 		PracticeScenarioDefinition.new(
 			SPAWN_TEST_ID,
 			"Spawn-Test",
@@ -319,10 +328,36 @@ static func catalog() -> Array[PracticeScenarioDefinition]:
 			true
 		),
 	]
+	var source_levels := ContentCatalog.level_definitions() if level_definitions.is_empty() else level_definitions
+	for level in source_levels:
+		if level == null or level.is_tutorial or level.case_pressure_plan == null or level.case_pressure_plan.target_focus_times.is_empty():
+			continue
+		result.append(PracticeScenarioDefinition.new(
+			StringName("event_test:%s" % String(level.id)),
+			"Event-Test · Fall %d" % level.order,
+			"Aktuelles Eventmonster aus %s" % level.title,
+			"1 Eventmonster · Originalprofil · keine Wellen",
+			RunType.EVENT_TEST,
+			0,
+			0,
+			0,
+			false,
+			level.order,
+			0.0,
+			0.0,
+			false,
+			false,
+			[],
+			level.id
+		))
+	return result
 
 
-static func get_by_id(scenario_id: StringName) -> PracticeScenarioDefinition:
-	for scenario in catalog():
+static func get_by_id(
+	scenario_id: StringName,
+	level_definitions: Array[LevelDefinition] = []
+) -> PracticeScenarioDefinition:
+	for scenario in catalog(level_definitions):
 		if scenario.get_id() == scenario_id:
 			return scenario
 	return null

@@ -30,8 +30,12 @@ func make_view_model(entry: LexiconEntryDefinition, seen_discovery_ids: Variant 
 	view_model.visual_id = entry.visual_id
 	view_model.locked = not _is_unlocked(entry, seen_discovery_ids)
 	if view_model.locked:
-		view_model.display_name = "Noch nicht beobachtet"
-		view_model.summary = "Dieser Eintrag wird nach der ersten Beobachtung sichtbar."
+		if entry.category == LexiconEntryDefinition.CATEGORY_MONSTERS:
+			view_model.display_name = "Noch nicht besiegt"
+			view_model.summary = "Besiege diesen Gegner, um seine Beschreibung freizuschalten."
+		else:
+			view_model.display_name = "Noch nicht entdeckt"
+			view_model.summary = "Entdecke diesen Eintrag im Spiel, um seine Beschreibung freizuschalten."
 		return view_model
 
 	view_model.display_name = entry.display_name

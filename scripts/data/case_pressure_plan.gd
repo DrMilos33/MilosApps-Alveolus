@@ -74,7 +74,7 @@ static func default_for_case_order(case_order: int) -> CasePressurePlan:
 	match case_order:
 		1:
 			return create(
-				PackedFloat32Array([60.0, 120.0]),
+				PackedFloat32Array([60.0, 120.0, 180.0]),
 				PackedFloat32Array(),
 				1
 			).configure_target_combat(66.0 / 42.0, 1.875, 1.5, 1.95)

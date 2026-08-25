@@ -238,8 +238,8 @@ func _test_upgrade_previews() -> void:
 	_assert_equal(rhythm_preview.effect_text, "+3 % Attack Speed", "Rhythmusupgrade verwendet einen linearen prozentualen Bonus")
 	_assert_equal(rhythm_preview.before_after_text, "0 %  >  3 %", "Attack-Speed-Ausbau zeigt ausschließlich den akkumulierten Bonus")
 	var immune_preview := stats.preview_upgrade(immune_damage)
-	_assert_equal(immune_preview.effect_text, "+3 Schaden", "Common-Abwehrupgrade verwendet eine ganzzahlige Effektzeile")
-	_assert_equal(immune_preview.before_after_text, "5 Schaden  >  8 Schaden", "Abwehrupgrade zeigt ganzzahlige Werte")
+	_assert_equal(immune_preview.effect_text, "+2 Schaden", "Common-Abwehrupgrade verwendet den proportionalen ganzzahligen Effekt")
+	_assert_equal(immune_preview.before_after_text, "5 Schaden  >  7 Schaden", "Abwehrupgrade zeigt proportionale ganzzahlige Werte")
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 77
@@ -347,12 +347,13 @@ func _test_discovery_catalog_and_queue() -> void:
 	var seen: Dictionary = {}
 	var manager := DiscoveryManager.new()
 	manager.configure(discoveries, seen)
+	manager.seen_changed.connect(func(id: StringName) -> void: seen[id] = true)
 	_assert_true(manager.request(&"analysis_pickup"), "Neue Entdeckung wird in die Warteschlange aufgenommen")
 	_assert_true(manager.request(&"pneumococcus"), "Zweite Entdeckung wird geordnet aufgenommen")
 	var first := manager.take_next()
 	_assert_equal(first["id"], &"pneumococcus", "Höhere Priorität wird zuerst erklärt")
 	manager.complete_active()
-	_assert_true(seen.has(&"pneumococcus"), "Abgeschlossene Entdeckung wird spielstandweit markiert")
+	_assert_true(seen.has(&"pneumococcus"), "Abgeschlossene Entdeckung wird über das Persistenzsignal spielstandweit markiert")
 	_assert_true(not manager.request(&"pneumococcus"), "Gesehene Entdeckung erscheint nicht erneut")
 
 func _test_level_progression_and_records() -> void:

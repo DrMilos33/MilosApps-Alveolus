@@ -1,87 +1,33 @@
 class_name PracticeBossProfile
 extends RefCounted
 
-## Immutable, practice-only snapshot of one production boss configuration.
-##
-## The catalog deliberately does not depend on the central content registry. Its values are
-## complete enough for the integration layer to build the existing boss spawn
-## request without resolving a patient case or touching progression state.
-
-const INTRO_BOSS_ID := &"intro_boss"
-const BACTERIAL_CORE_ID := &"bacterial_core"
-const DIAMOND_INFECTION_FOCUS_ID := &"diamond_infection_focus"
-const STANDARD_INFECTION_FOCUS_ID := &"standard_infection_focus"
+## Immutable practice-only snapshot of one authored level boss.
+## Profiles are derived from LevelDefinition instead of maintaining a second
+## boss catalog, so later case additions and retunes appear automatically.
 
 var _id: StringName
 var _title: String
 var _description: String
 var _source_case_id: StringName
-var _enemy_id: StringName
 var _visual_id: StringName
-var _health_multiplier: float
-var _enemy_speed_multiplier: float
-var _boss_speed_multiplier: float
-var _contact_damage_multiplier: float
-var _ranged_enabled: bool
-var _projectile_damage_multiplier: float
-var _wave_amplitude: float
-var _phase_minions: PackedInt32Array
-var _boss_count: int
-var _projectile_attack_speed_multiplier: float
-var _reinforcement_interval: float
-var _reinforcement_count: int
-var _reinforcement_minimum_phase: int
-var _add_defense_burst_shooting_lock_seconds: float
-var _projectile_speed_multiplier: float
-var _phase_health_thresholds: PackedFloat32Array
+var _source_config: RunConfig
 
 
 func _init(
-	id_value: StringName,
-	title_value: String,
-	description_value: String,
-	source_case_id_value: StringName,
-	enemy_id_value: StringName,
-	visual_id_value: StringName,
-	health_multiplier_value: float,
-	enemy_speed_multiplier_value: float,
-	boss_speed_multiplier_value: float,
-	contact_damage_multiplier_value: float,
-	ranged_enabled_value: bool,
-	projectile_damage_multiplier_value: float,
-	wave_amplitude_value: float,
-	phase_minions_value: PackedInt32Array,
-	boss_count_value: int = 1,
-	projectile_attack_speed_multiplier_value: float = 1.0,
-	reinforcement_interval_value: float = 0.0,
-	reinforcement_count_value: int = 0,
-	reinforcement_minimum_phase_value: int = 0,
-	add_defense_burst_shooting_lock_seconds_value: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS,
-	projectile_speed_multiplier_value: float = 1.0,
-	phase_health_thresholds_value: PackedFloat32Array = PackedFloat32Array([0.70, 0.40])
+	source_level: LevelDefinition = null,
+	boss_display_name: String = "",
+	boss_visual_id: StringName = &""
 ) -> void:
-	_id = id_value
-	_title = title_value
-	_description = description_value
-	_source_case_id = source_case_id_value
-	_enemy_id = enemy_id_value
-	_visual_id = visual_id_value
-	_health_multiplier = maxf(health_multiplier_value, 0.001)
-	_enemy_speed_multiplier = maxf(enemy_speed_multiplier_value, 0.0)
-	_boss_speed_multiplier = maxf(boss_speed_multiplier_value, 0.0)
-	_contact_damage_multiplier = maxf(contact_damage_multiplier_value, 0.0)
-	_ranged_enabled = ranged_enabled_value
-	_projectile_damage_multiplier = maxf(projectile_damage_multiplier_value, 0.0)
-	_wave_amplitude = maxf(wave_amplitude_value, 0.0)
-	_phase_minions = phase_minions_value.duplicate()
-	_boss_count = maxi(1, boss_count_value)
-	_projectile_attack_speed_multiplier = maxf(projectile_attack_speed_multiplier_value, 0.01)
-	_reinforcement_interval = maxf(reinforcement_interval_value, 0.0)
-	_reinforcement_count = maxi(reinforcement_count_value, 0)
-	_reinforcement_minimum_phase = clampi(reinforcement_minimum_phase_value, 0, 2)
-	_add_defense_burst_shooting_lock_seconds = add_defense_burst_shooting_lock_seconds_value
-	_projectile_speed_multiplier = maxf(projectile_speed_multiplier_value, 0.1)
-	_phase_health_thresholds = phase_health_thresholds_value.duplicate()
+	if source_level == null:
+		return
+	_source_case_id = source_level.id
+	_id = StringName("practice_boss:%s" % String(source_level.id))
+	var prefix := "Einführung" if source_level.is_tutorial else "Fall %d" % source_level.order
+	var resolved_name := boss_display_name if not boss_display_name.is_empty() else String(source_level.boss_enemy_id).replace("_", " ").capitalize()
+	_title = "%s · %s" % [prefix, resolved_name]
+	_description = "Aktuelles Bossprofil aus %s." % source_level.title
+	_visual_id = boss_visual_id if boss_visual_id != &"" else source_level.boss_enemy_id
+	_source_config = RunConfig.from_level(source_level)
 
 
 func get_id() -> StringName:
@@ -101,7 +47,7 @@ func get_source_case_id() -> StringName:
 
 
 func get_enemy_id() -> StringName:
-	return _enemy_id
+	return _source_config.boss_enemy_id if _source_config != null else &""
 
 
 func get_visual_id() -> StringName:
@@ -109,179 +55,136 @@ func get_visual_id() -> StringName:
 
 
 func get_health_multiplier() -> float:
-	return _health_multiplier
+	return _source_config.boss_health_multiplier if _source_config != null else 1.0
 
 
 func get_enemy_speed_multiplier() -> float:
-	return _enemy_speed_multiplier
+	return _source_config.enemy_speed_multiplier if _source_config != null else 1.0
 
 
 func get_boss_speed_multiplier() -> float:
-	return _boss_speed_multiplier
+	return _source_config.boss_speed_multiplier if _source_config != null else 1.0
 
 
 func get_effective_speed_multiplier() -> float:
-	return _enemy_speed_multiplier * _boss_speed_multiplier
+	return get_enemy_speed_multiplier() * get_boss_speed_multiplier()
 
 
 func get_contact_damage_multiplier() -> float:
-	return _contact_damage_multiplier
+	return _source_config.contact_damage_multiplier if _source_config != null else 1.0
 
 
 func is_ranged_enabled() -> bool:
-	return _ranged_enabled
+	return _source_config != null and _source_config.boss_ranged_enabled
 
 
 func get_projectile_damage_multiplier() -> float:
-	return _projectile_damage_multiplier
+	return _source_config.boss_projectile_damage_multiplier if _source_config != null else 1.0
 
 
 func get_wave_amplitude() -> float:
-	return _wave_amplitude
+	return _source_config.boss_wave_amplitude if _source_config != null else 44.0
 
 
 func get_phase_minions() -> PackedInt32Array:
-	return _phase_minions.duplicate()
+	return _source_config.boss_phase_minions.duplicate() if _source_config != null else PackedInt32Array()
 
 
 func get_boss_count() -> int:
-	return _boss_count
+	return _source_config.boss_count if _source_config != null else 1
 
 
 func get_projectile_attack_speed_multiplier() -> float:
-	return _projectile_attack_speed_multiplier
+	return _source_config.boss_projectile_attack_speed_multiplier if _source_config != null else 1.0
 
 
 func get_reinforcement_interval() -> float:
-	return _reinforcement_interval
+	return _source_config.boss_reinforcement_interval if _source_config != null else 0.0
 
 
 func get_reinforcement_count() -> int:
-	return _reinforcement_count
+	return _source_config.boss_reinforcement_count if _source_config != null else 0
 
 
 func get_reinforcement_minimum_phase() -> int:
-	return _reinforcement_minimum_phase
+	return _source_config.boss_reinforcement_minimum_phase if _source_config != null else 0
 
 
 func get_add_defense_burst_shooting_lock_seconds() -> float:
-	return _add_defense_burst_shooting_lock_seconds
+	return _source_config.boss_add_defense_burst_shooting_lock_seconds if _source_config != null else EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 
 
 func get_projectile_speed_multiplier() -> float:
-	return _projectile_speed_multiplier
+	return _source_config.boss_projectile_speed_multiplier if _source_config != null else 1.0
 
 
 func get_phase_health_thresholds() -> PackedFloat32Array:
-	return _phase_health_thresholds.duplicate()
+	return _source_config.boss_phase_health_thresholds.duplicate() if _source_config != null else PackedFloat32Array()
+
+
+func apply_boss_contract(target: RunConfig) -> void:
+	if target == null or _source_config == null:
+		return
+	target.boss_enemy_id = _source_config.boss_enemy_id
+	target.boss_health_multiplier = _source_config.boss_health_multiplier
+	target.enemy_speed_multiplier = _source_config.enemy_speed_multiplier
+	target.boss_speed_multiplier = _source_config.boss_speed_multiplier
+	target.contact_damage_multiplier = _source_config.contact_damage_multiplier
+	target.boss_ranged_enabled = _source_config.boss_ranged_enabled
+	target.boss_projectile_damage_multiplier = _source_config.boss_projectile_damage_multiplier
+	target.boss_projectile_attack_speed_multiplier = _source_config.boss_projectile_attack_speed_multiplier
+	target.boss_projectile_speed_multiplier = _source_config.boss_projectile_speed_multiplier
+	target.boss_projectiles_require_empty_aura = _source_config.boss_projectiles_require_empty_aura
+	target.boss_wave_amplitude = _source_config.boss_wave_amplitude
+	target.boss_phase_minions = _source_config.boss_phase_minions.duplicate()
+	target.boss_phase_health_thresholds = _source_config.boss_phase_health_thresholds.duplicate()
+	target.boss_aura_screen_diameter_fraction = _source_config.boss_aura_screen_diameter_fraction
+	target.boss_aura_speed_multiplier = _source_config.boss_aura_speed_multiplier
+	target.boss_aura_damage_multiplier = _source_config.boss_aura_damage_multiplier
+	target.boss_reinforcement_interval = _source_config.boss_reinforcement_interval
+	target.boss_reinforcement_count = _source_config.boss_reinforcement_count
+	target.boss_reinforcement_minimum_phase = _source_config.boss_reinforcement_minimum_phase
+	target.boss_add_defense_burst_shooting_lock_seconds = _source_config.boss_add_defense_burst_shooting_lock_seconds
+	target.boss_add_projectile_attack_speed_multiplier = _source_config.boss_add_projectile_attack_speed_multiplier
+	target.boss_count = _source_config.boss_count
 
 
 func duplicate_immutable() -> PracticeBossProfile:
-	return PracticeBossProfile.new(
-		_id,
-		_title,
-		_description,
-		_source_case_id,
-		_enemy_id,
-		_visual_id,
-		_health_multiplier,
-		_enemy_speed_multiplier,
-		_boss_speed_multiplier,
-		_contact_damage_multiplier,
-		_ranged_enabled,
-		_projectile_damage_multiplier,
-		_wave_amplitude,
-		_phase_minions,
-		_boss_count,
-		_projectile_attack_speed_multiplier,
-		_reinforcement_interval,
-		_reinforcement_count,
-		_reinforcement_minimum_phase,
-		_add_defense_burst_shooting_lock_seconds,
-		_projectile_speed_multiplier,
-		_phase_health_thresholds
-	)
+	var copy := PracticeBossProfile.new()
+	copy._id = _id
+	copy._title = _title
+	copy._description = _description
+	copy._source_case_id = _source_case_id
+	copy._visual_id = _visual_id
+	copy._source_config = _source_config.duplicate(true) as RunConfig if _source_config != null else null
+	return copy
 
 
-static func catalog() -> Array[PracticeBossProfile]:
-	return [
-		PracticeBossProfile.new(
-			INTRO_BOSS_ID,
-			"Intro-Boss",
-			"Kleiner Intro-Infektionsherd mit Fernangriff",
-			&"intro",
-			&"intro_focus",
-			&"infection_focus",
-			0.09,
-			0.80,
-			1.0,
-			0.50,
-			true,
-			1.0,
-			44.0,
-			PackedInt32Array()
-		),
-		PracticeBossProfile.new(
-			BACTERIAL_CORE_ID,
-			"Bakterienkern",
-			"Fernkampf-Boss mit Doppelkurven und regelmäßiger Verstärkung",
-			&"localized_focus",
-			&"localized_boss",
-			&"infection_focus",
-			1.0,
-			1.08,
-			1.0,
-			1.25,
-			true,
-			1.5,
-			44.0,
-			PackedInt32Array([3]),
-			1,
-			1.8,
-			15.0,
-			4,
-			1,
-			EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS,
-			1.5,
-			PackedFloat32Array([0.80])
-		),
-		PracticeBossProfile.new(
-			DIAMOND_INFECTION_FOCUS_ID,
-			"Infektionsherd · Raute",
-			"Schneller Fernkampf-Boss mit zwei Vierer-Phasen",
-			&"spreading_infection",
-			&"infection_focus",
-			&"infection_focus",
-			0.75,
-			1.16,
-			1.35,
-			1.45,
-			true,
-			2.5,
-			115.0,
-			PackedInt32Array([4, 4])
-		),
-		PracticeBossProfile.new(
-			STANDARD_INFECTION_FOCUS_ID,
-			"Infektionsherd · Standard",
-			"Robuster Nahkampf-Boss mit Sechser- und Achter-Phase",
-			&"severe_pneumonia",
-			&"infection_focus",
-			&"infection_focus",
-			1.35,
-			1.24,
-			1.0,
-			1.65,
-			false,
-			1.0,
-			44.0,
-			PackedInt32Array([6, 8])
-		),
-	]
+static func catalog(
+	level_definitions: Array[LevelDefinition] = [],
+	enemy_catalog: Dictionary = {}
+) -> Array[PracticeBossProfile]:
+	var source_levels := ContentCatalog.level_definitions() if level_definitions.is_empty() else level_definitions
+	var enemies := ContentCatalog.enemy_definitions() if enemy_catalog.is_empty() else enemy_catalog
+	var result: Array[PracticeBossProfile] = []
+	for level in source_levels:
+		if level == null or not level.automatic_boss_enabled or level.boss_enemy_id == &"":
+			continue
+		var enemy := enemies.get(level.boss_enemy_id) as EnemyDefinition
+		result.append(PracticeBossProfile.new(
+			level,
+			enemy.display_name if enemy != null else "",
+			enemy.visual_id if enemy != null else level.boss_enemy_id
+		))
+	return result
 
 
-static func get_by_id(profile_id: StringName) -> PracticeBossProfile:
-	for profile in catalog():
+static func get_by_id(
+	profile_id: StringName,
+	level_definitions: Array[LevelDefinition] = [],
+	enemy_catalog: Dictionary = {}
+) -> PracticeBossProfile:
+	for profile in catalog(level_definitions, enemy_catalog):
 		if profile.get_id() == profile_id:
 			return profile
 	return null

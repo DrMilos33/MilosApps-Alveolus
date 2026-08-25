@@ -75,9 +75,11 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Breites Lexikon benötigt keinen zusätzlichen vertikalen Seitenscroll")
 	_check(lexicon.entry_buttons.size() == 5, "Monsterliste enthält reguläre Gegner und beide Fallbosse")
 	_check(lexicon.selected_entry_id == &"", "Beim Öffnen ist kein Lexikoneintrag automatisch ausgewählt")
-	_check(lexicon.empty_detail_label.visible and lexicon.empty_detail_label.text == "Eintrag auswählen.", "Die leere Detailfläche gibt eine knappe neutrale Anleitung")
-	_check(lexicon.empty_detail_label.size_flags_vertical == Control.SIZE_SHRINK_BEGIN, "Die leere Anleitung reserviert keinen unnötigen vertikalen Leerraum")
-	_check(lexicon.detail_panel.size_flags_vertical == Control.SIZE_SHRINK_BEGIN, "Auch die leere Detailfläche selbst kollabiert auf ihre knappe Anleitung")
+	_check(lexicon.empty_detail_label.visible and lexicon.empty_detail_label.text.contains("Wähle links"), "Die leere Detailfläche erklärt die explizite Auswahl")
+	_check(lexicon.empty_detail_label.custom_minimum_size.y >= 120.0, "Die leere Anleitung bleibt als klar erkennbare Leerkartе sichtbar")
+	_check(lexicon.detail_panel.size_flags_vertical == Control.SIZE_EXPAND_FILL, "Die leere Detailfläche behält die stabile Master-Detail-Bühne")
+	_check(lexicon.entry_filter != null and lexicon.entry_filter.placeholder_text.contains("filtern"), "Die Eintragsliste besitzt eine klare Suchmöglichkeit")
+	_check(lexicon.entry_count_label.text.contains("freigeschaltet"), "Die Eintragsliste zeigt ihren Entdeckungsfortschritt")
 	_check(not lexicon.detail_type_sections.visible, "Die leere Detailfläche zeigt keine veralteten Typdaten")
 	_check(MedicalLexiconIllustration.SAFE_MARGIN >= 4.0, "Lexikonillustrationen reservieren einen festen Sicherheitsabstand zum Kachelrand")
 	for button in lexicon.entry_buttons.values():
@@ -181,10 +183,16 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_assert_type_presentations(lexicon, &"pneumococcus")
 	_check(lexicon.detail_title.text == "Bakterium", "Detailtitel verwendet einfachen Namen")
 	_check(lexicon.detail_medical_name.text == "Pneumokokke", "Fachbegriff bleibt als zweite Ebene")
+	lexicon.entry_filter.text = "keine passenden monster"
+	_check(lexicon.selected_entry_id == &"pneumococcus", "Filtern löscht die ausdrücklich gewählte Lexikonauswahl nicht")
+	_check(lexicon.detail_title.text == "Bakterium" and lexicon.detail_title.visible, "Das gewählte Detail bleibt auch bei ausgefilterter Zeile sichtbar")
+	lexicon.entry_filter.text = ""
+	var restored_selection := lexicon.entry_buttons.get(&"pneumococcus") as Button
+	_check(restored_selection != null and restored_selection.button_pressed, "Nach dem Leeren der Suche ist die bestehende Auswahl wieder sichtbar markiert")
 
 	_check(lexicon.select_entry(&"bacterial_cluster"), "Gesperrter Eintrag bleibt als Silhouette anwählbar")
 	_check(lexicon.detail_illustration.locked, "Gesperrter Eintrag zeichnet die Silhouette")
-	_check(lexicon.detail_title.text == "Noch nicht beobachtet", "Gesperrter Eintrag verrät keinen Namen")
+	_check(lexicon.detail_title.text == "Noch nicht besiegt", "Gesperrter Eintrag verrät keinen Namen und nennt die Freischaltbedingung")
 	_check(not lexicon.detail_stats_grid.visible, "Gesperrter Eintrag verrät keine Werte")
 	_check(not lexicon.detail_type_sections.visible, "Gesperrter Eintrag verrät keine Schadenstypen oder Resistenzen")
 	_check(not lexicon.detail_medical_name.visible, "Gesperrter Eintrag verrät keinen Fachbegriff")
@@ -250,7 +258,7 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	await process_frame
 	await process_frame
 	_check(lexicon.page_scroll.get_v_scroll_bar().max_value > lexicon.page_scroll.get_v_scroll_bar().page, "Bei 960x540 @ 200 % besitzt die Bühne einen echten vertikalen Scrollbereich")
-	_check(lexicon.list_panel.visible and lexicon.entry_scroll.size.y >= 300.0, "Die kompakte Eintragsliste behält eine nutzbare Scrollfläche statt eines leeren Streifens")
+	_check(lexicon.list_panel.visible and lexicon.entry_scroll.size.y >= 200.0, "Die kompakte Eintragsliste behält unter Suche und Fortschritt eine nutzbare Scrollfläche")
 	_check(lexicon.select_entry(&"pneumococcus", true), "Kompakte Auswahl öffnet weiterhin das Detail")
 	await process_frame
 	await process_frame
@@ -321,13 +329,13 @@ func _test_mouse_and_focus_navigation(lexicon: LexiconMasterDetail) -> void:
 	_check(first.focus_neighbor_left == first.get_path_to(monster_tab), "Linksnavigation führt zur aktiven Kategorie")
 	second.mouse_entered.emit()
 	await process_frame
-	_check(lexicon.selected_entry_id == visible_entries[1].id, "Mouseover zeigt die Detailinformation des berührten Lexikoneintrags sofort")
+	_check(lexicon.selected_entry_id == &"", "Mouseover verändert die ausdrückliche Lexikonauswahl nicht")
 	lexicon.grab_initial_focus()
 	await process_frame
 	_check(get_root().gui_get_focus_owner() == monster_tab, "Anfangsfokus ist für Tastatur und Gamepad sichtbar")
 	first.grab_focus()
 	await process_frame
-	_check(lexicon.selected_entry_id == visible_entries[0].id, "Tastatur- und Gamepadfokus aktualisieren dieselbe Detailvorschau wie Mouseover")
+	_check(lexicon.selected_entry_id == &"", "Tastatur- und Gamepadfokus verändert die Auswahl nicht ohne Bestätigung")
 	var activation_events: Array[StringName] = []
 	lexicon.entry_selected.connect(func(entry_id: StringName) -> void: activation_events.append(entry_id))
 	_send_action(&"ui_accept", true)
