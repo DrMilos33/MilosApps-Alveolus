@@ -79,7 +79,7 @@ func _test_enemy_values_are_sourced() -> void:
 	for required_copy in ["Fall 1", "Fall 2", "80 Prozent", "15 Sekunden", "Stoß"]:
 		_check(core_copy.contains(required_copy), "Bakterienkern-Lexikon erklärt %s" % required_copy)
 	var core_discovery: DiscoveryDefinition = ContentCatalog.discovery_definitions()[&"localized_boss"]
-	_check(core_discovery.gameplay_text.contains("Doppelkurven-Projektile") and core_discovery.gameplay_text.contains("dauerhaft"), "Bakterienkern-Entdeckung erklärt Projektilweg und Stoß-Sperre")
+	_check(core_discovery.gameplay_text.contains("Doppelkurven-Projektile") and core_discovery.gameplay_text.contains("zehn Sekunden"), "Bakterienkern-Entdeckung erklärt Projektilweg und zehnsekündige Stoß-Sperre")
 
 	var rebound_enemies := enemies.duplicate()
 	var rebound_enemy: EnemyDefinition = (enemies[&"pneumococcus"] as EnemyDefinition).duplicate(true) as EnemyDefinition

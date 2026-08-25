@@ -103,7 +103,7 @@ func _check_boss_profile_catalog() -> void:
 	_check(bacterial_core.get_reinforcement_minimum_phase() == 1, "Bakterienkern-Profil verstärkt erst ab seiner 80-Prozent-Phase")
 	_check(is_equal_approx(bacterial_core.get_projectile_speed_multiplier(), 1.5), "Bakterienkern-Profil bewahrt das 50 Prozent höhere Projektiltempo")
 	_check(bacterial_core.get_phase_health_thresholds() == PackedFloat32Array([0.80]), "Bakterienkern-Profil bewahrt die 80-Prozent-Beschwörungsschwelle")
-	_check(is_equal_approx(bacterial_core.get_add_defense_burst_shooting_lock_seconds(), -1.0), "Bakterienkern-Profil bewahrt die dauerhafte Stoß-Sperre seiner Adds")
+	_check(is_equal_approx(bacterial_core.get_add_defense_burst_shooting_lock_seconds(), 10.0), "Bakterienkern-Profil bewahrt die zehnsekündige Stoß-Sperre seiner Adds")
 	var phases := diamond.get_phase_minions()
 	phases[0] = 99
 	_check(diamond.get_phase_minions() == PackedInt32Array([4, 4]), "Ausgelesene Bossphasen können das Profil nicht verändern")

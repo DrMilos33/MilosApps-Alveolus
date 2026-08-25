@@ -143,7 +143,7 @@ Besonderheiten:
 
 | Fähigkeit | Status | Zielart | Abklingzeit | Werte | Schadenstyp |
 |---|---|---|---:|---|---|
-| Stoß | Forschung für 30 | Zielkreis | 14 s | 0 Schaden, Radiusstufe 5, 120 Rückstoß; getroffene Nichtboss-Schützen feuern nicht mehr | keiner |
+| Stoß | Forschung für 30 | Zielkreis | 14 s | 0 Schaden, Radiusstufe 5, 120 Rückstoß; getroffene Nichtboss-Schützen feuern 10 Sekunden nicht | keiner |
 | Fetter lazer | nach Fall 1 manuell für 0 Forschung | Zielrichtung | 18 s | 30 Schaden, Reichweitenstufe 21, 38 Breite | Wasser |
 | Fokusfeld | sichtbar gesperrt | Zielkreis | 16 s | Radiusstufe 6, 7 s, Behandlungsschaden ×1,25 | keiner |
 | Notfallhilfe | sichtbar gesperrt | selbst | 28 s | +14 Leben, +8 Schild | keiner |
@@ -310,8 +310,8 @@ Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
 Der geskriptete mobile Eventherd in Fall 1 bildet die einzige Ausnahme: Er
 verwendet ganzzahliges Basistempo 66, feuert alle 1,39 Sekunden und seine
 normalen Projektile besitzen 1,95-fache Geschwindigkeit sowie 1,5-fache
-Querbreite und Trefferfläche. Ein Treffer mit Stoß beendet seinen Beschuss für
-den restlichen Lebenszyklus; Bewegung und sonstiger Status laufen unverändert
+Querbreite und Trefferfläche. Ein Treffer mit Stoß unterbindet seinen Beschuss
+zehn Sekunden lang; Bewegung und sonstiger Status laufen unverändert
 weiter. Andere kleine Herde behalten das Tabellenprofil. Das mobile Fall-2-Event
 besitzt 1.200 gemeinsames Leben, doppeltes Eventtempo, schießt nicht, erscheint
 1,12-fach größer als Verbund kleiner Bakterien mit einem Lebensbalken und
@@ -343,8 +343,8 @@ spätere Projektiltempomodifikatoren verschieben sie nicht. Die Seite wechselt
 deterministisch zwischen den Schüssen. Bei 80 Prozent Leben erscheinen drei
 schießende Bakterien und der 15-Sekunden-Timer für weitere Vierergruppen beginnt.
 Wie alle projektilfähigen
-Nichtbosse verlieren sie nach Stoß ihren Beschuss für den restlichen
-Lebenszyklus. Bosse bleiben vollständig schussfähig, auch während ihres
+Nichtbosse verlieren sie nach Stoß ihren Beschuss für zehn Sekunden. Bosse
+bleiben vollständig schussfähig, auch während ihres
 Stoß-Stuns.
 
 ## 13. Fälle und Fortschrittskurven

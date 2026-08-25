@@ -141,7 +141,7 @@ func _test_boss_and_finding_contract() -> void:
 	_near(case_two.boss_reinforcement_interval, 15.0, "Fall-2-Boss ruft alle 15 Sekunden Verstärkung")
 	_equal(case_two.boss_reinforcement_count, 4, "Fall-2-Boss ruft pro Verstärkung vier Schützen")
 	_equal(case_two.boss_reinforcement_minimum_phase, 1, "Regelmäßige Fall-2-Verstärkung wartet auf die 80-Prozent-Phase")
-	_near(case_two.boss_add_defense_burst_shooting_lock_seconds, -1.0, "Stoß beendet den Beschuss seiner Adds dauerhaft")
+	_near(case_two.boss_add_defense_burst_shooting_lock_seconds, 10.0, "Stoß unterbindet den Beschuss seiner Adds zehn Sekunden lang")
 	_equal(case_three.boss_enemy_id, &"infection_focus", "Fall 3 führt den Infektionsherd ein")
 	_true(case_three.boss_ranged_enabled, "Fall 3 führt die Rautenprojektile ein")
 	_near(case_three.boss_projectile_damage_multiplier, 2.0, "Fall 3 verwendet den neuen Zwischen-Projektilfaktor")

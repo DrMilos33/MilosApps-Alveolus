@@ -35,7 +35,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein früher lokaler Infektionsherd bildet den ersten regulären Patientenfall.",
 			"Der frühe Verlauf wurde kontrolliert.",
 			"Der frühe Verlauf konnte in diesem Versuch nicht kontrolliert werden."
-		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", true).configure_boss_aura(1.20, 1.45, 1.45).configure_boss_reinforcements(15.0, 4).configure_boss_projectile_contract(1.0, -1.0, 1.3, true, 2.0).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
+		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", true).configure_boss_aura(1.20, 1.45, 1.45).configure_boss_reinforcements(15.0, 4).configure_boss_projectile_contract(1.0, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.3, true, 2.0).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
 		LevelDefinition.create(
 			&"localized_focus", 2, "lol - name fehlt", "Fall 02 · lokalisierter Pneumokokkenherd", false,
 			-1.0, 300.0, 50.0, 1.03375, 0.23375, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
@@ -43,7 +43,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein lokaler Bakterienherd belastet Doctor Milos. Stoppe ihn, bevor das Leben auf null fällt.",
 			"Der lokalisierte Infektionsherd wurde kontrolliert.",
 			"Die Infektionslast konnte in diesem Versuch nicht ausreichend kontrolliert werden."
-		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", true, 1.5).configure_boss_reinforcements(15.0, 4, 1).configure_boss_projectile_contract(1.8, -1.0, 1.5).configure_boss_phase_thresholds(PackedFloat32Array([0.80])).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", true, 1.5).configure_boss_reinforcements(15.0, 4, 1).configure_boss_projectile_contract(1.8, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.5).configure_boss_phase_thresholds(PackedFloat32Array([0.80])).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
 		LevelDefinition.create(
 			&"advancing_infection", 3, "Fortschreitender Verlauf", "Fall 03 · fortschreitende Pneumonie", false,
 			-1.0, 300.0, 50.0, 0.9075, 0.200, 1.25, 1.875, 1.12, 1.35, 0.14, 0.33,
@@ -168,7 +168,7 @@ static func discovery_definitions() -> Dictionary:
 		&"localized_boss": DiscoveryDefinition.create(
 			&"localized_boss", &"enemy_materialized", "Bakterienkern",
 			"Der Bakterienkern steht vereinfacht für einen noch lokal begrenzten Schwerpunkt der Infektion.",
-			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und ruft alle 15 Sekunden vier schnell schießende Bakterien. Ist seine Aura leer, feuert der Kern selbst. In Fall 2 feuert er mit 1,8-facher Rate 50 %% schnellere und stärkere Doppelkurven-Projektile; ab 80 %% Leben erscheinen drei Bakterien und danach alle 15 Sekunden vier weitere. Ein Stoß beendet den Beschuss schießender Nichtbosse dauerhaft; der Kern selbst bleibt schussfähig." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
+			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und ruft alle 15 Sekunden vier schnell schießende Bakterien. Ist seine Aura leer, feuert der Kern selbst. In Fall 2 feuert er mit 1,8-facher Rate 50 %% schnellere und stärkere Doppelkurven-Projektile; ab 80 %% Leben erscheinen drei Bakterien und danach alle 15 Sekunden vier weitere. Ein Stoß unterbindet den Beschuss schießender Nichtbosse zehn Sekunden lang; der Kern selbst bleibt schussfähig." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
 		),
 		&"minor_focus": DiscoveryDefinition.create(
 			&"minor_focus", &"enemy_materialized", "Kleiner Herd",
@@ -332,7 +332,7 @@ static func loadout_module_definitions() -> Dictionary:
 		&"treatment_pierce": LoadoutModuleDefinition.create(&"treatment_pierce", "Durchdringender Impuls", "Durchquert mehrere Gegner in einer Linie.", LoadoutModuleDefinition.Kind.TREATMENT, 2, [&"treatment", &"pierce"], &"unlock_piercing_treatment"),
 		&"ability_focus_field": LoadoutModuleDefinition.create(&"ability_focus_field", "Fokusfeld", "Behandlung im Zielgebiet verursacht 25 % mehr Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"focus", &"control"], &"", true),
 		&"ability_emergency_support": LoadoutModuleDefinition.create(&"ability_emergency_support", "Notfallhilfe", "Stellt 14 Leben wieder her und gewährt 8 Schild.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"support"], &"", true),
-		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Stoß", "Stößt Gegner zurück, betäubt sie für 1 Sekunde und beendet den Beschuss getroffener Nichtbosse. Verursacht derzeit keinen Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control"], &"unlock_defense_burst"),
+		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Stoß", "Stößt Gegner zurück, betäubt sie für 1 Sekunde und unterbindet den Beschuss getroffener Nichtbosse für 10 Sekunden. Verursacht derzeit keinen Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control"], &"unlock_defense_burst"),
 		&"ability_treatment_line": LoadoutModuleDefinition.create(&"ability_treatment_line", "Fetter lazer", "30 Schaden in einer durchdringenden Linie.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"pierce"], &"unlock_treatment_line"),
 		&"ability_protection_field": LoadoutModuleDefinition.create(&"ability_protection_field", "Schildfeld", "Gegner im Feld: −35 % Geschwindigkeit und Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control", &"support"], &"unlock_protection_field"),
 		&"ability_sample_pull": LoadoutModuleDefinition.create(&"ability_sample_pull", "Erfahrungszug", "Zieht Erfahrung an und beschleunigt kurz den Befund.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"samples", &"diagnosis"], &"unlock_sample_pull"),

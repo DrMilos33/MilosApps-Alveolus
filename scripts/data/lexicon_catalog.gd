@@ -69,7 +69,7 @@ static func _append_enemy_entries(result: Array[LexiconEntryDefinition]) -> void
 		&"pneumococcus": ["Schneller Einzelerreger", "Bewegt sich direkt auf Doctor Milos zu und verursacht Schaden, wenn er ihn erreicht."],
 		&"bacterial_cluster": ["Widerstandsfähige Gruppe", "Bewegt sich langsamer, hält mehr aus und hinterlässt mehr Erfahrung."],
 		&"minor_focus": ["Langsames Nebenziel", "Bewegt sich langsam und setzt nach einiger Zeit weitere Bakterien frei, wenn es nicht rechtzeitig kontrolliert wird."],
-		&"localized_boss": ["Bakterienkern aus Fall 1 und 2", "In Fall 1 verstärkt seine Aura nahe Monster, ruft alle 15 Sekunden vier schnell schießende Bakterien und feuert selbst, solange seine Aura leer ist. In Fall 2 feuert er mit 80 Prozent zusätzlicher Rate 50 Prozent schnellere und stärkere Doppelkurven-Projektile; ab 80 Prozent Leben erscheinen drei Bakterien und danach alle 15 Sekunden vier weitere. Ein Stoß beendet deren Beschuss dauerhaft."],
+		&"localized_boss": ["Bakterienkern aus Fall 1 und 2", "In Fall 1 verstärkt seine Aura nahe Monster, ruft alle 15 Sekunden vier schnell schießende Bakterien und feuert selbst, solange seine Aura leer ist. In Fall 2 feuert er mit 80 Prozent zusätzlicher Rate 50 Prozent schnellere und stärkere Doppelkurven-Projektile; ab 80 Prozent Leben erscheinen drei Bakterien und danach alle 15 Sekunden vier weitere. Ein Stoß unterbindet deren Beschuss zehn Sekunden lang."],
 		&"infection_focus": ["Bossgegner", "Seine Phasen erhöhen den Druck im Fall. Die tatsächlichen Werte werden je Fall skaliert."],
 	}
 	for id in [&"pneumococcus", &"bacterial_cluster", &"minor_focus", &"localized_boss", &"infection_focus"]:

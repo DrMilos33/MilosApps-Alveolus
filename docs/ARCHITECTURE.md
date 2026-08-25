@@ -570,9 +570,10 @@ edge arrow only while a boss body is fully outside the actual camera rectangle.
 Case-pressure combat and presentation modifiers are copied from the immutable
 plan into scalar activation fields on `InfectionEnemy` and cleared on recycle.
 The Fall-1 target resolves to speed 66, 1.875 attack-rate, 1.95 projectile-speed
-and width multipliers; a zero-damage Stoß control hit permanently disables its
-projectile lease. The Fall-2 target remains one gameplay entity with exactly
-1,200 shared health, double authored event movement, a presentation-only 1.12
+and width multipliers; a zero-damage Stoß control hit suppresses its projectile
+lease for exactly ten seconds. The Fall-2 target remains one gameplay entity
+with exactly 1,200 shared health, double authored event movement, a
+presentation-only 1.12
 visual scale and one bar. It publishes an explicitly disabled projectile
 contract, so no attack-director lease or misleading Stoß suppression marker can
 exist. Twenty immutable normalized sample points proxy its visible constituent
@@ -591,10 +592,11 @@ changes therefore alter distance but never the turn schedule. One authored
 15-second four-add schedule. A packed per-handle sequence alternates turn side.
 Only this Fall-2 contract is lifetime-bounded so both timed turns can complete;
 other double-turn projectiles retain their authored maximum-distance cutoff.
-Every projectile-capable nonboss receives a per-activation permanent Stoß
-shooting lock by default, including all periodic and phase adds. Spawn metadata
-may later select a positive duration or explicit zero. Boss identity overrides
-all lock values. Generations, recycle and director release clear every timer and
+Every projectile-capable nonboss receives a ten-second Stoß shooting lock by
+default, including all periodic and phase adds. Repeated hits refresh the same
+bounded timer. Spawn metadata may select another positive duration, explicit
+zero immunity or a negative permanent exception. Boss identity overrides all
+lock values. Generations, recycle and director release clear every timer and
 sequence.
 
 The second active slot derives from the completed-Fall-1 milestone, while

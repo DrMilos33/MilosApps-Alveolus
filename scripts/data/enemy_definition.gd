@@ -1,7 +1,7 @@
 class_name EnemyDefinition
 extends Resource
 
-const DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS := -1.0
+const DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS := 10.0
 
 @export var id: StringName
 @export var display_name: String

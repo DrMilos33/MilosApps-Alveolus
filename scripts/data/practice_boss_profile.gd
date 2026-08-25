@@ -241,7 +241,7 @@ static func catalog() -> Array[PracticeBossProfile]:
 			15.0,
 			4,
 			1,
-			-1.0,
+			EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS,
 			1.5,
 			PackedFloat32Array([0.80])
 		),
