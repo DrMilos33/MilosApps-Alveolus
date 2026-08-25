@@ -151,7 +151,7 @@ func _test_boss_and_finding_contract() -> void:
 	_near(case_three.boss_projectile_damage_multiplier, 2.0, "Fall 3 verwendet den neuen Zwischen-Projektilfaktor")
 	_near(case_three.boss_projectile_speed_multiplier, 1.26, "Fall-3-Bossprojektile sind gegenüber dem vorherigen Faktor um 30 Prozent reduziert")
 	_near(case_three.boss_wave_amplitude, 136.0, "Fall-3-Rautenflugbahn ist gegenüber dem bisherigen Muster 60 Prozent breiter")
-	_near(case_three.boss_wave_length, 400.0, "Fall-3-Rautenprojektile treffen sich erst nach 200 Weltpunkten wieder")
+	_near(case_three.boss_wave_length, 500.0, "Fall-3-Rautenprojektile treffen sich erst nach 250 Weltpunkten wieder")
 	_equal(case_four.boss_enemy_id, &"infection_focus", "Der bisherige Spezialboss liegt jetzt auf Order 4")
 	_true(case_four.boss_ranged_enabled, "Fall-4-Boss verwendet die Rautenprojektile")
 	_near(case_four.boss_projectile_damage_multiplier, 2.5, "Fall-4-Projektilschaden ist um 150 Prozent erhöht")
