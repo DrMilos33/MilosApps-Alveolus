@@ -371,7 +371,7 @@ Spawn bis zum Boss auf dem festen Fallgrundwert. Es gibt keine Ablaufzeit.
 
 | Fall | Titel | Standardintervall | Leben | Tempo | Schaden | Gruppen | Bossleben | Phasenadds | Forschung |
 |---:|---|---|---|---:|---:|---|---:|---|---:|
-| 1 | Früher Verlauf | 1,16125 → 0,26875 s | 1,05 | 1,04 | 1,15 | 6 → 23 % | 0,75 | 2 / – | 0,85 |
+| 1 | Früher Verlauf | 1,16125 → 0,28289 s | 1,05 | 1,04 | 1,15 | 6 → 23 % | 0,75 | 2 / – | 0,85 |
 | 2 | lol - name fehlt | 1,03375 → 0,23375 s | 1,15 | 1,08 | 1,25 | 10 → 28 % | 1,00 | 3 / – | 1,00 |
 | 3 | Fortschreitender Verlauf | 0,9075 → 0,200 s | 1,25 | 1,12 | 1,35 | 14 → 33 % | 0,60 | 3 / 3 | 1,175 |
 | 4 | Die Ausbreitung | 0,780 → 0,165 s | 1,35 | 1,16 | 1,45 | 18 → 38 % | 0,75 | 4 / 4 | 1,35 |
@@ -389,7 +389,7 @@ aber weder Gegner, EXP noch Levelprogression.
 
 | Fall | Körper im ersten Timeout-Paket | Körper im späten Timeout-Paket (ca.) |
 |---:|---:|---:|
-| 1 | 4 | 23 |
+| 1 | 4 | 22 |
 | 2 | 4 | 26 |
 | 3 | 5 | 31 |
 | 4 | 6 | 37 |
@@ -417,11 +417,12 @@ Schaden. Der erste Sieg kehrt direkt zum Campus zurück und vergibt exakt 30
 Forschung; der Intro-Skip vergibt ebenfalls exakt 30. Beide vergeben keinen
 Talentpunkt.
 
-Alle positiven Run-Forschungseinnahmen werden zentral mit 3,75 multipliziert;
-die separate Introgrundbelohnung beträgt exakt 30 und verwendet keinen
-Bossmultiplikator. Kosten und Rückerstattungen bleiben
-unverändert. Zusätzlich gilt am Rundenende der
-Bossmultiplikator `1 + 0,25 × besiegte Bosse`; gerundet wird genau einmal am Ende.
+Alle positiven Run-Forschungseinnahmen werden zentral mit 3,75 und danach mit
+dem zusätzlichen Run-Faktor 1,50 multipliziert; der effektive gemeinsame Faktor
+ist damit 5,625. Die separate Introgrundbelohnung beträgt exakt 30 und verwendet
+weder Run- noch Bossmultiplikator. Kosten und Rückerstattungen bleiben
+unverändert. Zusätzlich gilt am Rundenende der Bossmultiplikator
+`1 + 0,25 × besiegte Bosse`; gerundet wird genau einmal am Ende.
 
 ### Variationsregel
 

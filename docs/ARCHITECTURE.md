@@ -487,12 +487,13 @@ fire, water, earth, wind.
 
 `MetaProgressionState.calculate_run_reward()` is the pure reward preview and is
 the only arithmetic used by `award_run()`. A loss preview therefore shares the
-same multiplier, rounding and minimum with the eventual mutation. All positive
-research income uses the central 3.75 gain factor; purchases and refunds do not.
-Run rewards apply `1 + 0.25 * bosses_defeated` once before the single final
-rounding. The one-time intro grant is exactly 30 for completion or skip and
-deliberately bypasses the boss multiplier, so it equals the canonical Stoß
-unlock cost without creating surplus research.
+same multiplier, rounding and minimum with the eventual mutation. Positive run
+income uses the central 3.75 gain factor and an additional run-only 1.50 factor;
+purchases and refunds do not. Run rewards apply
+`1 + 0.25 * bosses_defeated` once before the single final rounding. The one-time
+intro grant is exactly 30 for completion or skip and deliberately bypasses both
+run factors and the boss multiplier, so it equals the canonical Stoß unlock cost
+without creating surplus research. Practice runs bypass this reward path.
 
 `UISettingsState.show_discovery_info` is an additive Save-v7 setting with a
 default of `true`. When disabled, `Game` drains requested discoveries through

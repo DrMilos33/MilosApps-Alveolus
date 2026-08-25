@@ -2,6 +2,7 @@ class_name MetaProgressionState
 extends RefCounted
 
 const RESEARCH_GAIN_MULTIPLIER := 3.75
+const RUN_RESEARCH_GAIN_MULTIPLIER := 1.50
 const BOSS_RESEARCH_MULTIPLIER_PER_DEFEAT := 0.25
 const INTRO_RESEARCH_REWARD := 30
 
@@ -209,6 +210,7 @@ static func calculate_run_reward(
 		float(reward)
 		* maxf(multiplier, 0.0)
 		* RESEARCH_GAIN_MULTIPLIER
+		* RUN_RESEARCH_GAIN_MULTIPLIER
 		* boss_research_multiplier(bosses_defeated)
 	))
 
