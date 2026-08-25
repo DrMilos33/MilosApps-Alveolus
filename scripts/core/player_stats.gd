@@ -5,7 +5,7 @@ const BASE_MAX_HEALTH := 50.0
 const BASE_DEFENSE := 0.0
 const BASE_LIFE_REGENERATION := 0.0
 const BASE_TREATMENT_DAMAGE := 10.0
-const BASE_MOVEMENT_SPEED := 180.0
+const BASE_MOVEMENT_SPEED := 171.0
 
 var therapy_damage: float = BASE_TREATMENT_DAMAGE
 var therapy_cooldown: float = 0.965

@@ -35,7 +35,7 @@ func _test_default_schedules() -> void:
 	_near(fall_one.target_movement_speed_multiplier, 60.0 / 38.0, "Fall 1 löst den mobilen Eventherd auf ganzzahliges Basistempo 60 auf")
 	_near(fall_one.target_attack_speed_multiplier, 1.875, "Fall 1 erhöht die vorhandene Eventherd-Schussrate nochmals um 50 Prozent")
 	_near(fall_one.target_projectile_width_multiplier, 1.5, "Fall 1 verbreitert nur die Eventherdprojektile um 50 Prozent")
-	_near(fall_one.target_projectile_speed_multiplier, 1.5, "Fall 1 beschleunigt nur die Eventherdprojektile um 50 Prozent")
+	_near(fall_one.target_projectile_speed_multiplier, 1.95, "Fall 1 beschleunigt die bereits schnellen Eventherdprojektile nochmals um 30 Prozent")
 	_near(fall_one.defense_burst_shooting_lock_seconds, 10.0, "Stoß unterbindet den Fall-1-Eventbeschuss zehn Sekunden")
 
 	var fall_two := CasePressurePlanScript.default_for_case_order(2)

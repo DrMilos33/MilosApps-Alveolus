@@ -93,7 +93,7 @@ func _test_global_research_is_idempotent() -> void:
 		_near(stats.experience_gain_multiplier, 1.15, "Erfahrungsforschung gilt global")
 		_near(stats.defense, 6.0, "Defensivforschung gilt global")
 		_near(stats.life_regeneration_per_second, 0.75, "Regenerationsforschung gilt global")
-		_near(stats.movement_speed, 196.0, "Galoppforschung gilt global und bleibt ganzzahlig")
+		_near(stats.movement_speed, 186.0, "Galoppforschung gilt global und bleibt ganzzahlig")
 
 		stats.apply_meta_progression(ranks)
 		_near(stats.therapy_damage, expected_damage, "Wiederholtes Anwenden vervielfacht den Grundschaden nicht")
@@ -101,7 +101,7 @@ func _test_global_research_is_idempotent() -> void:
 		_near(stats.experience_gain_multiplier, 1.15, "Wiederholtes Anwenden vervielfacht Erfahrung nicht")
 		_near(stats.defense, 6.0, "Wiederholtes Anwenden vervielfacht Defensive nicht")
 		_near(stats.life_regeneration_per_second, 0.75, "Wiederholtes Anwenden vervielfacht Regeneration nicht")
-		_near(stats.movement_speed, 196.0, "Wiederholtes Anwenden vervielfacht Galopp nicht")
+		_near(stats.movement_speed, 186.0, "Wiederholtes Anwenden vervielfacht Galopp nicht")
 
 		stats.apply_meta_progression({})
 		_near(stats.therapy_damage, treatment.base_damage, "Ein Forschungsreset stellt den Behandlungsschaden wieder her")

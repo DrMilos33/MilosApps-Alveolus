@@ -1928,7 +1928,10 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_reinforcement_count = 0
 	config.boss_reinforcement_minimum_phase = 0
 	config.boss_projectile_attack_speed_multiplier = 1.0
+	config.boss_projectile_speed_multiplier = 1.0
+	config.boss_projectiles_require_empty_aura = false
 	config.boss_add_defense_burst_shooting_lock_seconds = 0.0
+	config.boss_add_projectile_attack_speed_multiplier = 1.0
 	config.initial_small_enemy_count = scenario.get_initial_small_count()
 	config.initial_cluster_enemy_count = scenario.get_initial_medium_count()
 	config.regular_spawn_weight_cap = scenario.get_ongoing_weighted_cap()
@@ -2623,8 +2626,9 @@ func _on_enemy_reinforcements_requested(source_handle: int, count: int) -> void:
 	var source := enemy_world.resolve(source_handle) as InfectionEnemy
 	if not is_instance_valid(source) or not source.is_targetable():
 		return
-	# The first case summons ordinary melee bacteria. Projectile-boss
-	# reinforcements keep their established ranged-add contract.
+	# A ranged boss explicitly grants its periodic reinforcements the existing
+	# ranged-add contract. Fall 1 now uses this path even though the boss itself
+	# only fires while its aura is empty.
 	var add_source_handle := source_handle if config != null and config.boss_ranged_enabled else EntityHandle.INVALID
 	if _fixed_step_active:
 		run_session.event_queue.push(&"minions_requested", add_source_handle, EntityHandle.INVALID, float(count), source.global_position)
@@ -2830,8 +2834,7 @@ func _spawn_enemy(
 		return null
 	var definition: EnemyDefinition = enemy_definitions[type]
 	var critical := critical_spawn or definition.is_boss
-	var progress := 0.0 if state == null or config.event_driven_intro else clampf(state.elapsed / maxf(config.run_duration_seconds, 0.001), 0.0, 1.0)
-	var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, progress)
+	var health_scale := config.regular_enemy_health_scale()
 	var movement_scale := spawn_request.movement_scale if spawn_request != null else config.enemy_speed_multiplier
 	var damage_scale := spawn_request.contact_scale if spawn_request != null else config.contact_damage_multiplier
 	var phases := spawn_request.boss_phases.duplicate() if spawn_request != null else PackedInt32Array()
@@ -2982,6 +2985,7 @@ func _spawn_boss() -> void:
 			&"boss"
 		)
 		request.metadata["projectile_attack_speed_multiplier"] = config.boss_projectile_attack_speed_multiplier
+		request.metadata["projectile_speed_multiplier"] = config.boss_projectile_speed_multiplier
 		var boss := _spawn_enemy(
 			config.boss_enemy_id,
 			request.position,
@@ -3033,7 +3037,7 @@ func _register_active_boss(enemy: InfectionEnemy) -> void:
 			reinforcement_phase = 2
 		enemy_attack_director.configure_boss_contract(
 			handle,
-			config.boss_ranged_enabled,
+			config.boss_ranged_enabled and not config.boss_projectiles_require_empty_aura,
 			reinforcement_interval,
 			reinforcement_count,
 			reinforcement_phase
@@ -3120,6 +3124,7 @@ func _boss_aura_step(delta: float) -> void:
 		if not is_instance_valid(boss) or not boss.is_targetable():
 			continue
 		boss.set_boss_aura_radius(radius)
+		var has_nearby_monster := false
 		boss_aura_query_handles = enemy_world.query_collision_candidates(
 			boss.global_position,
 			radius,
@@ -3132,11 +3137,15 @@ func _boss_aura_step(delta: float) -> void:
 				not is_instance_valid(enemy)
 				or enemy.definition == null
 				or enemy.definition.is_boss
-				or not enemy.is_targetable()
 				or topology.distance_squared(boss.global_position, enemy.global_position) > radius_squared
 			):
 				continue
+			if not enemy.is_targetable():
+				continue
+			has_nearby_monster = true
 			next_handles[handle] = true
+		if config.boss_projectiles_require_empty_aura and enemy_attack_director != null:
+			enemy_attack_director.set_projectile_enabled(boss_handle, not has_nearby_monster)
 	for handle_value in boss_aura_active_handles.keys():
 		var handle := int(handle_value)
 		if next_handles.has(handle):
@@ -3198,8 +3207,8 @@ func _on_minions_requested(origin: Vector2, count: int, source_enemy: InfectionE
 func _apply_minions_requested(origin: Vector2, count: int, source_handle: int = EntityHandle.INVALID) -> void:
 	if state == null or not state.active:
 		return
-	var progress := 0.0 if config.event_driven_intro else clampf(state.elapsed / maxf(config.run_duration_seconds, 0.001), 0.0, 1.0)
-	var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, progress)
+	var health_scale := config.regular_enemy_health_scale()
+	var source_is_active_boss := EntityHandle.is_valid(source_handle) and active_boss_handles.has(source_handle)
 	for index in range(count):
 		var angle := TAU * float(index) / float(maxi(count, 1)) + rng.randf_range(-0.22, 0.22)
 		var position := topology.wrap_position(origin + Vector2.from_angle(angle) * rng.randf_range(88.0, 130.0))
@@ -3216,6 +3225,9 @@ func _apply_minions_requested(origin: Vector2, count: int, source_handle: int = 
 		)
 		request.metadata["ranged_shooter"] = EntityHandle.is_valid(source_handle)
 		if EntityHandle.is_valid(source_handle):
+			request.metadata["projectile_attack_speed_multiplier"] = (
+				config.boss_add_projectile_attack_speed_multiplier if source_is_active_boss else 1.0
+			)
 			request.metadata["defense_burst_shooting_lock_seconds"] = config.boss_add_defense_burst_shooting_lock_seconds
 		_spawn_enemy(&"pneumococcus", position, health_scale, true, true, request)
 

@@ -35,7 +35,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein früher lokaler Infektionsherd bildet den ersten regulären Patientenfall.",
 			"Der frühe Verlauf wurde kontrolliert.",
 			"Der frühe Verlauf konnte in diesem Versuch nicht kontrolliert werden."
-		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", false).configure_boss_aura(1.20, 1.45, 1.45).configure_boss_reinforcements(15.0, 4).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
+		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", true).configure_boss_aura(1.20, 1.45, 1.45).configure_boss_reinforcements(15.0, 4).configure_boss_projectile_contract(1.0, 0.0, 1.3, true, 2.0).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
 		LevelDefinition.create(
 			&"localized_focus", 2, "lol - name fehlt", "Fall 02 · lokalisierter Pneumokokkenherd", false,
 			-1.0, 300.0, 50.0, 1.03375, 0.23375, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
@@ -168,7 +168,7 @@ static func discovery_definitions() -> Dictionary:
 		&"localized_boss": DiscoveryDefinition.create(
 			&"localized_boss", &"enemy_materialized", "Bakterienkern",
 			"Der Bakterienkern steht vereinfacht für einen noch lokal begrenzten Schwerpunkt der Infektion.",
-			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und alle 15 Sekunden erscheinen vier Bakterien. In Fall 2 feuert er mit 1,8-facher Rate Doppelkurven-Projektile; bei 70 %% Leben erscheinen drei Bakterien und alle 15 Sekunden vier weitere schießende Bakterien. Ein Stoß beendet den Beschuss dieser Verstärkungen dauerhaft." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
+			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und ruft alle 15 Sekunden vier schnell schießende Bakterien. Ist seine Aura leer, feuert der Kern selbst. In Fall 2 feuert er mit 1,8-facher Rate Doppelkurven-Projektile; bei 70 %% Leben erscheinen drei Bakterien und alle 15 Sekunden vier weitere schießende Bakterien. Ein Stoß beendet den Beschuss dieser Verstärkungen dauerhaft." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
 		),
 		&"minor_focus": DiscoveryDefinition.create(
 			&"minor_focus", &"enemy_materialized", "Kleiner Herd",
@@ -183,7 +183,7 @@ static func discovery_definitions() -> Dictionary:
 		&"character_stats": DiscoveryDefinition.create(
 			&"character_stats", &"catalog", "Doctor Milos",
 			"Der beste Doctor mit Bandana.",
-			"GRUNDWERTE\n50 Leben · Galopp 180 · Schaden 13 · Attack Speed 1,04/s · Reichweite 16 · 1 Ziel · Erfahrungsradius 6. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", ""
+			"GRUNDWERTE\n50 Leben · Galopp 171 · Schaden 13 · Attack Speed 1,04/s · Reichweite 16 · 1 Ziel · Erfahrungsradius 6. Forschung und Ausbauten verändern diese Werte.", &"none", 0, &"grundlagen", &"doctor", ""
 		),
 		&"patient_stability": DiscoveryDefinition.create(
 			&"patient_stability", &"run_started", "Leben",

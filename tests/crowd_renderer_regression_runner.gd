@@ -33,6 +33,7 @@ func _run() -> void:
 	_test_zero_path(renderer, enemies, pickups)
 	_test_entity_owned_cluster_materialization_and_relocation()
 	_test_batched_health_bar_lifecycle()
+	_test_shooting_lock_status_lifecycle()
 	_append_enemies(enemies, 119)
 	_test_count_path(renderer, enemies, pickups, 119)
 	var slots_at_119 := _slot_map(renderer, enemies)
@@ -210,6 +211,25 @@ func _test_batched_health_bar_lifecycle() -> void:
 	renderer.release_enemy(detailed, detailed.activation_generation)
 	batched.queue_free()
 	detailed.queue_free()
+	renderer.queue_free()
+
+
+func _test_shooting_lock_status_lifecycle() -> void:
+	var renderer := CrowdRenderer.new()
+	get_root().add_child(renderer)
+	renderer.configure(2, 1)
+	var enemy := _make_enemy(703)
+	enemy.configure_projectile_modifiers(1.0, 1.0, 1.0, 10.0)
+	renderer.register_enemy(enemy)
+	_assert_equal(renderer.active_enemy_shooting_lock_count(), 0, "Ein normal schießender Gegner besitzt kein Verwirrtheitssymbol")
+	enemy.apply_knockback(Vector2.RIGHT, 8.0, 0.1, 1.0)
+	enemy.apply_defense_burst_shooting_lock()
+	_assert_true(enemy.is_stunned() and enemy.projectiles_suppressed(), "Stoß setzt Stun und Schusssperre gleichzeitig")
+	_assert_equal(renderer.active_enemy_shooting_lock_count(), 1, "Die Schusssperre registriert genau ein kleines Verwirrtheitssymbol")
+	enemy.step_fixed(10.01)
+	_assert_equal(renderer.active_enemy_shooting_lock_count(), 0, "Das Verwirrtheitssymbol endet synchron mit der zeitlichen Schusssperre")
+	renderer.release_enemy(enemy, enemy.activation_generation)
+	enemy.queue_free()
 	renderer.queue_free()
 
 func _test_count_path(renderer: CrowdRenderer, enemies: Array[InfectionEnemy], pickups: Array[AnalysisPickup], expected_count: int) -> void:

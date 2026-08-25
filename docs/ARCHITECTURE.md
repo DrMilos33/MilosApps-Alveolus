@@ -53,6 +53,10 @@ content definitions do not depend on scene nodes.
   boss-only practice, bosses, phase reinforcements, pressure targets and finding
   spawns remain event-authored exceptions. Boss start and run end cancel all
   pending standard-wave state before handles can be reused.
+  Every standard-wave intent captures `RunConfig.regular_enemy_health_scale()`,
+  which resolves to the authored case baseline for the entire run. Generic
+  spawns and boss adds use the same baseline; explicit request and boss health
+  overrides still take precedence.
 - `CombatSpatialGrid` and `CombatQuery` are the sole broad-phase query path.
   Both use `ArenaTopology`. `WRAP` remains the explicit compatibility mode;
   playable runs select `BOUNDED`, whose direct distances, clamped cell ranges
@@ -549,11 +553,14 @@ second phase. Projectile geometry is data-driven: the later special boss emits
 its two phased diamond shots at 212.5 world units per second and a 25-percent
 larger authored amplitude; ranged phase adds use 322.5. The intro boss emits one
 ordinary hostile projectile per attack interval. The Fall-1 boss configures a
-projectile-free director lease that requests four ordinary small bacteria every
-15 seconds from phase zero. Its Game-owned 10 Hz aura query reuses the existing
-enemy collision grid, applies one named 1.45 speed/damage status to nearby
-nonbosses inside a radius equal to 60 percent of the shorter visible dimension,
-and removes that status on exit, death, reuse or run cleanup. Boss locomotion remains direct and ignores all
+director lease that requests four shooting small bacteria every 15 seconds from
+phase zero. Periodic and phase adds use a 2.0 attack-rate multiplier. Its
+Game-owned 10 Hz aura query reuses the existing enemy collision grid, applies
+one named 1.45 speed/damage status to nearby nonbosses inside a radius equal to
+60 percent of the shorter visible dimension, and generation-safely enables the
+boss projectile lease only while that local query contains no materialized
+nonboss. Its own double-turn projectile uses a 1.3 travel-speed multiplier. Aura
+status is removed on exit, death, reuse or run cleanup. Boss locomotion remains direct and ignores all
 enemy-enemy contact circles in both directions; Doctor contact, damage, stun,
 knockback and bounded-arena constraints remain unchanged. The HUD resolves at
 most the active boss handles once per fixed snapshot and drives one process-free
@@ -561,7 +568,7 @@ edge arrow only while a boss body is fully outside the actual camera rectangle.
 
 Case-pressure combat and presentation modifiers are copied from the immutable
 plan into scalar activation fields on `InfectionEnemy` and cleared on recycle.
-The Fall-1 target resolves to speed 60, 1.875 attack-rate, 1.5 projectile-speed
+The Fall-1 target resolves to speed 60, 1.875 attack-rate, 1.95 projectile-speed
 and width multipliers; a zero-damage Stoß control hit pauses only its projectile
 timer for ten seconds. The Fall-2 target remains one gameplay entity with shared
 health: its composed bacteria texture and repeated bars are presentation-only,
@@ -609,9 +616,11 @@ typed EnemyWorld loop. `Stoß` supplies a distance, short eased travel duration
 and one-second stun. The same `player_push_enabled` contract controls its
 translation; bosses retain the stun but never change position. While stunned,
 chase/contact handling and `EnemyAttackDirector` projectile scheduling are
-suspended. `CrowdRenderer`
-tracks only the generation-bound stunned subset and draws the tiny shared CC0
-status icon; it does not introduce per-enemy process owners.
+suspended. `CrowdRenderer` tracks generation-bound status subsets without
+per-enemy process owners. It draws the tiny shared CC0 star for stun and, on the
+separate `shooting_lock_changed` edge, a small procedural question mark above
+that row for a Stoß-disabled projectile attack. Both records are cleared on
+expiry, release and generation reuse.
 
 `ArenaBackdrop` precomputes the coral dashed hard boundary and its eight corner
 segments during `configure()`. They are part of the existing one-shot static

@@ -127,12 +127,7 @@ func configure_boss_contract(
 	if not _owns(handle) or role_for(handle) != Role.BOSS:
 		return false
 	var slot := EntityHandle.slot(handle)
-	var projectiles_were_enabled := _projectile_enabled[slot] != 0
-	_projectile_enabled[slot] = 1 if projectile_enabled else 0
-	if projectile_enabled and not projectiles_were_enabled:
-		_shot_timers[slot] = _initial_delay(Role.BOSS)
-	elif not projectile_enabled:
-		_shot_timers[slot] = 0.0
+	_set_projectile_enabled_for_slot(slot, projectile_enabled)
 	_reinforcement_intervals[slot] = maxf(reinforcement_interval, 0.0)
 	_reinforcement_counts[slot] = maxi(reinforcement_count, 0)
 	_reinforcement_minimum_phases[slot] = clampi(minimum_phase, 0, 2)
@@ -141,6 +136,13 @@ func configure_boss_contract(
 		if _boss_reinforcements_enabled(slot)
 		else 0.0
 	)
+	return true
+
+
+func set_projectile_enabled(handle: int, enabled: bool) -> bool:
+	if not _owns(handle):
+		return false
+	_set_projectile_enabled_for_slot(EntityHandle.slot(handle), enabled)
 	return true
 
 
@@ -212,7 +214,7 @@ func _emit_attack(handle: int, role: int, enemy: InfectionEnemy) -> void:
 
 func _shot_interval(enemy: InfectionEnemy, role: int) -> float:
 	if role == Role.PHASE_ADD:
-		return PHASE_ADD_INTERVAL
+		return PHASE_ADD_INTERVAL / maxf(enemy.projectile_attack_speed_multiplier, 0.01)
 	if enemy.definition != null and enemy.definition.projectile_interval > 0.0:
 		return enemy.resolved_projectile_interval()
 	return PHASE_ADD_INTERVAL
@@ -236,6 +238,15 @@ func _boss_reinforcements_enabled(slot: int) -> bool:
 		and _reinforcement_counts[slot] > 0
 		and _boss_phases[slot] >= _reinforcement_minimum_phases[slot]
 	)
+
+
+func _set_projectile_enabled_for_slot(slot: int, enabled: bool) -> void:
+	var was_enabled := _projectile_enabled[slot] != 0
+	_projectile_enabled[slot] = 1 if enabled else 0
+	if enabled and not was_enabled:
+		_shot_timers[slot] = _initial_delay(int(_roles[slot]))
+	elif not enabled:
+		_shot_timers[slot] = 0.0
 
 
 func _owns(handle: int) -> bool:

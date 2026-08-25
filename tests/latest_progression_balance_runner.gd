@@ -16,7 +16,7 @@ func _test_integer_and_attack_speed_contract() -> void:
 	var treatments := TreatmentDefinition.catalog()
 	var impulse := treatments[&"treatment_precision"] as TreatmentDefinition
 	_equal(PlayerStats.BASE_MAX_HEALTH, 50.0, "Doctor Milos beginnt mit 50 Basisleben")
-	_equal(PlayerStats.BASE_MOVEMENT_SPEED, 180.0, "Der sichtbare Galopp besitzt den vereinbarten Basiswert")
+	_equal(PlayerStats.BASE_MOVEMENT_SPEED, 171.0, "Der sichtbare Galopp besitzt den um fünf Prozent reduzierten Basiswert")
 	_equal(impulse.base_damage, 10.0, "Impuls verwendet den um drei reduzierten ganzzahligen Schaden")
 	_near(impulse.base_interval, 0.965, "Impuls ist gegenüber 0,82 Sekunden um etwa 15 Prozent verlangsamt")
 	for definition in treatments.values():
@@ -121,7 +121,10 @@ func _test_boss_and_finding_contract() -> void:
 	_near(intro.boss_health_multiplier, 0.09, "Intro-Boss besitzt gegenüber der vorherigen Einführung halbierte Leben")
 	_true(intro.boss_ranged_enabled, "Intro-Boss feuert ein normales Projektil statt einer Spezialbahn")
 	_equal(case_one.boss_enemy_id, &"localized_boss", "Fall 1 beginnt mit dem einfachen Bakterienkern")
-	_true(not case_one.boss_ranged_enabled and case_one.boss_phase_minions == PackedInt32Array([2]), "Fall 1 verwendet genau eine kleine Zweierphase")
+	_true(case_one.boss_ranged_enabled and case_one.boss_phase_minions == PackedInt32Array([2]), "Fall 1 ergänzt seine kleine Zweierphase um den bedingten Fernangriff")
+	_true(case_one.boss_projectiles_require_empty_aura, "Fall 1 feuert nur ohne ein Monster im Auraradius")
+	_near(case_one.boss_projectile_speed_multiplier, 1.3, "Fall-1-Bossprojektile fliegen 30 Prozent schneller")
+	_near(case_one.boss_add_projectile_attack_speed_multiplier, 2.0, "Fall-1-Verstärkungen schießen mit doppelter Rate")
 	_near(case_one.boss_aura_screen_diameter_fraction, 1.20, "Fall-1-Bossaura besitzt nach der Radiusvergrößerung 120 Prozent Bildschirmdurchmesser")
 	_near(case_one.boss_aura_speed_multiplier, 1.45, "Fall-1-Bossaura erhöht nahes Tempo relativ stärker auf 45 Prozent")
 	_near(case_one.boss_aura_damage_multiplier, 1.45, "Fall-1-Bossaura erhöht nahen Schaden relativ stärker auf 45 Prozent")

@@ -161,7 +161,7 @@ func _test_case_one_event_target_profile() -> void:
 			_near(target.projectile_attack_speed_multiplier, 1.875, "Der Fall-1-Eventherd besitzt die um weitere 50 Prozent erhöhte Schussrate")
 			_near(target.resolved_projectile_interval(), 2.6 / 1.875, "Die lineare Feuerrate ergibt ein Intervall von rund 1,39 Sekunden")
 			_near(target.projectile_width_multiplier, 1.5, "Der Fall-1-Eventherd veröffentlicht 50 Prozent breitere Projektile")
-			_near(target.projectile_speed_multiplier, 1.5, "Der Fall-1-Eventherd veröffentlicht 50 Prozent schnellere Projektile")
+			_near(target.projectile_speed_multiplier, 1.95, "Der Fall-1-Eventherd veröffentlicht relativ nochmals 30 Prozent schnellere Projektile")
 			_near(target.defense_burst_shooting_lock_seconds, 10.0, "Der Fall-1-Eventherd übernimmt die zehnsekündige Stoßsperre")
 			target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 			var projectiles_before: int = game.projectiles.size()
@@ -172,7 +172,7 @@ func _test_case_one_event_target_profile() -> void:
 			if game.projectiles.size() > projectiles_before:
 				var projectile := game.projectiles[-1] as TherapyProjectile
 				_near(projectile.hostile_width_multiplier, 1.5, "Das echte Eventherdprojektil übernimmt die breitere Darstellung und Trefferfläche")
-				_near(projectile.speed, 307.5, "Das echte Eventherdprojektil fliegt 50 Prozent schneller")
+				_near(projectile.speed, 399.75, "Das echte Eventherdprojektil fliegt relativ nochmals 30 Prozent schneller")
 			target.apply_defense_burst_shooting_lock()
 			_true(target.projectiles_suppressed(), "Ein Stoß sperrt den Eventherdbeschuss sofort")
 			target.step_fixed(9.999)

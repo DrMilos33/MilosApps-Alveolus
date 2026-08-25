@@ -11,6 +11,7 @@ signal materialized(enemy: InfectionEnemy)
 signal damage_applied(enemy: InfectionEnemy, amount: float, source: StringName)
 signal visual_release_requested(enemy: InfectionEnemy, generation: int)
 signal stun_changed(enemy: InfectionEnemy, stunned: bool)
+signal shooting_lock_changed(enemy: InfectionEnemy, suppressed: bool)
 
 const SPAWN_TELEGRAPH_SECONDS := 0.55
 const SPAWN_MATERIALIZE_SECONDS := 0.15
@@ -267,6 +268,7 @@ func configure_damage_presentation(
 
 
 func apply_defense_burst_shooting_lock() -> void:
+	var was_suppressed := projectiles_suppressed()
 	if defense_burst_shooting_lock_seconds < 0.0:
 		_shooting_lock_permanent = true
 		_shooting_lock_remaining = 0.0
@@ -275,6 +277,8 @@ func apply_defense_burst_shooting_lock() -> void:
 			_shooting_lock_remaining,
 			defense_burst_shooting_lock_seconds
 		)
+	if not was_suppressed and projectiles_suppressed():
+		shooting_lock_changed.emit(self, true)
 
 
 func projectiles_suppressed() -> bool:
@@ -856,3 +860,5 @@ func _step_shooting_lock(delta: float) -> void:
 	if _shooting_lock_permanent or _shooting_lock_remaining <= 0.0:
 		return
 	_shooting_lock_remaining = maxf(0.0, _shooting_lock_remaining - maxf(delta, 0.0))
+	if _shooting_lock_remaining <= 0.0:
+		shooting_lock_changed.emit(self, false)

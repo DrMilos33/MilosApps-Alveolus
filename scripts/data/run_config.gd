@@ -30,6 +30,8 @@ const SPAWN_INTERVAL_CURVE_EXPONENT := 0.82
 @export var boss_ranged_enabled: bool = false
 @export var boss_projectile_damage_multiplier: float = 1.0
 @export var boss_projectile_attack_speed_multiplier: float = 1.0
+@export var boss_projectile_speed_multiplier: float = 1.0
+@export var boss_projectiles_require_empty_aura: bool = false
 @export var boss_wave_amplitude: float = 44.0
 @export var boss_phase_minions: PackedInt32Array = PackedInt32Array()
 @export_range(0.0, 2.0, 0.01) var boss_aura_screen_diameter_fraction: float = 0.0
@@ -39,6 +41,7 @@ const SPAWN_INTERVAL_CURVE_EXPONENT := 0.82
 @export var boss_reinforcement_count: int = 0
 @export var boss_reinforcement_minimum_phase: int = 0
 @export var boss_add_defense_burst_shooting_lock_seconds: float = 0.0
+@export var boss_add_projectile_attack_speed_multiplier: float = 1.0
 @export var reward_multiplier: float = 1.0
 @export var event_driven_intro: bool = false
 @export var enemy_resistance_effective_bonus: float = 0.0
@@ -75,6 +78,13 @@ func regular_spawn_interval(spawn_progress: float) -> float:
 	var curved_progress := pow(clampf(spawn_progress, 0.0, 1.0), SPAWN_INTERVAL_CURVE_EXPONENT)
 	var interval := lerpf(initial_spawn_interval, final_spawn_interval, curved_progress)
 	return interval / maxf(spawn_rate_multiplier, 0.01)
+
+
+## Regular enemies keep their authored case baseline for the whole run. The
+## legacy end field remains serialized for compatibility, but no longer raises
+## health as the boss horizon approaches.
+func regular_enemy_health_scale() -> float:
+	return enemy_health_start
 
 
 static func delayed_spawn_progress(real_progress: float, delay_strength: float) -> float:
@@ -114,6 +124,8 @@ static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunCo
 	config.boss_ranged_enabled = level.boss_ranged_enabled
 	config.boss_projectile_damage_multiplier = level.boss_projectile_damage_multiplier
 	config.boss_projectile_attack_speed_multiplier = level.boss_projectile_attack_speed_multiplier
+	config.boss_projectile_speed_multiplier = level.boss_projectile_speed_multiplier
+	config.boss_projectiles_require_empty_aura = level.boss_projectiles_require_empty_aura
 	config.boss_wave_amplitude = level.boss_wave_amplitude
 	config.boss_phase_minions = level.boss_phase_minions
 	config.boss_aura_screen_diameter_fraction = level.boss_aura_screen_diameter_fraction
@@ -123,6 +135,7 @@ static func from_level(level: LevelDefinition, quick_run: bool = false) -> RunCo
 	config.boss_reinforcement_count = level.boss_reinforcement_count
 	config.boss_reinforcement_minimum_phase = level.boss_reinforcement_minimum_phase
 	config.boss_add_defense_burst_shooting_lock_seconds = level.boss_add_defense_burst_shooting_lock_seconds
+	config.boss_add_projectile_attack_speed_multiplier = level.boss_add_projectile_attack_speed_multiplier
 	config.reward_multiplier = level.reward_multiplier
 	config.case_pressure_plan = level.case_pressure_plan.duplicate(true) as CasePressurePlan if level.case_pressure_plan != null else null
 	config.case_pressure_targets_stationary = level.case_pressure_targets_stationary

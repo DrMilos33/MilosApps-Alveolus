@@ -126,7 +126,7 @@ func open_wave(
 			body_count += 1
 	body_count = mini(body_count, MAX_PENDING_INTENTS)
 
-	var health_scale := lerpf(config.enemy_health_start, config.enemy_health_end, resolved_progress)
+	var health_scale := config.regular_enemy_health_scale()
 	var cluster_chance := clampf(
 		lerpf(config.cluster_chance_start, config.cluster_chance_end, resolved_progress) + cluster_chance_bonus,
 		0.0,

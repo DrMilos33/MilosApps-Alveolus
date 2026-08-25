@@ -41,7 +41,7 @@ IDs oder Save-Kompatibilität sie noch erfordern.
 | Wert | Basis |
 |---|---:|
 | Leben | 50 |
-| Galopp | 180 |
+| Galopp | 171 |
 | Körpergröße | Mittel (separate Größenklasse) |
 | Erfahrungsradius | Stufe 6 |
 | Verteidigung | 0 |
@@ -306,7 +306,7 @@ sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
 Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
 Der geskriptete mobile Eventherd in Fall 1 bildet die einzige Ausnahme: Er
 verwendet ganzzahliges Basistempo 60, feuert alle 1,39 Sekunden und seine
-normalen Projektile besitzen 1,5-fache Geschwindigkeit sowie 1,5-fache
+normalen Projektile besitzen 1,95-fache Geschwindigkeit sowie 1,5-fache
 Querbreite und Trefferfläche. Ein Treffer mit Stoß sperrt seinen Beschuss zehn
 Sekunden; Bewegung und sonstiger Status laufen unverändert weiter. Andere kleine
 Herde behalten das Tabellenprofil. Das mobile Fall-2-Event besitzt 1.800
@@ -319,8 +319,10 @@ gespiegelten, gegenüber dem vorherigen Stand um 25 Prozent weiter ausgelenkten
 Bahnen. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
 Sekunden weitere vier; ihre Projektile fliegen mit 322,5 Tempo. Der Fall-1-
-Bakterienkern aus Fall 1 ruft ab Bossspawn alle 15 Sekunden vier gewöhnliche kleine
-Bakterien. Seine Aura besitzt 120 Prozent Bildschirmdurchmesser beziehungsweise
+Bakterienkern ruft ab Bossspawn alle 15 Sekunden vier schießende kleine
+Bakterien; periodische und phasenabhängige Verstärkungen feuern alle 1,4 Sekunden.
+Solange kein materialisiertes Nichtboss-Monster in seiner Aura steht, feuert der
+Kern selbst mit 1,3-facher Projektilgeschwindigkeit. Seine Aura besitzt 120 Prozent Bildschirmdurchmesser beziehungsweise
 60 Prozent der kürzeren Bildschirmkante als Radius und erhöht Tempo und Schaden
 naher Nichtbosse um 45 Prozent. Gegnerschaden wird mit dem Fallfaktor multipliziert und
 anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
@@ -338,17 +340,18 @@ für den restlichen Lebenszyklus.
 
 ### Hauptfälle
 
-Alle Kurven laufen über die ersten 300 Sekunden bis zum Bossspawn und bleiben
-danach auf ihrem Endwert. Es gibt keine Ablaufzeit.
+Intervall- und Gruppenkurven laufen über die ersten 300 Sekunden bis zum
+Bossspawn und bleiben danach auf ihrem Endwert. Gegnerleben bleibt vom ersten
+Spawn bis zum Boss auf dem festen Fallgrundwert. Es gibt keine Ablaufzeit.
 
 | Fall | Titel | Standardintervall | Leben | Tempo | Schaden | Gruppen | Bossleben | Phasenadds | Forschung |
 |---:|---|---|---|---:|---:|---|---:|---|---:|
-| 1 | Früher Verlauf | 1,16125 → 0,26875 s | 1,05 → 1,525 | 1,04 | 1,15 | 6 → 23 % | 0,75 | 2 / – | 0,85 |
-| 2 | lol - name fehlt | 1,03375 → 0,23375 s | 1,15 → 1,70 | 1,08 | 1,25 | 10 → 28 % | 1,00 | 3 / – | 1,00 |
-| 3 | Fortschreitender Verlauf | 0,9075 → 0,200 s | 1,25 → 1,875 | 1,12 | 1,35 | 14 → 33 % | 0,60 | 3 / 3 | 1,175 |
-| 4 | Die Ausbreitung | 0,780 → 0,165 s | 1,35 → 2,05 | 1,16 | 1,45 | 18 → 38 % | 0,75 | 4 / 4 | 1,35 |
-| 5 | Kritischer Verlauf | 0,720 → 0,150 s | 1,45 → 2,225 | 1,20 | 1,55 | 21,5 → 43 % | 1,05 | 5 / 6 | 1,525 |
-| 6 | Schwerer Verlauf | 0,660 → 0,135 s | 1,55 → 2,40 | 1,24 | 1,65 | 25 → 48 % | 1,35 | 6 / 8 | 1,70 |
+| 1 | Früher Verlauf | 1,16125 → 0,26875 s | 1,05 | 1,04 | 1,15 | 6 → 23 % | 0,75 | 2 / – | 0,85 |
+| 2 | lol - name fehlt | 1,03375 → 0,23375 s | 1,15 | 1,08 | 1,25 | 10 → 28 % | 1,00 | 3 / – | 1,00 |
+| 3 | Fortschreitender Verlauf | 0,9075 → 0,200 s | 1,25 | 1,12 | 1,35 | 14 → 33 % | 0,60 | 3 / 3 | 1,175 |
+| 4 | Die Ausbreitung | 0,780 → 0,165 s | 1,35 | 1,16 | 1,45 | 18 → 38 % | 0,75 | 4 / 4 | 1,35 |
+| 5 | Kritischer Verlauf | 0,720 → 0,150 s | 1,45 | 1,20 | 1,55 | 21,5 → 43 % | 1,05 | 5 / 6 | 1,525 |
+| 6 | Schwerer Verlauf | 0,660 → 0,135 s | 1,55 | 1,24 | 1,65 | 25 → 48 % | 1,35 | 6 / 8 | 1,70 |
 
 Die Standardzufuhr erscheint als klar erkennbare Pakete. Die seit dem letzten
 Paket vergangene aktive Simulationszeit sammelt mit Faktor 1,10 Guthaben aus der

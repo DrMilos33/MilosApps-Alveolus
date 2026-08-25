@@ -63,7 +63,7 @@ func _test_catalog_contract() -> void:
 	_near((enemies[&"infection_focus"] as EnemyDefinition).speed, 72.0, "Infektionsherd verwendet die um 20 Prozent erhöhte ganzzahlige Bossgeschwindigkeit")
 	_near((enemies[&"localized_boss"] as EnemyDefinition).speed, 66.0, "Bakterienkern verwendet die um 20 Prozent erhöhte ganzzahlige Bossgeschwindigkeit")
 	_near((enemies[&"intro_focus"] as EnemyDefinition).speed, 72.0, "Intro-Boss erbt dieselbe Monsterbeschleunigung")
-	_near(PlayerStats.BASE_MOVEMENT_SPEED, 180.0, "Doctor Milos verwendet die neue Basisgeschwindigkeit")
+	_near(PlayerStats.BASE_MOVEMENT_SPEED, 171.0, "Doctor Milos verwendet die um fünf Prozent reduzierte Basisgeschwindigkeit")
 
 	var treatments := TreatmentDefinition.catalog()
 	_near((treatments[&"treatment_precision"] as TreatmentDefinition).base_damage, 10.0, "Impuls verwendet den um drei reduzierten ganzzahligen Basisschaden")
@@ -281,7 +281,8 @@ func _assert_trait_config(game: Node, trait_id: StringName, property_name: Strin
 	game._apply_case_trait_to_config(trait_id)
 	_near(float(game.config.get(property_name)), expected, "Fallmerkmal %s kompiliert %s zentral in RunConfig" % [String(trait_id), property_name])
 	if trait_id == &"monster_health_15":
-		_near(game.config.enemy_health_end, game.selected_level.enemy_health_end * 1.15, "Robuste Erreger skalieren auch das spätere Gegnerleben")
+		_near(game.config.regular_enemy_health_scale(), game.selected_level.enemy_health_start * 1.15, "Robuste Erreger skalieren den konstanten Fallgrundwert")
+		_near(game.config.enemy_health_end, game.selected_level.enemy_health_end * 1.15, "Robuste Erreger bewahren das kompatible Endfeld")
 		_near(game.config.boss_health_multiplier, game.selected_level.boss_health_multiplier * 1.15, "Robuste Erreger skalieren ausdrücklich auch Bossleben")
 
 

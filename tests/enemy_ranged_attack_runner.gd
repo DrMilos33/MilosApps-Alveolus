@@ -51,6 +51,10 @@ func _test_anchor_case_boss_contract() -> void:
 	_true(case_two.boss_ranged_enabled, "Fall 2 aktiviert den neuen Projektilboss")
 	_near(case_two.boss_projectile_attack_speed_multiplier, 1.8, "Fall 2 erhöht die Bossrate linear um 80 Prozent")
 	_near(case_two.boss_reinforcement_interval, 15.0, "Fall 2 ruft alle 15 Sekunden Adds")
+	var case_one := levels[1] as LevelDefinition
+	_true(case_one.boss_ranged_enabled and case_one.boss_projectiles_require_empty_aura, "Fall 1 aktiviert den Bossbeschuss ausschließlich bei leerer Aura")
+	_near(case_one.boss_projectile_speed_multiplier, 1.3, "Fall-1-Bossprojektile erhalten den relativen 30-Prozent-Temposchritt")
+	_near(case_one.boss_add_projectile_attack_speed_multiplier, 2.0, "Fall-1-Bossverstärkungen verwenden die doppelte Schussrate")
 
 
 func _test_case_two_boss_attack_and_add_lock() -> void:
@@ -88,10 +92,17 @@ func _test_case_two_boss_attack_and_add_lock() -> void:
 	var add := InfectionEnemy.new()
 	get_root().add_child(add)
 	add.configure(ContentCatalog.enemy_definitions()[&"pneumococcus"], avatar, topology)
-	add.configure_projectile_modifiers(1.0, 1.0, 1.0, -1.0)
+	add.configure_projectile_modifiers(2.0, 1.0, 1.0, -1.0)
 	add.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	var add_handle := world.register_enemy(add, true)
 	_true(director.register_enemy(add_handle, EnemyAttackDirector.Role.PHASE_ADD), "Fall-2-Add wird als Schütze registriert")
+	director.step_fixed(1.11)
+	_equal(shots.size(), 1, "Ein doppelt schneller Boss-Add feuert nach der unveränderten Startverzögerung")
+	director.step_fixed(1.38)
+	_equal(shots.size(), 1, "Die doppelte Add-Rate bleibt knapp vor 1,4 Sekunden stabil")
+	director.step_fixed(0.02)
+	_equal(shots.size(), 2, "Die doppelte Add-Rate feuert nach rund 1,4 Sekunden erneut")
+	shots.clear()
 	add.apply_defense_burst_shooting_lock()
 	_true(add.projectiles_suppressed(), "Stoß sperrt den Fall-2-Boss-Add dauerhaft")
 	director.step_fixed(30.0)
@@ -235,6 +246,12 @@ func _test_configurable_boss_contract() -> void:
 	director.step_fixed(0.02)
 	_equal(shots.size(), 0, "Deaktivierte Bossprojektile bleiben auch am Verstärkungstick aus")
 	_equal(reinforcements, [4], "Phase 0 fordert nach 15 Sekunden exakt vier Adds an")
+	_true(director.set_projectile_enabled(custom_handle, true), "Die leere Aura kann den bestehenden Bosslease zum Schießen freigeben")
+	director.step_fixed(0.65)
+	_equal(shots.size(), 2, "Die Freigabe feuert das vorhandene Rautenpaar nach der Boss-Startverzögerung")
+	_true(director.set_projectile_enabled(custom_handle, false), "Ein Monster in der Aura sperrt nur den Bossbeschuss wieder")
+	director.step_fixed(10.0)
+	_equal(shots.size(), 2, "Die erneute Aurasperre stoppt Schüsse ohne den Directorlease freizugeben")
 	_true(director.release(custom_handle), "Der benutzerdefinierte Bossvertrag wird synchron freigegeben")
 	_true(
 		not director.configure_boss_contract(custom_handle, true, 1.0, 9, 0),

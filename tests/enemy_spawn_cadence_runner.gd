@@ -35,6 +35,7 @@ func _test_catalog_and_config_contract() -> void:
 		_equal(config.regular_spawn_weight_cap, 145, "%s nutzt das zentrale Gewichtslimit" % String(level.id))
 		_true(config.regular_spawns_enabled, "%s verwendet den Standardwellenpfad" % String(level.id))
 		_true(config.regular_spawn_interval(1.0) < config.regular_spawn_interval(0.0), "%s verdichtet seine Paketgröße über die Fallzeit" % String(level.id))
+		_near(config.regular_enemy_health_scale(), level.enemy_health_start, "%s hält Gegnerleben über die gesamte Runde auf dem Fallgrundwert" % String(level.id))
 	_equal(found_ids, MAIN_LEVEL_IDS, "Exakt sechs Kampagnenfälle verwenden den zentralen Wellenvertrag")
 	_near(StandardWaveDirector.MAXIMUM_WAIT_SECONDS, 4.5, "Eine Welle wartet höchstens 4,5 Sekunden")
 	_near(StandardWaveDirector.MINIMUM_CLEAR_WAIT_SECONDS, 2.0, "Das frühe Clear-Gate besitzt zwei Sekunden Mindestabstand")
@@ -95,6 +96,8 @@ func _test_packet_balance_and_determinism() -> void:
 	_equal(late_count_b, late_count_a, "Spätes Paket bewahrt seine Same-Seed-Größe")
 	var late_intents_a := late_a.take_spawn_intents(64)
 	var late_intents_b := late_b.take_spawn_intents(64)
+	for intent in late_intents_a:
+		_near(intent.health_scale, late_config.enemy_health_start, "Auch ein spätes Fall-6-Wellenmitglied behält das Basisleben")
 	_equal(_intent_signature(late_intents_a), _intent_signature(late_intents_b), "Spätes Paket bewahrt Gegnerarten und Gewichte")
 	_true(_intent_weight(late_intents_a) <= 145, "Ein Paket überschreitet niemals das spielbare Gewichtslimit")
 
@@ -219,6 +222,25 @@ func _test_game_integration() -> void:
 		)
 		if not game.standard_wave_director.has_pending_intents():
 			break
+	game.config.enemy_health_start = 1.05
+	game.config.enemy_health_end = 9.0
+	game.state.elapsed = game.config.run_duration_seconds
+	var base_definition := game.enemy_definitions[&"pneumococcus"] as EnemyDefinition
+	var base_health: float = base_definition.max_health
+	var implicit: InfectionEnemy = game._spawn_enemy(&"pneumococcus", Vector2(420.0, 0.0), -1.0, false, false)
+	_true(implicit != null, "Der fokussierte Lauf erzeugt einen impliziten späten Gegner")
+	if implicit != null:
+		_near(implicit.max_health, base_health * 1.05, "Ein impliziter Spawn verwendet spät weiterhin nur das Fallbasisleben")
+	var count_before_adds: int = game.enemies.size()
+	game._apply_minions_requested(Vector2(-420.0, 0.0), 1)
+	_true(game.enemies.size() == count_before_adds + 1, "Der fokussierte Lauf erzeugt genau einen geskripteten Add")
+	if game.enemies.size() > count_before_adds:
+		var add: InfectionEnemy = game.enemies.back()
+		_near(add.max_health, base_health * 1.05, "Ein später Boss- oder Event-Add verwendet ebenfalls nur das Fallbasisleben")
+	var explicit: InfectionEnemy = game._spawn_enemy(&"pneumococcus", Vector2(0.0, 420.0), 1.7, false, false)
+	_true(explicit != null, "Der fokussierte Lauf erzeugt einen explizit skalierten Gegner")
+	if explicit != null:
+		_near(explicit.max_health, base_health * 1.7, "Ein ausdrücklicher Spawnfaktor behält Vorrang vor dem konstanten Fallbasisleben")
 	# Informational only: headless wall time is not a performance acceptance gate.
 	game.queue_free()
 	await process_frame

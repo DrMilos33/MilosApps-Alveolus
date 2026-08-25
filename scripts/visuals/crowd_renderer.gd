@@ -32,8 +32,10 @@ class EnemyRecord:
 	var telegraph_index: int = -1
 	var health_bar_index: int = -1
 	var stun_index: int = -1
+	var shooting_lock_index: int = -1
 	var health_callback: Callable
 	var stun_callback: Callable
+	var shooting_lock_callback: Callable
 	var materialized_callback: Callable
 	var previous_position: Vector2
 	var current_position: Vector2
@@ -96,6 +98,7 @@ var _enemy_record_list: Array[EnemyRecord] = []
 var _enemy_telegraph_records: Array[EnemyRecord] = []
 var _enemy_health_bar_records: Array[EnemyRecord] = []
 var _enemy_stun_records: Array[EnemyRecord] = []
+var _enemy_shooting_lock_records: Array[EnemyRecord] = []
 var _pickup_records: Dictionary = {}
 var _pickup_record_list: Array[PickupRecord] = []
 var _enemy_render_states: Dictionary = {}
@@ -131,6 +134,8 @@ func _process(_delta: float) -> void:
 	if not _enemy_health_bar_records.is_empty():
 		queue_redraw()
 	if not _enemy_stun_records.is_empty():
+		queue_redraw()
+	if not _enemy_shooting_lock_records.is_empty():
 		queue_redraw()
 
 
@@ -258,11 +263,16 @@ func register_enemy(enemy: InfectionEnemy, force_detailed: bool = false) -> Dict
 	record.stun_callback = Callable(self, "_on_enemy_stun_changed").bind(enemy, record.generation)
 	if not enemy.stun_changed.is_connected(record.stun_callback):
 		enemy.stun_changed.connect(record.stun_callback)
+	record.shooting_lock_callback = Callable(self, "_on_enemy_shooting_lock_changed").bind(enemy, record.generation)
+	if not enemy.shooting_lock_changed.is_connected(record.shooting_lock_callback):
+		enemy.shooting_lock_changed.connect(record.shooting_lock_callback)
 	record.materialized_callback = Callable(self, "_on_enemy_materialized").bind(record.generation)
 	if not enemy.materialized.is_connected(record.materialized_callback):
 		enemy.materialized.connect(record.materialized_callback)
 	if enemy.is_stunned():
 		_add_stun_record(record)
+	if enemy.projectiles_suppressed():
+		_add_shooting_lock_record(record)
 	if not VisualAssetCatalog.has_gameplay_visual(record.visual_id):
 		record.detailed = true
 		_report_unknown_enemy_visual(record.visual_id)
@@ -369,6 +379,7 @@ func clear() -> void:
 	_enemy_telegraph_records.clear()
 	_enemy_health_bar_records.clear()
 	_enemy_stun_records.clear()
+	_enemy_shooting_lock_records.clear()
 	_telegraph_was_visible = false
 	queue_redraw()
 
@@ -424,6 +435,10 @@ func active_telegraph_count() -> int:
 
 func active_enemy_health_bar_count() -> int:
 	return _enemy_health_bar_records.size()
+
+
+func active_enemy_shooting_lock_count() -> int:
+	return _enemy_shooting_lock_records.size()
 
 
 func enemy_health_bar_fraction(enemy: InfectionEnemy) -> float:
@@ -505,6 +520,24 @@ func _on_enemy_stun_changed(
 	queue_redraw()
 
 
+func _on_enemy_shooting_lock_changed(
+	_suppressed_enemy: InfectionEnemy,
+	suppressed: bool,
+	enemy: InfectionEnemy,
+	generation: int
+) -> void:
+	if not is_instance_valid(enemy):
+		return
+	var record := _enemy_records.get(enemy.get_instance_id()) as EnemyRecord
+	if record == null or record.generation != generation:
+		return
+	if suppressed:
+		_add_shooting_lock_record(record)
+	else:
+		_remove_shooting_lock_record(record)
+	queue_redraw()
+
+
 func _on_enemy_materialized(enemy: InfectionEnemy, generation: int) -> void:
 	if not is_instance_valid(enemy):
 		return
@@ -553,10 +586,13 @@ func _release_enemy_record(record: EnemyRecord) -> void:
 	_remove_telegraph_record(record)
 	_remove_health_bar_record(record)
 	_remove_stun_record(record)
+	_remove_shooting_lock_record(record)
 	if is_instance_valid(record.enemy) and record.health_callback.is_valid() and record.enemy.health_changed.is_connected(record.health_callback):
 		record.enemy.health_changed.disconnect(record.health_callback)
 	if is_instance_valid(record.enemy) and record.stun_callback.is_valid() and record.enemy.stun_changed.is_connected(record.stun_callback):
 		record.enemy.stun_changed.disconnect(record.stun_callback)
+	if is_instance_valid(record.enemy) and record.shooting_lock_callback.is_valid() and record.enemy.shooting_lock_changed.is_connected(record.shooting_lock_callback):
+		record.enemy.shooting_lock_changed.disconnect(record.shooting_lock_callback)
 	if is_instance_valid(record.enemy) and record.materialized_callback.is_valid() and record.enemy.materialized.is_connected(record.materialized_callback):
 		record.enemy.materialized.disconnect(record.materialized_callback)
 	if not record.detailed:
@@ -681,6 +717,28 @@ func _remove_stun_record(record: EnemyRecord) -> void:
 		_enemy_stun_records[index] = last
 		last.stun_index = index
 	record.stun_index = -1
+
+
+func _add_shooting_lock_record(record: EnemyRecord) -> void:
+	if record == null or record.shooting_lock_index >= 0:
+		return
+	record.shooting_lock_index = _enemy_shooting_lock_records.size()
+	_enemy_shooting_lock_records.append(record)
+
+
+func _remove_shooting_lock_record(record: EnemyRecord) -> void:
+	if record == null:
+		return
+	var index := record.shooting_lock_index
+	if index < 0 or index >= _enemy_shooting_lock_records.size():
+		record.shooting_lock_index = -1
+		return
+	var last: EnemyRecord = _enemy_shooting_lock_records.back()
+	_enemy_shooting_lock_records.pop_back()
+	if index < _enemy_shooting_lock_records.size():
+		_enemy_shooting_lock_records[index] = last
+		last.shooting_lock_index = index
+	record.shooting_lock_index = -1
 
 
 func _prune_materialized_telegraphs() -> void:
@@ -1116,6 +1174,25 @@ func _draw() -> void:
 			draw_texture_rect(STUN_ICON_TEXTURE, Rect2(icon_position, icon_size), false, Color(AlveolusVisualTheme.GOLD, 0.96))
 		else:
 			draw_circle(icon_position + icon_size * 0.5, 4.0, AlveolusVisualTheme.GOLD)
+	for record in _enemy_shooting_lock_records:
+		var enemy := record.enemy
+		if not is_instance_valid(enemy) or not enemy.is_generation_valid(record.generation) or not enemy.projectiles_suppressed() or enemy.definition == null:
+			continue
+		var position := to_local(enemy.visual_interpolated_position(fraction))
+		# Stoß stuns and suppresses in the same tick. Keep the question mark on a
+		# separate tiny row so it never covers the stun star or health rail.
+		var center := position + Vector2(0.0, -enemy.definition.radius - 28.0)
+		draw_circle(center, 5.0, Color(AlveolusVisualTheme.PETROL_DEEP, 0.90))
+		draw_arc(center, 5.0, 0.0, TAU, 12, Color(AlveolusVisualTheme.GOLD, 0.92), 1.0, true)
+		draw_string(
+			ThemeDB.fallback_font,
+			center + Vector2(-4.5, 3.5),
+			"?",
+			HORIZONTAL_ALIGNMENT_CENTER,
+			9.0,
+			9,
+			Color(AlveolusVisualTheme.GOLD, 0.98)
+		)
 
 
 func _create_batch(texture: Texture2D, capacity: int, layer: int, uses_colors: bool = true) -> MultiMeshInstance2D:
