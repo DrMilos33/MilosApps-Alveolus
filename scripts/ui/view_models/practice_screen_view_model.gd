@@ -7,6 +7,9 @@ extends RefCounted
 ## practice definitions into these primitive offers. No save, progression or
 ## platform/debug service crosses this boundary.
 
+const EVENT_TEST_GROUP_ID := &"event_test"
+const EVENT_TEST_SCENARIO_PREFIX := "event_test:"
+
 
 class ScenarioOfferViewModel extends RefCounted:
 	var _id: StringName
@@ -211,10 +214,42 @@ func selected_scenario_requires_boss_profile() -> bool:
 	return false
 
 
+func selected_scenario_is_event_test() -> bool:
+	return is_event_test_scenario_id(_selected_scenario_id)
+
+
+static func is_event_test_scenario_id(id_value: StringName) -> bool:
+	return String(id_value).begins_with(EVENT_TEST_SCENARIO_PREFIX)
+
+
 func scenario_offers() -> Array[ScenarioOfferViewModel]:
 	var result: Array[ScenarioOfferViewModel] = []
 	for offer in _scenario_offers:
 		result.append(offer.duplicate_value())
+	return result
+
+
+func primary_scenario_offers() -> Array[ScenarioOfferViewModel]:
+	var result: Array[ScenarioOfferViewModel] = []
+	for offer in _scenario_offers:
+		if not is_event_test_scenario_id(offer.id()):
+			result.append(offer.duplicate_value())
+	return result
+
+
+func event_scenario_offers() -> Array[ScenarioOfferViewModel]:
+	var result: Array[ScenarioOfferViewModel] = []
+	for offer in _scenario_offers:
+		if is_event_test_scenario_id(offer.id()):
+			result.append(offer.duplicate_value())
+	return result
+
+
+func event_scenario_offer_count() -> int:
+	var result := 0
+	for offer in _scenario_offers:
+		if is_event_test_scenario_id(offer.id()):
+			result += 1
 	return result
 
 

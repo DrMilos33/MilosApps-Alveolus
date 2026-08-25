@@ -22,6 +22,7 @@ var mouse_over: bool = false
 var reduced_motion: bool = false
 var available: bool = true
 var unavailable_reason: String = ""
+var guidance_emphasis: bool = false
 
 var _label_width: float = 0.0
 var _label_y: float = 0.0
@@ -127,6 +128,12 @@ func set_available(value: bool, reason: String = "") -> void:
 	_queue_chrome_layout_refresh()
 	set_process(true)
 
+
+func set_guidance_emphasis(enabled: bool) -> void:
+	guidance_emphasis = enabled
+	_apply_highlight()
+	set_process(true)
+
 func _has_point(point: Vector2) -> bool:
 	return unit_body != null and unit_body.contains_parent_point(point)
 
@@ -161,9 +168,11 @@ func _process(delta: float) -> void:
 
 func _apply_highlight() -> void:
 	if outline_material != null:
-		var outline_color := AlveolusVisualTheme.GOLD if has_focus() else accent.lightened(0.16)
+		var emphasized := available and guidance_emphasis
+		var outline_color := AlveolusVisualTheme.GOLD if has_focus() or emphasized else accent.lightened(0.16)
 		outline_material.set_shader_parameter("outline_color", outline_color)
-		outline_material.set_shader_parameter("outline_strength", hover_amount)
+		outline_material.set_shader_parameter("outline_width", 5.0 if emphasized else 2.0)
+		outline_material.set_shader_parameter("outline_strength", maxf(hover_amount, 1.0 if emphasized else 0.0))
 	if building_sprite != null:
 		# Campus art is outside the UI skin rollout. Hover and focus therefore
 		# alter only its existing outline and never its geometry or sampling.
@@ -190,11 +199,15 @@ func _refresh_chrome_visuals() -> void:
 	status_label.text = display_status
 	status_panel.visible = not display_status.is_empty()
 	if not available:
+		if building_sprite != null:
+			building_sprite.modulate = Color(0.56, 0.60, 0.60, 0.58)
 		title_label.add_theme_color_override("font_color", Color(AlveolusVisualTheme.SKY_DEEP, 0.56))
 		status_label.add_theme_color_override("font_color", Color(AlveolusVisualTheme.SKY_DEEP, 0.54))
 		title_panel.modulate = Color(0.72, 0.76, 0.76, 0.78)
 		status_panel.modulate = Color(0.70, 0.74, 0.74, 0.72)
 		return
+	if building_sprite != null:
+		building_sprite.modulate = Color.WHITE
 	title_panel.modulate = Color.WHITE
 	status_panel.modulate = Color.WHITE
 	var title_color := AlveolusVisualTheme.IVORY

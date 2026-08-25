@@ -42,6 +42,7 @@ func _run() -> void:
 	await process_frame
 
 	_test_master_detail_structure(lexicon)
+	await _test_dense_grid_overview(lexicon)
 	await _test_related_term_chips(lexicon)
 	_test_lock_and_selection(lexicon)
 	await _test_mouse_and_focus_navigation(lexicon)
@@ -62,34 +63,42 @@ func _run() -> void:
 func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.theme != null, "Die eigenständig geladene Lexikonszene erhält ein lokales Fallback-Theme")
 	_check(lexicon.category_buttons.size() == 5, "Fünf übergeordnete Kategorien einschließlich Fähigkeiten sind sichtbar")
-	_check(lexicon.category_bar.columns == 5, "Die fünf breiten Lexikonreiter stehen in einer gemeinsamen Reihe")
+	_check(lexicon.category_bar.columns == 5, "Die fünf kompakten Lexikonreiter stehen am breiten Inhaltsrand in einer Reihe")
 	var surface := lexicon.get_node("Surface") as PanelContainer
 	_check(surface != null and surface.theme_type_variation == AlveolusVisualTheme.TYPE_PAGE_CANVAS, "Die Lexikonbühne verwendet die zentrale PageCanvas-Rolle")
-	_check(lexicon.list_panel.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Die Eintragsliste verwendet die zentrale Dokumentfläche")
+	_check(lexicon.overview_toolbar.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Suche und Fortschritt verwenden eine gemeinsame semantische Dokumentfläche")
+	_check(lexicon.list_panel.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Das Eintragsraster verwendet die zentrale Dokumentfläche")
 	_check(lexicon.detail_panel.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Das Detail verwendet die zentrale Aktionskartenfläche")
+	_check(lexicon.category_bar.get_parent() == lexicon.overview_toolbar.get_parent() and lexicon.overview_toolbar.get_parent() == lexicon.content_row.get_parent(), "Kategorien, gemeinsame Suchzeile und Inhaltsstufe besitzen eine klare direkte Reihenfolge")
+	_check(lexicon.category_bar.get_index() < lexicon.overview_toolbar.get_index() and lexicon.overview_toolbar.get_index() < lexicon.content_row.get_index(), "Kategorien stehen direkt über Suche/Fortschritt und Raster")
 	for category_button in lexicon.category_buttons.values():
 		_check((category_button as Button).get_meta(&"alveolus_component", &"") == &"segmented_tab", "Jede Lexikonkategorie verwendet die zentrale Tab-Komponente")
-	_check(lexicon.entry_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Linke Liste scrollt nur vertikal")
+	_check(lexicon.entry_filter.get_parent() == lexicon.entry_count_label.get_parent() and lexicon.entry_filter.get_parent() == lexicon.toolbar_row, "Suche und Fortschritt teilen genau eine kompakte Zeile")
+	_check(lexicon.entry_filter.custom_minimum_size.y >= 44.0, "Das Suchfeld wahrt die zentrale Mindestzielhöhe")
+	_check(lexicon.entry_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Das Eintragsraster scrollt nur vertikal")
 	_check(lexicon.detail_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Detailbereich scrollt nur vertikal")
 	_check(lexicon.page_scroll != null and lexicon.page_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Die kompakte Gesamtbühne kann niemals horizontal aus dem Viewport laufen")
 	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Breites Lexikon benötigt keinen zusätzlichen vertikalen Seitenscroll")
+	_check(lexicon.entry_list is GridContainer and lexicon.entry_list.columns == LexiconMasterDetail.GRID_COLUMNS_WIDE, "Die breite Übersicht verwendet ein sechsspaltiges Kachelraster")
 	_check(lexicon.entry_buttons.size() == 5, "Monsterliste enthält reguläre Gegner und beide Fallbosse")
 	_check(lexicon.selected_entry_id == &"", "Beim Öffnen ist kein Lexikoneintrag automatisch ausgewählt")
-	_check(lexicon.empty_detail_label.visible and lexicon.empty_detail_label.text.contains("Wähle links"), "Die leere Detailfläche erklärt die explizite Auswahl")
-	_check(lexicon.empty_detail_label.custom_minimum_size.y >= 120.0, "Die leere Anleitung bleibt als klar erkennbare Leerkartе sichtbar")
-	_check(lexicon.detail_panel.size_flags_vertical == Control.SIZE_EXPAND_FILL, "Die leere Detailfläche behält die stabile Master-Detail-Bühne")
-	_check(lexicon.entry_filter != null and lexicon.entry_filter.placeholder_text.contains("filtern"), "Die Eintragsliste besitzt eine klare Suchmöglichkeit")
-	_check(lexicon.entry_count_label.text.contains("freigeschaltet"), "Die Eintragsliste zeigt ihren Entdeckungsfortschritt")
+	_check(lexicon.list_panel.visible and lexicon.overview_toolbar.visible and not lexicon.detail_panel.visible, "Das Lexikon öffnet auf der flächenfüllenden Übersicht statt auf einer leeren Detailhälfte")
+	_check(not lexicon.compact_back_button.visible, "Die Rückkehraktion erscheint erst auf der Detail-Zweitebene")
+	_check(lexicon.entry_filter != null and lexicon.entry_filter.placeholder_text.contains("durchsuchen"), "Die Eintragsübersicht besitzt eine klare Suche")
+	_check(lexicon.entry_count_label.text.contains("freigeschaltet"), "Die gemeinsame Kopfzeile zeigt den Entdeckungsfortschritt")
 	_check(not lexicon.detail_type_sections.visible, "Die leere Detailfläche zeigt keine veralteten Typdaten")
 	_check(MedicalLexiconIllustration.SAFE_MARGIN >= 4.0, "Lexikonillustrationen reservieren einen festen Sicherheitsabstand zum Kachelrand")
 	for button in lexicon.entry_buttons.values():
-		_check((button as Button).theme_type_variation in [AlveolusVisualTheme.TYPE_SELECTION_CARD, AlveolusVisualTheme.TYPE_SELECTED_CARD], "Jede Lexikonzeile verwendet eine zentrale Auswahlkartenrolle")
-		_check(not (button as Button).button_pressed, "Keine Lexikonzeile ist beim Öffnen automatisch markiert")
-		_check(not (button as Button).tooltip_text.is_empty(), "Der native Kurztooltip bleibt auf Maus-Hover verfügbar")
+		var tile := button as Button
+		_check(tile.theme_type_variation in [AlveolusVisualTheme.TYPE_SELECTION_CARD, AlveolusVisualTheme.TYPE_SELECTED_CARD], "Jede Lexikonkachel verwendet eine zentrale Auswahlkartenrolle")
+		_check(tile.custom_minimum_size == Vector2(LexiconMasterDetail.GRID_TILE_MIN_WIDTH, LexiconMasterDetail.GRID_TILE_HEIGHT), "Jede Übersichtskachel bleibt dicht und besitzt eine stabile Mindestgröße")
+		_check(not tile.button_pressed, "Keine Lexikonkachel ist beim Öffnen automatisch markiert")
+		_check(not tile.tooltip_text.is_empty(), "Der native Kurztooltip bleibt auf Maus-Hover verfügbar")
+		_check(not String(tile.get_meta(&"alveolus_accessible_name", "")).is_empty(), "Jede Kachel benennt Inhalt und Freischaltzustand zugänglich")
 		var illustrations: Array[Node] = button.find_children("*", "MedicalLexiconIllustration", true, false)
 		_check(illustrations.size() == 1, "Jede Lexikonkachel besitzt genau eine Illustration oder Silhouette")
 		if not illustrations.is_empty():
-			_check(_artboard_fits_safely(illustrations[0] as MedicalLexiconIllustration), "Jede kompakte Lexikonillustration skaliert innerhalb ihrer sicheren 48-px-Fläche")
+			_check(_artboard_fits_safely(illustrations[0] as MedicalLexiconIllustration), "Jede kompakte Lexikonillustration skaliert innerhalb ihrer sicheren Kachelfläche")
 	_check(_artboard_fits_safely(lexicon.detail_illustration), "Auch die große Detailillustration wahrt ihre Icon-Safe-Area")
 	_check(lexicon.detail_gameplay_text.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Lange Spieltexte umbrechen")
 	_check(lexicon.detail_medical_text.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Lange medizinische Texte umbrechen")
@@ -119,6 +128,24 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.detail_medical_panel.is_ancestor_of(lexicon.detail_medical_text), "Der medizinische Text bleibt innerhalb seiner semantischen Fläche")
 
 
+func _test_dense_grid_overview(lexicon: LexiconMasterDetail) -> void:
+	lexicon.select_category(LexiconEntryDefinition.CATEGORY_TERMS)
+	await process_frame
+	await process_frame
+	_check(lexicon.entry_buttons.size() >= 20, "Das Begriffslexikon liefert genügend Einträge für die Dichteprüfung")
+	_check(lexicon.entry_list.columns == LexiconMasterDetail.GRID_COLUMNS_WIDE, "Bei 1280x720 stehen sechs kleine Kacheln pro Reihe")
+	var visible_rows := floori(lexicon.entry_scroll.size.y / float(LexiconMasterDetail.GRID_TILE_HEIGHT + AlveolusVisualTheme.CONTROL_GAP))
+	_check(visible_rows * lexicon.entry_list.columns >= 18, "Bei 1280x720 sind mindestens achtzehn Einträge zugleich ohne Scrollen sichtbar")
+	_check(lexicon.list_panel.visible and not lexicon.detail_panel.visible, "Die dichte Übersicht nutzt vor einer Auswahl die vollständige Inhaltsfläche")
+	_set_filter_text(lexicon, "Attack Speed")
+	await process_frame
+	_check(lexicon.selected_entry_id == &"" and not lexicon.detail_panel.visible, "Die Suche verändert weder Auswahl noch Detailstufe")
+	_check(lexicon.entry_count_label.text.contains("Treffer"), "Ein aktiver Filter ergänzt die Fortschrittszeile um seine Trefferzahl")
+	_set_filter_text(lexicon, "")
+	lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
+	await process_frame
+
+
 func _test_related_term_chips(lexicon: LexiconMasterDetail) -> void:
 	var emitted_registrations: Array[Dictionary] = []
 	var capture := func(source: Control, content_provider: Callable, hover_enabled: bool) -> void:
@@ -138,6 +165,8 @@ func _test_related_term_chips(lexicon: LexiconMasterDetail) -> void:
 		RelatedTermPresentationStub.new(&"term_radius", "Radius", "Bestimmt die Größe einer Flächenwirkung.", &"damage_earth"),
 	]
 	lexicon._show_detail(view_model)
+	lexicon.compact_detail_visible = true
+	lexicon._apply_responsive_layout()
 	await process_frame
 	lexicon.context_detail_source_available.disconnect(capture)
 
@@ -178,17 +207,21 @@ func _test_related_term_chips(lexicon: LexiconMasterDetail) -> void:
 
 func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.select_entry(&"pneumococcus"), "Entdecktes Bakterium ist auswählbar")
+	_check(lexicon.detail_panel.visible and not lexicon.list_panel.visible and not lexicon.overview_toolbar.visible, "Eine bestätigte Kachel öffnet das große Detail als eigene zweite Ebene")
+	_check(lexicon.compact_back_button.visible and String(lexicon.compact_back_button.get_meta(&"alveolus_accessible_name", "")).contains("Übersicht"), "Die Detailstufe besitzt eine eindeutige Rückkehraktion")
 	_check(not lexicon.detail_illustration.locked, "Entdeckte Illustration ist sichtbar")
 	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Sechs kompakte Gegnerwerte bleiben neben der strukturierten Typdarstellung sichtbar")
 	_assert_type_presentations(lexicon, &"pneumococcus")
 	_check(lexicon.detail_title.text == "Bakterium", "Detailtitel verwendet einfachen Namen")
 	_check(lexicon.detail_medical_name.text == "Pneumokokke", "Fachbegriff bleibt als zweite Ebene")
-	lexicon.entry_filter.text = "keine passenden monster"
+	_set_filter_text(lexicon, "keine passenden monster")
 	_check(lexicon.selected_entry_id == &"pneumococcus", "Filtern löscht die ausdrücklich gewählte Lexikonauswahl nicht")
 	_check(lexicon.detail_title.text == "Bakterium" and lexicon.detail_title.visible, "Das gewählte Detail bleibt auch bei ausgefilterter Zeile sichtbar")
-	lexicon.entry_filter.text = ""
+	_set_filter_text(lexicon, "")
+	_check(lexicon.cancel_step(), "Cancel schließt auf jeder Breite zuerst die Detail-Zweitebene")
+	_check(lexicon.list_panel.visible and lexicon.overview_toolbar.visible and not lexicon.detail_panel.visible, "Cancel kehrt in die unveränderte Rasterübersicht zurück")
 	var restored_selection := lexicon.entry_buttons.get(&"pneumococcus") as Button
-	_check(restored_selection != null and restored_selection.button_pressed, "Nach dem Leeren der Suche ist die bestehende Auswahl wieder sichtbar markiert")
+	_check(restored_selection != null and restored_selection.button_pressed and restored_selection.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_CARD, "Nach der Rückkehr ist die bestehende Auswahl weiter sichtbar markiert")
 
 	_check(lexicon.select_entry(&"bacterial_cluster"), "Gesperrter Eintrag bleibt als Silhouette anwählbar")
 	_check(lexicon.detail_illustration.locked, "Gesperrter Eintrag zeichnet die Silhouette")
@@ -196,11 +229,12 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(not lexicon.detail_stats_grid.visible, "Gesperrter Eintrag verrät keine Werte")
 	_check(not lexicon.detail_type_sections.visible, "Gesperrter Eintrag verrät keine Schadenstypen oder Resistenzen")
 	_check(not lexicon.detail_medical_name.visible, "Gesperrter Eintrag verrät keinen Fachbegriff")
+	_check(lexicon.cancel_step(), "Auch ein gesperrtes Detail kehrt mit Cancel zur Übersicht zurück")
 
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_TERMS)
 	_check(lexicon.entry_buttons.size() >= 20, "Begriffslexikon enthält weiterhin den allgemeinen Startkatalog")
 	_check(lexicon.selected_entry_id == &"", "Auch ein Kategorienwechsel wählt nicht automatisch den ersten Begriff")
-	_check(lexicon.empty_detail_label.visible, "Nach dem Kategorienwechsel bleibt die kompakte neutrale Anleitung sichtbar")
+	_check(lexicon.list_panel.visible and not lexicon.detail_panel.visible, "Ein Kategorienwechsel zeigt ausschließlich das neue Eintragsraster")
 	_check(lexicon.context_detail_sources().is_empty(), "Begriffe erzeugen keine ui_info-Detailquellen")
 	for term_button_value in lexicon.entry_buttons.values():
 		var term_button := term_button_value as Button
@@ -212,11 +246,13 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(not lexicon.context_detail_payload(tempo_id).is_empty(), "Ein Charakterwert liefert seine normale Detailkarte")
 	_check(lexicon.select_entry(tempo_id), "Attack Speed ist unter Charakter direkt lesbar")
 	_check(lexicon.detail_gameplay_text.text.contains("Attack Speed"), "Detail erklärt Attack Speed verständlich")
+	lexicon.cancel_step()
 
 func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
 	_check(lexicon.select_entry(&"pneumococcus"), "Bekannter Gegner stellt seine Basiswerte für die Dichteprüfung bereit")
 	await process_frame
+	_check(lexicon.detail_panel.visible and not lexicon.list_panel.visible, "Das breite Detail ersetzt die Rasterstufe vollständig")
 	_check(lexicon.detail_stats_grid.columns == 2, "Breites Lexikon zeigt zwei kompakte Wertkarten pro Zeile")
 	_check(lexicon.detail_stats_grid.size_flags_horizontal == Control.SIZE_EXPAND_FILL, "Die Werteansicht nutzt die gesamte verfügbare Detailbreite")
 	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Die Zwei-Spalten-Wertansicht behält alle nicht redundanten Basiswerte")
@@ -233,9 +269,8 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	for type_grid in lexicon._detail_type_grids:
 		_check(type_grid.columns == 2, "Breite Schadenstypgruppen ordnen ihre vier Einträge in zwei Spalten")
 
-	# The scene has an 800-px minimum, which is intentionally still below the
-	# 820-px master/detail breakpoint. Pin it to the top-left so the test covers
-	# the component's compact contract independently of viewport stretch mode.
+	# Pin the component to 800 logical pixels so the test covers the compact
+	# Detaildichte unabhängig vom Viewport-Stretchmodus.
 	lexicon.set_anchor(SIDE_RIGHT, 0.0)
 	lexicon.set_anchor(SIDE_BOTTOM, 0.0)
 	lexicon.size = Vector2(800.0, 620.0)
@@ -244,10 +279,12 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.detail_stats_grid.columns == 1, "Kompaktes Lexikon zeigt genau eine Wertkarte pro Zeile")
 	for type_grid in lexicon._detail_type_grids:
 		_check(type_grid.columns == 1, "Kompakte Schadenstypgruppen bleiben als einzelne lesbare Zeilen erhalten")
-	_check(lexicon.category_bar.columns == 2, "Kompaktes Lexikon ordnet auch die Kategorien in zwei Spalten")
-	_check(lexicon.category_bar.custom_minimum_size.y >= 158.0, "Drei kompakte Kategorienreihen reservieren ihre vollständige Höhe")
+	_check(lexicon.category_bar.columns == 5, "Bei 800 Pixeln bleiben die kompakten Kategorien in einer einzigen Reihe")
+	_check(lexicon.category_bar.custom_minimum_size.y == 44.0, "Die einreihigen Kategorien belegen nur ihre Mindestzielhöhe")
 	_check(lexicon.page_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Kompaktes Lexikon aktiviert den vertikalen Seitenscroll")
-	_check(lexicon.content_row.custom_minimum_size.y >= LexiconMasterDetail.COMPACT_CONTENT_MIN_HEIGHT, "Liste und Detail kollabieren bei kompakter Höhe nicht zu einem leeren Streifen")
+	_check(lexicon.content_row.custom_minimum_size.y >= LexiconMasterDetail.COMPACT_CONTENT_MIN_HEIGHT, "Übersicht und Detail kollabieren bei kompakter Höhe nicht")
+	_check(lexicon.cancel_step(), "Cancel schließt das 800-Pixel-Detail vor der Seite")
+	_check(lexicon.entry_list.columns == 4 and lexicon.list_panel.visible, "Die 800-Pixel-Übersicht verwendet vier dichte Kachelspalten")
 
 	# 960 x 540 at 200 percent corresponds to only 480 x 270 logical pixels;
 	# after the shared page header the component can be even shorter. Exercise
@@ -258,12 +295,14 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	await process_frame
 	await process_frame
 	_check(lexicon.page_scroll.get_v_scroll_bar().max_value > lexicon.page_scroll.get_v_scroll_bar().page, "Bei 960x540 @ 200 % besitzt die Bühne einen echten vertikalen Scrollbereich")
-	_check(lexicon.list_panel.visible and lexicon.entry_scroll.size.y >= 200.0, "Die kompakte Eintragsliste behält unter Suche und Fortschritt eine nutzbare Scrollfläche")
+	_check(lexicon.category_bar.columns == 3 and lexicon.category_bar.custom_minimum_size.y < 120.0, "Sehr kompakte Kategorien benötigen nur zwei statt drei Reihen")
+	_check(lexicon.entry_list.columns == 2, "Die sehr kompakte Übersicht bleibt als zweispaltiges Kachelraster lesbar")
+	_check(lexicon.list_panel.visible and lexicon.entry_scroll.size.y >= 300.0, "Das kompakte Raster behält unter der gemeinsamen Suchzeile eine nutzbare Scrollfläche")
 	_check(lexicon.select_entry(&"pneumococcus", true), "Kompakte Auswahl öffnet weiterhin das Detail")
 	await process_frame
 	await process_frame
-	_check(lexicon.detail_panel.visible and lexicon.detail_scroll.size.y >= 300.0, "Auch das kompakte Detail bleibt in einer nutzbaren vertikalen Scrollfläche erreichbar")
-	lexicon.cancel_step()
+	_check(lexicon.detail_panel.visible and not lexicon.list_panel.visible and lexicon.detail_scroll.size.y >= 300.0, "Auch das kompakte Detail ist eine eigene nutzbare zweite Ebene")
+	_check(lexicon.cancel_step(), "Cancel kehrt aus dem sehr kompakten Detail zum Raster zurück")
 
 	lexicon.custom_minimum_size = scene_minimum
 	lexicon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -271,6 +310,7 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	await process_frame
 	_check(lexicon.detail_stats_grid.columns == 2, "Nach Rückkehr zur breiten Ansicht werden wieder zwei Wertkarten je Zeile gezeigt")
 	_check(lexicon.category_bar.columns == 5, "Nach Rückkehr zur breiten Ansicht stehen wieder alle fünf Reiter in einer Reihe")
+	_check(lexicon.entry_list.columns == LexiconMasterDetail.GRID_COLUMNS_WIDE, "Nach Rückkehr zur breiten Ansicht verwendet die Übersicht wieder sechs Kachelspalten")
 	for type_grid in lexicon._detail_type_grids:
 		_check(type_grid.columns == 2, "Nach Rückkehr zur breiten Ansicht nutzen auch Schadenstypen wieder zwei Spalten")
 
@@ -321,11 +361,12 @@ func _test_mouse_and_focus_navigation(lexicon: LexiconMasterDetail) -> void:
 	monster_tab.pressed.emit()
 	_check(lexicon.selected_category == LexiconEntryDefinition.CATEGORY_MONSTERS, "Mausklick wechselt die Kategorie")
 	_check(lexicon.selected_entry_id == &"", "Der Kategorienklick markiert nicht automatisch den ersten Eintrag")
-	_check(lexicon.empty_detail_label.visible, "Der Kategorienklick zeigt zunächst nur die neutrale Anleitung")
+	_check(lexicon.list_panel.visible and not lexicon.detail_panel.visible, "Der Kategorienklick zeigt zunächst ausschließlich das Eintragsraster")
 	var visible_entries := LexiconCatalog.entries_for_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
 	var first := lexicon.entry_buttons[visible_entries[0].id] as Button
 	var second := lexicon.entry_buttons[visible_entries[1].id] as Button
-	_check(first.focus_neighbor_bottom == first.get_path_to(second), "Einträge besitzen explizite vertikale Fokusnavigation")
+	_check(first.focus_neighbor_right == first.get_path_to(second), "Kacheln besitzen explizite horizontale Fokusnavigation")
+	_check(first.focus_neighbor_top == first.get_path_to(lexicon.entry_filter), "Die oberste Kachelreihe führt nach oben zur Suche")
 	_check(first.focus_neighbor_left == first.get_path_to(monster_tab), "Linksnavigation führt zur aktiven Kategorie")
 	second.mouse_entered.emit()
 	await process_frame
@@ -343,8 +384,14 @@ func _test_mouse_and_focus_navigation(lexicon: LexiconMasterDetail) -> void:
 	_send_action(&"ui_accept", false)
 	await process_frame
 	_check(not activation_events.is_empty() and activation_events[-1] == visible_entries[0].id, "Tastatur und Gamepad Aktivierung bestätigen den fokussierten Eintrag")
+	_check(lexicon.detail_panel.visible and not lexicon.list_panel.visible, "Accept öffnet ausschließlich die Detail-Zweitebene")
+	_check(get_root().gui_get_focus_owner() == lexicon.compact_back_button, "Nach dem Öffnen ist die Rückkehraktion der sichtbare Detailfokus")
+	_check(lexicon.cancel_step(), "Cancel schließt das per Accept geöffnete Detail")
+	await process_frame
+	_check(get_root().gui_get_focus_owner() == first and first.button_pressed, "Die Rasterstufe stellt Fokus und persistente Markierung am Auslöser wieder her")
 
 func _test_layout_sizes(lexicon: LexiconMasterDetail) -> void:
+	lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
 	for viewport_size in [Vector2i(1280, 720), Vector2i(1024, 576), Vector2i(960, 540)]:
 		get_root().size = viewport_size
 		await process_frame
@@ -355,8 +402,12 @@ func _test_layout_sizes(lexicon: LexiconMasterDetail) -> void:
 		var reference_size := Vector2(1280.0, 720.0)
 		_check(root_rect.position.x >= -0.5 and root_rect.position.y >= -0.5, "Lexikon beginnt bei %s im sichtbaren Bereich" % viewport_size)
 		_check(root_rect.end.x <= reference_size.x + 0.5 and root_rect.end.y <= reference_size.y + 0.5, "Lexikon bleibt bei %s vollständig im Bild" % viewport_size)
-		_check(lexicon.entry_scroll.size.x >= 260.0, "Linke Liste bleibt bei %s gut lesbar" % viewport_size)
-		_check(lexicon.detail_scroll.size.x >= 400.0, "Detailtext behält bei %s ausreichend Breite" % viewport_size)
+		_check(lexicon.list_panel.visible and lexicon.entry_scroll.size.x >= 900.0, "Das Übersichtsraster nutzt bei %s die breite Referenzfläche" % viewport_size)
+		_check(lexicon.entry_list.columns == LexiconMasterDetail.GRID_COLUMNS_WIDE, "Das Referenzcanvas behält bei %s sechs dichte Kachelspalten" % viewport_size)
+		_check(lexicon.select_entry(&"pneumococcus"), "Die Detailstufe ist bei %s erreichbar" % viewport_size)
+		await process_frame
+		_check(lexicon.detail_panel.visible and lexicon.detail_scroll.size.x >= 900.0, "Der Detailtext nutzt bei %s die eigene breite Ebene" % viewport_size)
+		_check(lexicon.cancel_step(), "Die Detailstufe schließt bei %s vor der Seite" % viewport_size)
 
 func _check(condition: bool, message: String) -> void:
 	assertions += 1
@@ -380,6 +431,12 @@ func _send_action(action: StringName, pressed: bool) -> void:
 	event.pressed = pressed
 	event.strength = 1.0 if pressed else 0.0
 	Input.parse_input_event(event)
+
+
+func _set_filter_text(lexicon: LexiconMasterDetail, text: String) -> void:
+	lexicon.entry_filter.text = text
+	lexicon.entry_filter.text_changed.emit(text)
+
 
 func _has_scroll_ancestor(node: Node) -> bool:
 	var current := node.get_parent()

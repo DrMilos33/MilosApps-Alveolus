@@ -328,9 +328,11 @@ bei den Breiten 38/54/70 zentriert 12/16/19 dieser Punkte; vollständige
 Hitboxabdeckung löst maximal 20-fachen Schaden aus. Andere Schadensquellen bleiben
 unverändert.
 
-Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile mit 212,5 Tempo auf
-gespiegelten, gegenüber dem vorherigen Stand um 25 Prozent weiter ausgelenkten
-Bahnen. Bei 70 und 40 Prozent Leben
+Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile auf gespiegelten
+Bahnen. In Fall 3 fliegen sie mit Faktor 1,8 beziehungsweise 382,5 Tempo und
+verwenden 136 Weltpunkte Amplitude; damit ist das vorherige 85er-Muster um
+60 Prozent verbreitert. Der Fall-4-Anker behält 212,5 Tempo und 115 Weltpunkte
+Amplitude. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
 Sekunden weitere vier; ihre Projektile fliegen mit 322,5 Tempo. Der Fall-1-
 Bakterienkern ruft ab Bossspawn alle 15 Sekunden vier schießende kleine
@@ -342,6 +344,9 @@ naher Nichtbosse um 45 Prozent. Gegnerschaden wird mit dem Fallfaktor multiplizi
 anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
 aufgelöst. Nach einem gültigen Treffer schützt die globale 0,5-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.
+Die beiden Richtungswechsel eines Fall-1-Kernprojektils variieren je Projektil
+seed-stabil und unabhängig innerhalb von ±10 Prozent ihrer aus Bildschirmgröße
+und Projektiltempo abgeleiteten authored Zeit.
 
 Der Bakterienkern aus Fall 2 schießt alle 0,89 Sekunden ein Projektil mit
 375 Tempo und authored 1,5-fachem Schaden. Der erste Kurvenzeitpunkt entspricht

@@ -63,14 +63,21 @@ func _run() -> void:
 	_check(card.focus_mode == Control.FOCUS_NONE and card.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Gesperrte Campuskarte ist weder per Fokus noch Maus aktivierbar")
 	_check(card.status_label.text == "Noch nicht freigeschaltet", "Gesperrter Zustand wird redundant und verständlich benannt")
 	_check(card.title_panel.modulate.a < 1.0 and card.status_panel.modulate.a < 1.0, "Gesperrte UI-Chrome ist zusätzlich sichtbar entsättigt")
+	_check(card.building_sprite.modulate.a < 0.8 and card.building_sprite.modulate.r < 0.7, "Gesperrte Campuskarte graut auch das eigentliche Gebäude sichtbar aus")
 	var accept_event := InputEventKey.new()
 	accept_event.keycode = KEY_ENTER
 	accept_event.pressed = true
 	card._gui_input(accept_event)
 	_check(emissions[0] == 0, "Gesperrte Campuskarte emittiert keine Auswahl")
 	card.set_available(true)
+	_check(card.building_sprite.modulate.is_equal_approx(Color.WHITE), "Freischaltung stellt die unverfälschte Gebäudegrafik wieder her")
 	card._gui_input(accept_event)
 	_check(emissions[0] == 1, "Freigeschaltete Campuskarte bewahrt ihr öffentliches selected-Signal")
+	card.set_guidance_emphasis(true)
+	_check(float(card.outline_material.get_shader_parameter("outline_width")) >= 5.0, "Campusführung markiert das Zielgebäude mit einem deutlich dickeren Rand")
+	_check(float(card.outline_material.get_shader_parameter("outline_strength")) >= 1.0, "Campusführung hält den Zielrand unabhängig vom Hover sichtbar")
+	card.set_guidance_emphasis(false)
+	_check(is_equal_approx(float(card.outline_material.get_shader_parameter("outline_width")), 2.0), "Nach der Campusführung kehrt das Gebäude zum normalen Rand zurück")
 
 	host.theme.default_base_scale = 2.0
 	await process_frame

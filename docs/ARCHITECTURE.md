@@ -538,8 +538,10 @@ non-tutorial `LevelDefinition` carrying a target-pressure plan. Each detached
 scenario reduces that current plan to one target at two seconds and disables
 waves, gates, bosses and rewards. Boss choices are likewise derived from every
 automatic campaign boss and copy the complete `RunConfig` boss contract,
-including aura, projectile conditions, phase thresholds and add cadence. No
-practice-owned balance table is maintained.
+including aura, projectile conditions, phase thresholds, turn-time variation
+and add cadence. No practice-owned balance table is maintained. Boss-Test and
+Event-Test remain presentation groups over these derived records; expanding a
+group never creates or copies gameplay data.
 
 ## Case lifecycle and variation
 
@@ -573,9 +575,12 @@ a separate stable `ProjectileRenderer` batch with a distinct texture. Release
 clears both possible render owners before a projectile node returns to its
 pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
-second phase. Projectile geometry is data-driven: the later special boss emits
-its two phased diamond shots at 212.5 world units per second and a 25-percent
-larger authored amplitude; ranged phase adds use 322.5. The intro boss emits one
+second phase. Projectile geometry is data-driven: the Fall-3 boss emits its two
+phased diamond shots at 382.5 world units per second with 136 world units of
+authored amplitude, while the Fall-4 anchor retains its independent 212.5/115
+contract; ranged phase adds use 322.5. The Fall-1 double-turn timing consumes a
+dedicated seed-stable projectile random stream and varies both authored legs
+independently inside their configured ten-percent corridor. The intro boss emits one
 ordinary hostile projectile per attack interval. The Fall-1 boss configures a
 director lease that requests four shooting small bacteria every 15 seconds from
 phase zero. Periodic and phase adds use a 2.0 attack-rate multiplier. Its

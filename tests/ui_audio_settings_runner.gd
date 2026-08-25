@@ -74,7 +74,7 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_equal(UISettingsState.UI_SCALES, [0.75, 0.90, 1.0, 1.25, 1.5, 2.0], "UI-Skalierung bietet die sechs verbindlichen Stufen einschließlich 75 und 90 Prozent")
 	_equal(defaults.glyph_mode, UISettingsState.GLYPH_AUTO, "Eingabesymbole erkennen das Gerät standardmäßig automatisch")
 	_true(not defaults.reduce_motion, "Reduzierte Bewegung ist optional")
-	_true(defaults.show_discovery_info, "Neue Entdeckungsinfos sind standardmäßig sichtbar")
+	_true(not defaults.show_discovery_info, "Neuigkeiten sind standardmäßig deaktiviert und öffnen keinen Erstkontakt-Popup")
 	_true(not defaults.show_character_name, "Der Charaktername ist standardmäßig dezent ausgeblendet")
 	_true(not defaults.show_character_health_bar, "Der kleine Charakter-Lebensbalken ist standardmäßig ausgeblendet")
 	_true(defaults.confirm_run_restart, "Strg+R verlangt standardmäßig eine bewusste Bestätigung")

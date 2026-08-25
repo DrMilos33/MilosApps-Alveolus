@@ -14,6 +14,7 @@ func _run() -> void:
 	_test_anchor_case_boss_contract()
 	_test_fall_one_add_spawn_metadata()
 	await _test_intro_boss_normal_attack()
+	await _test_case_one_turn_variation()
 	await _test_case_two_boss_attack_and_add_lock()
 	await _test_case_two_runtime_projectile_contract()
 	await _test_configurable_boss_contract()
@@ -92,8 +93,49 @@ func _test_anchor_case_boss_contract() -> void:
 	var case_one := levels[1] as LevelDefinition
 	_true(case_one.boss_ranged_enabled and case_one.boss_projectiles_require_empty_aura, "Fall 1 aktiviert den Bossbeschuss ausschließlich bei leerer Aura")
 	_near(case_one.boss_projectile_speed_multiplier, 1.3, "Fall-1-Bossprojektile erhalten den relativen 30-Prozent-Temposchritt")
+	_near(case_one.boss_projectile_turn_time_variation, 0.10, "Fall-1-Doppelkurven tragen den Zehn-Prozent-Zeitkorridor")
 	_near(case_one.boss_add_projectile_attack_speed_multiplier, 2.0, "Fall-1-Bossverstärkungen verwenden die doppelte Schussrate")
 	_near(case_one.boss_add_defense_burst_shooting_lock_seconds, 10.0, "Auch die schießenden Fall-1-Bossverstärkungen pausieren nach Stoß zehn Sekunden")
+	var case_three := levels[3] as LevelDefinition
+	_near(case_three.boss_projectile_speed_multiplier, 1.8, "Fall-3-Rautenprojektile tragen den 80-Prozent-Tempofaktor")
+	_near(case_three.boss_wave_amplitude, 136.0, "Fall-3-Rautenprojektile tragen die 60 Prozent breitere Bahn")
+
+
+func _test_case_one_turn_variation() -> void:
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	await process_frame
+	await process_frame
+	game.persistence_enabled = false
+	for discovery_id in game.discovery_definitions:
+		game.discovery_manager.mark_seen(StringName(discovery_id))
+	game.selected_level = game.levels[1]
+	game.start_run()
+	game.set_physics_process(false)
+	game._spawn_boss()
+	var boss := game.active_boss as InfectionEnemy
+	var first_turns: Array[float] = []
+	_true(is_instance_valid(boss), "Fall 1 materialisiert den variierenden Doppelkurvenboss")
+	if is_instance_valid(boss):
+		boss.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+		var handle: int = game.enemy_world.handle_for(boss)
+		for shot_index in range(4):
+			var count_before: int = game.projectiles.size()
+			game._on_enemy_projectile_requested(handle, EnemyAttackDirector.Pattern.DOUBLE_TURN, float(shot_index & 1) * 0.5, EnemyAttackDirector.Role.BOSS)
+			_true(game.projectiles.size() == count_before + 1, "Fall-1-Variationsschuss %d wird erzeugt" % shot_index)
+			if game.projectiles.size() <= count_before:
+				continue
+			var projectile := game.projectiles[-1] as TherapyProjectile
+			var visible_extent: float = minf(game._visible_world_rect().size.x, game._visible_world_rect().size.y)
+			var base_first: float = visible_extent * 0.5 / projectile.speed
+			var base_second: float = visible_extent * 0.2 / projectile.speed
+			_true(projectile.hostile_first_turn_seconds >= base_first * 0.9 and projectile.hostile_first_turn_seconds <= base_first * 1.1, "Erster Fall-1-Knick bleibt im ±10-Prozent-Korridor")
+			_true(projectile.hostile_second_leg_seconds >= base_second * 0.9 and projectile.hostile_second_leg_seconds <= base_second * 1.1, "Zweiter Fall-1-Knick bleibt im ±10-Prozent-Korridor")
+			first_turns.append(projectile.hostile_first_turn_seconds)
+	_true(first_turns.size() >= 2 and not is_equal_approx(first_turns[0], first_turns[1]), "Aufeinanderfolgende Fall-1-Projektile verwenden tatsächlich unterschiedliche Knickzeiten")
+	game.queue_free()
+	await process_frame
 
 
 func _test_case_two_boss_attack_and_add_lock() -> void:

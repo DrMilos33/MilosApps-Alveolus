@@ -74,6 +74,7 @@ var stats: PlayerStats
 var rng := RandomNumberGenerator.new()
 var spawn_rng := RandomNumberGenerator.new()
 var relocation_rng := RandomNumberGenerator.new()
+var boss_projectile_rng := RandomNumberGenerator.new()
 var spawn_attempt_index: int = 0
 var spawn_angle_cursor: float = 0.0
 var enemy_definitions: Dictionary
@@ -307,6 +308,7 @@ func _ready() -> void:
 		run_test_settings_repository = RunTestSettingsRepository.new()
 		run_test_settings = run_test_settings_repository.load_settings()
 	rng.seed = config.random_seed
+	boss_projectile_rng.seed = int(config.random_seed) ^ 0x424F535350524A
 	topology = ArenaTopology.new(config.arena_rect(), ArenaTopology.BoundaryMode.BOUNDED)
 
 	simulation_root = Node2D.new()
@@ -1109,6 +1111,8 @@ func _show_level_select(update_route: bool = true) -> void:
 		_route_to(&"level_select")
 
 func _show_lexicon() -> void:
+	if not _first_case_complete():
+		return
 	_cleanup_run_nodes()
 	avatar.input_enabled = false
 	avatar.hide()
@@ -1140,7 +1144,8 @@ func _on_navigate_requested(destination: StringName) -> void:
 		&"levels":
 			_show_level_select()
 		&"lexicon":
-			_show_lexicon()
+			if _first_case_complete():
+				_show_lexicon()
 		&"settings":
 			_show_settings(flow_state)
 		&"story":
@@ -1654,6 +1659,7 @@ func start_run(run_context: RunContext = null) -> void:
 	avatar.show()
 	avatar.queue_redraw()
 	rng.seed = config.random_seed
+	boss_projectile_rng.seed = int(config.random_seed) ^ 0x424F535350524A
 	_reset_spawn_position_sequence()
 	relocation_rng.seed = int(config.random_seed) ^ 0x52454C4F43415445
 	standard_wave_spawn_sectors.clear()
@@ -1950,6 +1956,7 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_reinforcement_minimum_phase = 0
 	config.boss_projectile_attack_speed_multiplier = 1.0
 	config.boss_projectile_speed_multiplier = 1.0
+	config.boss_projectile_turn_time_variation = 0.0
 	config.boss_phase_health_thresholds = PackedFloat32Array([0.70, 0.40])
 	config.boss_projectiles_require_empty_aura = false
 	config.boss_add_defense_burst_shooting_lock_seconds = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
@@ -2563,6 +2570,10 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 		else:
 			var screen_extent := minf(_visible_world_rect().size.x, _visible_world_rect().size.y)
 			turn_times = Vector2(screen_extent * 0.5 / move_speed, screen_extent * 0.2 / move_speed)
+		var turn_variation := clampf(config.boss_projectile_turn_time_variation, 0.0, 0.5)
+		if turn_variation > 0.0:
+			turn_times.x *= boss_projectile_rng.randf_range(1.0 - turn_variation, 1.0 + turn_variation)
+			turn_times.y *= boss_projectile_rng.randf_range(1.0 - turn_variation, 1.0 + turn_variation)
 	_spawn_hostile_projectile(
 		source.global_position,
 		heading,

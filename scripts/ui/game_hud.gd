@@ -175,7 +175,7 @@ var campus_overlay: Control
 var campus_buttons: Dictionary = {}
 var campus_research_status: Label
 var campus_clinic_status: Label
-var campus_research_prompt: VBoxContainer
+var campus_research_prompt: PanelContainer
 var campus_research_guidance_arrow: Label
 var practice_overlay: Control
 var practice_screen: PracticeScreen
@@ -756,21 +756,31 @@ func _build_campus() -> Control:
 	campus_clinic_status = _label("KEIN KLINIKFALL AKTIV", 14, AlveolusVisualTheme.SKY_DEEP)
 	campus_clinic_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	top_status.add_child(campus_clinic_status)
-	campus_research_prompt = VBoxContainer.new()
+	campus_research_prompt = PanelContainer.new()
 	campus_research_prompt.name = "ResearchGuidance"
 	campus_research_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	campus_research_prompt.alignment = BoxContainer.ALIGNMENT_CENTER
-	campus_research_prompt.custom_minimum_size = Vector2(360.0, 92.0)
-	campus_research_prompt.size = Vector2(360.0, 92.0)
-	var guidance_text := _label("Hier kannst du deine Fähigkeiten verbessern", 18, AlveolusVisualTheme.GOLD)
-	guidance_text.custom_minimum_size.x = 336.0
+	AlveolusUIComponents.apply_surface_role(
+		campus_research_prompt,
+		AlveolusVisualTheme.SurfaceRole.HUD_ALERT,
+		AlveolusVisualTheme.GOLD,
+		true
+	)
+	campus_research_prompt.custom_minimum_size = Vector2(380.0, 108.0)
+	campus_research_prompt.size = Vector2(380.0, 108.0)
+	var guidance_stack := VBoxContainer.new()
+	guidance_stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	var guidance_text := _label("Hier kannst du deine Fähigkeiten verbessern", 18, AlveolusVisualTheme.IVORY)
+	guidance_text.custom_minimum_size.x = 348.0
 	guidance_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	guidance_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	campus_research_prompt.add_child(guidance_text)
+	guidance_text.add_theme_color_override("font_outline_color", AlveolusVisualTheme.PETROL_DEEP)
+	guidance_text.add_theme_constant_override("outline_size", 3)
+	guidance_stack.add_child(guidance_text)
 	campus_research_guidance_arrow = _label("↘", 30, AlveolusVisualTheme.GOLD)
 	campus_research_guidance_arrow.name = "ResearchGuidanceArrow"
 	campus_research_guidance_arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	campus_research_prompt.add_child(campus_research_guidance_arrow)
+	guidance_stack.add_child(campus_research_guidance_arrow)
+	campus_research_prompt.add_child(AlveolusUIComponents.margin(guidance_stack, 12))
 	campus_research_prompt.hide()
 	overlay.add_child(campus_research_prompt)
 	_position_campus_research_guidance()
@@ -2023,6 +2033,9 @@ func show_campus(meta: MetaProgressionState) -> void:
 
 func show_campus_research_guidance() -> void:
 	if campus_research_prompt != null:
+		var research_button := campus_buttons.get(&"research") as CampusBuildingCard
+		if research_button != null:
+			research_button.set_guidance_emphasis(true)
 		_position_campus_research_guidance()
 		campus_research_prompt.show()
 		_position_campus_research_guidance.call_deferred()
@@ -2030,6 +2043,9 @@ func show_campus_research_guidance() -> void:
 func hide_campus_research_guidance() -> void:
 	if campus_research_prompt != null:
 		campus_research_prompt.hide()
+	var research_button := campus_buttons.get(&"research") as CampusBuildingCard
+	if research_button != null:
+		research_button.set_guidance_emphasis(false)
 
 
 func _position_campus_research_guidance() -> void:
@@ -2064,7 +2080,7 @@ func refresh_campus(meta: MetaProgressionState) -> void:
 	campus_clinic_status.hide()
 	var practice_button: CampusBuildingCard = campus_buttons[&"practice"]
 	practice_button.visible = practice_tests_available
-	practice_button.set_status("3 lokale Testläufe", practice_tests_available)
+	practice_button.set_status("4 Testkategorien", practice_tests_available)
 	var research_button: CampusBuildingCard = campus_buttons[&"research"]
 	var active_research := 0
 	for rank_value in meta.research_ranks.values():
@@ -2076,6 +2092,10 @@ func refresh_campus(meta: MetaProgressionState) -> void:
 	level_button.set_status("%d / 7 Fälle frei" % [meta.highest_unlocked_level + 1], true)
 	var lexicon_button: CampusBuildingCard = campus_buttons[&"lexicon"]
 	lexicon_button.set_status("%d entdeckt" % meta.seen_discovery_ids.size(), meta.seen_discovery_ids.size() > 0)
+	lexicon_button.set_available(
+		LoadoutAvailabilityPolicy.first_case_complete(meta),
+		"Nach Fall 1 verfügbar"
+	)
 	var settings_button: CampusBuildingCard = campus_buttons[&"settings"]
 	settings_button.set_status("Anzeige · Audio", false)
 
@@ -2097,7 +2117,7 @@ func configure_practice_tests(available: bool) -> void:
 	if campus_buttons.has(&"practice"):
 		var button := campus_buttons[&"practice"] as CampusBuildingCard
 		button.visible = available
-		button.set_status("3 lokale Testläufe", available)
+		button.set_status("4 Testkategorien", available)
 
 func show_research(meta: MetaProgressionState, definitions: Array[ResearchDefinition]) -> void:
 	_hide_all()

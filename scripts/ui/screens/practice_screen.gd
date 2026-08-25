@@ -13,9 +13,15 @@ signal back_requested
 
 const PracticeScreenViewModelType := preload("res://scripts/ui/view_models/practice_screen_view_model.gd")
 const ROUTE_ID := &"practice"
-const WIDE_LAYOUT_MINIMUM := 920.0
+const FOUR_COLUMN_MINIMUM := 1120.0
 const TWO_COLUMN_MINIMUM := 620.0
-const BOSS_TWO_COLUMN_MINIMUM := 760.0
+const SUBSELECTION_TWO_COLUMN_MINIMUM := 760.0
+
+enum Subselection {
+	NONE,
+	EVENT,
+	BOSS,
+}
 
 var _page_shell: PanelContainer
 var _scroll: ScrollContainer
@@ -25,11 +31,14 @@ var _availability_notice: PanelContainer
 
 var _scenario_card: PanelContainer
 var _scenario_grid: GridContainer
+var _event_card: PanelContainer
+var _event_grid: GridContainer
 var _boss_card: PanelContainer
 var _boss_grid: GridContainer
 
 var _back_button: Button
 var _scenario_buttons: Dictionary = {}
+var _event_scenario_buttons: Dictionary = {}
 var _boss_profile_buttons: Dictionary = {}
 
 var _has_applied_model := false
@@ -39,6 +48,7 @@ var _applied_scenario_offers_hash := 0
 var _applied_boss_profile_offers_hash := 0
 var _selected_scenario_id: StringName = &""
 var _selected_boss_profile_id: StringName = &""
+var _active_subselection := Subselection.NONE
 
 
 func _init() -> void:
@@ -49,6 +59,7 @@ func _init() -> void:
 	oversampling_with_scale = CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED
 	set_process(false)
 	set_physics_process(false)
+	set_process_shortcut_input(true)
 	_build()
 	resized.connect(_update_responsive_layout)
 	_update_responsive_layout()
@@ -71,16 +82,30 @@ func apply_view_model(view_model: PracticeScreenViewModelType) -> bool:
 		return false
 
 	if not _has_applied_model or view_model.scenario_offers_hash() != _applied_scenario_offers_hash:
-		_rebuild_scenario_offers(view_model.scenario_offers())
+		_rebuild_scenario_offers(
+			view_model.primary_scenario_offers(),
+			view_model.event_scenario_offers()
+		)
 	if not _has_applied_model or view_model.boss_profile_offers_hash() != _applied_boss_profile_offers_hash:
 		_rebuild_boss_profile_offers(view_model.boss_profile_offers())
 
+	var previous_scenario_id := _selected_scenario_id
 	_selected_scenario_id = view_model.selected_scenario_id()
 	_selected_boss_profile_id = view_model.selected_boss_profile_id()
 	var tests_are_visible := view_model.tests_visible()
 	_tests_content.visible = tests_are_visible
 	_availability_notice.visible = not tests_are_visible
-	_boss_card.visible = tests_are_visible and view_model.selected_scenario_requires_boss_profile()
+	var selection_changed := not _has_applied_model or previous_scenario_id != _selected_scenario_id
+	if not tests_are_visible:
+		_set_active_subselection(Subselection.NONE)
+	elif selection_changed and view_model.selected_scenario_requires_boss_profile():
+		_set_active_subselection(Subselection.BOSS, _has_applied_model)
+	elif selection_changed and view_model.selected_scenario_is_event_test():
+		_set_active_subselection(Subselection.EVENT, _has_applied_model)
+	elif selection_changed:
+		_set_active_subselection(Subselection.NONE)
+	else:
+		_refresh_subselection_visibility()
 	_update_selected_states()
 
 	_has_applied_model = true
@@ -107,8 +132,16 @@ func boss_profile_selection_visible() -> bool:
 	return _boss_card.visible
 
 
+func event_scenario_selection_visible() -> bool:
+	return _event_card.visible
+
+
 func layout_columns() -> int:
 	return _scenario_grid.columns
+
+
+func event_layout_columns() -> int:
+	return _event_grid.columns
 
 
 func boss_layout_columns() -> int:
@@ -117,6 +150,9 @@ func boss_layout_columns() -> int:
 
 func default_focus_control() -> Control:
 	if _tests_content.visible:
+		var subselection_focus := _first_enabled_button(_visible_subselection_grid())
+		if subselection_focus != null:
+			return subselection_focus
 		for child in _scenario_grid.get_children():
 			if child is Button and not (child as Button).disabled:
 				return child as Button
@@ -128,11 +164,39 @@ func back_action() -> Button:
 
 
 func scenario_action(id: StringName) -> Button:
-	return _scenario_buttons.get(id) as Button
+	var result := _scenario_buttons.get(id) as Button
+	if result != null:
+		return result
+	return _event_scenario_buttons.get(id) as Button
+
+
+func event_scenario_action(id: StringName) -> Button:
+	return _event_scenario_buttons.get(id) as Button
 
 
 func boss_profile_action(id: StringName) -> Button:
 	return _boss_profile_buttons.get(id) as Button
+
+
+## Consumes Back only while a nested Event- or Bossauswahl is visible.
+## The integration layer remains responsible for leaving the Practice screen.
+func handle_ui_cancel() -> bool:
+	if not is_inside_tree() or not is_visible_in_tree() or _active_subselection == Subselection.NONE:
+		return false
+	var focus_target := _scenario_buttons.get(
+		PracticeScreenViewModelType.EVENT_TEST_GROUP_ID
+		if _active_subselection == Subselection.EVENT
+		else _selected_scenario_id
+	) as Button
+	_set_active_subselection(Subselection.NONE)
+	if focus_target != null and focus_target.is_visible_in_tree() and not focus_target.disabled:
+		focus_target.grab_focus.call_deferred()
+	return true
+
+
+func _shortcut_input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"ui_cancel") and handle_ui_cancel():
+		get_viewport().set_input_as_handled()
 
 
 func _build() -> void:
@@ -143,7 +207,7 @@ func _build() -> void:
 		AlveolusVisualTheme.TEAL
 	)
 	_back_button.name = "BackAction"
-	_back_button.pressed.connect(func() -> void: back_requested.emit())
+	_back_button.pressed.connect(_on_back_pressed)
 	var header_parts := AlveolusUIComponents.page_header("Praxis", "", _back_button)
 
 	_scroll = ScrollContainer.new()
@@ -187,6 +251,11 @@ func _build_availability_notice() -> void:
 	_body.add_child(_availability_notice)
 
 
+func _on_back_pressed() -> void:
+	if not handle_ui_cancel():
+		back_requested.emit()
+
+
 func _build_test_content() -> void:
 	_tests_content = VBoxContainer.new()
 	_tests_content.name = "PracticeTests"
@@ -195,6 +264,7 @@ func _build_test_content() -> void:
 	_tests_content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
 	_body.add_child(_tests_content)
 	_build_scenario_card()
+	_build_event_card()
 	_build_boss_card()
 
 
@@ -220,6 +290,29 @@ func _build_scenario_card() -> void:
 	_tests_content.add_child(_scenario_card)
 
 
+func _build_event_card() -> void:
+	_event_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
+	_event_card.name = "EventScenarioSelectionCard"
+	_event_card.visible = false
+	_event_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	content.add_child(AlveolusUIComponents.section_header(
+		"EVENT-TEST",
+		"Fallprofil wählen",
+		"Jeder Test übernimmt das aktuelle Eventmonster des ausgewählten Falls."
+	))
+	_event_grid = GridContainer.new()
+	_event_grid.name = "EventScenarioOffers"
+	_event_grid.columns = 2
+	_event_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_event_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
+	_event_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	content.add_child(_event_grid)
+	_event_card.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	_tests_content.add_child(_event_card)
+
+
 func _build_boss_card() -> void:
 	_boss_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
 	_boss_card.name = "BossProfileSelectionCard"
@@ -243,9 +336,10 @@ func _build_boss_card() -> void:
 	_tests_content.add_child(_boss_card)
 
 
-func _rebuild_scenario_offers(offers: Array) -> void:
+func _rebuild_scenario_offers(primary_offers: Array, event_offers: Array) -> void:
 	_clear_offer_controls(_scenario_grid, _scenario_buttons)
-	for offer in offers:
+	_clear_offer_controls(_event_grid, _event_scenario_buttons)
+	for offer in primary_offers:
 		var button := AlveolusUIComponents.choice_card(
 			offer.title(),
 			offer.description(),
@@ -256,10 +350,47 @@ func _rebuild_scenario_offers(offers: Array) -> void:
 		button.name = "Scenario_%s" % String(offer.id())
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.set_meta(&"practice_scenario_id", offer.id())
-		button.pressed.connect(_emit_scenario_selected.bind(offer.id()))
+		button.set_meta(&"requires_boss_profile", offer.requires_boss_profile())
+		button.pressed.connect(_on_primary_scenario_pressed.bind(offer.id(), offer.requires_boss_profile()))
 		AlveolusUIComponents.set_button_disabled(button, not offer.enabled())
 		_scenario_grid.add_child(button)
 		_scenario_buttons[offer.id()] = button
+	if not event_offers.is_empty():
+		var event_group_id: StringName = PracticeScreenViewModelType.EVENT_TEST_GROUP_ID
+		var event_group_enabled := false
+		for offer in event_offers:
+			if offer.enabled():
+				event_group_enabled = true
+				break
+		var event_button := AlveolusUIComponents.choice_card(
+			"Event-Test",
+			"Ein aktuelles Eventmonster ohne Begleitwellen",
+			"%d Fallprofile wählen" % event_offers.size(),
+			false,
+			not event_group_enabled
+		)
+		event_button.name = "Scenario_%s" % String(event_group_id)
+		event_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		event_button.set_meta(&"practice_scenario_group_id", event_group_id)
+		event_button.pressed.connect(_open_event_selection)
+		AlveolusUIComponents.set_button_disabled(event_button, not event_group_enabled)
+		_scenario_grid.add_child(event_button)
+		_scenario_buttons[event_group_id] = event_button
+	for offer in event_offers:
+		var event_option := AlveolusUIComponents.choice_row(
+			offer.title(),
+			offer.description(),
+			offer.facts_text(),
+			false,
+			not offer.enabled()
+		)
+		event_option.name = "EventScenario_%s" % String(offer.id())
+		event_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		event_option.set_meta(&"practice_scenario_id", offer.id())
+		event_option.pressed.connect(_emit_scenario_selected.bind(offer.id()))
+		AlveolusUIComponents.set_button_disabled(event_option, not offer.enabled())
+		_event_grid.add_child(event_option)
+		_event_scenario_buttons[offer.id()] = event_option
 
 
 func _rebuild_boss_profile_offers(offers: Array) -> void:
@@ -292,12 +423,22 @@ func _update_selected_states() -> void:
 	for id_value in _scenario_buttons:
 		var scenario_id := StringName(id_value)
 		var button := _scenario_buttons[scenario_id] as Button
+		var is_selected := _primary_scenario_is_selected(scenario_id)
 		button.theme_type_variation = (
 			AlveolusVisualTheme.TYPE_SELECTED_CARD
-			if scenario_id == _selected_scenario_id
+			if is_selected
 			else AlveolusVisualTheme.TYPE_SELECTION_CARD
 		)
-		button.set_pressed_no_signal(scenario_id == _selected_scenario_id)
+		button.set_pressed_no_signal(is_selected)
+	for id_value in _event_scenario_buttons:
+		var event_id := StringName(id_value)
+		var event_button := _event_scenario_buttons[event_id] as Button
+		event_button.theme_type_variation = (
+			AlveolusVisualTheme.TYPE_SELECTED_CHOICE_ROW
+			if event_id == _selected_scenario_id
+			else AlveolusVisualTheme.TYPE_CHOICE_ROW
+		)
+		event_button.set_pressed_no_signal(event_id == _selected_scenario_id)
 	for id_value in _boss_profile_buttons:
 		var profile_id := StringName(id_value)
 		var button := _boss_profile_buttons[profile_id] as Button
@@ -309,12 +450,73 @@ func _update_selected_states() -> void:
 		button.set_pressed_no_signal(profile_id == _selected_boss_profile_id)
 
 
+func _primary_scenario_is_selected(scenario_id: StringName) -> bool:
+	var is_event_group := scenario_id == PracticeScreenViewModelType.EVENT_TEST_GROUP_ID
+	if _active_subselection == Subselection.EVENT:
+		return is_event_group
+	if _active_subselection == Subselection.BOSS:
+		return scenario_id == _selected_scenario_id
+	if is_event_group:
+		return PracticeScreenViewModelType.is_event_test_scenario_id(_selected_scenario_id)
+	return scenario_id == _selected_scenario_id
+
+
 func _emit_scenario_selected(id: StringName) -> void:
 	scenario_selected.emit(id)
 
 
+func _on_primary_scenario_pressed(id: StringName, requires_boss_profile: bool) -> void:
+	if requires_boss_profile and id == _selected_scenario_id and _active_subselection != Subselection.BOSS:
+		_set_active_subselection(Subselection.BOSS, true)
+		return
+	scenario_selected.emit(id)
+
+
+func _open_event_selection() -> void:
+	_set_active_subselection(Subselection.EVENT, true)
+
+
 func _emit_boss_profile_selected(id: StringName) -> void:
 	boss_profile_selected.emit(id)
+
+
+func _set_active_subselection(next: int, request_focus: bool = false) -> void:
+	_active_subselection = next
+	_refresh_subselection_visibility()
+	_update_selected_states()
+	if request_focus:
+		_focus_active_subselection.call_deferred()
+
+
+func _refresh_subselection_visibility() -> void:
+	if _active_subselection == Subselection.EVENT and _event_scenario_buttons.is_empty():
+		_active_subselection = Subselection.NONE
+	_event_card.visible = _tests_content.visible and _active_subselection == Subselection.EVENT and not _event_scenario_buttons.is_empty()
+	_boss_card.visible = _tests_content.visible and _active_subselection == Subselection.BOSS
+
+
+func _focus_active_subselection() -> void:
+	var target := _first_enabled_button(_visible_subselection_grid())
+	if target != null and target.is_visible_in_tree():
+		target.grab_focus()
+		_scroll.ensure_control_visible(target)
+
+
+func _visible_subselection_grid() -> GridContainer:
+	if _event_card.visible:
+		return _event_grid
+	if _boss_card.visible:
+		return _boss_grid
+	return null
+
+
+func _first_enabled_button(container: Container) -> Button:
+	if container == null:
+		return null
+	for child in container.get_children():
+		if child is Button and not (child as Button).disabled:
+			return child as Button
+	return null
 
 
 func _update_responsive_layout() -> void:
@@ -324,10 +526,12 @@ func _update_responsive_layout() -> void:
 	if logical_width <= 0.0 and get_viewport() != null:
 		logical_width = get_viewport_rect().size.x
 	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, logical_width < TWO_COLUMN_MINIMUM)
-	if logical_width >= WIDE_LAYOUT_MINIMUM:
-		_scenario_grid.columns = 3
+	if logical_width >= FOUR_COLUMN_MINIMUM:
+		_scenario_grid.columns = 4
 	elif logical_width >= TWO_COLUMN_MINIMUM:
 		_scenario_grid.columns = 2
 	else:
 		_scenario_grid.columns = 1
-	_boss_grid.columns = 2 if logical_width >= BOSS_TWO_COLUMN_MINIMUM else 1
+	var subselection_columns := 2 if logical_width >= SUBSELECTION_TWO_COLUMN_MINIMUM else 1
+	_event_grid.columns = subselection_columns
+	_boss_grid.columns = subselection_columns

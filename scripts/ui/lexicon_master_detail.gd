@@ -5,8 +5,10 @@ signal category_changed(category: StringName)
 signal entry_selected(entry_id: StringName)
 signal context_detail_source_available(source: Control, content_provider: Callable, hover_enabled: bool)
 
-const LIST_WIDTH := 310.0
 const COMPACT_CONTENT_MIN_HEIGHT := 360.0
+const GRID_TILE_MIN_WIDTH := 168.0
+const GRID_TILE_HEIGHT := 82.0
+const GRID_COLUMNS_WIDE := 6
 
 var provider: LexiconViewModelProvider
 var seen_discovery_ids: Variant = []
@@ -20,6 +22,8 @@ var entry_view_models: Dictionary = {}
 
 var page_scroll: ScrollContainer
 var category_bar: GridContainer
+var overview_toolbar: PanelContainer
+var toolbar_row: HBoxContainer
 var content_row: HBoxContainer
 var list_panel: PanelContainer
 var detail_panel: PanelContainer
@@ -27,7 +31,7 @@ var compact_back_button: Button
 var compact_detail_visible: bool = false
 var entry_scroll: ScrollContainer
 var entry_safe_margin: MarginContainer
-var entry_list: VBoxContainer
+var entry_list: GridContainer
 var entry_filter: LineEdit
 var entry_count_label: Label
 var entry_empty_label: Label
@@ -94,9 +98,8 @@ func select_category(category: StringName, _focus_first_entry: bool = false) -> 
 	# Category changes only reveal the available entries. Selection remains an
 	# explicit player action, so the first row is neither marked nor focused.
 	_show_empty_detail()
-	if _is_compact():
-		compact_detail_visible = false
-		_apply_responsive_layout()
+	compact_detail_visible = false
+	_apply_responsive_layout()
 	_configure_focus_neighbors()
 	category_changed.emit(category)
 
@@ -107,22 +110,12 @@ func select_entry(entry_id: StringName, move_focus: bool = false) -> bool:
 	selected_entry_id = entry_id
 	for id in entry_buttons:
 		var button := entry_buttons[id] as Button
-		var is_selected: bool = id == entry_id
-		button.set_pressed_no_signal(is_selected)
-		button.theme_type_variation = (
-			AlveolusVisualTheme.TYPE_SELECTED_CARD
-			if is_selected
-			else AlveolusVisualTheme.TYPE_SELECTION_CARD
-		)
+		_set_entry_button_selected(button, id == entry_id)
 	_show_detail(view_model)
-	if _is_compact() and move_focus:
-		compact_detail_visible = true
-		_apply_responsive_layout()
-		compact_back_button.grab_focus.call_deferred()
+	compact_detail_visible = true
+	_apply_responsive_layout()
 	if move_focus:
-		var selected_button := entry_buttons.get(entry_id) as Button
-		if selected_button != null:
-			selected_button.grab_focus()
+		compact_back_button.grab_focus.call_deferred()
 	entry_selected.emit(entry_id)
 	return true
 
@@ -230,53 +223,72 @@ func _build_layout() -> void:
 	page.name = "Page"
 	page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	page.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	page.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	margin.add_child(page)
 
 	category_bar = GridContainer.new()
 	category_bar.name = "CategoryBar"
 	category_bar.columns = LexiconCatalog.CATEGORY_ORDER.size()
-	category_bar.custom_minimum_size.y = 48.0
-	category_bar.add_theme_constant_override("separation", 10)
+	category_bar.custom_minimum_size.y = 44.0
+	category_bar.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	category_bar.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	page.add_child(category_bar)
+
+	overview_toolbar = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_DOCUMENT_INSET)
+	overview_toolbar.name = "OverviewToolbar"
+	overview_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	page.add_child(overview_toolbar)
+
+	var toolbar_margin := MarginContainer.new()
+	toolbar_margin.add_theme_constant_override("margin_left", 10)
+	toolbar_margin.add_theme_constant_override("margin_top", 4)
+	toolbar_margin.add_theme_constant_override("margin_right", 10)
+	toolbar_margin.add_theme_constant_override("margin_bottom", 4)
+	overview_toolbar.add_child(toolbar_margin)
+
+	toolbar_row = HBoxContainer.new()
+	toolbar_row.name = "SearchAndProgress"
+	toolbar_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	toolbar_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	toolbar_margin.add_child(toolbar_row)
+
+	entry_filter = LineEdit.new()
+	entry_filter.name = "EntryFilter"
+	entry_filter.placeholder_text = "Einträge durchsuchen …"
+	entry_filter.clear_button_enabled = true
+	entry_filter.custom_minimum_size = Vector2(220.0, 44.0)
+	entry_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	entry_filter.set_meta(&"alveolus_accessible_name", "Lexikoneinträge durchsuchen")
+	entry_filter.text_changed.connect(_on_entry_filter_changed)
+	toolbar_row.add_child(entry_filter)
+
+	entry_count_label = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
+	entry_count_label.name = "EntryCount"
+	entry_count_label.custom_minimum_size.x = 170.0
+	entry_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	entry_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	entry_count_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	toolbar_row.add_child(entry_count_label)
 
 	content_row = HBoxContainer.new()
 	content_row.name = "Content"
+	content_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	content_row.add_theme_constant_override("separation", 0)
 	page.add_child(content_row)
 
 	list_panel = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_DOCUMENT_INSET)
 	list_panel.name = "ListPanel"
-	list_panel.custom_minimum_size.x = LIST_WIDTH
+	list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	content_row.add_child(list_panel)
 
 	var list_margin := MarginContainer.new()
-	list_margin.add_theme_constant_override("margin_left", 12)
-	list_margin.add_theme_constant_override("margin_top", 12)
-	list_margin.add_theme_constant_override("margin_right", 12)
-	list_margin.add_theme_constant_override("margin_bottom", 12)
+	list_margin.add_theme_constant_override("margin_left", 10)
+	list_margin.add_theme_constant_override("margin_top", 10)
+	list_margin.add_theme_constant_override("margin_right", 10)
+	list_margin.add_theme_constant_override("margin_bottom", 10)
 	list_panel.add_child(list_margin)
-
-	var list_column := VBoxContainer.new()
-	list_column.name = "ListColumn"
-	list_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	list_column.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	list_margin.add_child(list_column)
-
-	entry_count_label = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
-	entry_count_label.name = "EntryCount"
-	list_column.add_child(entry_count_label)
-
-	entry_filter = LineEdit.new()
-	entry_filter.name = "EntryFilter"
-	entry_filter.placeholder_text = "Einträge filtern …"
-	entry_filter.clear_button_enabled = true
-	entry_filter.custom_minimum_size.y = 42.0
-	entry_filter.set_meta(&"alveolus_accessible_name", "Lexikoneinträge filtern")
-	entry_filter.text_changed.connect(_on_entry_filter_changed)
-	list_column.add_child(entry_filter)
 
 	entry_scroll = ScrollContainer.new()
 	entry_scroll.name = "EntryScroll"
@@ -284,7 +296,7 @@ func _build_layout() -> void:
 	entry_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	entry_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	entry_scroll.follow_focus = true
-	list_column.add_child(entry_scroll)
+	list_margin.add_child(entry_scroll)
 
 	entry_safe_margin = MarginContainer.new()
 	entry_safe_margin.name = "ScrollbarSafeInset"
@@ -293,11 +305,22 @@ func _build_layout() -> void:
 	entry_safe_margin.add_theme_constant_override("margin_bottom", AlveolusVisualTheme.GRID_UNIT)
 	entry_scroll.add_child(entry_safe_margin)
 
-	entry_list = VBoxContainer.new()
-	entry_list.name = "EntryList"
+	entry_list = GridContainer.new()
+	entry_list.name = "EntryGrid"
+	entry_list.columns = GRID_COLUMNS_WIDE
 	entry_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	entry_list.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	entry_list.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	entry_list.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	entry_safe_margin.add_child(entry_list)
+
+	entry_empty_label = AlveolusUIComponents.label("Keine passenden Einträge.", AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	entry_empty_label.name = "NoFilteredEntries"
+	entry_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	entry_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	entry_empty_label.custom_minimum_size.y = 72.0
+	entry_empty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	entry_empty_label.hide()
+	entry_safe_margin.add_child(entry_empty_label)
 
 	detail_panel = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
 	detail_panel.name = "DetailPanel"
@@ -340,7 +363,7 @@ func _build_category_buttons() -> void:
 			category == selected_category
 		)
 		button.name = "Category_%s" % category
-		button.custom_minimum_size = Vector2(160.0, 46.0)
+		button.custom_minimum_size = Vector2(0.0, 44.0)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.pressed.connect(select_category.bind(category, false))
 		category_bar.add_child(button)
@@ -348,11 +371,12 @@ func _build_category_buttons() -> void:
 
 func _build_detail_content() -> void:
 	compact_back_button = AlveolusUIComponents.action_button(
-		"Zur Liste",
+		"Zur Übersicht",
 		AlveolusUIComponents.ACTION_NAVIGATION,
 		&"back",
 		AlveolusVisualTheme.COBALT
 	)
+	compact_back_button.custom_minimum_size.y = 44.0
 	compact_back_button.pressed.connect(_show_compact_list)
 	compact_back_button.hide()
 	detail_content.add_child(compact_back_button)
@@ -445,7 +469,9 @@ func _rebuild_entry_list() -> void:
 		)
 		button.name = "Entry_%s" % definition.id
 		button.toggle_mode = true
-		button.custom_minimum_size = Vector2(0.0, 82.0)
+		button.custom_minimum_size = Vector2(GRID_TILE_MIN_WIDTH, GRID_TILE_HEIGHT)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.size_flags_vertical = Control.SIZE_FILL
 		var exposes_context_detail := view_model.category != LexiconEntryDefinition.CATEGORY_TERMS
 		button.tooltip_text = _hover_tooltip_text(view_model) if exposes_context_detail else ""
 		button.set_meta(&"lexicon_entry_id", definition.id)
@@ -453,24 +479,23 @@ func _rebuild_entry_list() -> void:
 		entry_list.add_child(button)
 		entry_buttons[definition.id] = button
 
-		# A lexicon row is a compact visual tile, not a text-only menu item. The
-		# same illustration ID drives both the list and detail view so unlocked
-		# art cannot drift, while undiscovered entries still show a real
-		# silhouette instead of an empty card.
+		# The overview is intentionally a dense card grid. The same illustration
+		# ID drives both overview and detail so unlocked art cannot drift, while
+		# undiscovered entries still show a real silhouette instead of an empty card.
 		var margin := MarginContainer.new()
 		margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		margin.add_theme_constant_override("margin_left", 10)
-		margin.add_theme_constant_override("margin_top", 7)
-		margin.add_theme_constant_override("margin_right", 10)
-		margin.add_theme_constant_override("margin_bottom", 7)
+		margin.add_theme_constant_override("margin_left", 8)
+		margin.add_theme_constant_override("margin_top", 6)
+		margin.add_theme_constant_override("margin_right", 8)
+		margin.add_theme_constant_override("margin_bottom", 6)
 		margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		button.add_child(margin)
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 10)
+		row.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		margin.add_child(row)
 		var illustration := MedicalLexiconIllustration.new()
-		illustration.custom_minimum_size = Vector2(48.0, 48.0)
+		illustration.custom_minimum_size = Vector2(42.0, 42.0)
 		illustration.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		illustration.configure(view_model.visual_id, accent)
 		illustration.set_locked(view_model.locked)
@@ -489,11 +514,17 @@ func _rebuild_entry_list() -> void:
 		if view_model.locked and view_model.category != LexiconEntryDefinition.CATEGORY_MONSTERS:
 			state_text = "Entdecken zum Freischalten"
 		var state_label := AlveolusUIComponents.label(state_text, AlveolusVisualTheme.TYPE_MUTED_LABEL)
+		state_label.custom_minimum_size.y = 30.0
+		state_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		state_label.max_lines_visible = 2
 		state_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		if not view_model.locked:
 			state_label.add_theme_color_override("font_color", accent)
 		row_copy.add_child(state_label)
+		button.set_meta(&"lexicon_display_name", view_model.display_name)
+		button.set_meta(&"lexicon_base_state_text", state_text)
+		button.set_meta(&"lexicon_state_label", state_label)
 
 		if exposes_context_detail:
 			var content_provider := context_detail_payload.bind(definition.id)
@@ -507,26 +538,34 @@ func _rebuild_entry_list() -> void:
 				"kind": &"entry",
 			}
 			context_detail_source_available.emit(button, content_provider, false)
-		if definition.id == selected_entry_id:
-			button.set_pressed_no_signal(true)
-			button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTED_CARD
+		_set_entry_button_selected(button, definition.id == selected_entry_id)
 	_update_entry_count()
-	entry_empty_label = AlveolusUIComponents.label("Keine passenden Einträge.", AlveolusVisualTheme.TYPE_MUTED_LABEL)
-	entry_empty_label.name = "NoFilteredEntries"
-	entry_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	entry_empty_label.custom_minimum_size.y = 72.0
 	entry_empty_label.visible = entry_buttons.is_empty()
-	entry_list.add_child(entry_empty_label)
+
+
+func _set_entry_button_selected(button: Button, is_selected: bool) -> void:
+	if button == null:
+		return
+	button.set_pressed_no_signal(is_selected)
+	button.theme_type_variation = (
+		AlveolusVisualTheme.TYPE_SELECTED_CARD
+		if is_selected
+		else AlveolusVisualTheme.TYPE_SELECTION_CARD
+	)
+	var display_name := String(button.get_meta(&"lexicon_display_name", "Lexikoneintrag"))
+	var state_text := String(button.get_meta(&"lexicon_base_state_text", ""))
+	var accessible_name := "%s, %s" % [display_name, state_text]
+	if is_selected:
+		accessible_name += ", ausgewählt"
+	button.set_meta(&"alveolus_accessible_name", accessible_name)
+
 
 func _show_empty_detail() -> void:
 	selected_entry_id = &""
 	detail_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	for button_value in entry_buttons.values():
 		var button := button_value as Button
-		if button == null:
-			continue
-		button.set_pressed_no_signal(false)
-		button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTION_CARD
+		_set_entry_button_selected(button, false)
 	detail_illustration.hide()
 	detail_category_label.hide()
 	detail_title.hide()
@@ -546,7 +585,7 @@ func _show_empty_detail() -> void:
 	_clear_related_term_chips()
 	detail_related_title.hide()
 	detail_related_chips.hide()
-	empty_detail_label.text = "Wähle links einen Eintrag aus.\nDie Auswahl bleibt bestehen, bis du einen anderen Eintrag öffnest."
+	empty_detail_label.text = "Wähle in der Übersicht einen Eintrag aus."
 	empty_detail_label.custom_minimum_size.y = 120.0
 	empty_detail_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	empty_detail_label.show()
@@ -829,14 +868,30 @@ func _configure_focus_neighbors() -> void:
 		if not visible.is_empty():
 			var first := entry_buttons.get(visible[0].id) as Button
 			entry_filter.focus_neighbor_bottom = entry_filter.get_path_to(first)
+		elif selected_category_button != null:
+			entry_filter.focus_neighbor_bottom = entry_filter.get_path_to(selected_category_button)
 
+	var columns := maxi(entry_list.columns if entry_list != null else 1, 1)
 	for index in range(visible.size()):
 		var entry_button := entry_buttons.get(visible[index].id) as Button
-		var previous_button := entry_buttons.get(visible[(index - 1 + visible.size()) % visible.size()].id) as Button
-		var next_button := entry_buttons.get(visible[(index + 1) % visible.size()].id) as Button
-		entry_button.focus_neighbor_top = entry_button.get_path_to(previous_button) if index > 0 else entry_button.get_path_to(entry_filter)
-		entry_button.focus_neighbor_bottom = entry_button.get_path_to(next_button)
-		entry_button.focus_neighbor_left = entry_button.get_path_to(category_buttons[selected_category])
+		var column := index % columns
+		var category_button := category_buttons.get(selected_category) as Button
+		var top_button: Control = entry_filter
+		var bottom_button: Control = entry_filter
+		var left_button: Control = category_button
+		var right_button: Control = category_button
+		if index >= columns:
+			top_button = entry_buttons.get(visible[index - columns].id) as Button
+		if index + columns < visible.size():
+			bottom_button = entry_buttons.get(visible[index + columns].id) as Button
+		if column > 0:
+			left_button = entry_buttons.get(visible[index - 1].id) as Button
+		if column + 1 < columns and index + 1 < visible.size():
+			right_button = entry_buttons.get(visible[index + 1].id) as Button
+		entry_button.focus_neighbor_top = entry_button.get_path_to(top_button)
+		entry_button.focus_neighbor_bottom = entry_button.get_path_to(bottom_button)
+		entry_button.focus_neighbor_left = entry_button.get_path_to(left_button)
+		entry_button.focus_neighbor_right = entry_button.get_path_to(right_button)
 
 func _update_category_states() -> void:
 	for category in category_buttons:
@@ -929,7 +984,7 @@ func _ensure_standalone_theme() -> void:
 	theme = AlveolusVisualTheme.create_theme()
 
 func cancel_step() -> bool:
-	if not _is_compact() or not compact_detail_visible:
+	if not compact_detail_visible:
 		return false
 	_show_compact_list()
 	return true
@@ -940,12 +995,14 @@ func _show_compact_list() -> void:
 	var selected_button := entry_buttons.get(selected_entry_id) as Button
 	if selected_button != null:
 		selected_button.grab_focus.call_deferred()
+	elif entry_filter != null:
+		entry_filter.grab_focus.call_deferred()
 
 func _is_compact() -> bool:
 	return size.x < 820.0
 
 func _apply_responsive_layout() -> void:
-	if page_scroll == null or category_bar == null or list_panel == null or detail_panel == null:
+	if page_scroll == null or category_bar == null or list_panel == null or detail_panel == null or entry_list == null:
 		return
 	var compact := _is_compact()
 	page_scroll.vertical_scroll_mode = (
@@ -955,20 +1012,45 @@ func _apply_responsive_layout() -> void:
 	)
 	if not compact:
 		page_scroll.scroll_vertical = 0
-	category_bar.columns = 2 if compact else LexiconCatalog.CATEGORY_ORDER.size()
+	category_bar.columns = _category_column_count()
 	var category_rows := ceili(float(LexiconCatalog.CATEGORY_ORDER.size()) / float(category_bar.columns))
-	category_bar.custom_minimum_size.y = float(category_rows * 46 + maxi(category_rows - 1, 0) * 10)
+	category_bar.custom_minimum_size.y = float(category_rows * 44 + maxi(category_rows - 1, 0) * AlveolusVisualTheme.CONTROL_GAP)
+	entry_list.columns = _entry_grid_column_count()
 	content_row.custom_minimum_size.y = COMPACT_CONTENT_MIN_HEIGHT if compact else 0.0
-	list_panel.custom_minimum_size.x = 0.0 if compact else LIST_WIDTH
-	list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL if compact else Control.SIZE_FILL
-	list_panel.visible = not compact or not compact_detail_visible
-	detail_panel.visible = not compact or compact_detail_visible
+	list_panel.custom_minimum_size.x = 0.0
+	list_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_panel.visible = not compact_detail_visible
+	detail_panel.visible = compact_detail_visible
+	if overview_toolbar != null:
+		overview_toolbar.visible = not compact_detail_visible
 	detail_stats_grid.columns = 1 if compact else 2
 	for type_grid in _detail_type_grids:
 		if type_grid != null and is_instance_valid(type_grid):
 			type_grid.columns = 1 if compact else 2
 	if compact_back_button != null:
-		compact_back_button.visible = compact and compact_detail_visible
+		compact_back_button.visible = compact_detail_visible
+	if not category_buttons.is_empty():
+		_configure_focus_neighbors()
+
+
+func _category_column_count() -> int:
+	if size.x >= 720.0:
+		return LexiconCatalog.CATEGORY_ORDER.size()
+	if size.x >= 440.0:
+		return 3
+	return 2
+
+
+func _entry_grid_column_count() -> int:
+	if size.x >= 1150.0:
+		return GRID_COLUMNS_WIDE
+	if size.x >= 970.0:
+		return 5
+	if size.x >= 790.0:
+		return 4
+	if size.x >= 610.0:
+		return 3
+	return 2
 
 func _add_separator(parent: Container) -> void:
 	var separator := HSeparator.new()

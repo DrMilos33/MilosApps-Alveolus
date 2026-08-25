@@ -27,6 +27,13 @@ func _run() -> void:
 	var guidance_rect := hud.campus_research_prompt.get_global_rect()
 	_check(guidance_rect.end.x < research_target.position.x and guidance_rect.get_center().y < research_target.get_center().y, "Forschungshinweis steht diagonal links oberhalb des tatsächlichen Gebäudes (Hinweis %s, Ziel %s)" % [str(guidance_rect), str(research_target)])
 	_check(hud.campus_research_guidance_arrow != null and hud.campus_research_guidance_arrow.text == "↘", "Der Pfeil zeigt vom Hinweis diagonal zum Forschungsgebäude")
+	_check(hud.campus_research_prompt.get_meta(&"alveolus_surface_role", -1) == AlveolusVisualTheme.SurfaceRole.HUD_ALERT, "Der Forschungshinweis besitzt eine kontrastreiche semantische Alarmfläche statt ungerahmten Text")
+	_check(float(research_card.outline_material.get_shader_parameter("outline_width")) >= 5.0, "Der Forschungshinweis hebt das Zielgebäude gleichzeitig mit einem dicken Rand hervor")
+	var lexicon_card := hud.campus_buttons[&"lexicon"] as CampusBuildingCard
+	_check(not lexicon_card.available and lexicon_card.status_label.text.contains("Fall 1"), "Das Lexikongebäude ist vor Abschluss von Fall 1 sichtbar gesperrt")
+	campus_meta.highest_unlocked_level = 2
+	hud.refresh_campus(campus_meta)
+	_check(lexicon_card.available, "Der erhaltene Fall-1-Fortschritt schaltet das Lexikongebäude frei")
 
 	var components := [
 		{"id": &"precise", "title": "Impuls", "description": "Ein verfolgtes Ziel", "kind": 0, "capacity_cost": 2, "selected": true, "visual_id": &"treatment_precision"},

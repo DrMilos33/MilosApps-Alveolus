@@ -31,6 +31,7 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var boss_projectile_damage_multiplier: float = 1.0
 @export var boss_projectile_attack_speed_multiplier: float = 1.0
 @export var boss_projectile_speed_multiplier: float = 1.0
+@export_range(0.0, 0.5, 0.01) var boss_projectile_turn_time_variation: float = 0.0
 @export var boss_projectiles_require_empty_aura: bool = false
 @export var boss_wave_amplitude: float = 44.0
 @export var boss_phase_minions: PackedInt32Array
@@ -191,6 +192,11 @@ func configure_boss_projectile_contract(
 	boss_projectile_speed_multiplier = maxf(projectile_speed_multiplier, 0.1)
 	boss_projectiles_require_empty_aura = require_empty_aura
 	boss_add_projectile_attack_speed_multiplier = maxf(add_attack_speed_multiplier, 0.01)
+	return self
+
+
+func configure_boss_projectile_turn_time_variation(variation_ratio: float) -> LevelDefinition:
+	boss_projectile_turn_time_variation = clampf(variation_ratio, 0.0, 0.5)
 	return self
 
 func configure_boss(
