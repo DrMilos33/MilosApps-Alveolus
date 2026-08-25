@@ -32,6 +32,8 @@ var _reinforcement_interval: float
 var _reinforcement_count: int
 var _reinforcement_minimum_phase: int
 var _add_defense_burst_shooting_lock_seconds: float
+var _projectile_speed_multiplier: float
+var _phase_health_thresholds: PackedFloat32Array
 
 
 func _init(
@@ -54,7 +56,9 @@ func _init(
 	reinforcement_interval_value: float = 0.0,
 	reinforcement_count_value: int = 0,
 	reinforcement_minimum_phase_value: int = 0,
-	add_defense_burst_shooting_lock_seconds_value: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
+	add_defense_burst_shooting_lock_seconds_value: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS,
+	projectile_speed_multiplier_value: float = 1.0,
+	phase_health_thresholds_value: PackedFloat32Array = PackedFloat32Array([0.70, 0.40])
 ) -> void:
 	_id = id_value
 	_title = title_value
@@ -76,6 +80,8 @@ func _init(
 	_reinforcement_count = maxi(reinforcement_count_value, 0)
 	_reinforcement_minimum_phase = clampi(reinforcement_minimum_phase_value, 0, 2)
 	_add_defense_burst_shooting_lock_seconds = add_defense_burst_shooting_lock_seconds_value
+	_projectile_speed_multiplier = maxf(projectile_speed_multiplier_value, 0.1)
+	_phase_health_thresholds = phase_health_thresholds_value.duplicate()
 
 
 func get_id() -> StringName:
@@ -162,6 +168,14 @@ func get_add_defense_burst_shooting_lock_seconds() -> float:
 	return _add_defense_burst_shooting_lock_seconds
 
 
+func get_projectile_speed_multiplier() -> float:
+	return _projectile_speed_multiplier
+
+
+func get_phase_health_thresholds() -> PackedFloat32Array:
+	return _phase_health_thresholds.duplicate()
+
+
 func duplicate_immutable() -> PracticeBossProfile:
 	return PracticeBossProfile.new(
 		_id,
@@ -183,7 +197,9 @@ func duplicate_immutable() -> PracticeBossProfile:
 		_reinforcement_interval,
 		_reinforcement_count,
 		_reinforcement_minimum_phase,
-		_add_defense_burst_shooting_lock_seconds
+		_add_defense_burst_shooting_lock_seconds,
+		_projectile_speed_multiplier,
+		_phase_health_thresholds
 	)
 
 
@@ -217,15 +233,17 @@ static func catalog() -> Array[PracticeBossProfile]:
 			1.0,
 			1.25,
 			true,
-			1.0,
+			1.5,
 			44.0,
 			PackedInt32Array([3]),
 			1,
 			1.8,
 			15.0,
 			4,
-			0,
-			-1.0
+			1,
+			-1.0,
+			1.5,
+			PackedFloat32Array([0.80])
 		),
 		PracticeBossProfile.new(
 			DIAMOND_INFECTION_FOCUS_ID,

@@ -28,7 +28,9 @@ func _run() -> void:
 	_true(LoadoutValidator.validate(default_loadout, definitions, fresh_available, 8).valid, "Der frische Ein-Komponenten-Plan ist vor Fortschrittsfreischaltungen gültig")
 	var burst_owned := {&"unlock_defense_burst": 1}
 	var first_case_available := LoadoutAvailabilityPolicy.selectable_ids(definitions, burst_owned, true)
-	_true(bool(first_case_available.get(&"ability_defense_burst", false)) and bool(first_case_available.get(&"ability_treatment_line", false)), "Fall-1-Abschluss ergänzt den Lazer zur erforschten Stoß-Fähigkeit")
+	_true(bool(first_case_available.get(&"ability_defense_burst", false)) and not bool(first_case_available.get(&"ability_treatment_line", false)), "Fall-1-Abschluss öffnet Slot 2, besitzt den Lazer aber noch nicht")
+	var lazer_owned := {&"unlock_defense_burst": 1, &"unlock_treatment_line": 1}
+	_true(bool(LoadoutAvailabilityPolicy.selectable_ids(definitions, lazer_owned, true).get(&"ability_treatment_line", false)), "Fall-1-Meilenstein plus Forschungsrang schalten den Lazer frei")
 	_equal(LoadoutAvailabilityPolicy.active_ability_slot_limit(false), 1, "Vor Fall 1 steht genau ein Aktivplatz bereit")
 	_equal(LoadoutAvailabilityPolicy.active_ability_slot_limit(true), 2, "Nach Fall 1 stehen zwei Aktivplätze bereit")
 	_true(not LoadoutAvailabilityPolicy.slot_is_available(LoadoutSlotId.ACTIVE_2, false), "Aktiv 2 ist vor Fall 1 gesperrt")
@@ -62,7 +64,8 @@ func _run() -> void:
 		_true(SimpleIcon.supports(research.id), "%s besitzt eine registrierte semantische Forschungsglyphe" % String(research.id))
 		meta.research_ranks[research.id] = research.max_level
 		if research.id == LoadoutAvailabilityPolicy.TREATMENT_LINE_RESEARCH_ID:
-			_true(not LoadoutAvailabilityPolicy.research_purchase_enabled(research), "Fetter lazer ist ausschließlich ein Fallmeilenstein")
+			_true(not LoadoutAvailabilityPolicy.research_purchase_enabled(research, false), "Fetter lazer ist vor Fall 1 nicht kaufbar")
+			_true(LoadoutAvailabilityPolicy.research_purchase_enabled(research, true), "Fetter lazer wird nach Fall 1 als manuelle Forschung kaufbar")
 			_true(LoadoutAvailabilityPolicy.research_icon_kind(research, false) == &"question", "Der gesperrte Lazer nutzt die Fragezeichenglyphe")
 			_true(LoadoutAvailabilityPolicy.research_status(research, definitions, false).contains("Fall 1"), "Der gesperrte Lazer erklärt seinen Fallmeilenstein")
 			_equal(LoadoutAvailabilityPolicy.research_effective_rank(research, research.max_level, false), 0, "Ein alter Forschungsrang umgeht den Meilenstein nicht")
@@ -71,10 +74,23 @@ func _run() -> void:
 	meta.research_ranks[LoadoutAvailabilityPolicy.TREATMENT_LINE_RESEARCH_ID] = 0
 	meta.get_level_record(LoadoutAvailabilityPolicy.FIRST_CASE_LEVEL_ID).victories = 1
 	var available := LoadoutAvailabilityPolicy.selectable_ids(definitions, meta.research_ranks, true)
-	_equal(available.size(), 5, "Beide Forschungsbehandlungen erweitern den Planungspool")
+	_equal(available.size(), 4, "Fall 1 allein ergänzt keinen automatisch besessenen Lazer")
 	var researched_sanitized := LoadoutAvailabilityPolicy.sanitized_copy(historical, definitions, meta.research_ranks, true)
 	_equal(researched_sanitized.treatment_id, &"treatment_spread", "Eine erforschte historische Behandlung bleibt erhalten")
-	_equal(researched_sanitized.ability_ids, [&"ability_treatment_line"], "Nach Fall 1 bleibt der Lazer ohne Forschungsrang erhalten")
+	_equal(researched_sanitized.ability_ids, [], "Ohne manuellen Forschungsrang entfernt die effektive Kopie den historischen Lazer")
+	var lazer_research: ResearchDefinition
+	for research in ContentCatalog.research_definitions():
+		if research.id == LoadoutAvailabilityPolicy.TREATMENT_LINE_RESEARCH_ID:
+			lazer_research = research
+			break
+	_true(lazer_research != null and lazer_research.cost_for_rank(0) == 0, "Die manuelle Lazer-Freischaltung kostet nach Fall 1 null Forschung")
+	var research_before := meta.research_points
+	await _test_lazer_hud_transition(meta, lazer_research)
+	_equal(meta.research_points, research_before, "Der kostenlose Lazer-Kauf verändert den Forschungsstand nicht")
+	available = LoadoutAvailabilityPolicy.selectable_ids(definitions, meta.research_ranks, true)
+	_equal(available.size(), 5, "Nach dem manuellen Klick gehört der Lazer zum Planungspool")
+	researched_sanitized = LoadoutAvailabilityPolicy.sanitized_copy(historical, definitions, meta.research_ranks, true)
+	_equal(researched_sanitized.ability_ids, [&"ability_treatment_line"], "Der gespeicherte kostenlose Rang erhält den Lazer in der effektiven Kopie")
 	_true(SimpleIcon.supports(&"question"), "Die semantische Fragezeichenglyphe ist zentral registriert")
 
 	var completed_case_loadout := PreparedLoadout.create(
@@ -83,6 +99,44 @@ func _run() -> void:
 	)
 	await _test_hud(definitions, available, completed_case_loadout, meta)
 	_finish()
+
+
+func _test_lazer_hud_transition(meta: MetaProgressionState, lazer_research: ResearchDefinition) -> void:
+	get_root().size = Vector2i(1280, 720)
+	var hud := GameHUD.new()
+	get_root().add_child(hud)
+	await process_frame
+	await process_frame
+	hud.set_progression_availability(true, true)
+	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
+	await process_frame
+	var before_item: ProgressionScreenViewModel.ResearchItemViewModel
+	for item in hud.progression_research_items:
+		if item.id() == LoadoutAvailabilityPolicy.TREATMENT_LINE_RESEARCH_ID:
+			before_item = item
+			break
+	_true(before_item != null, "Die echte HUD-Brücke veröffentlicht das Lazer-Forschungsfeld")
+	if before_item != null:
+		_equal(before_item.state(), ProgressionScreenViewModel.ItemState.AVAILABLE, "Nach Fall 1 ist der ungekaufte Lazer verfügbar")
+		_true(before_item.interactive(), "Der kostenlose Lazer ist nach Fall 1 anklickbar")
+		_equal(before_item.cost_text(), "Kostenlos", "Das Lazer-Feld zeigt den Nullkostenvertrag sichtbar")
+		_true(not before_item.milestone_lock_cover(), "Nach Fall 1 ist die Vollflächen-Padlocksperre entfernt")
+	var lazer_button := hud.progression_screen.research_action(LoadoutAvailabilityPolicy.TREATMENT_LINE_RESEARCH_ID)
+	_true(lazer_button != null and lazer_button.find_child("ResearchMilestoneLock", true, false) == null, "Die echte Karte trägt nach Fall 1 keine Padlockfläche")
+	_true(meta.purchase(lazer_research), "Der kostenlose Forschungsklick speichert den Lazer-Rang")
+	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
+	await process_frame
+	var after_item: ProgressionScreenViewModel.ResearchItemViewModel
+	for item in hud.progression_research_items:
+		if item.id() == LoadoutAvailabilityPolicy.TREATMENT_LINE_RESEARCH_ID:
+			after_item = item
+			break
+	_true(after_item != null, "Der gekaufte Lazer bleibt im echten HUD-Forschungsmodell")
+	if after_item != null:
+		_equal(after_item.state(), ProgressionScreenViewModel.ItemState.ACTIVE, "Nach dem Klick ist der Lazer aktiv")
+		_true(not after_item.interactive(), "Der einmalige Lazer-Kauf ist danach abgeschlossen")
+	hud.queue_free()
+	await process_frame
 
 
 func _test_hud(definitions: Dictionary, available: Dictionary, loadout: PreparedLoadout, meta: MetaProgressionState) -> void:

@@ -1,7 +1,7 @@
 # ALVEOLUS – aktueller Werte- und Ausbaukatalog
 
-**Stand:** 21. August 2026
-**Geprüfte Codebasis:** lokaler Balance-Arbeitsbaum auf Basis von `16122ec`
+**Stand:** 25. August 2026
+**Geprüfte Codebasis:** lokaler Arbeitsbaum `codex/alveolus-local-main`
 **Zweck:** Verbindliche Ist-Aufnahme für die nächste Balanceiteration.
 
 Dieses Dokument beschreibt implementierte Werte und Auswahlregeln. Es ist noch
@@ -15,8 +15,9 @@ im Kampf ist dagegen vollständig enthalten.
   Fähigkeiten.
 - Es gibt drei Behandlungen. Impuls ist sofort verfügbar; Streuimpuls
   und Durchdringender Impuls werden durch Forschung freigeschaltet.
-- `Stoß` wird durch Forschung freigeschaltet. `Fetter lazer` und der zweite
-  aktive Slot werden nach dem ersten Sieg in Fall 1 automatisch freigeschaltet.
+- `Stoß` wird durch Forschung freigeschaltet. Nach dem ersten Sieg in Fall 1
+  öffnet sich der zweite aktive Slot; `Fetter lazer` muss anschließend manuell,
+  aber für 0 Forschung freigeschaltet werden.
   Vier weitere aktive Fähigkeiten bleiben mit ihren Werten sichtbar, aber gesperrt.
 - Es gibt derzeit **keine Passivmodule** im aktiven Produktkatalog.
 - Dauerhafte Progression besteht aus zehn globalen Forschungen und vier
@@ -143,7 +144,7 @@ Besonderheiten:
 | Fähigkeit | Status | Zielart | Abklingzeit | Werte | Schadenstyp |
 |---|---|---|---:|---|---|
 | Stoß | Forschung für 30 | Zielkreis | 14 s | 0 Schaden, Radiusstufe 5, 120 Rückstoß; getroffene Nichtboss-Schützen feuern nicht mehr | keiner |
-| Fetter lazer | nach erstem Sieg in Fall 1 | Zielrichtung | 18 s | 30 Schaden, Reichweitenstufe 21, 38 Breite | Wasser |
+| Fetter lazer | nach Fall 1 manuell für 0 Forschung | Zielrichtung | 18 s | 30 Schaden, Reichweitenstufe 21, 38 Breite | Wasser |
 | Fokusfeld | sichtbar gesperrt | Zielkreis | 16 s | Radiusstufe 6, 7 s, Behandlungsschaden ×1,25 | keiner |
 | Notfallhilfe | sichtbar gesperrt | selbst | 28 s | +14 Leben, +8 Schild | keiner |
 | Schildfeld | sichtbar gesperrt | Zielkreis | 20 s | Radiusstufe 6, 6 s, Gegnertempo und -schaden ×0,65 | keiner |
@@ -162,9 +163,9 @@ interpretiert werden.
 
 ## 8. Forschung
 
-Neun kaufbare Forschungen wirken global oder schalten eine Komponente frei.
-Ein zehntes Forschungsfeld zeigt den nicht käuflichen Fall-1-Meilenstein für
-`Fetter lazer`.
+Zehn manuell auslösbare Forschungen wirken global oder schalten eine Komponente
+frei. `Fetter lazer` bleibt bis zum Fall-1-Meilenstein gesperrt und wird danach
+als kostenloser Kauf angeboten.
 
 | Forschung | Ränge | Kosten je Rang | Wirkung je Rang | Maximum |
 |---|---:|---|---|---|
@@ -177,7 +178,7 @@ Ein zehntes Forschungsfeld zeigt den nicht käuflichen Fall-1-Meilenstein für
 | Streuimpuls | 1 | 300 | Behandlung freischalten | freigeschaltet |
 | Durchdringender Impuls | 1 | 500 | Behandlung freischalten | freigeschaltet |
 | Stoß | 1 | 30 | aktive Fähigkeit freischalten | freigeschaltet |
-| Fetter lazer | 1 | Abschluss Fall 1 | aktive Fähigkeit und zweiten Aktivslot freischalten | freigeschaltet |
+| Fetter lazer | 1 | 0 nach Abschluss von Fall 1 | aktive Fähigkeit freischalten | freigeschaltet |
 
 Der reguläre kaufbare Vollausbau kostet insgesamt **9.481 Forschungspunkte**. Ein neuer
 Spielstand startet mit 0 Forschung. Introabschluss oder Überspringen vergeben einmalig
@@ -189,8 +190,10 @@ Einführung verwendet ihre feste Lehrkonfiguration.
 
 Der Talentbaum ist bis zum ersten erfolgreichen Abschluss von Fall 2 vollständig
 gesperrt; Introabschluss, Intro-Skip und Fall 1 umgehen die Sperre nicht. Vor dem ersten Sieg in Fall 1 zeigt `Fetter lazer` Fragezeichen,
-Schloss und die Meilensteinbedingung; gespeicherte Forschungsränge umgehen sie
-nicht.
+eine vollflächige Schlossabdeckung und die Meilensteinbedingung; gespeicherte
+Forschungsränge umgehen sie nicht. Nach Fall 1 öffnet sich die Karte als
+kostenlose manuelle Freischaltung. Der zweite Aktivslot ist davon unabhängig
+bereits durch den Fallabschluss verfügbar.
 
 ## 9. Behandlungs-Talentbaum
 
@@ -310,8 +313,9 @@ normalen Projektile besitzen 1,95-fache Geschwindigkeit sowie 1,5-fache
 Querbreite und Trefferfläche. Ein Treffer mit Stoß beendet seinen Beschuss für
 den restlichen Lebenszyklus; Bewegung und sonstiger Status laufen unverändert
 weiter. Andere kleine Herde behalten das Tabellenprofil. Das mobile Fall-2-Event
-besitzt 600 gemeinsames Leben, erscheint als Verbund kleiner Bakterien mit einem
-Lebensbalken und verwendet zwanzig virtuelle Trefferpunkte. `Fetter lazer` trifft
+besitzt 1.200 gemeinsames Leben, doppeltes Eventtempo, schießt nicht, erscheint
+1,12-fach größer als Verbund kleiner Bakterien mit einem Lebensbalken und
+verwendet zwanzig virtuelle Trefferpunkte. `Fetter lazer` trifft
 bei den Breiten 38/54/70 zentriert 12/16/19 dieser Punkte; vollständige
 Hitboxabdeckung löst maximal 20-fachen Schaden aus. Andere Schadensquellen bleiben
 unverändert.
@@ -331,11 +335,14 @@ anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
 aufgelöst. Nach einem gültigen Treffer schützt die globale 0,5-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.
 
-Der Bakterienkern aus Fall 2 schießt alle 0,89 Sekunden ein Projektil. Nach 50
-Prozent der kürzeren sichtbaren Bildschirmkante biegt es um 90 Grad nach links
-oder rechts ab, nach weiteren 20 Prozent erneut in dieselbe Richtung. Die Seite
-wechselt deterministisch zwischen den Schüssen. Alle 15 Sekunden sowie in seiner
-Lebensphase entstehen vier schießende Bakterien. Wie alle projektilfähigen
+Der Bakterienkern aus Fall 2 schießt alle 0,89 Sekunden ein Projektil mit
+375 Tempo und authored 1,5-fachem Schaden. Der erste Kurvenzeitpunkt entspricht
+bei diesem Referenztempo ungefähr 80 Prozent der sichtbaren Bildschirmbreite,
+der zweite weiteren 40 Prozent. Beide Zeiten werden beim Spawn eingefroren;
+spätere Projektiltempomodifikatoren verschieben sie nicht. Die Seite wechselt
+deterministisch zwischen den Schüssen. Bei 80 Prozent Leben erscheinen drei
+schießende Bakterien und der 15-Sekunden-Timer für weitere Vierergruppen beginnt.
+Wie alle projektilfähigen
 Nichtbosse verlieren sie nach Stoß ihren Beschuss für den restlichen
 Lebenszyklus. Bosse bleiben vollständig schussfähig, auch während ihres
 Stoß-Stuns.

@@ -511,6 +511,8 @@ func _update_research_button(button: Button, item: Variant) -> void:
 		state,
 		AlveolusVisualTheme.GOLD
 	)
+	if item.milestone_lock_cover():
+		_build_research_lock_cover(button)
 	AlveolusUIComponents.refresh_button_state(button)
 	_register_info_source(
 		button,
@@ -518,6 +520,30 @@ func _update_research_button(button: Button, item: Variant) -> void:
 		item.detail_info(),
 		_research_info_source_ids
 	)
+
+
+func _build_research_lock_cover(button: Button) -> void:
+	var cover := PanelContainer.new()
+	cover.name = "ResearchMilestoneLock"
+	cover.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cover.add_theme_stylebox_override("panel", AlveolusVisualTheme.surface_role_style(
+		AlveolusVisualTheme.SurfaceRole.MODAL_SHEET,
+		AlveolusVisualTheme.GOLD,
+		AlveolusVisualTheme.CornerTreatment.CARD_6
+	))
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover.z_index = 2
+	cover.set_meta(&"alveolus_component", &"research_milestone_lock")
+	button.add_child(cover)
+	var center := CenterContainer.new()
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover.add_child(center)
+	var icon := SimpleIcon.new()
+	icon.name = "ResearchMilestoneLockIcon"
+	icon.custom_minimum_size = Vector2(38.0, 38.0)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.configure(&"locked", AlveolusVisualTheme.GOLD)
+	center.add_child(icon)
 
 
 func _rebuild_talents(branches: Array) -> void:

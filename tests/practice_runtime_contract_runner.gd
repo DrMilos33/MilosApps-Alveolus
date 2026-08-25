@@ -89,6 +89,8 @@ func _check_practice_run_configs() -> void:
 		_check(boss.boss_phase_minions == profile.get_phase_minions(), "Bossprofil %s überträgt alle Phasen" % profile.get_id())
 		_check(boss.boss_count == profile.get_boss_count(), "Bossprofil %s überträgt die Bossanzahl" % profile.get_id())
 		_check(is_equal_approx(boss.boss_projectile_attack_speed_multiplier, profile.get_projectile_attack_speed_multiplier()), "Bossprofil %s überträgt die Schussrate" % profile.get_id())
+		_check(is_equal_approx(boss.boss_projectile_speed_multiplier, profile.get_projectile_speed_multiplier()), "Bossprofil %s überträgt das Projektiltempo" % profile.get_id())
+		_check(boss.boss_phase_health_thresholds == profile.get_phase_health_thresholds(), "Bossprofil %s überträgt die Beschwörungsschwellen" % profile.get_id())
 		_check(is_equal_approx(boss.boss_reinforcement_interval, profile.get_reinforcement_interval()), "Bossprofil %s überträgt das Verstärkungsintervall" % profile.get_id())
 		_check(boss.boss_reinforcement_count == profile.get_reinforcement_count(), "Bossprofil %s überträgt die Verstärkungsmenge" % profile.get_id())
 		_check(boss.boss_reinforcement_minimum_phase == profile.get_reinforcement_minimum_phase(), "Bossprofil %s überträgt die Verstärkungsphase" % profile.get_id())

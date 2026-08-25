@@ -14,9 +14,11 @@ extends Resource
 @export_range(0.01, 4.0, 0.01) var target_attack_speed_multiplier: float = 1.0
 @export_range(0.1, 4.0, 0.01) var target_projectile_width_multiplier: float = 1.0
 @export_range(0.1, 4.0, 0.01) var target_projectile_speed_multiplier: float = 1.0
+@export var target_projectiles_enabled: bool = true
 @export var defense_burst_shooting_lock_seconds: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 @export_range(0.01, 100.0, 0.01) var target_health_multiplier: float = 1.0
 @export var target_visual_id: StringName = &""
+@export_range(0.5, 2.0, 0.01) var target_visual_scale: float = 1.0
 @export_range(0, 16, 1) var symbolic_health_bar_count: int = 0
 @export_range(0.01, 100.0, 0.01) var treatment_line_damage_multiplier: float = 1.0
 @export var treatment_line_coverage_scaled: bool = false
@@ -39,13 +41,15 @@ func configure_target_combat(
 	attack_speed_multiplier: float,
 	projectile_width_multiplier: float,
 	projectile_speed_multiplier: float = 1.0,
-	shooting_lock_seconds: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
+	shooting_lock_seconds: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS,
+	projectiles_enabled: bool = true
 ) -> CasePressurePlan:
 	target_movement_speed_multiplier = maxf(movement_speed_multiplier, 0.0)
 	target_attack_speed_multiplier = maxf(attack_speed_multiplier, 0.01)
 	target_projectile_width_multiplier = maxf(projectile_width_multiplier, 0.1)
 	target_projectile_speed_multiplier = maxf(projectile_speed_multiplier, 0.1)
 	defense_burst_shooting_lock_seconds = shooting_lock_seconds
+	target_projectiles_enabled = projectiles_enabled
 	return self
 
 
@@ -54,13 +58,15 @@ func configure_target_presentation(
 	health_multiplier: float,
 	health_bar_count: int,
 	line_damage_multiplier: float,
-	coverage_scaled: bool = false
+	coverage_scaled: bool = false,
+	visual_scale: float = 1.0
 ) -> CasePressurePlan:
 	target_visual_id = visual_id
 	target_health_multiplier = maxf(health_multiplier, 0.01)
 	symbolic_health_bar_count = clampi(health_bar_count, 0, 16)
 	treatment_line_damage_multiplier = maxf(line_damage_multiplier, 0.01)
 	treatment_line_coverage_scaled = coverage_scaled
+	target_visual_scale = clampf(visual_scale, 0.5, 2.0)
 	return self
 
 
@@ -77,7 +83,8 @@ static func default_for_case_order(case_order: int) -> CasePressurePlan:
 				PackedFloat32Array([25.0, 60.0, 95.0, 130.0]),
 				PackedFloat32Array(),
 				2
-			).configure_target_presentation(&"bacterial_swarm", 10.0 / 3.0, 1, 20.0, true)
+			).configure_target_combat(2.0, 1.0, 1.0, 1.0, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, false
+			).configure_target_presentation(&"bacterial_swarm", 20.0 / 3.0, 1, 20.0, true, 1.12)
 		3:
 			return create(
 				PackedFloat32Array([22.5, 60.0, 97.5, 135.0]),

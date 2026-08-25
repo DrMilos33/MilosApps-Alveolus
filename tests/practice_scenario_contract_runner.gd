@@ -86,7 +86,7 @@ func _check_boss_profile_catalog() -> void:
 	)
 	_check_profile(
 		PracticeBossProfileScript.get_by_id(&"bacterial_core"),
-		&"localized_focus", &"localized_boss", 1.0, 1.08, 1.0, 1.25, true, 1.0, 44.0, PackedInt32Array([3])
+		&"localized_focus", &"localized_boss", 1.0, 1.08, 1.0, 1.25, true, 1.5, 44.0, PackedInt32Array([3])
 	)
 	_check_profile(
 		PracticeBossProfileScript.get_by_id(&"diamond_infection_focus"),
@@ -100,7 +100,9 @@ func _check_boss_profile_catalog() -> void:
 	var bacterial_core = PracticeBossProfileScript.get_by_id(&"bacterial_core")
 	_check(is_equal_approx(bacterial_core.get_projectile_attack_speed_multiplier(), 1.8), "Bakterienkern-Profil bewahrt die schnellere Schussrate")
 	_check(is_equal_approx(bacterial_core.get_reinforcement_interval(), 15.0) and bacterial_core.get_reinforcement_count() == 4, "Bakterienkern-Profil bewahrt seine regelmäßige Vierer-Verstärkung")
-	_check(bacterial_core.get_reinforcement_minimum_phase() == 0, "Bakterienkern-Profil verstärkt ab Kampfbeginn")
+	_check(bacterial_core.get_reinforcement_minimum_phase() == 1, "Bakterienkern-Profil verstärkt erst ab seiner 80-Prozent-Phase")
+	_check(is_equal_approx(bacterial_core.get_projectile_speed_multiplier(), 1.5), "Bakterienkern-Profil bewahrt das 50 Prozent höhere Projektiltempo")
+	_check(bacterial_core.get_phase_health_thresholds() == PackedFloat32Array([0.80]), "Bakterienkern-Profil bewahrt die 80-Prozent-Beschwörungsschwelle")
 	_check(is_equal_approx(bacterial_core.get_add_defense_burst_shooting_lock_seconds(), -1.0), "Bakterienkern-Profil bewahrt die dauerhafte Stoß-Sperre seiner Adds")
 	var phases := diamond.get_phase_minions()
 	phases[0] = 99

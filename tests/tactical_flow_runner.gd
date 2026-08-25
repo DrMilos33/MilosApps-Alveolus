@@ -20,6 +20,7 @@ func _run() -> void:
 	game.meta.research_ranks[&"sample_logistics"] = 1
 	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
 	game.meta.research_ranks[&"unlock_defense_burst"] = 1
+	game.meta.research_ranks[&"unlock_treatment_line"] = 1
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(StringName(discovery_id))
 	await process_frame

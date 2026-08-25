@@ -34,6 +34,7 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var boss_projectiles_require_empty_aura: bool = false
 @export var boss_wave_amplitude: float = 44.0
 @export var boss_phase_minions: PackedInt32Array
+@export var boss_phase_health_thresholds: PackedFloat32Array = PackedFloat32Array([0.70, 0.40])
 @export_range(0.0, 2.0, 0.01) var boss_aura_screen_diameter_fraction: float = 0.0
 @export var boss_aura_speed_multiplier: float = 1.0
 @export var boss_aura_damage_multiplier: float = 1.0
@@ -168,6 +169,13 @@ func configure_boss_reinforcements(
 	boss_reinforcement_interval = maxf(interval_seconds, 0.0)
 	boss_reinforcement_count = maxi(count, 0)
 	boss_reinforcement_minimum_phase = clampi(minimum_phase, 0, 2)
+	return self
+
+
+func configure_boss_phase_thresholds(thresholds: PackedFloat32Array) -> LevelDefinition:
+	boss_phase_health_thresholds = PackedFloat32Array()
+	for threshold in thresholds:
+		boss_phase_health_thresholds.append(clampf(threshold, 0.01, 0.99))
 	return self
 
 

@@ -58,6 +58,12 @@ func _run() -> void:
 	_check(_primary_icon_kind(locked_research) == &"question", "Unbekannte Meilensteinforschung zeigt Fragezeichen plus separates Schloss")
 	_check(locked_research.theme_type_variation == AlveolusVisualTheme.TYPE_COMPACT_RESEARCH, "Gesperrte Forschung bewahrt die fokussierbare kompakte Grundrolle")
 	_check(locked_research.focus_mode == Control.FOCUS_ALL, "Gesperrte Forschung bleibt für ui_info fokussierbar")
+	var research_lock_cover := locked_research.find_child("ResearchMilestoneLock", true, false) as PanelContainer
+	var research_lock_icon := locked_research.find_child("ResearchMilestoneLockIcon", true, false) as SimpleIcon
+	_check(research_lock_cover != null and research_lock_cover.get_global_rect().is_equal_approx(locked_research.get_global_rect()), "Der Lazer-Meilenstein bedeckt exakt die ganze Forschungskarte")
+	_check(research_lock_cover != null and research_lock_cover.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Die Sperrfläche lässt Hover und ui_info an die Karte durch")
+	_check(research_lock_icon != null and research_lock_icon.kind == &"locked", "Die Vollflächensperre verwendet die zentrale Padlock-Glyphe")
+	_check(screen.research_action(&"research_fourth").find_child("ResearchMilestoneLock", true, false) == null, "Normale unbezahlbare Forschung erhält keine Meilenstein-Sperrfläche")
 	_check(String(locked_research.get_meta(&"alveolus_accessible_name", "")).contains("gesperrt"), "Nicht sichtbarer zugänglicher Name benennt den Zustand ausdrücklich")
 	_check(String(screen.info_payload_for(locked_research).get("body", "")).contains("Abschluss von Fall 1"), "Meilensteinforschung erklärt ihren Unlock im Hoverdetail")
 	_check(active_research.custom_minimum_size.y == AlveolusVisualTheme.COMPACT_RESEARCH_HEIGHT and active_research.get_combined_minimum_size().y <= 68.0, "Forschungskarten bleiben einschließlich Theme-Innenrändern kompakt")
@@ -314,7 +320,8 @@ func _research_item(
 		state,
 		interactive,
 		_info(title, info_body, cost, icon_kind, AlveolusVisualTheme.GOLD),
-		total_effect
+		total_effect,
+		icon_kind == &"question"
 	)
 
 
@@ -428,6 +435,7 @@ func _check_source_contracts() -> void:
 	_check(branch_source.contains("draw_polyline") and not branch_source.contains("draw_circle"), "Talentverbindungen verwenden Linien ohne Kreispunkte")
 	_check(model_source.contains("Array[ResearchItemViewModel]") and model_source.contains("Array[TalentBranchViewModel]"), "ViewModel hält Kindeinträge typisiert")
 	_check(model_source.contains("total_effect_text_value") and model_source.contains("Gesamt: %s"), "Gesamtwirkung wird als vorbereiteter Wert ausschließlich im Detailpayload ergänzt")
+	_check(model_source.contains("milestone_lock_cover_value") and screen_source.contains("ResearchMilestoneLock"), "Der Lazer-Meilenstein transportiert seine Vollflächensperre explizit statt über jeden Locked-Zustand")
 	_check(model_source.contains("rank_current_value") and model_source.contains("rank_maximum_value"), "Talentränge gelangen als reine Präsentationsprimitive ins ViewModel")
 
 

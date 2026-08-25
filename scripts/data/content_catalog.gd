@@ -43,7 +43,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein lokaler Bakterienherd belastet Doctor Milos. Stoppe ihn, bevor das Leben auf null fällt.",
 			"Der lokalisierte Infektionsherd wurde kontrolliert.",
 			"Die Infektionslast konnte in diesem Versuch nicht ausreichend kontrolliert werden."
-		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", true).configure_boss_reinforcements(15.0, 4).configure_boss_projectile_contract(1.8, -1.0).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", true, 1.5).configure_boss_reinforcements(15.0, 4, 1).configure_boss_projectile_contract(1.8, -1.0, 1.5).configure_boss_phase_thresholds(PackedFloat32Array([0.80])).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
 		LevelDefinition.create(
 			&"advancing_infection", 3, "Fortschreitender Verlauf", "Fall 03 · fortschreitende Pneumonie", false,
 			-1.0, 300.0, 50.0, 0.9075, 0.200, 1.25, 1.875, 1.12, 1.35, 0.14, 0.33,
@@ -168,12 +168,12 @@ static func discovery_definitions() -> Dictionary:
 		&"localized_boss": DiscoveryDefinition.create(
 			&"localized_boss", &"enemy_materialized", "Bakterienkern",
 			"Der Bakterienkern steht vereinfacht für einen noch lokal begrenzten Schwerpunkt der Infektion.",
-			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und ruft alle 15 Sekunden vier schnell schießende Bakterien. Ist seine Aura leer, feuert der Kern selbst. In Fall 2 feuert er mit 1,8-facher Rate Doppelkurven-Projektile; bei 70 %% Leben erscheinen drei Bakterien und alle 15 Sekunden vier weitere schießende Bakterien. Ein Stoß beendet den Beschuss schießender Nichtbosse dauerhaft; der Kern selbst bleibt schussfähig." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
+			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und ruft alle 15 Sekunden vier schnell schießende Bakterien. Ist seine Aura leer, feuert der Kern selbst. In Fall 2 feuert er mit 1,8-facher Rate 50 %% schnellere und stärkere Doppelkurven-Projektile; ab 80 %% Leben erscheinen drei Bakterien und danach alle 15 Sekunden vier weitere. Ein Stoß beendet den Beschuss schießender Nichtbosse dauerhaft; der Kern selbst bleibt schussfähig." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
 		),
 		&"minor_focus": DiscoveryDefinition.create(
 			&"minor_focus", &"enemy_materialized", "Kleiner Herd",
 			"Ein kleiner Herd steht vereinfacht für eine zusätzliche lokale Bakterienquelle.",
-			"%s\nBewegt sich langsam auf Doctor Milos zu, feuert Projektile und setzt nach 20 Sekunden vier Bakterien frei, falls er nicht kontrolliert wird." % _enemy_values_text(minor_focus, "Mobiles Nebenziel", false), &"enemy", 95, &"erreger", &"infection_focus", "Kleiner Infektionsherd"
+			"%s\nBewegt sich langsam auf Doctor Milos zu. Je nach Fall feuert er Projektile und setzt nach 20 Sekunden vier Bakterien frei, falls er nicht kontrolliert wird; der Fall-2-Bakterienschwarm schießt nicht." % _enemy_values_text(minor_focus, "Mobiles Nebenziel", false), &"enemy", 95, &"erreger", &"infection_focus", "Kleiner Infektionsherd"
 		),
 		&"analysis_pickup": DiscoveryDefinition.create(
 			&"analysis_pickup", &"pickup_spawned", "Erfahrung",
@@ -322,7 +322,7 @@ static func research_definitions() -> Array[ResearchDefinition]:
 		ResearchDefinition.create(&"unlock_piercing_treatment", "Durchdringender Impuls", "Schaltet die durchdringende Grundbehandlung frei", PackedInt32Array([500]), &"unlock", 1.0).configure_unlock(&"treatment_pierce", &"treatment"),
 		ResearchDefinition.create(&"movement_training", "Mehr Galopp", "+3 % Galopp je Rang", PackedInt32Array([75, 450, 1000]), &"movement_speed_multiplier", 0.03),
 		ResearchDefinition.create(&"unlock_defense_burst", "Stoß", "Schaltet Stoß frei", PackedInt32Array([30]), &"unlock", 1.0).configure_unlock(&"ability_defense_burst", &"ability"),
-		ResearchDefinition.create(&"unlock_treatment_line", "Fetter lazer", "Wird nach Abschluss von Fall 1 freigeschaltet", PackedInt32Array([1000]), &"unlock", 1.0).configure_unlock(&"ability_treatment_line", &"ability"),
+		ResearchDefinition.create(&"unlock_treatment_line", "Fetter lazer", "Nach Fall 1 kostenlos im Forschungsgebäude freischalten", PackedInt32Array([0]), &"unlock", 1.0).configure_unlock(&"ability_treatment_line", &"ability"),
 	]
 
 static func loadout_module_definitions() -> Dictionary:

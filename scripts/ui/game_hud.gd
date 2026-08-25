@@ -2160,8 +2160,8 @@ func _refresh_progression_research_cache(
 		var purchase_enabled := LoadoutAvailabilityPolicy.research_purchase_enabled(definition, first_case_complete)
 		var available := purchase_enabled and not maximum and meta.can_afford_research(cost)
 		var state := ProgressionScreenViewModel.ItemState.ACTIVE if maximum else (ProgressionScreenViewModel.ItemState.LOCKED if not purchase_enabled else (ProgressionScreenViewModel.ItemState.AVAILABLE if available else ProgressionScreenViewModel.ItemState.LOCKED))
-		var rank_text := "Gesperrt" if milestone_locked else ("Freigeschaltet" if milestone_lazer and maximum else "Rang %d/%d" % [rank, definition.max_level])
-		var cost_text := "Gesperrt" if milestone_locked else ("Freigeschaltet" if milestone_lazer and maximum else ("Maximum" if maximum else "%d Forschung" % cost))
+		var rank_text := "Gesperrt" if milestone_locked else ("Freigeschaltet" if milestone_lazer and maximum else ("Bereit" if milestone_lazer else "Rang %d/%d" % [rank, definition.max_level]))
+		var cost_text := "Gesperrt" if milestone_locked else ("Freigeschaltet" if milestone_lazer and maximum else ("Maximum" if maximum else ("Kostenlos" if cost == 0 else "%d Forschung" % cost)))
 		var state_text := LoadoutAvailabilityPolicy.research_status(definition, module_definitions, first_case_complete) if not purchase_enabled else ("Abgeschlossen" if maximum else ("Verfügbar" if available else "Nicht genug Forschung"))
 		var icon_id := LoadoutAvailabilityPolicy.research_icon_kind(definition, first_case_complete)
 		var description := "Wird nach Abschluss von Fall 1 freigeschaltet." if milestone_locked else definition.description
@@ -2181,7 +2181,8 @@ func _refresh_progression_research_cache(
 			state,
 			available,
 			info,
-			definition.total_effect_text(rank)
+			definition.total_effect_text(rank),
+			milestone_locked
 		))
 
 
@@ -3338,6 +3339,16 @@ func show_boss(maximum: float, phase_count: int) -> void:
 		show_run_prompt("%s erkannt" % boss_title, PlainRunPrompt.MODE_CORAL)
 		boss_announcement_time = 1.2
 		set_process(true)
+
+
+func set_boss_phase_schedule(thresholds: PackedFloat32Array) -> void:
+	if thresholds.is_empty():
+		return
+	var values := PackedStringArray()
+	for threshold in thresholds:
+		values.append("%d %%" % roundi(threshold * 100.0))
+	run_hud_vitals["boss_phase"] = ("Phase " if values.size() == 1 else "Phasen ") + " · ".join(values)
+	_apply_run_hud_model()
 
 
 func show_run_prompt(

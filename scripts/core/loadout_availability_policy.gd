@@ -55,7 +55,7 @@ static func selectable_ids(
 		if not definitions.is_empty() and not definitions.has(id):
 			continue
 		if id == TREATMENT_LINE_ID:
-			if first_case_complete:
+			if first_case_complete and int(research_ranks.get(TREATMENT_LINE_RESEARCH_ID, 0)) > 0:
 				result[id] = true
 			continue
 		var research_id := &"unlock_defense_burst"
@@ -77,7 +77,7 @@ static func unavailable_reason(
 	if bool(selectable_ids(definitions, research_ranks, first_case_complete).get(id, false)):
 		return ""
 	if id == TREATMENT_LINE_ID:
-		return TREATMENT_LINE_MILESTONE_COPY
+		return TREATMENT_LINE_MILESTONE_COPY if not first_case_complete else "Im Forschungsgebäude kostenlos freischalten."
 	if id == &"treatment_spread" or id == &"treatment_pierce":
 		return "Erfordert die passende Forschung"
 	if AVAILABLE_ABILITY_IDS.has(id):
@@ -96,7 +96,7 @@ static func research_status(
 	if definition == null:
 		return "Derzeit nicht verfügbar"
 	if definition.id == TREATMENT_LINE_RESEARCH_ID:
-		return "Nach Abschluss von Fall 1 freigeschaltet" if first_case_complete else TREATMENT_LINE_MILESTONE_COPY
+		return "Kostenlos freischaltbar" if first_case_complete else TREATMENT_LINE_MILESTONE_COPY
 	if is_selectable(definition.unlock_module_id):
 		return "Im aktuellen Testkatalog enthalten"
 	if definition.unlock_module_id != &"":
@@ -104,13 +104,12 @@ static func research_status(
 	return "Dauerhafter Forschungsbonus"
 
 
-static func research_purchase_enabled(definition: ResearchDefinition, _first_case_complete: bool = false) -> bool:
-	return definition != null and definition.id != TREATMENT_LINE_RESEARCH_ID
+static func research_purchase_enabled(definition: ResearchDefinition, first_case_complete: bool = false) -> bool:
+	return definition != null and (definition.id != TREATMENT_LINE_RESEARCH_ID or first_case_complete)
 
 
-## Presentation helpers keep the milestone node out of raw research ownership.
-## A legacy stored rank remains untouched/refundable, but no longer bypasses the
-## case milestone and is never required to represent its completed state.
+## The milestone gates availability while the stored research rank remains the
+## sole ownership fact. Historic ranks stay preserved but cannot bypass Fall 1.
 static func research_effective_rank(
 	definition: ResearchDefinition,
 	stored_rank: int,
@@ -119,7 +118,7 @@ static func research_effective_rank(
 	if definition == null:
 		return 0
 	if definition.id == TREATMENT_LINE_RESEARCH_ID:
-		return definition.max_level if first_case_complete else 0
+		return clampi(stored_rank, 0, definition.max_level) if first_case_complete else 0
 	return clampi(stored_rank, 0, definition.max_level)
 
 

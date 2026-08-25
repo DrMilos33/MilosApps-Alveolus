@@ -31,7 +31,7 @@ func _test_catalog_contract() -> void:
 		"boss_time": 300.0, "ramp": 300.0, "spawn": [1.03375, 0.23375], "health": [1.15, 1.70], "speed": 1.08,
 		"contact": 1.25, "clusters": [0.10, 0.28], "boss_health": 1.0,
 		"boss_speed": 1.0, "boss_id": &"localized_boss", "boss_ranged": true,
-		"projectile": 1.0, "amplitude": 44.0, "adds": PackedInt32Array([3]),
+		"projectile": 1.5, "amplitude": 44.0, "adds": PackedInt32Array([3]),
 		"reward": 1.0,
 	}, "Fall-2-Anker bewahrt seine stabile Balance und ergänzt den neuen Projektilboss")
 	_equal(_level_snapshot(levels[4]), {

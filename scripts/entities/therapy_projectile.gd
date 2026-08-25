@@ -44,10 +44,12 @@ var hostile_right: Vector2 = Vector2.DOWN
 var hostile_wave_amplitude: float = 0.0
 var hostile_wave_length: float = 180.0
 var hostile_width_multiplier: float = 1.0
-var hostile_first_turn_distance: float = 0.0
-var hostile_second_leg_distance: float = 0.0
+var hostile_elapsed_seconds: float = 0.0
+var hostile_first_turn_seconds: float = 0.0
+var hostile_second_leg_seconds: float = 0.0
 var hostile_turn_sign: float = 1.0
 var hostile_turn_count: int = 0
+var hostile_time_bounded_double_turn: bool = false
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -147,8 +149,9 @@ func configure_hostile(
 	wave_amplitude: float = 44.0,
 	wave_length: float = 180.0,
 	width_multiplier: float = 1.0,
-	first_turn_distance: float = 0.0,
-	second_leg_distance: float = 0.0
+	first_turn_seconds: float = 0.0,
+	second_leg_seconds: float = 0.0,
+	time_bounded_double_turn: bool = false
 ) -> void:
 	target = null
 	damage = maxf(0.0, amount)
@@ -176,10 +179,14 @@ func configure_hostile(
 	hostile_wave_amplitude = maxf(0.0, wave_amplitude) if pattern == HOSTILE_DIAMOND else 0.0
 	hostile_wave_length = maxf(32.0, wave_length)
 	hostile_width_multiplier = maxf(width_multiplier, 0.1)
-	hostile_first_turn_distance = maxf(first_turn_distance, 0.0)
-	hostile_second_leg_distance = maxf(second_leg_distance, 0.0)
+	hostile_elapsed_seconds = 0.0
+	hostile_first_turn_seconds = maxf(first_turn_seconds, 0.0)
+	hostile_second_leg_seconds = maxf(second_leg_seconds, 0.0)
 	hostile_turn_sign = -1.0 if hostile_pattern_phase < 0.5 else 1.0
 	hostile_turn_count = 0
+	hostile_time_bounded_double_turn = hostile_pattern == HOSTILE_DOUBLE_TURN and time_bounded_double_turn
+	if hostile_time_bounded_double_turn:
+		lifetime = maxf(lifetime, hostile_first_turn_seconds + hostile_second_leg_seconds + 0.75)
 	_apply_visual_width()
 	rotation = direction.angle()
 	reset_visual_motion()
@@ -280,24 +287,28 @@ func _step_hostile(delta: float) -> void:
 
 func _step_hostile_double_turn(delta: float) -> void:
 	var previous_position := global_position
-	var remaining := minf(speed * delta, maximum_distance - travelled_distance)
-	while remaining > 0.0001:
-		var next_turn_distance := INF
-		if hostile_turn_count == 0 and hostile_first_turn_distance > 0.0:
-			next_turn_distance = hostile_first_turn_distance
-		elif hostile_turn_count == 1 and hostile_second_leg_distance > 0.0:
-			next_turn_distance = hostile_first_turn_distance + hostile_second_leg_distance
-		var segment := remaining
-		if is_finite(next_turn_distance):
-			segment = minf(segment, maxf(next_turn_distance - travelled_distance, 0.0))
-		if segment > 0.0001:
-			var next_position := global_position + direction * segment
+	var remaining_seconds := delta
+	while remaining_seconds > 0.0001:
+		var next_turn_seconds := INF
+		if hostile_turn_count == 0 and hostile_first_turn_seconds > 0.0:
+			next_turn_seconds = hostile_first_turn_seconds
+		elif hostile_turn_count == 1 and hostile_second_leg_seconds > 0.0:
+			next_turn_seconds = hostile_first_turn_seconds + hostile_second_leg_seconds
+		var segment_seconds := remaining_seconds
+		if is_finite(next_turn_seconds):
+			segment_seconds = minf(segment_seconds, maxf(next_turn_seconds - hostile_elapsed_seconds, 0.0))
+		if not hostile_time_bounded_double_turn:
+			segment_seconds = minf(segment_seconds, maxf(maximum_distance - travelled_distance, 0.0) / speed)
+		if segment_seconds > 0.0001:
+			var segment_distance := speed * segment_seconds
+			var next_position := global_position + direction * segment_distance
 			if _finish_if_outside_bounded_arena(next_position):
 				return
 			global_position = topology.resolve_position(next_position) if topology != null else next_position
-			travelled_distance += segment
-			remaining -= segment
-		if is_finite(next_turn_distance) and travelled_distance >= next_turn_distance - 0.0001:
+			travelled_distance += segment_distance
+			hostile_elapsed_seconds += segment_seconds
+			remaining_seconds -= segment_seconds
+		if is_finite(next_turn_seconds) and hostile_elapsed_seconds >= next_turn_seconds - 0.0001:
 			direction = direction.rotated(hostile_turn_sign * PI * 0.5).normalized()
 			hostile_turn_count += 1
 			rotation = direction.angle()
@@ -321,7 +332,7 @@ func _finish_hostile_if_hit_or_complete() -> bool:
 			hostile_hit.emit(self, damage, hostile_damage_profile)
 			_finish()
 			return true
-	if travelled_distance >= maximum_distance:
+	if not hostile_time_bounded_double_turn and travelled_distance >= maximum_distance:
 		_finish()
 		return true
 	return false
@@ -373,10 +384,12 @@ func recycle() -> void:
 	hostile_wave_amplitude = 0.0
 	hostile_wave_length = 180.0
 	hostile_width_multiplier = 1.0
-	hostile_first_turn_distance = 0.0
-	hostile_second_leg_distance = 0.0
+	hostile_elapsed_seconds = 0.0
+	hostile_first_turn_seconds = 0.0
+	hostile_second_leg_seconds = 0.0
 	hostile_turn_sign = 1.0
 	hostile_turn_count = 0
+	hostile_time_bounded_double_turn = false
 	_apply_visual_width()
 
 

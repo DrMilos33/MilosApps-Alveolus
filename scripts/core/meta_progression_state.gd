@@ -70,7 +70,7 @@ func research_balance() -> int:
 	return UNLIMITED_TEST_POINT_POOL if unlimited_test_progression else research_points
 
 func can_afford_research(cost: int) -> bool:
-	return cost > 0 and (unlimited_test_progression or research_points >= cost)
+	return cost >= 0 and (unlimited_test_progression or research_points >= cost)
 
 func reset_defaults(now: int = -1) -> void:
 	research_points = 0

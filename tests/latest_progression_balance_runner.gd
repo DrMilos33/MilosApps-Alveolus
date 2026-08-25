@@ -49,7 +49,7 @@ func _test_research_and_intro_rewards() -> void:
 		&"unlock_piercing_treatment": PackedInt32Array([500]),
 		&"movement_training": PackedInt32Array([75, 450, 1000]),
 		&"unlock_defense_burst": PackedInt32Array([30]),
-		&"unlock_treatment_line": PackedInt32Array([1000]),
+		&"unlock_treatment_line": PackedInt32Array([0]),
 	}
 	var definitions := ContentCatalog.research_definitions()
 	_equal(definitions.size(), expected_costs.size(), "Forschung enthält nur die zehn aktuellen Einträge")
@@ -63,8 +63,10 @@ func _test_research_and_intro_rewards() -> void:
 	_true(not empty_available.has(&"ability_defense_burst") and not empty_available.has(&"ability_treatment_line"), "Aktive Fähigkeiten sind vor Forschung gesperrt")
 	var researched_before_case := LoadoutAvailabilityPolicy.selectable_ids(modules, {&"unlock_defense_burst": 1, &"unlock_treatment_line": 1})
 	_true(researched_before_case.has(&"ability_defense_burst") and not researched_before_case.has(&"ability_treatment_line"), "Ein alter Lazer-Forschungsrang umgeht den Fallmeilenstein nicht")
-	var unlocked := LoadoutAvailabilityPolicy.selectable_ids(modules, {&"unlock_defense_burst": 1}, true)
-	_true(unlocked.has(&"ability_defense_burst") and unlocked.has(&"ability_treatment_line"), "Fall 1 schaltet den zweiten Aktivplatz und den Lazer frei")
+	var milestone_only := LoadoutAvailabilityPolicy.selectable_ids(modules, {&"unlock_defense_burst": 1}, true)
+	_true(milestone_only.has(&"ability_defense_burst") and not milestone_only.has(&"ability_treatment_line"), "Fall 1 öffnet den zweiten Aktivplatz, schaltet den Lazer aber nicht automatisch frei")
+	var unlocked := LoadoutAvailabilityPolicy.selectable_ids(modules, {&"unlock_defense_burst": 1, &"unlock_treatment_line": 1}, true)
+	_true(unlocked.has(&"ability_treatment_line"), "Der kostenlose manuelle Forschungsrang schaltet Fetter lazer frei")
 
 	var meta := MetaProgressionState.new(func() -> int: return 1_700_000_000)
 	meta.reset_defaults(1_700_000_000)
@@ -133,8 +135,12 @@ func _test_boss_and_finding_contract() -> void:
 	_equal(case_two.boss_enemy_id, &"localized_boss", "Erhaltener Bakterienkern liegt auf Order 2")
 	_true(case_two.boss_ranged_enabled and case_two.boss_phase_minions == PackedInt32Array([3]), "Fall 2 ergänzt seine Dreierphase um den neuen Projektilvertrag")
 	_near(case_two.boss_projectile_attack_speed_multiplier, 1.8, "Fall-2-Boss schießt mit 80 Prozent zusätzlicher Rate")
+	_near(case_two.boss_projectile_speed_multiplier, 1.5, "Fall-2-Bossprojektile fliegen 50 Prozent schneller")
+	_near(case_two.boss_projectile_damage_multiplier, 1.5, "Fall-2-Bossprojektile besitzen 50 Prozent zusätzlichen Schaden")
+	_equal(case_two.boss_phase_health_thresholds, PackedFloat32Array([0.80]), "Fall-2-Boss beginnt bei 80 Prozent Leben mit Beschwörungen")
 	_near(case_two.boss_reinforcement_interval, 15.0, "Fall-2-Boss ruft alle 15 Sekunden Verstärkung")
 	_equal(case_two.boss_reinforcement_count, 4, "Fall-2-Boss ruft pro Verstärkung vier Schützen")
+	_equal(case_two.boss_reinforcement_minimum_phase, 1, "Regelmäßige Fall-2-Verstärkung wartet auf die 80-Prozent-Phase")
 	_near(case_two.boss_add_defense_burst_shooting_lock_seconds, -1.0, "Stoß beendet den Beschuss seiner Adds dauerhaft")
 	_equal(case_three.boss_enemy_id, &"infection_focus", "Fall 3 führt den Infektionsherd ein")
 	_true(case_three.boss_ranged_enabled, "Fall 3 führt die Rautenprojektile ein")

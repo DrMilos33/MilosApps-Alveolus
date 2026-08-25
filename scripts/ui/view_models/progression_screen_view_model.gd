@@ -84,6 +84,7 @@ class ResearchItemViewModel extends RefCounted:
 	var _interactive: bool
 	var _info: InfoViewModel
 	var _total_effect_text: String
+	var _milestone_lock_cover: bool
 
 
 	static func create(
@@ -95,7 +96,8 @@ class ResearchItemViewModel extends RefCounted:
 		state_value: int,
 		interactive_value: bool,
 		info_value: InfoViewModel,
-		total_effect_text_value: String = ""
+		total_effect_text_value: String = "",
+		milestone_lock_cover_value: bool = false
 	) -> ResearchItemViewModel:
 		var model := ResearchItemViewModel.new()
 		model._id = id_value
@@ -107,6 +109,7 @@ class ResearchItemViewModel extends RefCounted:
 		model._interactive = interactive_value and id_value != &"" and model._state == ItemState.AVAILABLE
 		model._info = info_value.duplicate_value() if info_value != null else InfoViewModel.create(title_value, "", "", icon_kind_value, Color.TRANSPARENT)
 		model._total_effect_text = total_effect_text_value
+		model._milestone_lock_cover = milestone_lock_cover_value
 		return model
 
 
@@ -148,6 +151,10 @@ class ResearchItemViewModel extends RefCounted:
 		return _total_effect_text
 
 
+	func milestone_lock_cover() -> bool:
+		return _milestone_lock_cover
+
+
 	func detail_info() -> InfoViewModel:
 		if _total_effect_text.is_empty():
 			return _info.duplicate_value()
@@ -165,11 +172,11 @@ class ResearchItemViewModel extends RefCounted:
 
 
 	func duplicate_value() -> ResearchItemViewModel:
-		return create(_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info, _total_effect_text)
+		return create(_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info, _total_effect_text, _milestone_lock_cover)
 
 
 	func content_signature() -> Array:
-		return [_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info.content_signature(), _total_effect_text]
+		return [_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info.content_signature(), _total_effect_text, _milestone_lock_cover]
 
 
 class TalentNodeViewModel extends RefCounted:

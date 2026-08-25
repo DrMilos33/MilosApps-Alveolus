@@ -118,11 +118,10 @@ func _test_case_two_target_remains_mobile() -> void:
 			_equal(StringName(runtime.get(&"behavior", &"")), &"ambient_focus", "Fall 2 behält den beweglichen Herdvertrag")
 			_true(not target.is_static_flow_obstacle(), "Der kleine Fall-2-Herd wird kein stationäres Hindernis")
 			_equal(target.body_role, EnemySpawnRequest.BodyRole.MOBILE, "Fall 2 behält die normale mobile Körperrolle")
-			_true(target.speed_multiplier > 0.0, "Der Fall-2-Herd behält seine normale Bewegung")
-			_near(target.projectile_attack_speed_multiplier, 1.0, "Der Fall-2-Herd übernimmt nicht die schnellere Fall-1-Kadenz")
-			_near(target.projectile_width_multiplier, 1.0, "Der Fall-2-Herd übernimmt nicht die breiteren Fall-1-Projektile")
+			_near(target.definition.speed * target.speed_multiplier, 42.0 * game.config.enemy_speed_multiplier * 2.0, "Der Fall-2-Schwarm bewegt sich mit doppeltem Eventtempo")
 			_equal(target.resolved_visual_id(), &"bacterial_swarm", "Der Fall-2-Herd zeigt viele kleine Bakterien als ein gemeinsames Visual")
-			_near(target.max_health, 600.0, "Der Fall-2-Schwarm besitzt exakt 600 gemeinsames Leben")
+			_near(target.runtime_visual_scale, 1.12, "Der Fall-2-Schwarm veröffentlicht die leicht größere Darstellung")
+			_near(target.max_health, 1200.0, "Der Fall-2-Schwarm besitzt exakt 1200 gemeinsames Leben")
 			_equal(target.symbolic_health_bar_count, 1, "Der Fall-2-Schwarm veröffentlicht genau einen gemeinsamen Lebensbalken")
 			_true(target.treatment_line_coverage_scaled, "Der Fall-2-Schwarm aktiviert die virtuelle Flächenabdeckung")
 			target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
@@ -141,9 +140,10 @@ func _test_case_two_target_remains_mobile() -> void:
 			var health_before_impulse := target.health
 			target.take_damage(10.0, &"treatment_precision")
 			_near(target.health, health_before_impulse - 10.0, "Andere Treffer behalten am Fall-2-Schwarm ihren normalen Schaden")
-			_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.MINOR_FOCUS, "Der bewegliche Fall-2-Herd schießt unverändert")
+			_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.NONE, "Der bewegliche Fall-2-Schwarm belegt keinen Schützen-Lease")
+			_true(not target.can_emit_projectiles(), "Der Fall-2-Schwarm kann weder definitions- noch runtimebasiert Projektile emittieren")
 			target.apply_defense_burst_shooting_lock()
-			_true(target.projectiles_suppressed(), "Auch ein definitionsbasierter kleiner Herd übernimmt ohne Sondermetadaten die allgemeine dauerhafte Stoßsperre")
+			_true(not target.projectiles_suppressed(), "Ein Gegner ohne Projektilvertrag zeigt nach Stoß keine irreführende Schusssperre")
 	game.queue_free()
 	await process_frame
 

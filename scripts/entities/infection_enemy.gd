@@ -70,13 +70,16 @@ var obstacle_traversal: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 var projectile_attack_speed_multiplier: float = 1.0
 var projectile_width_multiplier: float = 1.0
 var projectile_speed_multiplier: float = 1.0
+var projectile_emission_enabled: bool = true
 var defense_burst_shooting_lock_seconds: float = DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 var runtime_projectile_shooter: bool = false
 var treatment_line_damage_multiplier: float = 1.0
 var treatment_line_coverage_scaled: bool = false
 var symbolic_health_bar_count: int = 0
 var runtime_visual_id: StringName = &""
+var runtime_visual_scale: float = 1.0
 var phase_minions: PackedInt32Array = PackedInt32Array()
+var phase_health_thresholds: PackedFloat32Array = PackedFloat32Array([0.70, 0.40])
 var next_phase_index: int = 0
 var contact_cooldown: float = 0.0
 var hit_flash: float = 0.0
@@ -139,7 +142,8 @@ func configure(
 	defense_rating: float = 0.0,
 	body_role_value: int = EnemySpawnRequest.BodyRole.MOBILE,
 	obstacle_traversal_value: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT,
-	visual_id_override: StringName = &""
+	visual_id_override: StringName = &"",
+	boss_phase_thresholds: PackedFloat32Array = PackedFloat32Array([0.70, 0.40])
 ) -> void:
 	activation_generation += 1
 	activation_active = true
@@ -162,9 +166,11 @@ func configure(
 	body_role = body_role_value
 	obstacle_traversal = obstacle_traversal_value
 	runtime_visual_id = visual_id_override if visual_id_override != &"" else definition.visual_id
+	runtime_visual_scale = 1.0
 	projectile_attack_speed_multiplier = 1.0
 	projectile_width_multiplier = 1.0
 	projectile_speed_multiplier = 1.0
+	projectile_emission_enabled = true
 	defense_burst_shooting_lock_seconds = DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 	runtime_projectile_shooter = false
 	treatment_line_damage_multiplier = 1.0
@@ -173,6 +179,7 @@ func configure(
 	_shooting_lock_remaining = 0.0
 	_shooting_lock_permanent = false
 	phase_minions = boss_phases
+	phase_health_thresholds = boss_phase_thresholds.duplicate()
 	next_phase_index = 0
 	contact_cooldown = 0.0
 	hit_flash = 0.0
@@ -223,9 +230,11 @@ func recycle() -> void:
 	body_role = EnemySpawnRequest.BodyRole.MOBILE
 	obstacle_traversal = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 	runtime_visual_id = &""
+	runtime_visual_scale = 1.0
 	projectile_attack_speed_multiplier = 1.0
 	projectile_width_multiplier = 1.0
 	projectile_speed_multiplier = 1.0
+	projectile_emission_enabled = true
 	defense_burst_shooting_lock_seconds = DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 	runtime_projectile_shooter = false
 	treatment_line_damage_multiplier = 1.0
@@ -234,6 +243,7 @@ func recycle() -> void:
 	_shooting_lock_remaining = 0.0
 	_shooting_lock_permanent = false
 	phase_minions = PackedInt32Array()
+	phase_health_thresholds = PackedFloat32Array([0.70, 0.40])
 	status_speed_multipliers.clear()
 	status_contact_multipliers.clear()
 	_cached_status_speed_multiplier = 1.0
@@ -284,11 +294,13 @@ func configure_projectile_modifiers(
 	width_multiplier: float,
 	travel_speed_multiplier: float = 1.0,
 	burst_shooting_lock_seconds: float = DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS,
-	is_runtime_projectile_shooter: bool = false
+	is_runtime_projectile_shooter: bool = false,
+	emission_enabled: bool = true
 ) -> void:
 	projectile_attack_speed_multiplier = maxf(attack_speed_multiplier, 0.01)
 	projectile_width_multiplier = maxf(width_multiplier, 0.1)
 	projectile_speed_multiplier = maxf(travel_speed_multiplier, 0.1)
+	projectile_emission_enabled = emission_enabled
 	defense_burst_shooting_lock_seconds = burst_shooting_lock_seconds
 	runtime_projectile_shooter = is_runtime_projectile_shooter
 
@@ -296,11 +308,15 @@ func configure_projectile_modifiers(
 func configure_damage_presentation(
 	line_damage_multiplier: float,
 	health_bar_count: int,
-	coverage_scaled: bool = false
+	coverage_scaled: bool = false,
+	visual_scale: float = 1.0
 ) -> void:
 	treatment_line_damage_multiplier = maxf(line_damage_multiplier, 0.01)
 	symbolic_health_bar_count = clampi(health_bar_count, 0, 16)
 	treatment_line_coverage_scaled = coverage_scaled
+	runtime_visual_scale = clampf(visual_scale, 0.5, 2.0)
+	_configure_visual()
+	_sync_visual_appearance()
 	queue_redraw()
 
 
@@ -337,11 +353,14 @@ func projectiles_suppressed() -> bool:
 
 func can_emit_projectiles() -> bool:
 	return (
-		runtime_projectile_shooter
-		or (
-			definition != null
-			and definition.projectile_damage > 0.0
-			and definition.projectile_interval > 0.0
+		projectile_emission_enabled
+		and (
+			runtime_projectile_shooter
+			or (
+				definition != null
+				and definition.projectile_damage > 0.0
+				and definition.projectile_interval > 0.0
+			)
 		)
 	)
 
@@ -520,7 +539,7 @@ func _configure_visual() -> void:
 		return
 	visual_texture = VisualAssetCatalog.gameplay_sprite(resolved_visual_id())
 	if visual_body != null:
-		visual_body.configure_circle(definition.radius * (1.08 if not definition.is_boss else 1.04), Vector2.ZERO, 32)
+		visual_body.configure_circle(definition.radius * runtime_visual_scale * (1.08 if not definition.is_boss else 1.04), Vector2.ZERO, 32)
 
 func _visual_rect() -> Rect2:
 	var extent := visual_extent()
@@ -530,10 +549,10 @@ func visual_extent() -> float:
 	if definition == null:
 		return 0.0
 	if resolved_visual_id() == &"bacterial_swarm":
-		return definition.radius * 2.65
+		return definition.radius * 2.65 * runtime_visual_scale
 	if definition.id == &"bacterial_cluster":
-		return definition.radius * 2.15
-	return definition.radius * (2.25 if definition.is_boss else 2.35)
+		return definition.radius * 2.15 * runtime_visual_scale
+	return definition.radius * (2.25 if definition.is_boss else 2.35) * runtime_visual_scale
 
 
 func resolved_visual_id() -> StringName:
@@ -898,9 +917,8 @@ func _complete_defeat() -> void:
 func _check_boss_phases() -> void:
 	if not definition.is_boss or max_health <= 0.0:
 		return
-	var thresholds := [0.70, 0.40]
 	var fraction := health / max_health
-	while next_phase_index < phase_minions.size() and next_phase_index < thresholds.size() and fraction <= thresholds[next_phase_index]:
+	while next_phase_index < phase_minions.size() and next_phase_index < phase_health_thresholds.size() and fraction <= phase_health_thresholds[next_phase_index]:
 		var phase := next_phase_index + 1
 		minions_requested.emit(global_position, int(phase_minions[next_phase_index]))
 		boss_phase_changed.emit(phase)

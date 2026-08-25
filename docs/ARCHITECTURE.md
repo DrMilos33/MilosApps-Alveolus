@@ -571,22 +571,37 @@ Case-pressure combat and presentation modifiers are copied from the immutable
 plan into scalar activation fields on `InfectionEnemy` and cleared on recycle.
 The Fall-1 target resolves to speed 66, 1.875 attack-rate, 1.95 projectile-speed
 and width multipliers; a zero-damage Stoß control hit permanently disables its
-projectile lease. The Fall-2 target remains one gameplay entity with exactly 600
-shared health and one bar. Twenty immutable normalized sample points proxy its
-visible constituent bacteria. `AbilityController` tests those points against the
+projectile lease. The Fall-2 target remains one gameplay entity with exactly
+1,200 shared health, double authored event movement, a presentation-only 1.12
+visual scale and one bar. It publishes an explicitly disabled projectile
+contract, so no attack-director lease or misleading Stoß suppression marker can
+exist. Twenty immutable normalized sample points proxy its visible constituent
+bacteria. `AbilityController` tests those points against the
 already resolved beam rectangle and scales only `ability_treatment_line` from
 partial coverage up to 20x before the normal resistance/defense pipeline. This
 adds no entity, query or process owner and makes beam width materially relevant.
 
-The Fall-2 boss uses one pooled `HOSTILE_DOUBLE_TURN` projectile per shot. The
-first and second leg distances are frozen from the shorter visible world extent
-at spawn, and the fixed-step projectile consumes overshoot piecewise before each
-same-direction 90-degree turn. A packed per-handle sequence alternates turn side.
+The Fall-2 boss uses one pooled `HOSTILE_DOUBLE_TURN` projectile per shot at a
+1.5 travel-speed and authored damage multiplier. At spawn, 80 and another 40
+percent of the visible world width are converted through the fixed 375 reference
+speed into two immutable turn times. The fixed-step projectile consumes temporal
+overshoot piecewise before each same-direction 90-degree turn; later travel-speed
+changes therefore alter distance but never the turn schedule. One authored
+80-percent health phase emits the first three adds and arms the existing
+15-second four-add schedule. A packed per-handle sequence alternates turn side.
+Only this Fall-2 contract is lifetime-bounded so both timed turns can complete;
+other double-turn projectiles retain their authored maximum-distance cutoff.
 Every projectile-capable nonboss receives a per-activation permanent Stoß
 shooting lock by default, including all periodic and phase adds. Spawn metadata
 may later select a positive duration or explicit zero. Boss identity overrides
 all lock values. Generations, recycle and director release clear every timer and
 sequence.
+
+The second active slot derives from the completed-Fall-1 milestone, while
+`ability_treatment_line` ownership derives only from the stable stored
+`unlock_treatment_line` research rank. Before the milestone, policy masks even a
+historic rank; afterwards rank zero exposes a zero-cost purchase and rank one
+makes the ability selectable. No additional save bit or migration is involved.
 
 The Lexicon catalog has five stable presentation categories, including
 `abilities`; its entries are derived from the complete `AbilityDefinition`

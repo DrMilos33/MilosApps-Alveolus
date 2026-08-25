@@ -57,6 +57,9 @@ const CASE_PRESSURE_GATE_PROJECTILE_SPEED := 180.0
 const CASE_PRESSURE_GATE_SPACING := 52.0
 const CASE_PRESSURE_GATE_SAFE_GAP := 156.0
 const CASE_PRESSURE_GATE_MAX_PROJECTILES := 24
+const CASE_TWO_DOUBLE_TURN_REFERENCE_SPEED := 375.0
+const CASE_TWO_DOUBLE_TURN_FIRST_WIDTH_FRACTION := 0.80
+const CASE_TWO_DOUBLE_TURN_SECOND_WIDTH_FRACTION := 0.40
 const BOSS_AURA_STATUS_SOURCE := &"boss_aura"
 const BOSS_AURA_REFRESH_SECONDS := 0.10
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
@@ -1929,6 +1932,7 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_reinforcement_minimum_phase = 0
 	config.boss_projectile_attack_speed_multiplier = 1.0
 	config.boss_projectile_speed_multiplier = 1.0
+	config.boss_phase_health_thresholds = PackedFloat32Array([0.70, 0.40])
 	config.boss_projectiles_require_empty_aura = false
 	config.boss_add_defense_burst_shooting_lock_seconds = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 	config.boss_add_projectile_attack_speed_multiplier = 1.0
@@ -1959,6 +1963,8 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_phase_minions = profile.get_phase_minions()
 	config.boss_count = profile.get_boss_count()
 	config.boss_projectile_attack_speed_multiplier = profile.get_projectile_attack_speed_multiplier()
+	config.boss_projectile_speed_multiplier = profile.get_projectile_speed_multiplier()
+	config.boss_phase_health_thresholds = profile.get_phase_health_thresholds()
 	config.boss_reinforcement_interval = profile.get_reinforcement_interval()
 	config.boss_reinforcement_count = profile.get_reinforcement_count()
 	config.boss_reinforcement_minimum_phase = profile.get_reinforcement_minimum_phase()
@@ -2525,10 +2531,22 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 		hostile_pattern = TherapyProjectile.HOSTILE_DIAMOND
 	elif pattern == EnemyAttackDirector.Pattern.DOUBLE_TURN:
 		hostile_pattern = TherapyProjectile.HOSTILE_DOUBLE_TURN
-	var turn_distances := Vector2.ZERO
+	var turn_times := Vector2.ZERO
+	var time_bounded_double_turn := false
 	if pattern == EnemyAttackDirector.Pattern.DOUBLE_TURN:
-		var screen_extent := minf(_visible_world_rect().size.x, _visible_world_rect().size.y)
-		turn_distances = Vector2(screen_extent * 0.5, screen_extent * 0.2)
+		var uses_case_two_contract := config.level_id == &"localized_focus"
+		if _is_practice_test() and active_run_context.practice_boss_profile != null:
+			uses_case_two_contract = (active_run_context.practice_boss_profile as PracticeBossProfile).get_source_case_id() == &"localized_focus"
+		if uses_case_two_contract:
+			time_bounded_double_turn = true
+			var screen_width := _visible_world_rect().size.x
+			turn_times = Vector2(
+				screen_width * CASE_TWO_DOUBLE_TURN_FIRST_WIDTH_FRACTION / CASE_TWO_DOUBLE_TURN_REFERENCE_SPEED,
+				screen_width * CASE_TWO_DOUBLE_TURN_SECOND_WIDTH_FRACTION / CASE_TWO_DOUBLE_TURN_REFERENCE_SPEED
+			)
+		else:
+			var screen_extent := minf(_visible_world_rect().size.x, _visible_world_rect().size.y)
+			turn_times = Vector2(screen_extent * 0.5 / move_speed, screen_extent * 0.2 / move_speed)
 	_spawn_hostile_projectile(
 		source.global_position,
 		heading,
@@ -2542,7 +2560,8 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 		false,
 		-1,
 		source.projectile_width_multiplier,
-		turn_distances
+		turn_times,
+		time_bounded_double_turn
 	)
 
 
@@ -2559,7 +2578,8 @@ func _spawn_hostile_projectile(
 	critical_pressure: bool = false,
 	gate_id: int = -1,
 	projectile_width_multiplier: float = 1.0,
-	turn_distances: Vector2 = Vector2.ZERO
+	turn_times: Vector2 = Vector2.ZERO,
+	time_bounded_double_turn: bool = false
 ) -> bool:
 	if projectile_world == null or hostile_projectile_renderer == null or not is_instance_valid(avatar):
 		return false
@@ -2591,8 +2611,9 @@ func _spawn_hostile_projectile(
 		wave_amplitude,
 		180.0,
 		projectile_width_multiplier,
-		turn_distances.x,
-		turn_distances.y
+		turn_times.x,
+		turn_times.y,
+		time_bounded_double_turn
 	)
 	projectile.global_position = origin
 	projectile.reset_visual_motion()
@@ -2908,7 +2929,8 @@ func _spawn_enemy(
 		config.enemy_defense,
 		body_role,
 		obstacle_traversal,
-		spawn_request.resolved_visual_id() if spawn_request != null else definition.visual_id
+		spawn_request.resolved_visual_id() if spawn_request != null else definition.visual_id,
+		config.boss_phase_health_thresholds
 	)
 	if test_tools_available:
 		enemy.set_incoming_player_damage_multiplier(run_test_settings.outgoing_damage_multiplier())
@@ -2932,7 +2954,11 @@ func _spawn_enemy(
 	_combat_query_dirty = true
 	enemies.append(enemy)
 	crowd_renderer.register_enemy(enemy, force_detailed_discovery)
-	if enemy_attack_director != null and definition.id == &"minor_focus":
+	var projectile_emission_enabled := (
+		spawn_request == null
+		or bool(spawn_request.metadata.get("projectiles_enabled", true))
+	)
+	if enemy_attack_director != null and definition.id == &"minor_focus" and projectile_emission_enabled:
 		enemy_attack_director.register_enemy(world_handle, EnemyAttackDirector.Role.MINOR_FOCUS)
 	_apply_enemy_spawn_metadata(enemy, spawn_request)
 	return enemy
@@ -2948,12 +2974,14 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 			"defense_burst_shooting_lock_seconds",
 			EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 		)),
-		bool(request.metadata.get("ranged_shooter", false))
+		bool(request.metadata.get("ranged_shooter", false)),
+		bool(request.metadata.get("projectiles_enabled", true))
 	)
 	enemy.configure_damage_presentation(
 		float(request.metadata.get("treatment_line_damage_multiplier", 1.0)),
 		int(request.metadata.get("symbolic_health_bar_count", 0)),
-		bool(request.metadata.get("treatment_line_coverage_scaled", false))
+		bool(request.metadata.get("treatment_line_coverage_scaled", false)),
+		float(request.metadata.get("visual_scale", 1.0))
 	)
 	if bool(request.metadata.get("case_pressure_target", false)):
 		_register_case_pressure_target(enemy, StringName(request.metadata.get("pressure_behavior", &"stationary_fan")))
@@ -3198,6 +3226,10 @@ func _show_active_boss_hud() -> void:
 		boss_title = boss_definition.display_name
 	hud.set_boss_title(boss_title)
 	hud.show_boss(maximum, config.boss_phase_minions.size())
+	var visible_phase_thresholds := PackedFloat32Array()
+	for index in range(mini(config.boss_phase_minions.size(), config.boss_phase_health_thresholds.size())):
+		visible_phase_thresholds.append(config.boss_phase_health_thresholds[index])
+	hud.set_boss_phase_schedule(visible_phase_thresholds)
 	hud.update_boss_health(float(snapshot.get("current", 0.0)), maximum)
 	if boss_aggregate_phase > 0:
 		hud.show_boss_phase(boss_aggregate_phase)
@@ -4199,6 +4231,7 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 		pressure_plan.target_projectile_width_multiplier if pressure_plan != null else 1.0
 	)
 	request.metadata["projectile_speed_multiplier"] = pressure_plan.target_projectile_speed_multiplier if pressure_plan != null else 1.0
+	request.metadata["projectiles_enabled"] = pressure_plan.target_projectiles_enabled if pressure_plan != null else true
 	request.metadata["defense_burst_shooting_lock_seconds"] = (
 		pressure_plan.defense_burst_shooting_lock_seconds
 		if pressure_plan != null
@@ -4207,6 +4240,7 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 	request.metadata["treatment_line_damage_multiplier"] = pressure_plan.treatment_line_damage_multiplier if pressure_plan != null else 1.0
 	request.metadata["symbolic_health_bar_count"] = pressure_plan.symbolic_health_bar_count if pressure_plan != null else 0
 	request.metadata["treatment_line_coverage_scaled"] = pressure_plan.treatment_line_coverage_scaled if pressure_plan != null else false
+	request.metadata["visual_scale"] = pressure_plan.target_visual_scale if pressure_plan != null else 1.0
 	if stationary_fan:
 		request.configure_body_interaction(
 			EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE,

@@ -15,6 +15,7 @@ func _run() -> void:
 	_test_fall_one_add_spawn_metadata()
 	await _test_intro_boss_normal_attack()
 	await _test_case_two_boss_attack_and_add_lock()
+	await _test_case_two_runtime_projectile_contract()
 	await _test_configurable_boss_contract()
 	await _test_generation_safe_attack_director()
 	await _test_hostile_projectile_geometry()
@@ -78,7 +79,11 @@ func _test_anchor_case_boss_contract() -> void:
 	var case_two := levels[2] as LevelDefinition
 	_true(case_two.boss_ranged_enabled, "Fall 2 aktiviert den neuen Projektilboss")
 	_near(case_two.boss_projectile_attack_speed_multiplier, 1.8, "Fall 2 erhöht die Bossrate linear um 80 Prozent")
+	_near(case_two.boss_projectile_speed_multiplier, 1.5, "Fall 2 erhöht das Bossprojektiltempo um 50 Prozent")
+	_near(case_two.boss_projectile_damage_multiplier, 1.5, "Fall 2 erhöht den Bossprojektilschaden um 50 Prozent")
+	_equal(case_two.boss_phase_health_thresholds, PackedFloat32Array([0.80]), "Fall 2 beginnt seine Addphase bei 80 Prozent Leben")
 	_near(case_two.boss_reinforcement_interval, 15.0, "Fall 2 ruft alle 15 Sekunden Adds")
+	_equal(case_two.boss_reinforcement_minimum_phase, 1, "Der 15-Sekunden-Timer startet erst mit der 80-Prozent-Phase")
 	var case_one := levels[1] as LevelDefinition
 	_true(case_one.boss_ranged_enabled and case_one.boss_projectiles_require_empty_aura, "Fall 1 aktiviert den Bossbeschuss ausschließlich bei leerer Aura")
 	_near(case_one.boss_projectile_speed_multiplier, 1.3, "Fall-1-Bossprojektile erhalten den relativen 30-Prozent-Temposchritt")
@@ -100,11 +105,15 @@ func _test_case_two_boss_attack_and_add_lock() -> void:
 	var handle := world.register_enemy(boss, true)
 	var director := EnemyAttackDirector.new().configure(CombatCapacity.defaults().max_enemies, world.resolve)
 	var shots: Array[Dictionary] = []
+	var reinforcements: Array[int] = []
 	director.projectile_requested.connect(func(_source: int, pattern: int, phase: float, _role: int) -> void:
 		shots.append({"pattern": pattern, "phase": phase})
 	)
+	director.reinforcements_requested.connect(func(_source: int, count: int) -> void:
+		reinforcements.append(count)
+	)
 	_true(director.register_enemy(handle, EnemyAttackDirector.Role.BOSS), "Fall-2-Boss wird als Schütze registriert")
-	_true(director.configure_boss_contract(handle, true, 15.0, 4, 0), "Fall-2-Boss übernimmt den 15-Sekunden-Addvertrag")
+	_true(director.configure_boss_contract(handle, true, 15.0, 4, 1), "Fall-2-Boss übernimmt den ab Phase 1 aktiven 15-Sekunden-Addvertrag")
 	boss.apply_defense_burst_shooting_lock()
 	_true(not boss.projectiles_suppressed(), "Bosse ignorieren die allgemeine Stoß-Schusssperre")
 	director.step_fixed(0.65)
@@ -114,6 +123,13 @@ func _test_case_two_boss_attack_and_add_lock() -> void:
 	director.step_fixed(1.6 / 1.8)
 	_equal(shots.size(), 2, "Nach rund 0,89 Sekunden feuert der Fall-2-Boss erneut")
 	_true(float(shots[0]["phase"]) != float(shots[1]["phase"]), "Aufeinanderfolgende Projektile teilen sich deterministisch 50/50 auf beide Kurvenseiten")
+	director.step_fixed(20.0)
+	_equal(reinforcements, [], "Oberhalb der 80-Prozent-Phase startet der periodische Addtimer nicht")
+	_true(director.set_boss_phase(handle, 1), "Die 80-Prozent-Phase aktiviert den periodischen Addvertrag")
+	director.step_fixed(14.99)
+	_equal(reinforcements, [], "Nach Aktivierung bleibt der Fall-2-Boss bis 15 Sekunden ohne periodische Adds")
+	director.step_fixed(0.02)
+	_equal(reinforcements, [4], "15 Sekunden nach der 80-Prozent-Phase fordert der Boss vier Adds an")
 	director.release(handle)
 	world.release(handle, false)
 	world.flush_deferred()
@@ -152,6 +168,59 @@ func _test_case_two_boss_attack_and_add_lock() -> void:
 	world.clear()
 	add.queue_free()
 	avatar.queue_free()
+	await process_frame
+
+
+func _test_case_two_runtime_projectile_contract() -> void:
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	await process_frame
+	await process_frame
+	game.persistence_enabled = false
+	for discovery_id in game.discovery_definitions:
+		game.discovery_manager.mark_seen(StringName(discovery_id))
+	game.selected_level = game.levels[2]
+	game.start_run()
+	game.set_physics_process(false)
+	game._spawn_boss()
+	var boss := game.active_boss as InfectionEnemy
+	_true(is_instance_valid(boss), "Fall 2 materialisiert seinen Bakterienkern über die echte Runtimebrücke")
+	_equal(String(game.hud.run_hud_vitals.get("boss_phase", "")), "Phase 80 %", "Das Boss-HUD zeigt die echte Fall-2-Beschwörungsschwelle")
+	if is_instance_valid(boss):
+		boss.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+		_equal(boss.phase_health_thresholds, PackedFloat32Array([0.80]), "Die echte Bossaktivierung übernimmt die 80-Prozent-Addschwelle")
+		var phase_changes: Array[int] = []
+		boss.boss_phase_changed.connect(func(phase: int) -> void: phase_changes.append(phase))
+		boss.take_damage(boss.max_health * 0.19, &"test_threshold")
+		_equal(phase_changes, [], "Oberhalb 80 Prozent beschwört der Fall-2-Boss noch keine Monster")
+		boss.take_damage(boss.max_health * 0.02, &"test_threshold")
+		_equal(phase_changes, [1], "Beim Unterschreiten von 80 Prozent beginnt die Fall-2-Beschwörung")
+		var handle: int = game.enemy_world.handle_for(boss)
+		var count_before: int = game.projectiles.size()
+		game._on_enemy_projectile_requested(
+			handle,
+			EnemyAttackDirector.Pattern.DOUBLE_TURN,
+			0.0,
+			EnemyAttackDirector.Role.BOSS
+		)
+		_equal(game.projectiles.size(), count_before + 1, "Der echte Fall-2-Schuss erzeugt genau ein Doppelkurvenprojektil")
+		if game.projectiles.size() > count_before:
+			var projectile := game.projectiles[-1] as TherapyProjectile
+			_near(projectile.speed, 375.0, "Die Runtime löst das Fall-2-Bossprojektil auf 375 Tempo auf")
+			_near(projectile.damage, 8.0, "Der authored 50-Prozent-Schadensbonus wird nach der globalen Ganzzahlregel zu acht Schaden")
+			var visible_width: float = game._visible_world_rect().size.x
+			var expected_first := visible_width * 0.80 / 375.0
+			var expected_second := visible_width * 0.40 / 375.0
+			_near(projectile.hostile_first_turn_seconds, expected_first, "Der erste Knick friert 80 Prozent Bildschirmbreite als Zeit ein")
+			_near(projectile.hostile_second_leg_seconds, expected_second, "Der zweite Knick friert weitere 40 Prozent Bildschirmbreite als Zeit ein")
+			_true(projectile.hostile_time_bounded_double_turn, "Nur der Fall-2-Vertrag darf seine beiden Zeitkurven unabhängig von der Distanzgrenze vollenden")
+			projectile.speed *= 0.5
+			projectile.step_fixed(expected_first - 0.001)
+			_equal(projectile.hostile_turn_count, 0, "Eine spätere Verlangsamung löst den Knick nicht vor seinem festen Zeitpunkt aus")
+			projectile.step_fixed(0.002)
+			_equal(projectile.hostile_turn_count, 1, "Eine spätere Verlangsamung verschiebt den festen Knickzeitpunkt nicht")
+	game.queue_free()
 	await process_frame
 
 
@@ -377,20 +446,48 @@ func _test_hostile_projectile_geometry() -> void:
 	get_root().add_child(right_turn)
 	for projectile in [left_turn, right_turn]:
 		projectile.global_position = Vector2.ZERO
-	left_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.0, 100.0, 500.0, 0.0, 180.0, 1.0, 100.0, 40.0)
-	right_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.5, 100.0, 500.0, 0.0, 180.0, 1.0, 100.0, 40.0)
+	left_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.0, 100.0, 500.0, 0.0, 180.0, 1.0, 1.0, 0.4)
+	right_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.5, 100.0, 500.0, 0.0, 180.0, 1.0, 1.0, 0.4)
 	left_turn.step_fixed(1.0)
 	right_turn.step_fixed(1.0)
-	_near(left_turn.global_position.x, 100.0, "Erste Kurve beginnt nach exakt 100 Test-Weltpunkten")
+	_near(left_turn.global_position.x, 100.0, "Erste Kurve beginnt nach exakt einer Sekunde")
 	_true(left_turn.direction.y < -0.99 and right_turn.direction.y > 0.99, "Erste 90-Grad-Kurve verteilt Projektile auf beide Seiten")
 	left_turn.step_fixed(0.4)
 	right_turn.step_fixed(0.4)
 	_true(left_turn.direction.x < -0.99 and right_turn.direction.x < -0.99, "Die zweite Kurve dreht in derselben Richtung weiter")
-	_near(absf(left_turn.global_position.y), 40.0, "Die zweite Kurve folgt nach weiteren 40 Test-Weltpunkten")
+	_near(absf(left_turn.global_position.y), 40.0, "Die zweite Kurve folgt nach weiteren 0,4 Sekunden")
+	var faster_turn := TherapyProjectile.new()
+	get_root().add_child(faster_turn)
+	faster_turn.global_position = Vector2.ZERO
+	faster_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.0, 200.0, 500.0, 0.0, 180.0, 1.0, 1.0, 0.4)
+	faster_turn.step_fixed(1.0)
+	_true(faster_turn.direction.y < -0.99, "Eine spätere Geschwindigkeitsänderung verschiebt den ersten Kurvenzeitpunkt nicht")
+	_near(faster_turn.global_position.x, 200.0, "Höheres Tempo verändert nur die bis zum festen Zeitpunkt zurückgelegte Strecke")
+	var overshoot_turn := TherapyProjectile.new()
+	get_root().add_child(overshoot_turn)
+	overshoot_turn.global_position = Vector2.ZERO
+	overshoot_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.0, 100.0, 500.0, 0.0, 180.0, 1.0, 1.0, 0.4, true)
+	overshoot_turn.step_fixed(1.5)
+	_equal(overshoot_turn.hostile_turn_count, 2, "Ein großer Fixed-Step darf beide Zeitkurven exakt konsumieren")
+	_true(overshoot_turn.global_position.is_equal_approx(Vector2(90.0, -40.0)), "Der Restweg wird nach beiden Kurven auf den jeweils neuen Segmenten fortgesetzt")
+	var bounded_turn := TherapyProjectile.new()
+	get_root().add_child(bounded_turn)
+	bounded_turn.global_position = Vector2.ZERO
+	var bounded_finishes: Array[int] = []
+	bounded_turn.finished.connect(func(_projectile: TherapyProjectile) -> void: bounded_finishes.append(1))
+	bounded_turn.configure_hostile(Vector2.RIGHT, 1.0, topology, avatar, null, TherapyProjectile.HOSTILE_DOUBLE_TURN, 0.0, 100.0, 50.0, 0.0, 180.0, 1.0, 1.0, 0.4)
+	bounded_turn.step_fixed(0.6)
+	_near(bounded_turn.travelled_distance, 50.0, "Andere Doppelkurvenverträge behalten ihre authored Distanzgrenze")
+	_equal(bounded_finishes.size(), 1, "Die normale Distanzgrenze beendet ein nicht zeitgebundenes Doppelkurvenprojektil")
 	left_turn.recycle()
-	_near(left_turn.hostile_first_turn_distance, 0.0, "Pool-Recycling löscht die erste Kurvendistanz")
+	_near(left_turn.hostile_first_turn_seconds, 0.0, "Pool-Recycling löscht den ersten Kurvenzeitpunkt")
+	_near(left_turn.hostile_second_leg_seconds, 0.0, "Pool-Recycling löscht den zweiten Kurvenzeitpunkt")
+	_near(left_turn.hostile_elapsed_seconds, 0.0, "Pool-Recycling löscht die vergangene Kurvenzeit")
 	_equal(left_turn.hostile_turn_count, 0, "Pool-Recycling löscht den Kurvenfortschritt")
-	for node in [normal, default_width, wide, upper, lower, left_turn, right_turn, avatar]:
+	_true(overshoot_turn.hostile_time_bounded_double_turn, "Der zeitgebundene Testkörper trägt vor Recycling den Fall-2-Vertrag")
+	overshoot_turn.recycle()
+	_true(not overshoot_turn.hostile_time_bounded_double_turn, "Pool-Recycling löscht den Fall-2-Zeitvertrag")
+	for node in [normal, default_width, wide, upper, lower, left_turn, right_turn, faster_turn, overshoot_turn, bounded_turn, avatar]:
 		node.queue_free()
 	await process_frame
 
