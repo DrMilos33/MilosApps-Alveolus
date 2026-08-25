@@ -35,7 +35,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein früher lokaler Infektionsherd bildet den ersten regulären Patientenfall.",
 			"Der frühe Verlauf wurde kontrolliert.",
 			"Der frühe Verlauf konnte in diesem Versuch nicht kontrolliert werden."
-		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", true).configure_boss_aura(1.20, 1.45, 1.45).configure_boss_reinforcements(15.0, 4).configure_boss_projectile_contract(1.0, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.3, true, 2.0).configure_boss_projectile_turn_time_variation(0.10).configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
+		).configure_runtime(1).configure_case_variation(all_traits, all_findings, 24).configure_boss(&"localized_boss", true).configure_boss_aura(1.20, 1.45, 1.45).configure_boss_reinforcements(15.0, 4).configure_boss_projectile_contract(1.0, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.3, true, 2.0).configure_boss_projectile_pattern(&"normal").configure_case_pressure(CasePressurePlan.default_for_case_order(1)),
 		LevelDefinition.create(
 			&"localized_focus", 2, "lol - name fehlt", "Fall 02 · lokalisierter Pneumokokkenherd", false,
 			-1.0, 300.0, 50.0, 1.03375, 0.23375, 1.15, 1.70, 1.08, 1.25, 0.10, 0.28,
@@ -43,7 +43,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein lokaler Bakterienherd belastet Doctor Milos. Stoppe ihn, bevor das Leben auf null fällt.",
 			"Der lokalisierte Infektionsherd wurde kontrolliert.",
 			"Die Infektionslast konnte in diesem Versuch nicht ausreichend kontrolliert werden."
-		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", true, 1.5).configure_boss_reinforcements(15.0, 4, 1).configure_boss_projectile_contract(1.8, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.5).configure_boss_phase_thresholds(PackedFloat32Array([0.80])).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", true, 1.5).configure_boss_reinforcements(15.0, 4, 1).configure_boss_projectile_contract(1.8, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.5).configure_boss_projectile_pattern(&"double_turn").configure_boss_projectile_turn_time_variation(0.10).configure_boss_phase_thresholds(PackedFloat32Array([0.80])).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
 		LevelDefinition.create(
 			&"advancing_infection", 3, "Fortschreitender Verlauf", "Fall 03 · fortschreitende Pneumonie", false,
 			-1.0, 300.0, 50.0, 0.9075, 0.200, 1.25, 1.875, 1.12, 1.35, 0.14, 0.33,
@@ -51,7 +51,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Die Infektion breitet sich weiter aus und fordert mehr Kontrolle über den Raum.",
 			"Der fortschreitende Verlauf wurde eingegrenzt.",
 			"Der fortschreitende Verlauf blieb unkontrolliert."
-		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 36).configure_boss_behavior(1.20).configure_boss(&"infection_focus", true, 2.0, 136.0).configure_boss_projectile_contract(1.0, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.8).configure_case_pressure(CasePressurePlan.default_for_case_order(3)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 36).configure_boss_behavior(1.20).configure_boss(&"infection_focus", true, 2.0, 136.0, 200.0).configure_boss_projectile_contract(1.0, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.26).configure_case_pressure(CasePressurePlan.default_for_case_order(3)),
 		LevelDefinition.create(
 			&"spreading_infection", 4, "Die Ausbreitung", "Fall 04 · bakterielle Pneumonie", false,
 			-1.0, 300.0, 50.0, 0.780, 0.165, 1.35, 2.05, 1.16, 1.45, 0.18, 0.38,

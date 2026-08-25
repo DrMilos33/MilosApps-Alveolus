@@ -26,6 +26,7 @@ enum Pattern {
 const PHASE_ADD_INTERVAL := 2.8
 const REINFORCEMENT_INTERVAL := 20.0
 const REINFORCEMENT_COUNT := 4
+const PATTERN_INHERIT := 255
 
 var _capacity: int = 0
 var _resolver: Callable
@@ -36,6 +37,7 @@ var _shot_sequences := PackedInt32Array()
 var _reinforcement_timers := PackedFloat32Array()
 var _boss_phases := PackedByteArray()
 var _projectile_enabled := PackedByteArray()
+var _boss_pattern_overrides := PackedByteArray()
 var _reinforcement_intervals := PackedFloat32Array()
 var _reinforcement_counts := PackedInt32Array()
 var _reinforcement_minimum_phases := PackedByteArray()
@@ -60,6 +62,8 @@ func configure(capacity: int, resolver: Callable) -> EnemyAttackDirector:
 	_boss_phases.fill(0)
 	_projectile_enabled.resize(_capacity)
 	_projectile_enabled.fill(0)
+	_boss_pattern_overrides.resize(_capacity)
+	_boss_pattern_overrides.fill(PATTERN_INHERIT)
 	_reinforcement_intervals.resize(_capacity)
 	_reinforcement_intervals.fill(0.0)
 	_reinforcement_counts.resize(_capacity)
@@ -89,6 +93,7 @@ func register_enemy(handle: int, role: int) -> bool:
 	_reinforcement_timers[slot] = 0.0
 	_boss_phases[slot] = 0
 	_projectile_enabled[slot] = 1
+	_boss_pattern_overrides[slot] = PATTERN_INHERIT
 	_reinforcement_intervals[slot] = REINFORCEMENT_INTERVAL if role == Role.BOSS else 0.0
 	_reinforcement_counts[slot] = REINFORCEMENT_COUNT if role == Role.BOSS else 0
 	_reinforcement_minimum_phases[slot] = 2 if role == Role.BOSS else 0
@@ -122,12 +127,18 @@ func configure_boss_contract(
 	projectile_enabled: bool,
 	reinforcement_interval: float,
 	reinforcement_count: int,
-	minimum_phase: int
+	minimum_phase: int,
+	projectile_pattern_override: int = PATTERN_INHERIT
 ) -> bool:
 	if not _owns(handle) or role_for(handle) != Role.BOSS:
 		return false
 	var slot := EntityHandle.slot(handle)
 	_set_projectile_enabled_for_slot(slot, projectile_enabled)
+	_boss_pattern_overrides[slot] = (
+		projectile_pattern_override
+		if projectile_pattern_override in [Pattern.NORMAL, Pattern.DIAMOND, Pattern.DOUBLE_TURN]
+		else PATTERN_INHERIT
+	)
 	_reinforcement_intervals[slot] = maxf(reinforcement_interval, 0.0)
 	_reinforcement_counts[slot] = maxi(reinforcement_count, 0)
 	_reinforcement_minimum_phases[slot] = clampi(minimum_phase, 0, 2)
@@ -194,6 +205,7 @@ func clear() -> void:
 	_reinforcement_timers.fill(0.0)
 	_boss_phases.fill(0)
 	_projectile_enabled.fill(0)
+	_boss_pattern_overrides.fill(PATTERN_INHERIT)
 	_reinforcement_intervals.fill(0.0)
 	_reinforcement_counts.fill(0)
 	_reinforcement_minimum_phases.fill(0)
@@ -203,6 +215,14 @@ func clear() -> void:
 
 func _emit_attack(handle: int, role: int, enemy: InfectionEnemy) -> void:
 	var pattern := enemy.definition.projectile_pattern if enemy != null and enemy.definition != null else &""
+	if role == Role.BOSS:
+		match int(_boss_pattern_overrides[EntityHandle.slot(handle)]):
+			Pattern.NORMAL:
+				pattern = &"normal"
+			Pattern.DIAMOND:
+				pattern = &"diamond"
+			Pattern.DOUBLE_TURN:
+				pattern = &"double_turn"
 	if role == Role.BOSS and pattern == &"diamond":
 		projectile_requested.emit(handle, Pattern.DIAMOND, 0.25, role)
 		projectile_requested.emit(handle, Pattern.DIAMOND, 0.75, role)
@@ -280,6 +300,7 @@ func _release_slot(slot: int) -> void:
 	_reinforcement_timers[slot] = 0.0
 	_boss_phases[slot] = 0
 	_projectile_enabled[slot] = 0
+	_boss_pattern_overrides[slot] = PATTERN_INHERIT
 	_reinforcement_intervals[slot] = 0.0
 	_reinforcement_counts[slot] = 0
 	_reinforcement_minimum_phases[slot] = 0

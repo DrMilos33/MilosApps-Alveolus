@@ -1956,7 +1956,9 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_reinforcement_minimum_phase = 0
 	config.boss_projectile_attack_speed_multiplier = 1.0
 	config.boss_projectile_speed_multiplier = 1.0
+	config.boss_projectile_pattern = &""
 	config.boss_projectile_turn_time_variation = 0.0
+	config.boss_wave_length = 180.0
 	config.boss_phase_health_thresholds = PackedFloat32Array([0.70, 0.40])
 	config.boss_projectiles_require_empty_aura = false
 	config.boss_add_defense_burst_shooting_lock_seconds = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
@@ -2588,7 +2590,8 @@ func _on_enemy_projectile_requested(source_handle: int, pattern: int, phase: flo
 		-1,
 		source.projectile_width_multiplier,
 		turn_times,
-		time_bounded_double_turn
+		time_bounded_double_turn,
+		config.boss_wave_length if role == EnemyAttackDirector.Role.BOSS else 180.0
 	)
 
 
@@ -2606,7 +2609,8 @@ func _spawn_hostile_projectile(
 	gate_id: int = -1,
 	projectile_width_multiplier: float = 1.0,
 	turn_times: Vector2 = Vector2.ZERO,
-	time_bounded_double_turn: bool = false
+	time_bounded_double_turn: bool = false,
+	wave_length: float = 180.0
 ) -> bool:
 	if projectile_world == null or hostile_projectile_renderer == null or not is_instance_valid(avatar):
 		return false
@@ -2636,7 +2640,7 @@ func _spawn_hostile_projectile(
 		move_speed,
 		max_distance,
 		wave_amplitude,
-		180.0,
+		wave_length,
 		projectile_width_multiplier,
 		turn_times.x,
 		turn_times.y,
@@ -3100,12 +3104,24 @@ func _register_active_boss(enemy: InfectionEnemy) -> void:
 			config.boss_ranged_enabled and not config.boss_projectiles_require_empty_aura,
 			reinforcement_interval,
 			reinforcement_count,
-			reinforcement_phase
+			reinforcement_phase,
+			_boss_projectile_pattern_override()
 		)
 	if config.boss_aura_screen_diameter_fraction > 0.0:
 		enemy.set_boss_aura_radius(_boss_aura_world_radius())
 	if active_boss == null:
 		active_boss = enemy
+
+
+func _boss_projectile_pattern_override() -> int:
+	match config.boss_projectile_pattern:
+		&"normal":
+			return EnemyAttackDirector.Pattern.NORMAL
+		&"diamond":
+			return EnemyAttackDirector.Pattern.DIAMOND
+		&"double_turn":
+			return EnemyAttackDirector.Pattern.DOUBLE_TURN
+	return EnemyAttackDirector.PATTERN_INHERIT
 
 
 func _remove_active_boss(enemy: InfectionEnemy) -> bool:

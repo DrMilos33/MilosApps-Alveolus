@@ -329,30 +329,29 @@ Hitboxabdeckung löst maximal 20-fachen Schaden aus. Andere Schadensquellen blei
 unverändert.
 
 Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile auf gespiegelten
-Bahnen. In Fall 3 fliegen sie mit Faktor 1,8 beziehungsweise 382,5 Tempo und
-verwenden 136 Weltpunkte Amplitude; damit ist das vorherige 85er-Muster um
-60 Prozent verbreitert. Der Fall-4-Anker behält 212,5 Tempo und 115 Weltpunkte
-Amplitude. Bei 70 und 40 Prozent Leben
+Bahnen. In Fall 3 fliegen sie mit Faktor 1,26 beziehungsweise 267,75 Tempo,
+verwenden 136 Weltpunkte Amplitude und eine Wellenlänge von 200. Damit bleibt
+das vorherige 85er-Muster um 60 Prozent verbreitert und beide Geschosse treffen
+sich nach 100 statt 90 Vorwärts-Weltpunkten wieder. Der Fall-4-Anker behält
+212,5 Tempo, 115 Weltpunkte Amplitude und Wellenlänge 180. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
 Sekunden weitere vier; ihre Projektile fliegen mit 322,5 Tempo. Der Fall-1-
 Bakterienkern ruft ab Bossspawn alle 15 Sekunden vier schießende kleine
 Bakterien; periodische und phasenabhängige Verstärkungen feuern alle 1,4 Sekunden.
 Solange kein materialisiertes Nichtboss-Monster in seiner Aura steht, feuert der
-Kern selbst mit 1,3-facher Projektilgeschwindigkeit. Seine Aura besitzt 120 Prozent Bildschirmdurchmesser beziehungsweise
+Kern selbst ein normales Projektil mit 1,3-facher Projektilgeschwindigkeit. Seine Aura besitzt 120 Prozent Bildschirmdurchmesser beziehungsweise
 60 Prozent der kürzeren Bildschirmkante als Radius und erhöht Tempo und Schaden
 naher Nichtbosse um 45 Prozent. Gegnerschaden wird mit dem Fallfaktor multipliziert und
 anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
 aufgelöst. Nach einem gültigen Treffer schützt die globale 0,5-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.
-Die beiden Richtungswechsel eines Fall-1-Kernprojektils variieren je Projektil
-seed-stabil und unabhängig innerhalb von ±10 Prozent ihrer aus Bildschirmgröße
-und Projektiltempo abgeleiteten authored Zeit.
 
 Der Bakterienkern aus Fall 2 schießt alle 0,89 Sekunden ein Projektil mit
 375 Tempo und authored 1,5-fachem Schaden. Der erste Kurvenzeitpunkt entspricht
 bei diesem Referenztempo ungefähr 80 Prozent der sichtbaren Bildschirmbreite,
 der zweite weiteren 40 Prozent. Beide Zeiten werden beim Spawn eingefroren;
-spätere Projektiltempomodifikatoren verschieben sie nicht. Die Seite wechselt
+beide variieren je Projektil seed-stabil und unabhängig innerhalb von ±10 Prozent.
+Spätere Projektiltempomodifikatoren verschieben sie nicht. Die Seite wechselt
 deterministisch zwischen den Schüssen. Bei 80 Prozent Leben erscheinen drei
 schießende Bakterien und der 15-Sekunden-Timer für weitere Vierergruppen beginnt.
 Wie alle projektilfähigen

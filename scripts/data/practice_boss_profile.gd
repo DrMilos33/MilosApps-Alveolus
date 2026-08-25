@@ -86,6 +86,10 @@ func get_wave_amplitude() -> float:
 	return _source_config.boss_wave_amplitude if _source_config != null else 44.0
 
 
+func get_wave_length() -> float:
+	return _source_config.boss_wave_length if _source_config != null else 180.0
+
+
 func get_phase_minions() -> PackedInt32Array:
 	return _source_config.boss_phase_minions.duplicate() if _source_config != null else PackedInt32Array()
 
@@ -118,6 +122,10 @@ func get_projectile_speed_multiplier() -> float:
 	return _source_config.boss_projectile_speed_multiplier if _source_config != null else 1.0
 
 
+func get_projectile_pattern() -> StringName:
+	return _source_config.boss_projectile_pattern if _source_config != null else &""
+
+
 func get_projectile_turn_time_variation() -> float:
 	return _source_config.boss_projectile_turn_time_variation if _source_config != null else 0.0
 
@@ -138,9 +146,11 @@ func apply_boss_contract(target: RunConfig) -> void:
 	target.boss_projectile_damage_multiplier = _source_config.boss_projectile_damage_multiplier
 	target.boss_projectile_attack_speed_multiplier = _source_config.boss_projectile_attack_speed_multiplier
 	target.boss_projectile_speed_multiplier = _source_config.boss_projectile_speed_multiplier
+	target.boss_projectile_pattern = _source_config.boss_projectile_pattern
 	target.boss_projectile_turn_time_variation = _source_config.boss_projectile_turn_time_variation
 	target.boss_projectiles_require_empty_aura = _source_config.boss_projectiles_require_empty_aura
 	target.boss_wave_amplitude = _source_config.boss_wave_amplitude
+	target.boss_wave_length = _source_config.boss_wave_length
 	target.boss_phase_minions = _source_config.boss_phase_minions.duplicate()
 	target.boss_phase_health_thresholds = _source_config.boss_phase_health_thresholds.duplicate()
 	target.boss_aura_screen_diameter_fraction = _source_config.boss_aura_screen_diameter_fraction

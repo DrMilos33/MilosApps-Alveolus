@@ -576,11 +576,10 @@ clears both possible render owners before a projectile node returns to its
 pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase. Projectile geometry is data-driven: the Fall-3 boss emits its two
-phased diamond shots at 382.5 world units per second with 136 world units of
-authored amplitude, while the Fall-4 anchor retains its independent 212.5/115
-contract; ranged phase adds use 322.5. The Fall-1 double-turn timing consumes a
-dedicated seed-stable projectile random stream and varies both authored legs
-independently inside their configured ten-percent corridor. The intro boss emits one
+phased diamond shots at 267.75 world units per second with 136 world units of
+authored amplitude and a 200-unit wave length, so both shots reunite every 100
+forward world units. The Fall-4 anchor retains its independent 212.5/115/180
+contract; ranged phase adds use 322.5. The intro and Fall-1 bosses emit one
 ordinary hostile projectile per attack interval. The Fall-1 boss configures a
 director lease that requests four shooting small bacteria every 15 seconds from
 phase zero. Periodic and phase adds use a 2.0 attack-rate multiplier. Its
@@ -588,7 +587,7 @@ Game-owned 10 Hz aura query reuses the existing enemy collision grid, applies
 one named 1.45 speed/damage status to nearby nonbosses inside a radius equal to
 60 percent of the shorter visible dimension, and generation-safely enables the
 boss projectile lease only while that local query contains no materialized
-nonboss. Its own double-turn projectile uses a 1.3 travel-speed multiplier. Aura
+nonboss. Its normal projectile uses a 1.3 travel-speed multiplier. Aura
 status is removed on exit, death, reuse or run cleanup. Boss locomotion remains direct and ignores all
 enemy-enemy contact circles in both directions; Doctor contact, damage, stun,
 knockback and bounded-arena constraints remain unchanged. The HUD resolves at
@@ -613,9 +612,11 @@ adds no entity, query or process owner and makes beam width materially relevant.
 The Fall-2 boss uses one pooled `HOSTILE_DOUBLE_TURN` projectile per shot at a
 1.5 travel-speed and authored damage multiplier. At spawn, 80 and another 40
 percent of the visible world width are converted through the fixed 375 reference
-speed into two immutable turn times. The fixed-step projectile consumes temporal
-overshoot piecewise before each same-direction 90-degree turn; later travel-speed
-changes therefore alter distance but never the turn schedule. One authored
+speed into two immutable base turn times. A dedicated seed-stable projectile
+random stream varies both legs independently inside a ten-percent corridor. The
+fixed-step projectile consumes temporal overshoot piecewise before each
+same-direction 90-degree turn; later travel-speed changes therefore alter
+distance but never the turn schedule. One authored
 80-percent health phase emits the first three adds and arms the existing
 15-second four-add schedule. A packed per-handle sequence alternates turn side.
 Only this Fall-2 contract is lifetime-bounded so both timed turns can complete;

@@ -31,9 +31,11 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var boss_projectile_damage_multiplier: float = 1.0
 @export var boss_projectile_attack_speed_multiplier: float = 1.0
 @export var boss_projectile_speed_multiplier: float = 1.0
+@export var boss_projectile_pattern: StringName = &""
 @export_range(0.0, 0.5, 0.01) var boss_projectile_turn_time_variation: float = 0.0
 @export var boss_projectiles_require_empty_aura: bool = false
 @export var boss_wave_amplitude: float = 44.0
+@export var boss_wave_length: float = 180.0
 @export var boss_phase_minions: PackedInt32Array
 @export var boss_phase_health_thresholds: PackedFloat32Array = PackedFloat32Array([0.70, 0.40])
 @export_range(0.0, 2.0, 0.01) var boss_aura_screen_diameter_fraction: float = 0.0
@@ -199,16 +201,24 @@ func configure_boss_projectile_turn_time_variation(variation_ratio: float) -> Le
 	boss_projectile_turn_time_variation = clampf(variation_ratio, 0.0, 0.5)
 	return self
 
+
+func configure_boss_projectile_pattern(pattern: StringName) -> LevelDefinition:
+	boss_projectile_pattern = pattern if pattern in [&"normal", &"diamond", &"double_turn"] else &""
+	return self
+
+
 func configure_boss(
 	enemy_id: StringName,
 	ranged_enabled: bool,
 	projectile_damage_multiplier: float = 1.0,
-	wave_amplitude: float = 44.0
+	wave_amplitude: float = 44.0,
+	wave_length: float = 180.0
 ) -> LevelDefinition:
 	boss_enemy_id = enemy_id if enemy_id != &"" else &"infection_focus"
 	boss_ranged_enabled = ranged_enabled
 	boss_projectile_damage_multiplier = maxf(projectile_damage_multiplier, 0.0)
 	boss_wave_amplitude = maxf(wave_amplitude, 0.0)
+	boss_wave_length = maxf(wave_length, 32.0)
 	return self
 
 func duration_text() -> String:
