@@ -373,11 +373,13 @@ func _damage_line(target: Vector2, values: Dictionary, source: StringName, damag
 			var enemy: Variant = combat_query.resolve(handle)
 			if not _targetable(enemy):
 				continue
-			_apply_damage_and_displacement(enemy, shot.origin, shot.damage, source, 0.0, damage_profile)
+			var line_damage := shot.damage * _treatment_line_geometry_multiplier(enemy, shot)
+			_apply_damage_and_displacement(enemy, shot.origin, line_damage, source, 0.0, damage_profile)
 			affected.append(handle)
 	else:
 		for enemy in shot.resolve_line_hits(_enemies(), topology):
-			_apply_damage_and_displacement(enemy, shot.origin, shot.damage, source, 0.0, damage_profile)
+			var line_damage := shot.damage * _treatment_line_geometry_multiplier(enemy, shot)
+			_apply_damage_and_displacement(enemy, shot.origin, line_damage, source, 0.0, damage_profile)
 	return {
 		"direction": shot.direction,
 		"length": shot.range_value,
@@ -385,6 +387,24 @@ func _damage_line(target: Vector2, values: Dictionary, source: StringName, damag
 		"damage": shot.damage,
 		"handles": affected,
 	}
+
+
+func _treatment_line_geometry_multiplier(enemy: Object, shot: TreatmentShot) -> float:
+	if (
+		shot.source_id != &"ability_treatment_line"
+		or not enemy.has_method("treatment_line_damage_multiplier_for_geometry")
+	):
+		return 1.0
+	return maxf(
+		float(enemy.call(
+			"treatment_line_damage_multiplier_for_geometry",
+			shot.origin,
+			shot.direction,
+			shot.range_value,
+			shot.hit_radius
+		)),
+		0.0
+	)
 
 func _pull_samples(center: Vector2, radius: float) -> Dictionary:
 	var affected := PackedInt64Array()

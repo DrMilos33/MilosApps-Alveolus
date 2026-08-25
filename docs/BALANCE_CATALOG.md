@@ -142,7 +142,7 @@ Besonderheiten:
 
 | Fähigkeit | Status | Zielart | Abklingzeit | Werte | Schadenstyp |
 |---|---|---|---:|---|---|
-| Stoß | Forschung für 30 | Zielkreis | 14 s | 0 Schaden, Radiusstufe 5, 120 Rückstoß | keiner |
+| Stoß | Forschung für 30 | Zielkreis | 14 s | 0 Schaden, Radiusstufe 5, 120 Rückstoß; getroffene Nichtboss-Schützen feuern nicht mehr | keiner |
 | Fetter lazer | nach erstem Sieg in Fall 1 | Zielrichtung | 18 s | 30 Schaden, Reichweitenstufe 21, 38 Breite | Wasser |
 | Fokusfeld | sichtbar gesperrt | Zielkreis | 16 s | Radiusstufe 6, 7 s, Behandlungsschaden ×1,25 | keiner |
 | Notfallhilfe | sichtbar gesperrt | selbst | 28 s | +14 Leben, +8 Schild | keiner |
@@ -294,25 +294,27 @@ Attack-Speed-Ausbaupfade reserviert.
 
 | Gegner | Leben | Tempo | Berührungsschaden | Projektil | Schadenstyp | Erfahrung | Größenklasse | Resistenzen (Rating; positiv effektiv) |
 |---|---:|---:|---:|---:|---|---:|---:|---|
-| Bakterium | 22 | 85 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
-| Bakteriengruppe | 74 | 85 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
-| Kleiner Herd | 180 | 38 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
-| Bakterienkern | 900 | 66 | 6 | 4 alle 0,89 s in Fall 2 | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
-| Infektionsherd | 2.200 | 72 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Bakterium | 22 | 94 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
+| Bakteriengruppe | 74 | 94 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
+| Kleiner Herd | 180 | 42 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
+| Bakterienkern | 900 | 73 | 6 | 4 alle 0,89 s in Fall 2 | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Infektionsherd | 2.200 | 79 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
 erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
 sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
 Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
 Der geskriptete mobile Eventherd in Fall 1 bildet die einzige Ausnahme: Er
-verwendet ganzzahliges Basistempo 60, feuert alle 1,39 Sekunden und seine
+verwendet ganzzahliges Basistempo 66, feuert alle 1,39 Sekunden und seine
 normalen Projektile besitzen 1,95-fache Geschwindigkeit sowie 1,5-fache
-Querbreite und Trefferfläche. Ein Treffer mit Stoß sperrt seinen Beschuss zehn
-Sekunden; Bewegung und sonstiger Status laufen unverändert weiter. Andere kleine
-Herde behalten das Tabellenprofil. Das mobile Fall-2-Event besitzt 1.800
-gemeinsames Leben, erscheint als Verbund kleiner Bakterien mit neun gleich
-gefüllten symbolischen Lebensbalken und nimmt ausschließlich von `Fetter lazer`
-zehnfachen Schaden.
+Querbreite und Trefferfläche. Ein Treffer mit Stoß beendet seinen Beschuss für
+den restlichen Lebenszyklus; Bewegung und sonstiger Status laufen unverändert
+weiter. Andere kleine Herde behalten das Tabellenprofil. Das mobile Fall-2-Event
+besitzt 600 gemeinsames Leben, erscheint als Verbund kleiner Bakterien mit einem
+Lebensbalken und verwendet zwanzig virtuelle Trefferpunkte. `Fetter lazer` trifft
+bei den Breiten 38/54/70 zentriert 12/16/19 dieser Punkte; vollständige
+Hitboxabdeckung löst maximal 20-fachen Schaden aus. Andere Schadensquellen bleiben
+unverändert.
 
 Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile mit 212,5 Tempo auf
 gespiegelten, gegenüber dem vorherigen Stand um 25 Prozent weiter ausgelenkten
@@ -333,8 +335,10 @@ Der Bakterienkern aus Fall 2 schießt alle 0,89 Sekunden ein Projektil. Nach 50
 Prozent der kürzeren sichtbaren Bildschirmkante biegt es um 90 Grad nach links
 oder rechts ab, nach weiteren 20 Prozent erneut in dieselbe Richtung. Die Seite
 wechselt deterministisch zwischen den Schüssen. Alle 15 Sekunden sowie in seiner
-Lebensphase entstehen vier schießende Bakterien; ein Stoß beendet ihren Beschuss
-für den restlichen Lebenszyklus.
+Lebensphase entstehen vier schießende Bakterien. Wie alle projektilfähigen
+Nichtbosse verlieren sie nach Stoß ihren Beschuss für den restlichen
+Lebenszyklus. Bosse bleiben vollständig schussfähig, auch während ihres
+Stoß-Stuns.
 
 ## 13. Fälle und Fortschrittskurven
 

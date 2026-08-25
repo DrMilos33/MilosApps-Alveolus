@@ -57,12 +57,12 @@ func _test_catalog_contract() -> void:
 			_near(levels[order].spawn_ramp_seconds, 300.0, "Order %d verteilt die Standardwelle über fünf Minuten" % order)
 
 	var enemies := ContentCatalog.enemy_definitions()
-	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 85.0, "Bakterium verwendet die um 20 Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
-	_near((enemies[&"bacterial_cluster"] as EnemyDefinition).speed, 85.0, "Bakteriengruppe verwendet die um 20 Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
-	_near((enemies[&"minor_focus"] as EnemyDefinition).speed, 38.0, "Kleiner Herd verwendet die um 20 Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
-	_near((enemies[&"infection_focus"] as EnemyDefinition).speed, 72.0, "Infektionsherd verwendet die um 20 Prozent erhöhte ganzzahlige Bossgeschwindigkeit")
-	_near((enemies[&"localized_boss"] as EnemyDefinition).speed, 66.0, "Bakterienkern verwendet die um 20 Prozent erhöhte ganzzahlige Bossgeschwindigkeit")
-	_near((enemies[&"intro_focus"] as EnemyDefinition).speed, 72.0, "Intro-Boss erbt dieselbe Monsterbeschleunigung")
+	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 94.0, "Bakterium verwendet die erneut um zehn Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
+	_near((enemies[&"bacterial_cluster"] as EnemyDefinition).speed, 94.0, "Bakteriengruppe verwendet die erneut um zehn Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
+	_near((enemies[&"minor_focus"] as EnemyDefinition).speed, 42.0, "Kleiner Herd verwendet die erneut um zehn Prozent erhöhte ganzzahlige Basisgeschwindigkeit")
+	_near((enemies[&"infection_focus"] as EnemyDefinition).speed, 79.0, "Infektionsherd verwendet die erneut um zehn Prozent erhöhte ganzzahlige Bossgeschwindigkeit")
+	_near((enemies[&"localized_boss"] as EnemyDefinition).speed, 73.0, "Bakterienkern verwendet die erneut um zehn Prozent erhöhte ganzzahlige Bossgeschwindigkeit")
+	_near((enemies[&"intro_focus"] as EnemyDefinition).speed, 79.0, "Intro-Boss erbt dieselbe Monsterbeschleunigung")
 	_near(PlayerStats.BASE_MOVEMENT_SPEED, 171.0, "Doctor Milos verwendet die um fünf Prozent reduzierte Basisgeschwindigkeit")
 
 	var treatments := TreatmentDefinition.catalog()
@@ -135,6 +135,7 @@ func _test_runtime_config_and_double_boss() -> void:
 	await process_frame
 
 	game.persistence_enabled = false
+	game.run_test_settings.reset_defaults()
 	game.meta.reset_defaults()
 	game.discovery_manager.configure(game.discovery_definitions, {})
 	for discovery_id in game.discovery_definitions:

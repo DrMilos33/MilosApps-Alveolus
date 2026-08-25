@@ -1,6 +1,8 @@
 class_name EnemyDefinition
 extends Resource
 
+const DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS := -1.0
+
 @export var id: StringName
 @export var display_name: String
 @export var max_health: float
@@ -15,6 +17,7 @@ var contact_damage: float
 @export var color: Color
 @export var is_boss: bool = false
 @export var player_push_enabled: bool = true
+@export_range(0.1, 4.0, 0.05) var player_push_speed_multiplier: float = 1.0
 @export var discovery_id: StringName
 @export var visual_id: StringName
 @export var medical_name: String
@@ -67,8 +70,9 @@ func configure_contact_radius(radius_value: float) -> EnemyDefinition:
 	return self
 
 
-func configure_player_push(enabled: bool) -> EnemyDefinition:
+func configure_player_push(enabled: bool, speed_multiplier: float = 1.0) -> EnemyDefinition:
 	player_push_enabled = enabled
+	player_push_speed_multiplier = maxf(speed_multiplier, 0.1)
 	return self
 
 

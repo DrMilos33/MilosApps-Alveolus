@@ -165,7 +165,11 @@ func step_fixed(delta: float, _session: RunSession = null) -> void:
 		if not is_instance_valid(enemy) or enemy.is_queued_for_deletion():
 			_release_slot(slot)
 			continue
-		if not enemy.is_targetable() or enemy.is_stunned():
+		var stunned_non_boss := (
+			enemy.is_stunned()
+			and (enemy.definition == null or not enemy.definition.is_boss)
+		)
+		if not enemy.is_targetable() or stunned_non_boss:
 			dense_index += 1
 			continue
 		if _projectile_enabled[slot] != 0 and not enemy.projectiles_suppressed():

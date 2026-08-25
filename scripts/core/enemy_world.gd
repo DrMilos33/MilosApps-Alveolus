@@ -234,7 +234,7 @@ const BULK_BLEND_IN_SECONDS := 0.20
 const BULK_BLEND_OUT_SECONDS := 0.35
 const BULK_PROJECTION_PASSES := 1
 const BULK_BLEND_EPSILON := 0.001
-const BULK_PAIR_LOOKAHEAD := 41.0
+const BULK_PAIR_LOOKAHEAD := 46.0
 const MAX_BULK_NEIGHBORS := 7
 const MAX_BULK_SNAPSHOT_CANDIDATES := 24
 const BULK_SNAPSHOT_BUILD_PHASES := 4
@@ -1265,7 +1265,10 @@ func _resolve_avatar_pushable_body(
 	if inward_component <= allowed_inward:
 		return requested_delta
 	var required_yield := inward_component - allowed_inward
-	var requested_push := minf(required_yield, AVATAR_PUSH_SPEED * delta)
+	var requested_push := minf(
+		required_yield,
+		AVATAR_PUSH_SPEED * enemy.resolved_player_push_speed_multiplier() * delta
+	)
 	var allowed_push := _avatar_body_push_distance(handle, enemy, contact_normal, requested_push)
 	var actual_push := 0.0
 	if allowed_push > DIRECT_COLLISION_EPSILON:

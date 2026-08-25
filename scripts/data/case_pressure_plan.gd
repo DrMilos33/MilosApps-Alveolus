@@ -14,11 +14,12 @@ extends Resource
 @export_range(0.01, 4.0, 0.01) var target_attack_speed_multiplier: float = 1.0
 @export_range(0.1, 4.0, 0.01) var target_projectile_width_multiplier: float = 1.0
 @export_range(0.1, 4.0, 0.01) var target_projectile_speed_multiplier: float = 1.0
-@export var defense_burst_shooting_lock_seconds: float = 0.0
+@export var defense_burst_shooting_lock_seconds: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 @export_range(0.01, 100.0, 0.01) var target_health_multiplier: float = 1.0
 @export var target_visual_id: StringName = &""
 @export_range(0, 16, 1) var symbolic_health_bar_count: int = 0
 @export_range(0.01, 100.0, 0.01) var treatment_line_damage_multiplier: float = 1.0
+@export var treatment_line_coverage_scaled: bool = false
 
 
 static func create(
@@ -38,7 +39,7 @@ func configure_target_combat(
 	attack_speed_multiplier: float,
 	projectile_width_multiplier: float,
 	projectile_speed_multiplier: float = 1.0,
-	shooting_lock_seconds: float = 0.0
+	shooting_lock_seconds: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 ) -> CasePressurePlan:
 	target_movement_speed_multiplier = maxf(movement_speed_multiplier, 0.0)
 	target_attack_speed_multiplier = maxf(attack_speed_multiplier, 0.01)
@@ -52,12 +53,14 @@ func configure_target_presentation(
 	visual_id: StringName,
 	health_multiplier: float,
 	health_bar_count: int,
-	line_damage_multiplier: float
+	line_damage_multiplier: float,
+	coverage_scaled: bool = false
 ) -> CasePressurePlan:
 	target_visual_id = visual_id
 	target_health_multiplier = maxf(health_multiplier, 0.01)
 	symbolic_health_bar_count = clampi(health_bar_count, 0, 16)
 	treatment_line_damage_multiplier = maxf(line_damage_multiplier, 0.01)
+	treatment_line_coverage_scaled = coverage_scaled
 	return self
 
 
@@ -68,13 +71,13 @@ static func default_for_case_order(case_order: int) -> CasePressurePlan:
 				PackedFloat32Array([60.0, 120.0]),
 				PackedFloat32Array(),
 				1
-			).configure_target_combat(60.0 / 38.0, 1.875, 1.5, 1.95, 10.0)
+			).configure_target_combat(66.0 / 42.0, 1.875, 1.5, 1.95)
 		2:
 			return create(
 				PackedFloat32Array([25.0, 60.0, 95.0, 130.0]),
 				PackedFloat32Array(),
 				2
-			).configure_target_presentation(&"bacterial_swarm", 10.0, 9, 10.0)
+			).configure_target_presentation(&"bacterial_swarm", 10.0 / 3.0, 1, 20.0, true)
 		3:
 			return create(
 				PackedFloat32Array([22.5, 60.0, 97.5, 135.0]),

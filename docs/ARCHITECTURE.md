@@ -367,8 +367,8 @@ or a phased guard update. The check is allocation-free and adds no query.
 
 The topology snapshot is built into a double buffer over four fixed ticks. Its
 limited broad-phase query retains the nearest seven exact bodies per member
-inside a 41-world-unit surface horizon; this scales the cache to the current
-85-world-unit maximum ordinary base speed without changing steering;
+inside a 46-world-unit surface horizon; this scales the cache to the current
+94-world-unit maximum ordinary base speed without changing steering;
 front-to-back resolution consumes only that packed cache and commits through the
 existing spatial grid. A routed mover with cached group neighbors uses this same
 bounded solver even while an obstacle temporarily splits the connected
@@ -446,9 +446,10 @@ Before the avatar step, `EnemyWorld.prepare_avatar_body_interaction()` resolves
 the same authored contact circles from the player's side. Ordinary mobile
 non-bosses receive a bounded physical push by default and therefore yield
 gradually without changing either movement stat or applying a slow status. The
-shared yield cap is 72 world units per second, forty percent of the base Galopp
-value, so contact is easier to work through but never equals free travel.
-`EnemyDefinition.player_push_enabled` is the explicit opt-out; bosses and
+base yield cap is 72 world units per second. `EnemyDefinition` may scale only
+that physical cap: small bacteria use 2.0 (144/s), bacterial clusters use 1.5
+(108/s), and other ordinary bodies retain 72/s. Galopp, damage contact and
+enemy-enemy spacing are not modified. `EnemyDefinition.player_push_enabled` is the explicit opt-out; bosses and
 `STATIC_FLOW_OBSTACLE` bodies always hard-clip the proposed avatar displacement.
 The contacted body still cannot cross another contact circle or the arena edge.
 
@@ -537,7 +538,7 @@ from the saved case seed. That seed advances only after a successful non-intro
 result, so failure and cancellation cannot silently reroll the case.
 
 `minor_focus` participates in the normal centralized enemy movement path with
-base speed 38 before case modifiers. It remains a detailed,
+base speed 42 before case modifiers. It remains a detailed,
 generation-safe spawning objective and releases four bacteria after its
 20-second lifecycle if it survives; mobility does not authorize a per-entity
 process loop or a second renderer.
@@ -568,18 +569,24 @@ edge arrow only while a boss body is fully outside the actual camera rectangle.
 
 Case-pressure combat and presentation modifiers are copied from the immutable
 plan into scalar activation fields on `InfectionEnemy` and cleared on recycle.
-The Fall-1 target resolves to speed 60, 1.875 attack-rate, 1.95 projectile-speed
-and width multipliers; a zero-damage Stoß control hit pauses only its projectile
-timer for ten seconds. The Fall-2 target remains one gameplay entity with shared
-health: its composed bacteria texture and repeated bars are presentation-only,
-while only source `ability_treatment_line` receives its 10x incoming multiplier.
+The Fall-1 target resolves to speed 66, 1.875 attack-rate, 1.95 projectile-speed
+and width multipliers; a zero-damage Stoß control hit permanently disables its
+projectile lease. The Fall-2 target remains one gameplay entity with exactly 600
+shared health and one bar. Twenty immutable normalized sample points proxy its
+visible constituent bacteria. `AbilityController` tests those points against the
+already resolved beam rectangle and scales only `ability_treatment_line` from
+partial coverage up to 20x before the normal resistance/defense pipeline. This
+adds no entity, query or process owner and makes beam width materially relevant.
 
 The Fall-2 boss uses one pooled `HOSTILE_DOUBLE_TURN` projectile per shot. The
 first and second leg distances are frozen from the shorter visible world extent
 at spawn, and the fixed-step projectile consumes overshoot piecewise before each
 same-direction 90-degree turn. A packed per-handle sequence alternates turn side.
-Its periodic and phase adds receive a per-activation permanent Stoß shooting
-lock; generations, recycle and director release clear every timer and sequence.
+Every projectile-capable nonboss receives a per-activation permanent Stoß
+shooting lock by default, including all periodic and phase adds. Spawn metadata
+may later select a positive duration or explicit zero. Boss identity overrides
+all lock values. Generations, recycle and director release clear every timer and
+sequence.
 
 The Lexicon catalog has five stable presentation categories, including
 `abilities`; its entries are derived from the complete `AbilityDefinition`
@@ -614,9 +621,9 @@ above; it never gains a global steering target.
 Knockback state lives on `InfectionEnemy` and advances inside the existing
 typed EnemyWorld loop. `Stoß` supplies a distance, short eased travel duration
 and one-second stun. The same `player_push_enabled` contract controls its
-translation; bosses retain the stun but never change position. While stunned,
-chase/contact handling and `EnemyAttackDirector` projectile scheduling are
-suspended. `CrowdRenderer` tracks generation-bound status subsets without
+translation; bosses retain the movement/contact stun but never change position.
+While stunned, chase/contact handling and nonboss projectile scheduling are
+suspended. Boss projectile scheduling explicitly continues. `CrowdRenderer` tracks generation-bound status subsets without
 per-enemy process owners. It draws the tiny shared CC0 star for stun and, on the
 separate `shooting_lock_changed` edge, a small procedural question mark above
 that row for a Stoß-disabled projectile attack. Both records are cleared on

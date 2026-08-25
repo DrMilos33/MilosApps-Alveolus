@@ -12,6 +12,7 @@ class FakeEnemy extends Node2D:
 	var contact_multiplier: float = 1.0
 	var displacement: Vector2 = Vector2.ZERO
 	var shooting_locks: int = 0
+	var treatment_line_geometry_multiplier: float = 1.0
 
 	func is_targetable() -> bool:
 		return targetable and health > 0.0
@@ -33,6 +34,14 @@ class FakeEnemy extends Node2D:
 
 	func apply_defense_burst_shooting_lock() -> void:
 		shooting_locks += 1
+
+	func treatment_line_damage_multiplier_for_geometry(
+		_origin: Vector2,
+		_direction: Vector2,
+		_length: float,
+		_half_width: float
+	) -> float:
+		return treatment_line_geometry_multiplier
 
 class FakeAvatar extends Node2D:
 	var last_facing := Vector2.RIGHT
@@ -156,6 +165,7 @@ func _test_command_pipeline_and_geometry() -> void:
 	controller.execution_completed.connect(func(result: AbilityExecutionResult) -> void: execution_order.append(result.sequence))
 	controller.equip(AbilityController.SLOT_Q, definitions[&"ability_defense_burst"])
 	controller.equip(AbilityController.SLOT_E, definitions[&"ability_treatment_line"])
+	enemy.treatment_line_geometry_multiplier = 2.0
 	_true(controller.enqueue_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2(-480.0, 0.0), 20)), "Later command enters queue")
 	_true(controller.enqueue_command(AbilityCommand.create(AbilityController.SLOT_E, Vector2(-450.0, 0.0), 10)), "Earlier command enters queue")
 	_true(not controller.enqueue_command(AbilityCommand.create(AbilityController.SLOT_E, Vector2.ZERO, 10)), "Duplicate sequence is rejected")
@@ -166,6 +176,7 @@ func _test_command_pipeline_and_geometry() -> void:
 	_true(queued_results[0].success and queued_results[0].length > 600.0, "Line result publishes exact geometry")
 	_true(queued_results[0].affected_handles.has(enemy_handle), "Line query returns generation-safe hit handle")
 	_true(queued_results[1].affected_handles.has(enemy_handle), "Area query returns generation-safe hit handle")
+	_near(enemy.health, 440.0, "Treatment line applies the target's geometry multiplier before damage resolution")
 	_equal(enemy.shooting_locks, 1, "Stoß applies its shooting lock even while its damage remains zero")
 	for index in range(AbilityController.MAX_QUEUED_COMMANDS):
 		_true(controller.enqueue_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2.ZERO, 30 + index)), "Bounded queue accepts command %d" % index)
@@ -175,6 +186,7 @@ func _test_command_pipeline_and_geometry() -> void:
 	controller.configure(build, topology, avatar, Callable(), Callable(), state)
 	controller.configure_queries(enemy_query, pickup_query)
 	controller.set_physics_process(false)
+	enemy.treatment_line_geometry_multiplier = 1.0
 	controller.equip(AbilityController.SLOT_Q, definitions[&"ability_sample_pull"])
 	_true(controller.enqueue_command(AbilityCommand.create(AbilityController.SLOT_Q, Vector2(-480.0, 0.0), 90)), "Sample command enters queue")
 	controller.process_command_queue()

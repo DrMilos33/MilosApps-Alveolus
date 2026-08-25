@@ -32,11 +32,11 @@ func _test_default_schedules() -> void:
 	)
 	_equal(fall_one.projectile_gate_times, PackedFloat32Array(), "Fall 1 plant keine Projektiltore")
 	_equal(fall_one.max_active_targets, 1, "Fall 1 erlaubt höchstens einen aktiven Zielherd")
-	_near(fall_one.target_movement_speed_multiplier, 60.0 / 38.0, "Fall 1 löst den mobilen Eventherd auf ganzzahliges Basistempo 60 auf")
+	_near(fall_one.target_movement_speed_multiplier, 66.0 / 42.0, "Fall 1 löst den mobilen Eventherd auf ganzzahliges Basistempo 66 auf")
 	_near(fall_one.target_attack_speed_multiplier, 1.875, "Fall 1 erhöht die vorhandene Eventherd-Schussrate nochmals um 50 Prozent")
 	_near(fall_one.target_projectile_width_multiplier, 1.5, "Fall 1 verbreitert nur die Eventherdprojektile um 50 Prozent")
 	_near(fall_one.target_projectile_speed_multiplier, 1.95, "Fall 1 beschleunigt die bereits schnellen Eventherdprojektile nochmals um 30 Prozent")
-	_near(fall_one.defense_burst_shooting_lock_seconds, 10.0, "Stoß unterbindet den Fall-1-Eventbeschuss zehn Sekunden")
+	_near(fall_one.defense_burst_shooting_lock_seconds, -1.0, "Stoß beendet den Fall-1-Eventbeschuss dauerhaft")
 
 	var fall_two := CasePressurePlanScript.default_for_case_order(2)
 	_equal(
@@ -50,9 +50,10 @@ func _test_default_schedules() -> void:
 	_near(fall_two.target_attack_speed_multiplier, 1.0, "Andere Zielherde behalten ihre Schussrate")
 	_near(fall_two.target_projectile_width_multiplier, 1.0, "Andere Zielherde behalten ihre Projektilbreite")
 	_equal(fall_two.target_visual_id, &"bacterial_swarm", "Fall 2 verwendet das zusammengesetzte Bakterienschwarm-Visual")
-	_near(fall_two.target_health_multiplier, 10.0, "Fall 2 besitzt ein zehnfaches gemeinsames Eventleben")
-	_equal(fall_two.symbolic_health_bar_count, 9, "Fall 2 zeigt mehrere symbolische gemeinsame Lebensbalken")
-	_near(fall_two.treatment_line_damage_multiplier, 10.0, "Fetter lazer trifft den Fall-2-Schwarm zehnfach")
+	_near(fall_two.target_health_multiplier, 10.0 / 3.0, "Fall 2 löst das gemeinsame Eventleben auf exakt 600 auf")
+	_equal(fall_two.symbolic_health_bar_count, 1, "Fall 2 zeigt genau einen gemeinsamen Lebensbalken")
+	_near(fall_two.treatment_line_damage_multiplier, 20.0, "Fetter lazer trifft den Fall-2-Schwarm bei voller Abdeckung zwanzigfach")
+	_true(fall_two.treatment_line_coverage_scaled, "Fall 2 skaliert den Lazerbonus mit der abgedeckten Schwarmfläche")
 
 	var fall_three := CasePressurePlanScript.default_for_case_order(3)
 	_equal(

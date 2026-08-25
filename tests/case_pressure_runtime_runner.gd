@@ -78,6 +78,7 @@ func _test_live_target_and_gate_contract() -> void:
 	await process_frame
 
 	game.persistence_enabled = false
+	game.run_test_settings.reset_defaults()
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(discovery_id)
 	game.selected_level = _level_by_id(game.levels, &"severe_pneumonia")
@@ -99,6 +100,7 @@ func _test_case_two_target_remains_mobile() -> void:
 	await process_frame
 	await process_frame
 	game.persistence_enabled = false
+	game.run_test_settings.reset_defaults()
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(discovery_id)
 	game.selected_level = _level_by_id(game.levels, &"localized_focus")
@@ -120,16 +122,28 @@ func _test_case_two_target_remains_mobile() -> void:
 			_near(target.projectile_attack_speed_multiplier, 1.0, "Der Fall-2-Herd übernimmt nicht die schnellere Fall-1-Kadenz")
 			_near(target.projectile_width_multiplier, 1.0, "Der Fall-2-Herd übernimmt nicht die breiteren Fall-1-Projektile")
 			_equal(target.resolved_visual_id(), &"bacterial_swarm", "Der Fall-2-Herd zeigt viele kleine Bakterien als ein gemeinsames Visual")
-			_near(target.max_health, target.definition.max_health * 10.0, "Der Fall-2-Schwarm besitzt zehnfaches gemeinsames Leben")
-			_equal(target.symbolic_health_bar_count, 9, "Der Fall-2-Schwarm veröffentlicht neun gleichlaufende Lebensbalken")
+			_near(target.max_health, 600.0, "Der Fall-2-Schwarm besitzt exakt 600 gemeinsames Leben")
+			_equal(target.symbolic_health_bar_count, 1, "Der Fall-2-Schwarm veröffentlicht genau einen gemeinsamen Lebensbalken")
+			_true(target.treatment_line_coverage_scaled, "Der Fall-2-Schwarm aktiviert die virtuelle Flächenabdeckung")
 			target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
-			var health_before_laser := target.health
-			target.take_damage(10.0, &"ability_treatment_line")
-			_near(target.health, health_before_laser - 100.0, "Fetter lazer verursacht am Fall-2-Schwarm zehnfachen Schaden")
+			target.global_position = Vector2(120.0, 0.0)
+			var beam_origin := Vector2.ZERO
+			_near(target.treatment_line_damage_multiplier_for_geometry(beam_origin, Vector2.RIGHT, 300.0, 19.0), 12.0, "Basisbreite trifft zwölf virtuelle Teilbakterien")
+			_near(target.treatment_line_damage_multiplier_for_geometry(beam_origin, Vector2.RIGHT, 300.0, 27.0), 16.0, "Der erste Breitenrang trifft sechzehn virtuelle Teilbakterien")
+			_near(target.treatment_line_damage_multiplier_for_geometry(beam_origin, Vector2.RIGHT, 300.0, 35.0), 19.0, "Der zweite Breitenrang trifft neunzehn virtuelle Teilbakterien")
+			_near(target.treatment_line_damage_multiplier_for_geometry(beam_origin, Vector2.RIGHT, 300.0, 38.0), 20.0, "Eine vollständig durchlaufene Hitbox löst exakt den zwanzigfachen Lazerwert aus")
+			_true(target.treatment_line_damage_multiplier_for_geometry(beam_origin, Vector2.RIGHT.rotated(deg_to_rad(10.0)), 300.0, 35.0) < 20.0, "Ein gedrehter Teiltreffer bleibt unter dem Maximalwert")
+			target.global_position = Vector2(30.0, 0.0)
+			_true(target.treatment_line_damage_multiplier_for_geometry(beam_origin, Vector2.RIGHT, 300.0, 38.0) < 20.0, "Die offene Strahlstartkappe kann keinen vollständigen Treffer vortäuschen")
+			target.global_position = Vector2(280.0, 0.0)
+			_true(target.treatment_line_damage_multiplier_for_geometry(beam_origin, Vector2.RIGHT, 300.0, 38.0) < 20.0, "Die offene Strahlendkappe kann keinen vollständigen Treffer vortäuschen")
+			target.global_position = Vector2(120.0, 0.0)
 			var health_before_impulse := target.health
 			target.take_damage(10.0, &"treatment_precision")
 			_near(target.health, health_before_impulse - 10.0, "Andere Treffer behalten am Fall-2-Schwarm ihren normalen Schaden")
 			_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.MINOR_FOCUS, "Der bewegliche Fall-2-Herd schießt unverändert")
+			target.apply_defense_burst_shooting_lock()
+			_true(target.projectiles_suppressed(), "Auch ein definitionsbasierter kleiner Herd übernimmt ohne Sondermetadaten die allgemeine dauerhafte Stoßsperre")
 	game.queue_free()
 	await process_frame
 
@@ -140,6 +154,7 @@ func _test_case_one_event_target_profile() -> void:
 	await process_frame
 	await process_frame
 	game.persistence_enabled = false
+	game.run_test_settings.reset_defaults()
 	for discovery_id in game.discovery_definitions:
 		game.discovery_manager.mark_seen(discovery_id)
 	game.selected_level = _level_by_id(game.levels, &"early_localized_focus")
@@ -155,14 +170,14 @@ func _test_case_one_event_target_profile() -> void:
 		if is_instance_valid(target):
 			_near(
 				target.definition.speed * target.speed_multiplier,
-				60.0 * game.config.enemy_speed_multiplier,
-				"Der Fall-1-Eventherd besitzt nach diesem Patch ganzzahliges Basistempo 60"
+				66.0 * game.config.enemy_speed_multiplier,
+				"Der Fall-1-Eventherd besitzt nach diesem Patch ganzzahliges Basistempo 66"
 			)
 			_near(target.projectile_attack_speed_multiplier, 1.875, "Der Fall-1-Eventherd besitzt die um weitere 50 Prozent erhöhte Schussrate")
 			_near(target.resolved_projectile_interval(), 2.6 / 1.875, "Die lineare Feuerrate ergibt ein Intervall von rund 1,39 Sekunden")
 			_near(target.projectile_width_multiplier, 1.5, "Der Fall-1-Eventherd veröffentlicht 50 Prozent breitere Projektile")
 			_near(target.projectile_speed_multiplier, 1.95, "Der Fall-1-Eventherd veröffentlicht relativ nochmals 30 Prozent schnellere Projektile")
-			_near(target.defense_burst_shooting_lock_seconds, 10.0, "Der Fall-1-Eventherd übernimmt die zehnsekündige Stoßsperre")
+			_near(target.defense_burst_shooting_lock_seconds, -1.0, "Der Fall-1-Eventherd übernimmt die dauerhafte Stoßsperre")
 			target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 			var projectiles_before: int = game.projectiles.size()
 			game.enemy_attack_director.step_fixed(0.899)
@@ -174,16 +189,11 @@ func _test_case_one_event_target_profile() -> void:
 				_near(projectile.hostile_width_multiplier, 1.5, "Das echte Eventherdprojektil übernimmt die breitere Darstellung und Trefferfläche")
 				_near(projectile.speed, 399.75, "Das echte Eventherdprojektil fliegt relativ nochmals 30 Prozent schneller")
 			target.apply_defense_burst_shooting_lock()
-			_true(target.projectiles_suppressed(), "Ein Stoß sperrt den Eventherdbeschuss sofort")
-			target.step_fixed(9.999)
-			game.enemy_attack_director.step_fixed(9.999)
-			_equal(game.projectiles.size(), projectiles_before + 1, "Während zehn Sekunden Stoßsperre entsteht kein neues Projektil")
-			target.step_fixed(0.002)
-			_true(not target.projectiles_suppressed(), "Die Eventherdsperre endet nach exakt zehn Sekunden")
-			game.enemy_attack_director.step_fixed(2.6 / 1.875 - 0.002)
-			_equal(game.projectiles.size(), projectiles_before + 1, "Die pausierte Kadenz feuert nicht vor ihrem verbleibenden Intervall")
-			game.enemy_attack_director.step_fixed(0.002)
-			_equal(game.projectiles.size(), projectiles_before + 2, "Der Eventherd nimmt nach der Sperre seine Kadenz wieder auf")
+			_true(target.projectiles_suppressed(), "Ein Stoß beendet den Eventherdbeschuss sofort")
+			target.step_fixed(30.0)
+			game.enemy_attack_director.step_fixed(30.0)
+			_true(target.projectiles_suppressed(), "Der Eventherd bleibt für seinen restlichen Lebenszyklus schussunfähig")
+			_equal(game.projectiles.size(), projectiles_before + 1, "Auch nach dreißig Sekunden entsteht kein weiteres Eventherdprojektil")
 	game.queue_free()
 	await process_frame
 

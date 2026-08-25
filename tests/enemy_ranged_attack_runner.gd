@@ -1,5 +1,7 @@
 extends SceneTree
 
+const GameScript := preload("res://scripts/game.gd")
+
 var assertions := 0
 var failures := 0
 
@@ -10,6 +12,7 @@ func _init() -> void:
 
 func _run() -> void:
 	_test_anchor_case_boss_contract()
+	_test_fall_one_add_spawn_metadata()
 	await _test_intro_boss_normal_attack()
 	await _test_case_two_boss_attack_and_add_lock()
 	await _test_configurable_boss_contract()
@@ -21,6 +24,31 @@ func _run() -> void:
 	else:
 		printerr("ALVEOLUS_ENEMY_RANGED_ATTACK_FAILED failures=%d assertions=%d" % [failures, assertions])
 		quit(1)
+
+
+func _test_fall_one_add_spawn_metadata() -> void:
+	var levels := ContentCatalog.level_definitions()
+	var case_one := levels[1] as LevelDefinition
+	var topology := ArenaTopology.new(Rect2(-600.0, -400.0, 1200.0, 800.0))
+	var avatar := TherapyAvatar.new()
+	var add := InfectionEnemy.new()
+	get_root().add_child(avatar)
+	get_root().add_child(add)
+	add.configure(ContentCatalog.enemy_definitions()[&"pneumococcus"], avatar, topology)
+	var request := EnemySpawnRequest.create(&"pneumococcus", Vector2.ZERO)
+	request.metadata["ranged_shooter"] = true
+	request.metadata["projectile_attack_speed_multiplier"] = case_one.boss_add_projectile_attack_speed_multiplier
+	request.metadata["defense_burst_shooting_lock_seconds"] = case_one.boss_add_defense_burst_shooting_lock_seconds
+	var game := GameScript.new()
+	game._apply_enemy_spawn_metadata(add, request)
+	add.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	_true(add.runtime_projectile_shooter, "Die echte Spawnmetadatenbrücke markiert Fall-1-Verstärkungen als Schützen")
+	_near(add.projectile_attack_speed_multiplier, 2.0, "Die echte Spawnmetadatenbrücke übernimmt ihre doppelte Schussrate")
+	add.apply_defense_burst_shooting_lock()
+	_true(add.projectiles_suppressed(), "Ein per Fall-1-Boss beschworenes kleines Bakterium verliert nach Stoß dauerhaft seine Projektile")
+	game.free()
+	add.free()
+	avatar.free()
 
 
 func _test_anchor_case_boss_contract() -> void:
@@ -55,6 +83,7 @@ func _test_anchor_case_boss_contract() -> void:
 	_true(case_one.boss_ranged_enabled and case_one.boss_projectiles_require_empty_aura, "Fall 1 aktiviert den Bossbeschuss ausschließlich bei leerer Aura")
 	_near(case_one.boss_projectile_speed_multiplier, 1.3, "Fall-1-Bossprojektile erhalten den relativen 30-Prozent-Temposchritt")
 	_near(case_one.boss_add_projectile_attack_speed_multiplier, 2.0, "Fall-1-Bossverstärkungen verwenden die doppelte Schussrate")
+	_near(case_one.boss_add_defense_burst_shooting_lock_seconds, -1.0, "Auch die schießenden Fall-1-Bossverstärkungen verlieren ihren Beschuss nach Stoß dauerhaft")
 
 
 func _test_case_two_boss_attack_and_add_lock() -> void:
@@ -76,6 +105,8 @@ func _test_case_two_boss_attack_and_add_lock() -> void:
 	)
 	_true(director.register_enemy(handle, EnemyAttackDirector.Role.BOSS), "Fall-2-Boss wird als Schütze registriert")
 	_true(director.configure_boss_contract(handle, true, 15.0, 4, 0), "Fall-2-Boss übernimmt den 15-Sekunden-Addvertrag")
+	boss.apply_defense_burst_shooting_lock()
+	_true(not boss.projectiles_suppressed(), "Bosse ignorieren die allgemeine Stoß-Schusssperre")
 	director.step_fixed(0.65)
 	_equal(shots.size(), 1, "Der Fall-2-Boss feuert pro Takt ein Doppelkurvenprojektil")
 	_equal(int(shots[0]["pattern"]), EnemyAttackDirector.Pattern.DOUBLE_TURN, "Der echte Director emittiert das Doppelkurvenmuster")
@@ -92,7 +123,7 @@ func _test_case_two_boss_attack_and_add_lock() -> void:
 	var add := InfectionEnemy.new()
 	get_root().add_child(add)
 	add.configure(ContentCatalog.enemy_definitions()[&"pneumococcus"], avatar, topology)
-	add.configure_projectile_modifiers(2.0, 1.0, 1.0, -1.0)
+	add.configure_projectile_modifiers(2.0, 1.0, 1.0, -1.0, true)
 	add.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	var add_handle := world.register_enemy(add, true)
 	_true(director.register_enemy(add_handle, EnemyAttackDirector.Role.PHASE_ADD), "Fall-2-Add wird als Schütze registriert")
@@ -110,8 +141,14 @@ func _test_case_two_boss_attack_and_add_lock() -> void:
 	director.release(add_handle)
 	world.release(add_handle, false)
 	world.flush_deferred()
+	add.configure_damage_presentation(20.0, 1, true)
 	add.recycle()
 	_true(not add.projectiles_suppressed(), "Pool-Recycling entfernt die dauerhafte Schusssperre")
+	_true(not add.treatment_line_coverage_scaled and is_equal_approx(add.treatment_line_damage_multiplier, 1.0) and add.symbolic_health_bar_count == 0, "Pool-Recycling entfernt auch den Fall-2-Flächenproxy und seinen Balken")
+	add.configure(ContentCatalog.enemy_definitions()[&"pneumococcus"], avatar, topology)
+	add.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+	add.apply_defense_burst_shooting_lock()
+	_true(not add.projectiles_suppressed(), "Ein gewöhnliches Nahkampfbakterium erhält ohne Schützenrolle keine irreführende Schusssperre")
 	world.clear()
 	add.queue_free()
 	avatar.queue_free()
@@ -188,10 +225,10 @@ func _test_generation_safe_attack_director() -> void:
 	boss.step_fixed(0.05)
 	_true(boss.global_position.is_equal_approx(boss_position_before_push), "Stoß betäubt den Boss, verschiebt ihn aber nicht")
 	director.step_fixed(0.65)
-	_equal(shots.size(), 0, "Ein gestunnter Boss feuert keine Projektile und pausiert seinen Angriffstimer")
+	_equal(shots.size(), 2, "Ein Boss bleibt trotz Stoß-Stun schussfähig")
 	boss.step_fixed(1.01)
 	director.step_fixed(0.65)
-	_equal(shots.size(), 2, "Ein Bossangriff erzeugt exakt zwei Projektile")
+	_equal(shots.size(), 2, "Der Bossangriffstimer läuft während des Stuns normal weiter")
 	if shots.size() == 2:
 		_equal(int(shots[0]["pattern"]), EnemyAttackDirector.Pattern.DIAMOND, "Beide Bossprojektile verwenden das Rautenmuster")
 		_equal(int(shots[1]["pattern"]), EnemyAttackDirector.Pattern.DIAMOND, "Das zweite Bossprojektil verwendet ebenfalls das Rautenmuster")

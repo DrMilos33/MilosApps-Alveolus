@@ -1930,7 +1930,7 @@ func _configure_practice_run_config(context: RunContext) -> void:
 	config.boss_projectile_attack_speed_multiplier = 1.0
 	config.boss_projectile_speed_multiplier = 1.0
 	config.boss_projectiles_require_empty_aura = false
-	config.boss_add_defense_burst_shooting_lock_seconds = 0.0
+	config.boss_add_defense_burst_shooting_lock_seconds = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 	config.boss_add_projectile_attack_speed_multiplier = 1.0
 	config.initial_small_enemy_count = scenario.get_initial_small_count()
 	config.initial_cluster_enemy_count = scenario.get_initial_medium_count()
@@ -2944,11 +2944,16 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 		float(request.metadata.get("projectile_attack_speed_multiplier", 1.0)),
 		float(request.metadata.get("projectile_width_multiplier", 1.0)),
 		float(request.metadata.get("projectile_speed_multiplier", 1.0)),
-		float(request.metadata.get("defense_burst_shooting_lock_seconds", 0.0))
+		float(request.metadata.get(
+			"defense_burst_shooting_lock_seconds",
+			EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
+		)),
+		bool(request.metadata.get("ranged_shooter", false))
 	)
 	enemy.configure_damage_presentation(
 		float(request.metadata.get("treatment_line_damage_multiplier", 1.0)),
-		int(request.metadata.get("symbolic_health_bar_count", 0))
+		int(request.metadata.get("symbolic_health_bar_count", 0)),
+		bool(request.metadata.get("treatment_line_coverage_scaled", false))
 	)
 	if bool(request.metadata.get("case_pressure_target", false)):
 		_register_case_pressure_target(enemy, StringName(request.metadata.get("pressure_behavior", &"stationary_fan")))
@@ -4194,9 +4199,14 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 		pressure_plan.target_projectile_width_multiplier if pressure_plan != null else 1.0
 	)
 	request.metadata["projectile_speed_multiplier"] = pressure_plan.target_projectile_speed_multiplier if pressure_plan != null else 1.0
-	request.metadata["defense_burst_shooting_lock_seconds"] = pressure_plan.defense_burst_shooting_lock_seconds if pressure_plan != null else 0.0
+	request.metadata["defense_burst_shooting_lock_seconds"] = (
+		pressure_plan.defense_burst_shooting_lock_seconds
+		if pressure_plan != null
+		else EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
+	)
 	request.metadata["treatment_line_damage_multiplier"] = pressure_plan.treatment_line_damage_multiplier if pressure_plan != null else 1.0
 	request.metadata["symbolic_health_bar_count"] = pressure_plan.symbolic_health_bar_count if pressure_plan != null else 0
+	request.metadata["treatment_line_coverage_scaled"] = pressure_plan.treatment_line_coverage_scaled if pressure_plan != null else false
 	if stationary_fan:
 		request.configure_body_interaction(
 			EnemySpawnRequest.BodyRole.STATIC_FLOW_OBSTACLE,

@@ -1364,14 +1364,15 @@ func _run() -> void:
 	new_recovery_neighbor.free()
 
 	# Doctor Milos uses the same damage-contact circles as physical boundaries.
-	# Every ordinary mobile non-boss yields slowly by default, independent of ID.
+	# Every ordinary mobile non-boss yields by default; authored body types may
+	# raise only that yield cap without changing Galopp or contact geometry.
 	_near(EnemyWorld.AVATAR_PUSH_SPEED, 72.0, "Das zentrale Spielerschiebetempo bleibt exakt auf 72 begrenzt")
 	avatar.global_position = Vector2.ZERO
 	var cluster_push_world := EnemyWorld.new().configure_enemy_world(CombatCapacity.defaults())
 	cluster_push_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
 	var pushable_cluster_definition := EnemyDefinition.create(
 		&"bacterial_cluster", "Schiebbare Bakteriengruppe", 74.0, 0.0, 0.0, 0, 30.0, Color.WHITE
-	).configure_contact_radius(23.0)
+	).configure_contact_radius(23.0).configure_player_push(true, 1.5)
 	var pushed_cluster := _enemy(
 		pushable_cluster_definition,
 		avatar,
@@ -1388,7 +1389,7 @@ func _run() -> void:
 		cluster_push_world.prepare_avatar_body_interaction(1.0 / 60.0)
 		avatar.step_fixed(1.0 / 60.0)
 	Input.action_release(&"move_right")
-	_true(avatar.global_position.x > 30.0 and avatar.global_position.x < 60.0, "Der Doctor arbeitet sich mit dem erhöhten, weiterhin begrenzten Schiebetempo durch eine Bakteriengruppe (%.2f)" % avatar.global_position.x)
+	_true(avatar.global_position.x > 50.0 and avatar.global_position.x < 58.0, "Der Doctor arbeitet sich mit 108 Weltpunkten pro Sekunde durch eine Bakteriengruppe (%.2f)" % avatar.global_position.x)
 	_true(pushed_cluster.global_position.x > cluster_origin.x + 5.0, "Auch eine große gewöhnliche Gegnerart wird sichtbar weggedrückt")
 	_true(
 		pushed_cluster.global_position.distance_to(avatar.global_position) >= TherapyAvatar.CONTACT_RADIUS + pushed_cluster.contact_body_radius() - 0.1,
@@ -1498,7 +1499,7 @@ func _run() -> void:
 	push_world.configure_crowd_collision(topology, avatar, cluster_definition.radius)
 	var push_definition := EnemyDefinition.create(
 		&"pneumococcus", "Schiebbares Bakterium", 22.0, 0.0, 0.0, 0, 18.0, Color.WHITE
-	).configure_contact_radius(17.0)
+	).configure_contact_radius(17.0).configure_player_push(true, 2.0)
 	var pushed_small := _enemy(
 		push_definition,
 		avatar,
@@ -1514,7 +1515,7 @@ func _run() -> void:
 		push_world.prepare_avatar_body_interaction(1.0 / 60.0)
 		avatar.step_fixed(1.0 / 60.0)
 	Input.action_release(&"move_right")
-	_true(avatar.global_position.x > 30.0 and avatar.global_position.x < 60.0, "Der Doctor arbeitet sich mit dem erhöhten, weiterhin begrenzten Schiebetempo durch kleine Bakterien (%.2f)" % avatar.global_position.x)
+	_true(avatar.global_position.x > 68.0 and avatar.global_position.x < 76.0, "Der Doctor arbeitet sich mit 144 Weltpunkten pro Sekunde deutlich leichter durch kleine Bakterien (%.2f)" % avatar.global_position.x)
 	_true(pushed_small.global_position.x > small_origin.x + 5.0, "Das kleine Bakterium wird über mehrere Ticks sichtbar weggedrückt")
 	_true(
 		pushed_small.global_position.distance_to(avatar.global_position) >= TherapyAvatar.CONTACT_RADIUS + pushed_small.contact_body_radius() - 0.1,

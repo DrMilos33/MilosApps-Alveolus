@@ -20,6 +20,7 @@ const DEATH_SECONDS := 0.0
 const HIT_REACTION_SECONDS := 0.09
 const DEFAULT_KNOCKBACK_SECONDS := 0.28
 const DEFAULT_STUN_SECONDS := 1.0
+const DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS := EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 const RELOCATION_INTERACTION_LOCK_SECONDS := 1.0
 const RELOCATION_POST_MOVE_LOCK_SECONDS := 3.0
 const SMALL_CROWD_RADIUS_FACTOR := 1.00
@@ -31,6 +32,28 @@ const CROWD_STEERING_SMOOTHING := 1.0
 const CROWD_SPEED_SMOOTHING := 1.0
 const CROWD_STEERING_WEIGHT := 1.0
 const DIRECT_CHASE_CONTACT_DEPTH := 0.5
+const TREATMENT_LINE_SWARM_SAMPLE_OFFSETS: Array[Vector2] = [
+	Vector2(0.1486, 0.0000),
+	Vector2(-0.1898, 0.1739),
+	Vector2(0.0291, -0.3311),
+	Vector2(0.2393, 0.3121),
+	Vector2(-0.4391, -0.0777),
+	Vector2(0.4159, -0.2646),
+	Vector2(-0.1391, 0.7350),
+	Vector2(-0.2653, -0.4900),
+	Vector2(0.5756, 0.2102),
+	Vector2(-0.5988, 0.2472),
+	Vector2(0.2887, -0.7350),
+	Vector2(0.2133, 0.6801),
+	Vector2(-0.6430, -0.3726),
+	Vector2(0.7543, -0.1658),
+	Vector2(-0.4603, 0.6548),
+	Vector2(-0.1063, -0.8207),
+	Vector2(0.6529, 0.5502),
+	Vector2(-0.8785, 0.0363),
+	Vector2(0.6408, -0.6377),
+	Vector2(-0.0429, 0.9272),
+]
 
 var definition: EnemyDefinition
 var target: TherapyAvatar
@@ -47,8 +70,10 @@ var obstacle_traversal: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
 var projectile_attack_speed_multiplier: float = 1.0
 var projectile_width_multiplier: float = 1.0
 var projectile_speed_multiplier: float = 1.0
-var defense_burst_shooting_lock_seconds: float = 0.0
+var defense_burst_shooting_lock_seconds: float = DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
+var runtime_projectile_shooter: bool = false
 var treatment_line_damage_multiplier: float = 1.0
+var treatment_line_coverage_scaled: bool = false
 var symbolic_health_bar_count: int = 0
 var runtime_visual_id: StringName = &""
 var phase_minions: PackedInt32Array = PackedInt32Array()
@@ -140,8 +165,10 @@ func configure(
 	projectile_attack_speed_multiplier = 1.0
 	projectile_width_multiplier = 1.0
 	projectile_speed_multiplier = 1.0
-	defense_burst_shooting_lock_seconds = 0.0
+	defense_burst_shooting_lock_seconds = DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
+	runtime_projectile_shooter = false
 	treatment_line_damage_multiplier = 1.0
+	treatment_line_coverage_scaled = false
 	symbolic_health_bar_count = 0
 	_shooting_lock_remaining = 0.0
 	_shooting_lock_permanent = false
@@ -199,8 +226,10 @@ func recycle() -> void:
 	projectile_attack_speed_multiplier = 1.0
 	projectile_width_multiplier = 1.0
 	projectile_speed_multiplier = 1.0
-	defense_burst_shooting_lock_seconds = 0.0
+	defense_burst_shooting_lock_seconds = DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
+	runtime_projectile_shooter = false
 	treatment_line_damage_multiplier = 1.0
+	treatment_line_coverage_scaled = false
 	symbolic_health_bar_count = 0
 	_shooting_lock_remaining = 0.0
 	_shooting_lock_permanent = false
@@ -238,6 +267,10 @@ func can_be_pushed_by_player() -> bool:
 	)
 
 
+func resolved_player_push_speed_multiplier() -> float:
+	return maxf(definition.player_push_speed_multiplier, 0.1) if definition != null else 1.0
+
+
 func resolved_obstacle_traversal() -> int:
 	if obstacle_traversal != EnemySpawnRequest.ObstacleTraversal.DEFAULT:
 		return obstacle_traversal
@@ -250,24 +283,35 @@ func configure_projectile_modifiers(
 	attack_speed_multiplier: float,
 	width_multiplier: float,
 	travel_speed_multiplier: float = 1.0,
-	burst_shooting_lock_seconds: float = 0.0
+	burst_shooting_lock_seconds: float = DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS,
+	is_runtime_projectile_shooter: bool = false
 ) -> void:
 	projectile_attack_speed_multiplier = maxf(attack_speed_multiplier, 0.01)
 	projectile_width_multiplier = maxf(width_multiplier, 0.1)
 	projectile_speed_multiplier = maxf(travel_speed_multiplier, 0.1)
 	defense_burst_shooting_lock_seconds = burst_shooting_lock_seconds
+	runtime_projectile_shooter = is_runtime_projectile_shooter
 
 
 func configure_damage_presentation(
 	line_damage_multiplier: float,
-	health_bar_count: int
+	health_bar_count: int,
+	coverage_scaled: bool = false
 ) -> void:
 	treatment_line_damage_multiplier = maxf(line_damage_multiplier, 0.01)
 	symbolic_health_bar_count = clampi(health_bar_count, 0, 16)
+	treatment_line_coverage_scaled = coverage_scaled
 	queue_redraw()
 
 
 func apply_defense_burst_shooting_lock() -> void:
+	if (
+		definition == null
+		or definition.is_boss
+		or not can_emit_projectiles()
+		or is_zero_approx(defense_burst_shooting_lock_seconds)
+	):
+		return
 	var was_suppressed := projectiles_suppressed()
 	if defense_burst_shooting_lock_seconds < 0.0:
 		_shooting_lock_permanent = true
@@ -282,7 +326,87 @@ func apply_defense_burst_shooting_lock() -> void:
 
 
 func projectiles_suppressed() -> bool:
-	return activation_active and (_shooting_lock_permanent or _shooting_lock_remaining > 0.0)
+	return (
+		activation_active
+		and definition != null
+		and not definition.is_boss
+		and can_emit_projectiles()
+		and (_shooting_lock_permanent or _shooting_lock_remaining > 0.0)
+	)
+
+
+func can_emit_projectiles() -> bool:
+	return (
+		runtime_projectile_shooter
+		or (
+			definition != null
+			and definition.projectile_damage > 0.0
+			and definition.projectile_interval > 0.0
+		)
+	)
+
+
+## The Fall-2 swarm stays one entity. Twenty deterministic sample points proxy
+## the visible constituent bacteria, so beam width and offset resolve to a cheap
+## area-proportional multiplier without child entities or extra spatial queries.
+func treatment_line_damage_multiplier_for_geometry(
+	origin: Vector2,
+	direction: Vector2,
+	length: float,
+	half_width: float
+) -> float:
+	if not treatment_line_coverage_scaled:
+		return treatment_line_damage_multiplier
+	if definition == null or treatment_line_damage_multiplier <= 0.0:
+		return 0.0
+	var heading := direction.normalized() if direction.length_squared() > 0.0001 else Vector2.RIGHT
+	var hit_samples := 0
+	for normalized_offset in TREATMENT_LINE_SWARM_SAMPLE_OFFSETS:
+		var sample_position := global_position + normalized_offset * definition.radius
+		var sample_delta := (
+			sample_position - origin
+			if topology == null or _topology_bounded
+			else topology.shortest_delta(origin, sample_position)
+		)
+		var forward := sample_delta.dot(heading)
+		if forward < 0.0 or forward > maxf(length, 0.0):
+			continue
+		if absf(sample_delta.cross(heading)) <= maxf(half_width, 0.0):
+			hit_samples += 1
+	# The samples cheaply approximate partial area, but the advertised maximum
+	# is stricter: 20x only applies when the complete circular gameplay hitbox
+	# lies inside both the beam width and its start/end caps.
+	if (
+		hit_samples == TREATMENT_LINE_SWARM_SAMPLE_OFFSETS.size()
+		and not _treatment_line_fully_covers_hitbox(origin, heading, length, half_width)
+	):
+		hit_samples -= 1
+	return (
+		treatment_line_damage_multiplier
+		* float(hit_samples)
+		/ float(TREATMENT_LINE_SWARM_SAMPLE_OFFSETS.size())
+	)
+
+
+func _treatment_line_fully_covers_hitbox(
+	origin: Vector2,
+	heading: Vector2,
+	length: float,
+	half_width: float
+) -> bool:
+	var center_delta := (
+		global_position - origin
+		if topology == null or _topology_bounded
+		else topology.shortest_delta(origin, global_position)
+	)
+	var forward := center_delta.dot(heading)
+	var lateral := absf(center_delta.cross(heading))
+	var hitbox_radius := maxf(definition.radius, 0.0)
+	return (
+		forward - hitbox_radius >= 0.0
+		and forward + hitbox_radius <= maxf(length, 0.0)
+		and lateral + hitbox_radius <= maxf(half_width, 0.0)
+	)
 
 
 func resolved_projectile_interval() -> float:
@@ -738,8 +862,7 @@ func _refresh_status_products() -> void:
 		_cached_status_contact_multiplier *= float(status_contact_multipliers[source])
 
 func take_damage(amount: float, source: StringName = &"therapy") -> void:
-	var source_multiplier := treatment_line_damage_multiplier if source == &"ability_treatment_line" else 1.0
-	var resolved_amount := amount * source_multiplier * incoming_player_damage_multiplier
+	var resolved_amount := amount * incoming_player_damage_multiplier
 	if resolved_amount <= 0.0 or not is_targetable():
 		return
 	var applied := minf(resolved_amount, health)
@@ -842,6 +965,12 @@ func _draw() -> void:
 
 func _draw_symbolic_health_bars(alpha: float) -> void:
 	var fraction := clampf(health / maxf(max_health, 0.001), 0.0, 1.0)
+	if symbolic_health_bar_count == 1:
+		var single_width := definition.radius * 2.0
+		var single_position := Vector2(-single_width * 0.5, -visual_extent() * 0.5 - 10.0)
+		draw_rect(Rect2(single_position, Vector2(single_width, 6.0)), Color(AlveolusVisualTheme.IVORY_DEEP, alpha), true)
+		draw_rect(Rect2(single_position, Vector2(single_width * fraction, 6.0)), Color(AlveolusVisualTheme.CORAL, alpha), true)
+		return
 	var columns := mini(5, symbolic_health_bar_count)
 	var rows := ceili(float(symbolic_health_bar_count) / float(columns))
 	var bar_size := Vector2(16.0, 3.0)

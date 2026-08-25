@@ -40,7 +40,7 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export var boss_reinforcement_interval: float = 0.0
 @export_range(0, 64, 1) var boss_reinforcement_count: int = 0
 @export_range(0, 2, 1) var boss_reinforcement_minimum_phase: int = 0
-@export var boss_add_defense_burst_shooting_lock_seconds: float = 0.0
+@export var boss_add_defense_burst_shooting_lock_seconds: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 @export var boss_add_projectile_attack_speed_multiplier: float = 1.0
 @export var reward_multiplier: float
 @export_multiline var briefing_text: String
@@ -173,7 +173,7 @@ func configure_boss_reinforcements(
 
 func configure_boss_projectile_contract(
 	attack_speed_multiplier: float,
-	add_shooting_lock_seconds: float = 0.0,
+	add_shooting_lock_seconds: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS,
 	projectile_speed_multiplier: float = 1.0,
 	require_empty_aura: bool = false,
 	add_attack_speed_multiplier: float = 1.0

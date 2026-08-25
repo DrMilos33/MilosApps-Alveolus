@@ -54,7 +54,7 @@ func _init(
 	reinforcement_interval_value: float = 0.0,
 	reinforcement_count_value: int = 0,
 	reinforcement_minimum_phase_value: int = 0,
-	add_defense_burst_shooting_lock_seconds_value: float = 0.0
+	add_defense_burst_shooting_lock_seconds_value: float = EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS
 ) -> void:
 	_id = id_value
 	_title = title_value
