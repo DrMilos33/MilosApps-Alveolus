@@ -330,9 +330,9 @@ unverändert.
 
 Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile auf gespiegelten
 Bahnen. In Fall 3 fliegen sie mit Faktor 1,26 beziehungsweise 267,75 Tempo,
-verwenden 136 Weltpunkte Amplitude und eine Wellenlänge von 200. Damit bleibt
+verwenden 136 Weltpunkte Amplitude und eine Wellenlänge von 220. Damit bleibt
 das vorherige 85er-Muster um 60 Prozent verbreitert und beide Geschosse treffen
-sich nach 100 statt 90 Vorwärts-Weltpunkten wieder. Der Fall-4-Anker behält
+sich erst nach 110 statt 100 Vorwärts-Weltpunkten wieder. Der Fall-4-Anker behält
 212,5 Tempo, 115 Weltpunkte Amplitude und Wellenlänge 180. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
 Sekunden weitere vier; ihre Projektile fliegen mit 322,5 Tempo. Der Fall-1-
@@ -348,8 +348,8 @@ vor einem sofortigen weiteren Gegnertreffer.
 
 Der Bakterienkern aus Fall 2 schießt alle 0,89 Sekunden ein Projektil mit
 375 Tempo und authored 1,5-fachem Schaden. Der erste Kurvenzeitpunkt entspricht
-bei diesem Referenztempo ungefähr 80 Prozent der sichtbaren Bildschirmbreite,
-der zweite weiteren 40 Prozent. Beide Zeiten werden beim Spawn eingefroren;
+bei diesem Referenztempo ungefähr 60 Prozent der sichtbaren Bildschirmbreite,
+der zweite weiteren 35 Prozent. Beide Zeiten werden beim Spawn eingefroren;
 beide variieren je Projektil seed-stabil und unabhängig innerhalb von ±10 Prozent.
 Spätere Projektiltempomodifikatoren verschieben sie nicht. Die Seite wechselt
 deterministisch zwischen den Schüssen. Bei 80 Prozent Leben erscheinen drei

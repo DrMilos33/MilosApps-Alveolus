@@ -577,7 +577,7 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase. Projectile geometry is data-driven: the Fall-3 boss emits its two
 phased diamond shots at 267.75 world units per second with 136 world units of
-authored amplitude and a 200-unit wave length, so both shots reunite every 100
+authored amplitude and a 220-unit wave length, so both shots reunite every 110
 forward world units. The Fall-4 anchor retains its independent 212.5/115/180
 contract; ranged phase adds use 322.5. The intro and Fall-1 bosses emit one
 ordinary hostile projectile per attack interval. The Fall-1 boss configures a
@@ -610,7 +610,7 @@ partial coverage up to 20x before the normal resistance/defense pipeline. This
 adds no entity, query or process owner and makes beam width materially relevant.
 
 The Fall-2 boss uses one pooled `HOSTILE_DOUBLE_TURN` projectile per shot at a
-1.5 travel-speed and authored damage multiplier. At spawn, 80 and another 40
+1.5 travel-speed and authored damage multiplier. At spawn, 60 and another 35
 percent of the visible world width are converted through the fixed 375 reference
 speed into two immutable base turn times. A dedicated seed-stable projectile
 random stream varies both legs independently inside a ten-percent corridor. The

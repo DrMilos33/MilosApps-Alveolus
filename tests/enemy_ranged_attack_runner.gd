@@ -103,7 +103,7 @@ func _test_anchor_case_boss_contract() -> void:
 	_near(case_two.boss_projectile_turn_time_variation, 0.10, "Die Kurvenvariation gehört zum Fall-2-Projektil")
 	_near(case_three.boss_projectile_speed_multiplier, 1.26, "Fall-3-Rautenprojektile tragen den um 30 Prozent reduzierten Tempofaktor")
 	_near(case_three.boss_wave_amplitude, 136.0, "Fall-3-Rautenprojektile tragen die 60 Prozent breitere Bahn")
-	_near(case_three.boss_wave_length, 200.0, "Fall-3-Rautenprojektile treffen sich nach 100 statt 90 Weltpunkten")
+	_near(case_three.boss_wave_length, 220.0, "Fall-3-Rautenprojektile treffen sich erst nach 110 Weltpunkten")
 
 
 func _test_case_one_normal_and_case_two_turn_variation() -> void:
@@ -161,8 +161,8 @@ func _test_case_one_normal_and_case_two_turn_variation() -> void:
 				continue
 			var projectile := case_two_game.projectiles[-1] as TherapyProjectile
 			var visible_width: float = case_two_game._visible_world_rect().size.x
-			var base_first: float = visible_width * 0.80 / 375.0
-			var base_second: float = visible_width * 0.40 / 375.0
+			var base_first: float = visible_width * 0.60 / 375.0
+			var base_second: float = visible_width * 0.35 / 375.0
 			_true(projectile.hostile_first_turn_seconds >= base_first * 0.9 and projectile.hostile_first_turn_seconds <= base_first * 1.1, "Erster Fall-2-Knick bleibt im ±10-Prozent-Korridor")
 			_true(projectile.hostile_second_leg_seconds >= base_second * 0.9 and projectile.hostile_second_leg_seconds <= base_second * 1.1, "Zweiter Fall-2-Knick bleibt im ±10-Prozent-Korridor")
 			first_turns.append(projectile.hostile_first_turn_seconds)
@@ -296,10 +296,10 @@ func _test_case_two_runtime_projectile_contract() -> void:
 			_near(projectile.speed, 375.0, "Die Runtime löst das Fall-2-Bossprojektil auf 375 Tempo auf")
 			_near(projectile.damage, 8.0, "Der authored 50-Prozent-Schadensbonus wird nach der globalen Ganzzahlregel zu acht Schaden")
 			var visible_width: float = game._visible_world_rect().size.x
-			var expected_first := visible_width * 0.80 / 375.0
-			var expected_second := visible_width * 0.40 / 375.0
-			_true(projectile.hostile_first_turn_seconds >= expected_first * 0.9 and projectile.hostile_first_turn_seconds <= expected_first * 1.1, "Der erste Knick friert 80 Prozent Bildschirmbreite mit ±10 Prozent Variation als Zeit ein")
-			_true(projectile.hostile_second_leg_seconds >= expected_second * 0.9 and projectile.hostile_second_leg_seconds <= expected_second * 1.1, "Der zweite Knick friert weitere 40 Prozent Bildschirmbreite mit ±10 Prozent Variation als Zeit ein")
+			var expected_first := visible_width * 0.60 / 375.0
+			var expected_second := visible_width * 0.35 / 375.0
+			_true(projectile.hostile_first_turn_seconds >= expected_first * 0.9 and projectile.hostile_first_turn_seconds <= expected_first * 1.1, "Der erste Knick friert 60 Prozent Bildschirmbreite mit ±10 Prozent Variation als Zeit ein")
+			_true(projectile.hostile_second_leg_seconds >= expected_second * 0.9 and projectile.hostile_second_leg_seconds <= expected_second * 1.1, "Der zweite Knick friert weitere 35 Prozent Bildschirmbreite mit ±10 Prozent Variation als Zeit ein")
 			_true(projectile.hostile_time_bounded_double_turn, "Nur der Fall-2-Vertrag darf seine beiden Zeitkurven unabhängig von der Distanzgrenze vollenden")
 			var actual_first := projectile.hostile_first_turn_seconds
 			projectile.speed *= 0.5
@@ -337,11 +337,11 @@ func _test_case_three_runtime_projectile_contract() -> void:
 			for projectile in [first, second]:
 				_near(projectile.speed, 267.75, "Fall-3-Projektiltempo ist relativ um 30 Prozent reduziert")
 				_near(projectile.hostile_wave_amplitude, 136.0, "Die 60 Prozent breitere Fall-3-Auslenkung bleibt erhalten")
-				_near(projectile.hostile_wave_length, 200.0, "Die Fall-3-Rautenlänge steigt moderat auf 200")
-			var meet_seconds := 100.0 / first.speed
+				_near(projectile.hostile_wave_length, 220.0, "Die Fall-3-Rautenlänge steigt moderat auf 220")
+			var meet_seconds := 110.0 / first.speed
 			first.step_fixed(meet_seconds)
 			second.step_fixed(meet_seconds)
-			_near(first.global_position.distance_to(second.global_position), 0.0, "Die beiden Fall-3-Projektile treffen sich nach 100 Vorwärts-Weltpunkten wieder")
+			_near(first.global_position.distance_to(second.global_position), 0.0, "Die beiden Fall-3-Projektile treffen sich nach 110 Vorwärts-Weltpunkten wieder")
 	game.queue_free()
 	await process_frame
 
