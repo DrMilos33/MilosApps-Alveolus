@@ -124,14 +124,29 @@ func _test_batched_sprite_regions() -> void:
 	var cluster := VisualAssetCatalog.gameplay_batch_texture(&"bacterial_cluster")
 	var sample := VisualAssetCatalog.gameplay_batch_texture(&"analysis_pickup")
 	var swarm := VisualAssetCatalog.gameplay_batch_texture(&"bacterial_swarm")
+	var case_one_event := VisualAssetCatalog.gameplay_batch_texture(&"case_one_event_monster")
 	_assert_true(bacterium != null and cluster != null and sample != null, "Batch-Sprites werden als eigenständige Texturen erzeugt")
 	_assert_true(swarm != null and swarm.get_width() == swarm.get_height(), "Das Fall-2-Event besitzt eine gecachte quadratische Bakterienmasse")
+	_assert_true(case_one_event != null and case_one_event.get_width() == case_one_event.get_height(), "Das Fall-1-Eventmonster wird freigestellt und verzerrungsfrei gepolstert")
 	_assert_equal(bacterium.get_width(), bacterium.get_height(), "Keimregion wird verzerrungsfrei auf eine quadratische Textur gepolstert")
 	_assert_equal(cluster.get_width(), cluster.get_height(), "Bakteriengruppe wird verzerrungsfrei auf eine quadratische Textur gepolstert")
 	_assert_true(not (bacterium is AtlasTexture) and not (cluster is AtlasTexture) and not (sample is AtlasTexture), "MultiMesh erhält keine ungefilterten Atlasregionen")
 	_assert_true(bacterium == VisualAssetCatalog.gameplay_batch_texture(&"pneumococcus"), "Zugeschnittene Batch-Texturen werden wiederverwendet")
 	_assert_true(swarm == VisualAssetCatalog.gameplay_batch_texture(&"bacterial_swarm"), "Die zusammengesetzte Bakterienmasse wird pro Prozess nur einmal erzeugt")
-	_assert_true(VisualAssetCatalog.has_gameplay_visual(&"pneumococcus") and VisualAssetCatalog.has_gameplay_visual(&"analysis_pickup"), "Der Katalog erkennt explizit registrierte Gameplay-Grafiken")
+	_assert_true(case_one_event == VisualAssetCatalog.gameplay_sprite(&"case_one_event_monster"), "Die Nutzerzeichnung wird über den zentralen Texturcache wiederverwendet")
+	_assert_true(VisualAssetCatalog.has_gameplay_visual(&"pneumococcus") and VisualAssetCatalog.has_gameplay_visual(&"analysis_pickup") and VisualAssetCatalog.has_gameplay_visual(&"case_one_event_monster"), "Der Katalog erkennt explizit registrierte Gameplay-Grafiken")
+	if case_one_event != null:
+		var event_image := case_one_event.get_image()
+		_assert_true(event_image != null and not event_image.is_empty(), "Die Eventmonster-PNG liefert importierbare Pixeldaten")
+		if event_image != null and not event_image.is_empty():
+			var maximum := event_image.get_size() - Vector2i.ONE
+			_assert_true(
+				event_image.get_pixel(0, 0).a == 0.0
+				and event_image.get_pixel(maximum.x, 0).a == 0.0
+				and event_image.get_pixel(0, maximum.y).a == 0.0
+				and event_image.get_pixel(maximum.x, maximum.y).a == 0.0,
+				"Alle vier Spriteränder besitzen echte Transparenz"
+			)
 	_assert_true(not VisualAssetCatalog.has_gameplay_visual(&"missing_visual") and not VisualAssetCatalog.has_gameplay_visual(&""), "Unbekannte und leere Grafik-IDs gelten nicht als registriert")
 	_assert_true(VisualAssetCatalog.gameplay_sprite(&"missing_visual") == null, "Unbekannte Gameplay-IDs fallen nicht auf das Proben-Symbol zurück")
 	_assert_true(VisualAssetCatalog.gameplay_batch_texture(&"") == null, "Eine leere Batch-ID erzeugt keine falsche Textur")

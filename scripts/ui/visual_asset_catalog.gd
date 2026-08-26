@@ -32,6 +32,10 @@ const GAMEPLAY_INTERFACE_VISUALS := {
 	&"bacterial_swarm": true,
 }
 
+const DIRECT_GAMEPLAY_VISUAL_PATHS := {
+	&"case_one_event_monster": "res://assets/art/event_monsters/case_one_event_monster.png",
+}
+
 const CAMPUS_TILE_PATHS := {
 	&"grass": SKETCH_TOWN_ROOT + "grass_center_S.png",
 	&"path_n": SKETCH_TOWN_ROOT + "grass_path_N.png",
@@ -121,12 +125,19 @@ static func gameplay_sprite(id: StringName) -> Texture2D:
 		return doctor_frame(Vector2.DOWN, 0, false)
 	if id == &"bacterial_swarm":
 		return _bacterial_swarm_texture()
+	if DIRECT_GAMEPLAY_VISUAL_PATHS.has(id):
+		return _normalized_texture(String(DIRECT_GAMEPLAY_VISUAL_PATHS[id]), true)
 	if GERM_REGIONS.has(id):
 		return _cropped_texture_region(GERMS_SHEET_PATH, GERM_REGIONS[id], true)
 	return _normalized_texture(ANALYSIS_SAMPLE_PATH, true)
 
 static func has_gameplay_visual(id: StringName) -> bool:
-	return not id.is_empty() and (id == &"doctor" or GERM_REGIONS.has(id) or GAMEPLAY_INTERFACE_VISUALS.has(id))
+	return not id.is_empty() and (
+		id == &"doctor"
+		or GERM_REGIONS.has(id)
+		or GAMEPLAY_INTERFACE_VISUALS.has(id)
+		or DIRECT_GAMEPLAY_VISUAL_PATHS.has(id)
+	)
 
 static func doctor_frame(direction: Vector2, frame: int, moving: bool = true) -> Texture2D:
 	var row := _doctor_direction_row(direction)
@@ -142,6 +153,8 @@ static func gameplay_batch_texture(id: StringName) -> Texture2D:
 		return null
 	if id == &"bacterial_swarm":
 		return _bacterial_swarm_texture()
+	if DIRECT_GAMEPLAY_VISUAL_PATHS.has(id):
+		return _normalized_texture(String(DIRECT_GAMEPLAY_VISUAL_PATHS[id]), true)
 	if GERM_REGIONS.has(id):
 		return _cropped_texture_region(GERMS_SHEET_PATH, GERM_REGIONS[id], true)
 	if id == &"doctor":

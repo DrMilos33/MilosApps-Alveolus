@@ -97,7 +97,17 @@ static func default_for_case_order(case_order: int) -> CasePressurePlan:
 				PackedFloat32Array([60.0, 120.0, 180.0]),
 				PackedFloat32Array(),
 				1
-			).configure_target_combat(66.0 / 42.0, 1.875, 1.5, 1.95)
+			).configure_target_combat(
+				66.0 / 42.0,
+				1.875,
+				1.5,
+				1.95
+			).configure_target_presentation(
+				&"case_one_event_monster",
+				1.0,
+				0,
+				1.0
+			)
 		2:
 			return create(
 				PackedFloat32Array([25.0, 60.0, 95.0, 130.0]),

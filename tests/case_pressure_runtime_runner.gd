@@ -253,6 +253,12 @@ func _test_case_one_event_target_profile() -> void:
 		var target := game.enemy_world.resolve(handle) as InfectionEnemy
 		_true(is_instance_valid(target), "Der Fall-1-Eventherd besitzt einen gültigen Handle")
 		if is_instance_valid(target):
+			_equal(target.definition.id, &"minor_focus", "Der Fall-1-Eventherd bewahrt seine stabile Gameplay-ID")
+			_equal(target.definition.visual_id, &"infection_focus", "Normale kleine Herde behalten ihr bisheriges Katalogvisual")
+			_equal(target.resolved_visual_id(), &"case_one_event_monster", "Nur der Fall-1-Eventherd löst auf die Nutzerzeichnung auf")
+			_true(target.visual_texture != null, "Das neue Eventmonster ist als Gameplay-Textur geladen")
+			_near(target.runtime_visual_scale, 1.0, "Das neue Sprite bewahrt den bisherigen Präsentationsfaktor des Eventherds")
+			_near(target.visual_extent(), target.definition.radius * 2.35, "Das neue Sprite bewahrt die bisherige sichtbare Größe des kleinen Eventherds")
 			_near(target.max_health, 135.0, "Der Fall-1-Eventherd besitzt 25 Prozent weniger Leben")
 			_near(
 				target.definition.speed * target.speed_multiplier,

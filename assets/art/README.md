@@ -1,5 +1,13 @@
 # First-party art
 
+## Fall 1 event monster
+
+- File: `event_monsters/case_one_event_monster.png`
+- Purpose: presentation-only sprite for the mobile Fall 1 event monster
+- Original artwork: hand-drawn and supplied directly by the user on 2026-08-26
+- Processing: the built-in OpenAI image-editing tool removed the white canvas, stray border marks and edge matte, preserving the creature design and delivering genuine transparent RGBA pixels
+- Runtime scope: visual ID `case_one_event_monster`; the stable gameplay identity remains `minor_focus`, so ordinary small infection foci and later cases retain their existing art
+
 ## Bright visual restart (legacy development history)
 
 - Directory: `visual_restart/`

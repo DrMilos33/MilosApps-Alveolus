@@ -37,6 +37,7 @@ func _test_default_schedules() -> void:
 	_near(fall_one.target_projectile_width_multiplier, 1.5, "Fall 1 verbreitert nur die Eventherdprojektile um 50 Prozent")
 	_near(fall_one.target_projectile_speed_multiplier, 1.95, "Fall 1 beschleunigt die bereits schnellen Eventherdprojektile nochmals um 30 Prozent")
 	_near(fall_one.defense_burst_shooting_lock_seconds, 10.0, "Stoß unterbindet den Fall-1-Eventbeschuss zehn Sekunden lang")
+	_equal(fall_one.target_visual_id, &"case_one_event_monster", "Fall 1 verwendet exklusiv das freigestellte Nutzer-Eventmonster")
 
 	var fall_two := CasePressurePlanScript.default_for_case_order(2)
 	_equal(
@@ -63,6 +64,7 @@ func _test_default_schedules() -> void:
 	)
 	_equal(fall_three.projectile_gate_times, PackedFloat32Array(), "Fall 3 plant keine Projektiltore")
 	_equal(fall_three.max_active_targets, 1, "Fall 3 erlaubt höchstens einen aktiven Zielherd")
+	_equal(fall_three.target_visual_id, &"", "Spätere Fälle übernehmen das Fall-1-Eventmonster nicht")
 
 	var fall_four := CasePressurePlanScript.default_for_case_order(4)
 	_equal(
