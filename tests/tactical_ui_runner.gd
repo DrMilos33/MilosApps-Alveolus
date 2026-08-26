@@ -80,7 +80,11 @@ func _run() -> void:
 	var pointer_press := InputEventMouseButton.new()
 	pointer_press.button_index = MOUSE_BUTTON_LEFT
 	pointer_press.pressed = true
+	var pointer_release := InputEventMouseButton.new()
+	pointer_release.button_index = MOUSE_BUTTON_LEFT
+	pointer_release.pressed = false
 	hud._input(pointer_press)
+	hud._input(pointer_release)
 	await process_frame
 	await process_frame
 	_check(get_root().gui_get_focus_owner() == null, "Ein Pointer-Klick aktiviert keinen automatischen Navigationsfokus")
@@ -93,6 +97,7 @@ func _run() -> void:
 	var tab_focus := get_root().gui_get_focus_owner()
 	_check(tab_focus != null and hud.preparation_overlay.is_ancestor_of(tab_focus), "Tab aktiviert Fokus innerhalb der sichtbaren Vorbereitung")
 	hud._input(pointer_press)
+	hud._input(pointer_release)
 	await process_frame
 	await process_frame
 	_check(get_root().gui_get_focus_owner() == null, "Ein anschließender Pointer-Klick entfernt den Navigationsfokus wieder")
@@ -105,6 +110,7 @@ func _run() -> void:
 	var directional_focus := get_root().gui_get_focus_owner()
 	_check(directional_focus != null and hud.preparation_overlay.is_ancestor_of(directional_focus), "Eine Richtungseingabe aktiviert ebenfalls Fokus innerhalb der sichtbaren Vorbereitung")
 	hud._input(pointer_press)
+	hud._input(pointer_release)
 	await process_frame
 	await process_frame
 
@@ -121,6 +127,9 @@ func _run() -> void:
 	outside_text_press.pressed = true
 	outside_text_press.position = Vector2(1270.0, 710.0)
 	hud._input(outside_text_press)
+	var outside_text_release := outside_text_press.duplicate() as InputEventMouseButton
+	outside_text_release.pressed = false
+	hud._input(outside_text_release)
 	await process_frame
 	await process_frame
 	_check(get_root().gui_get_focus_owner() == null, "Ein Pointer-Klick außerhalb der Lexikonsuche entfernt auch deren Textfokus")
@@ -130,6 +139,9 @@ func _run() -> void:
 	inside_text_press.pressed = true
 	inside_text_press.position = lexicon_filter.get_global_rect().get_center()
 	hud._input(inside_text_press)
+	var inside_text_release := inside_text_press.duplicate() as InputEventMouseButton
+	inside_text_release.pressed = false
+	hud._input(inside_text_release)
 	await process_frame
 	await process_frame
 	_check(get_root().gui_get_focus_owner() == lexicon_filter, "Ein Pointer-Klick in die Lexikonsuche behält den benötigten Texteingabefokus")
@@ -143,6 +155,7 @@ func _run() -> void:
 	await process_frame
 	_check(hud._active_navigation_scope() == hud.pause_overlay, "Charakterwerte verwenden den echten Pause-Overlay als Navigationsbereich")
 	hud._input(outside_text_press)
+	hud._input(outside_text_release)
 	await process_frame
 	await process_frame
 	hud._input(directional_navigation)

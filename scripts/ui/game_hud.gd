@@ -544,11 +544,15 @@ func _input(event: InputEvent) -> void:
 	if _is_intentional_navigation_event(event) and _active_navigation_scope() != null:
 		navigation_focus_active = true
 		_activate_navigation_focus.call_deferred()
-	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-		var pointer_position := (event as InputEventMouseButton).position
-		navigation_focus_active = false
-		_release_pointer_focus_for_pointer.call_deferred(pointer_position)
-		_release_pointer_focus_after_frame(pointer_position)
+	elif event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT:
+			var pointer_position := mouse_event.position
+			navigation_focus_active = false
+			if not mouse_event.pressed:
+				# BaseButton must keep its focus through the complete press/release
+				# cycle. Clear mouse focus after GUI dispatch has emitted `pressed`.
+				_release_pointer_focus_for_pointer.call_deferred(pointer_position)
 	if settings_overlay != null and settings_overlay.is_visible_in_tree() and settings_screen != null and settings_screen.is_binding_conflict_open():
 		var cancel_conflict: bool = (event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE) \
 			or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_B)
@@ -4268,13 +4272,6 @@ func _release_pointer_focus_for_pointer(pointer_position: Vector2) -> void:
 		return
 	focus_owner.release_focus()
 
-
-func _release_pointer_focus_after_frame(pointer_position: Vector2) -> void:
-	if not is_inside_tree():
-		return
-	await get_tree().process_frame
-	if not navigation_focus_active:
-		_release_pointer_focus_for_pointer(pointer_position)
 
 func _configure_focus_cycle(scope: Control) -> Array[Control]:
 	if scope == null or not scope.is_visible_in_tree():

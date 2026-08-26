@@ -10,6 +10,7 @@ func _init() -> void:
 
 
 func _run() -> void:
+	root.size = Vector2i(1280, 720)
 	_prepare_actions()
 	var sound := UISoundService.new()
 	root.add_child(sound)
@@ -23,6 +24,7 @@ func _run() -> void:
 
 	_test_prompt_icons_and_text_fallback(hud, glyphs)
 	_test_dual_keyboard_capture_and_conflict_popup(hud)
+	await _test_pointer_button_activation(hud)
 	_test_live_test_slider_identity(hud)
 	_test_visible_settings_and_reduced_motion(hud)
 	_test_restart_confirmation_setting(hud)
@@ -109,6 +111,44 @@ func _test_dual_keyboard_capture_and_conflict_popup(hud: GameHUD) -> void:
 	hud.show_running_hud()
 	_true(not hud.is_binding_interaction_active() and hud.pending_binding_action == &"", "Verlassen der Einstellungen verwirft eine unvollständige Erfassung vollständig")
 	hud.show_settings(false)
+
+
+func _test_pointer_button_activation(hud: GameHUD) -> void:
+	hud.show_settings(false)
+	await process_frame
+	await process_frame
+	var back := hud.settings_screen.control_for_setting(&"back") as Button
+	var activations: Array[StringName] = []
+	var listener := func() -> void: activations.append(&"back")
+	hud.back_requested.connect(listener)
+	await _desktop_pointer_click(back)
+	_equal(activations, [&"back"], "Ein normal gehaltener Desktopklick aktiviert den Settings-Zurück-Button exakt einmal")
+	_true(root.gui_get_focus_owner() == null, "Nach dem Desktopklick bleibt keine gelbe Tastaturfokusmarkierung zurück")
+	hud.back_requested.disconnect(listener)
+
+
+func _desktop_pointer_click(control: Control) -> void:
+	var position := control.get_global_rect().get_center()
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.button_mask = MOUSE_BUTTON_MASK_LEFT
+	down.pressed = true
+	down.position = position
+	down.global_position = position
+	Input.parse_input_event(down)
+	# Human clicks routinely span frames. Regressions that clear a freshly
+	# pressed button before release are invisible to same-frame click helpers.
+	await process_frame
+	await process_frame
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.button_mask = 0
+	up.pressed = false
+	up.position = position
+	up.global_position = position
+	Input.parse_input_event(up)
+	await process_frame
+	await process_frame
 
 
 func _test_visible_settings_and_reduced_motion(hud: GameHUD) -> void:
