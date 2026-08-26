@@ -103,7 +103,7 @@ func _test_anchor_case_boss_contract() -> void:
 	_near(case_two.boss_projectile_turn_time_variation, 0.10, "Die Kurvenvariation gehört zum Fall-2-Projektil")
 	_near(case_three.boss_projectile_speed_multiplier, 1.26, "Fall-3-Rautenprojektile tragen den um 30 Prozent reduzierten Tempofaktor")
 	_near(case_three.boss_wave_amplitude, 136.0, "Fall-3-Rautenprojektile tragen die 60 Prozent breitere Bahn")
-	_near(case_three.boss_wave_length, 500.0, "Fall-3-Rautenprojektile treffen sich erst nach 250 Weltpunkten")
+	_near(case_three.boss_wave_length, 550.0, "Fall-3-Rautenprojektile treffen sich erst nach 275 Weltpunkten")
 
 
 func _test_case_one_normal_and_case_two_turn_variation() -> void:
@@ -338,11 +338,11 @@ func _test_case_three_runtime_projectile_contract() -> void:
 			for projectile in [first, second]:
 				_near(projectile.speed, 267.75, "Fall-3-Projektiltempo ist relativ um 30 Prozent reduziert")
 				_near(projectile.hostile_wave_amplitude, 136.0, "Die 60 Prozent breitere Fall-3-Auslenkung bleibt erhalten")
-				_near(projectile.hostile_wave_length, 500.0, "Die Fall-3-Rautenlänge steigt auf 500")
-			var meet_seconds := 250.0 / first.speed
+				_near(projectile.hostile_wave_length, 550.0, "Die Fall-3-Rautenlänge steigt auf 550")
+			var meet_seconds := 275.0 / first.speed
 			first.step_fixed(meet_seconds)
 			second.step_fixed(meet_seconds)
-			_near(first.global_position.distance_to(second.global_position), 0.0, "Die beiden Fall-3-Projektile treffen sich nach 250 Vorwärts-Weltpunkten wieder")
+			_near(first.global_position.distance_to(second.global_position), 0.0, "Die beiden Fall-3-Projektile treffen sich nach 275 Vorwärts-Weltpunkten wieder")
 	game.queue_free()
 	await process_frame
 

@@ -335,9 +335,9 @@ unverändert.
 
 Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile auf gespiegelten
 Bahnen. In Fall 3 fliegen sie mit Faktor 1,26 beziehungsweise 267,75 Tempo,
-verwenden 136 Weltpunkte Amplitude und eine Wellenlänge von 500. Damit bleibt
+verwenden 136 Weltpunkte Amplitude und eine Wellenlänge von 550. Damit bleibt
 das vorherige 85er-Muster um 60 Prozent verbreitert und beide Geschosse treffen
-sich erst nach 250 statt 200 Vorwärts-Weltpunkten wieder. Der Fall-4-Anker behält
+sich erst nach 275 statt 250 Vorwärts-Weltpunkten wieder. Der Fall-4-Anker behält
 212,5 Tempo, 115 Weltpunkte Amplitude und Wellenlänge 180. Bei 70 und 40 Prozent Leben
 erscheinen jeweils vier schießende Bakterien. Nach Phase zwei folgen alle 20
 Sekunden weitere vier; ihre Projektile fliegen mit 322,5 Tempo. Der Fall-1-

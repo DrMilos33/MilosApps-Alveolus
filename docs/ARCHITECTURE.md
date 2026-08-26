@@ -586,7 +586,7 @@ pool. Boss phase adds preserve their shooter role through deferred spawn
 metadata; the first boss starts its repeating four-add schedule only after its
 second phase. Projectile geometry is data-driven: the Fall-3 boss emits its two
 phased diamond shots at 267.75 world units per second with 136 world units of
-authored amplitude and a 500-unit wave length, so both shots reunite every 250
+authored amplitude and a 550-unit wave length, so both shots reunite every 275
 forward world units. The Fall-4 anchor retains its independent 212.5/115/180
 contract; ranged phase adds use 322.5. The intro and Fall-1 bosses emit one
 ordinary hostile projectile per attack interval. The Fall-1 boss configures a
