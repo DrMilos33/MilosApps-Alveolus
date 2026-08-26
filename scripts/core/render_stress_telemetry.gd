@@ -18,14 +18,16 @@ const MAX_REPORTED_ACCEPTANCE_VIOLATIONS := 32
 const EXPECTED_ENTITIES := {
 	"enemies": 600,
 	"pickups": 360,
-	"projectiles": 512,
+	# The regular lane leaves 48 of 512 runtime slots available for critical
+	# case-pressure projectiles, including in the explicit stress fixture.
+	"projectiles": 464,
 	"feedback": 80,
 }
 const EXPECTED_RENDER_VISUALS := {
 	"crowd_enemy_visuals": 600,
 	"crowd_pickup_visuals": 360,
 	"crowd_visuals": 960,
-	"projectile_visuals": 512,
+	"projectile_visuals": 464,
 	"feedback_visuals": 80,
 }
 

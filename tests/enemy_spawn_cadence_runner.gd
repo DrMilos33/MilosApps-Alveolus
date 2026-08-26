@@ -230,10 +230,24 @@ func _test_game_integration() -> void:
 	game.state.elapsed = game.config.run_duration_seconds
 	var base_definition := game.enemy_definitions[&"pneumococcus"] as EnemyDefinition
 	var base_health: float = base_definition.max_health
+	var cached_weight_before_spawn: int = game._ambient_melee_weight()
+	_false(game._ambient_melee_weight_dirty, "Die erste Bestandsabfrage füllt den ereignisgesteuerten Nahkampf-Cache")
 	var implicit: InfectionEnemy = game._spawn_enemy(&"pneumococcus", Vector2(420.0, 0.0), -1.0, false, false)
 	_true(implicit != null, "Der fokussierte Lauf erzeugt einen impliziten späten Gegner")
 	if implicit != null:
 		_near(implicit.max_health, base_health * 1.05, "Ein impliziter Spawn verwendet spät weiterhin nur das Fallbasisleben")
+		_true(game._ambient_melee_weight_dirty, "Eine Registry-Anmeldung invalidiert den Nahkampf-Cache")
+		_equal(game._ambient_melee_weight(), cached_weight_before_spawn, "Der Cache zählt einen noch materialisierenden Körper nicht vorzeitig")
+		implicit.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+		_true(game._ambient_melee_weight_dirty, "Die Materialisierung invalidiert den Nahkampf-Cache")
+		_equal(game._ambient_melee_weight(), cached_weight_before_spawn + 1, "Der erneuerte Cache zählt den neuen Nahkämpfer exakt einmal")
+		var implicit_handle: int = game.enemy_world.handle_for(implicit)
+		_true(game._register_enemy_attack_role(implicit_handle, EnemyAttackDirector.Role.PHASE_ADD), "Eine Laufzeitrolle wird über die cache-sichere Fassade registriert")
+		_true(game._ambient_melee_weight_dirty, "Eine neue Fernkampfrolle invalidiert den Nahkampf-Cache")
+		_equal(game._ambient_melee_weight(), cached_weight_before_spawn, "Der erneuerte Cache schließt den Fernkämpfer aus")
+		_true(game._release_enemy_attack_role(implicit_handle), "Die Laufzeitrolle wird über die cache-sichere Fassade freigegeben")
+		_true(game._ambient_melee_weight_dirty, "Die Rollenfreigabe invalidiert den Nahkampf-Cache")
+		_equal(game._ambient_melee_weight(), cached_weight_before_spawn + 1, "Der erneuerte Cache nimmt den wieder normalen Nahkämpfer auf")
 	var count_before_adds: int = game.enemies.size()
 	game._apply_minions_requested(Vector2(-420.0, 0.0), 1)
 	_true(game.enemies.size() == count_before_adds + 1, "Der fokussierte Lauf erzeugt genau einen geskripteten Add")
@@ -244,6 +258,12 @@ func _test_game_integration() -> void:
 	_true(explicit != null, "Der fokussierte Lauf erzeugt einen explizit skalierten Gegner")
 	if explicit != null:
 		_near(explicit.max_health, base_health * 1.7, "Ein ausdrücklicher Spawnfaktor behält Vorrang vor dem konstanten Fallbasisleben")
+		explicit.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+		var cached_weight_before_defeat: int = game._ambient_melee_weight()
+		explicit.set_incoming_player_damage_multiplier(1.0)
+		explicit.take_damage(explicit.max_health + 1.0)
+		_true(game._ambient_melee_weight_dirty, "Eine Registry-Freigabe invalidiert den Nahkampf-Cache")
+		_equal(game._ambient_melee_weight(), cached_weight_before_defeat - 1, "Der erneuerte Cache entfernt den besiegten Nahkämpfer exakt einmal")
 	# Informational only: headless wall time is not a performance acceptance gate.
 	game.queue_free()
 	await process_frame

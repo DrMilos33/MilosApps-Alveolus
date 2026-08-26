@@ -197,6 +197,8 @@ var treatment_beam_return_visualized: Dictionary = {}
 
 var standard_wave_spawn_sectors := PackedInt32Array()
 var standard_wave_spawn_sector_cursor: int = 0
+var _ambient_melee_weight_cache: int = 0
+var _ambient_melee_weight_dirty: bool = true
 var offscreen_relocation_timer: float = OFFSCREEN_RELOCATION_INTERVAL
 var offscreen_relocation_move_timer: float = 0.0
 var offscreen_relocation_move_interval: float = OFFSCREEN_RELOCATION_INTERVAL
@@ -348,6 +350,8 @@ func _ready() -> void:
 	run_session.register_system(self, RunSession.Phase.CLOCK)
 	simulation_root.add_child(run_session)
 	enemy_world = EnemyWorld.new().configure_enemy_world(combat_capacity)
+	enemy_world.entity_registered.connect(_on_enemy_world_membership_changed)
+	enemy_world.entity_released.connect(_on_enemy_world_membership_changed)
 	projectile_world = ProjectileWorld.new().configure_projectile_world(combat_capacity)
 	pickup_world = PickupWorld.new().configure_pickup_world(combat_capacity)
 	enemy_attack_director = EnemyAttackDirector.new().configure(combat_capacity.max_enemies, enemy_world.resolve)
@@ -1811,6 +1815,14 @@ func start_run(run_context: RunContext = null) -> void:
 		stress_telemetry.begin()
 
 func _spawn_stress_projectiles() -> void:
+	# Normal cases use the bounded arena contract. The explicit render fixture
+	# instead keeps its fixed projectile load moving for arbitrarily long soak
+	# windows by wrapping only these diagnostic entities inside the same bounds.
+	# This topology is never installed in gameplay worlds or queries.
+	var stress_projectile_topology := ArenaTopology.new(
+		topology.bounds,
+		ArenaTopology.BoundaryMode.WRAP
+	)
 	var shots: Array[TreatmentShot] = []
 	for index in range(combat_capacity.max_projectile_states):
 		var angle := TAU * float(index) / float(combat_capacity.max_projectile_states)
@@ -1819,6 +1831,7 @@ func _spawn_stress_projectiles() -> void:
 	_on_treatment_shots_requested(shots)
 	for index in range(projectiles.size()):
 		var projectile := projectiles[index]
+		projectile.topology = stress_projectile_topology
 		projectile.lifetime = STRESS_RUN_SECONDS
 		projectile.speed = 520.0
 		projectile.direction = Vector2.from_angle(TAU * float(index) / float(maxi(projectiles.size(), 1)) + PI * 0.5)
@@ -2329,6 +2342,8 @@ func _regular_spawn_weight_cap() -> int:
 
 
 func _ambient_melee_weight() -> int:
+	if not _ambient_melee_weight_dirty:
+		return _ambient_melee_weight_cache
 	var weight := 0
 	for enemy in enemies:
 		if not is_instance_valid(enemy) or enemy.definition == null or not enemy.is_targetable():
@@ -2339,7 +2354,36 @@ func _ambient_melee_weight() -> int:
 		if enemy_attack_director != null and enemy_attack_director.role_for(handle) != EnemyAttackDirector.Role.NONE:
 			continue
 		weight += 2 if enemy.definition.id == &"bacterial_cluster" else 1
-	return weight
+	_ambient_melee_weight_cache = weight
+	_ambient_melee_weight_dirty = false
+	return _ambient_melee_weight_cache
+
+
+func _on_enemy_world_membership_changed(_enemy: Node, _handle: int) -> void:
+	# Roles are configured in the same spawn transaction before the next clock
+	# step. Deferring the scan until _ambient_melee_weight() therefore preserves
+	# its exact filters while eliminating unchanged full-roster scans.
+	_ambient_melee_weight_dirty = true
+
+
+func _register_enemy_attack_role(handle: int, role: int) -> bool:
+	if enemy_attack_director == null:
+		return false
+	var previous_role := enemy_attack_director.role_for(handle)
+	var registered := enemy_attack_director.register_enemy(handle, role)
+	if registered and previous_role != role:
+		_ambient_melee_weight_dirty = true
+	return registered
+
+
+func _release_enemy_attack_role(handle: int) -> bool:
+	if enemy_attack_director == null:
+		return false
+	var released := enemy_attack_director.release(handle)
+	if released:
+		_ambient_melee_weight_dirty = true
+	return released
+
 
 func _drain_deferred_spawns(maximum_per_tick: int) -> void:
 	var emitted := 0
@@ -3044,7 +3088,7 @@ func _spawn_enemy(
 		or bool(spawn_request.metadata.get("projectiles_enabled", true))
 	)
 	if enemy_attack_director != null and definition.id == &"minor_focus" and projectile_emission_enabled:
-		enemy_attack_director.register_enemy(world_handle, EnemyAttackDirector.Role.MINOR_FOCUS)
+		_register_enemy_attack_role(world_handle, EnemyAttackDirector.Role.MINOR_FOCUS)
 	_apply_enemy_spawn_metadata(enemy, spawn_request)
 	return enemy
 
@@ -3076,7 +3120,7 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 		var handle := enemy_world.handle_for(enemy)
 		if EntityHandle.is_valid(handle):
 			enemy_world.set_bulk_flow_allowed(handle, false)
-			enemy_attack_director.register_enemy(handle, EnemyAttackDirector.Role.PHASE_ADD)
+			_register_enemy_attack_role(handle, EnemyAttackDirector.Role.PHASE_ADD)
 
 func _spawn_boss() -> void:
 	if state == null or not state.active:
@@ -3145,7 +3189,7 @@ func _register_active_boss(enemy: InfectionEnemy) -> void:
 		and config.boss_reinforcement_count > 0
 	)
 	if enemy_attack_director != null and (config.boss_ranged_enabled or has_authored_reinforcements):
-		enemy_attack_director.register_enemy(handle, EnemyAttackDirector.Role.BOSS)
+		_register_enemy_attack_role(handle, EnemyAttackDirector.Role.BOSS)
 		var reinforcement_interval := config.boss_reinforcement_interval
 		var reinforcement_count := config.boss_reinforcement_count
 		var reinforcement_phase := config.boss_reinforcement_minimum_phase
@@ -3386,6 +3430,7 @@ func _on_boss_phase_changed(phase: int, enemy: InfectionEnemy) -> void:
 func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
 	if not is_instance_valid(enemy) or enemy.definition == null:
 		return
+	_ambient_melee_weight_dirty = true
 	if _is_practice_test():
 		return
 	if selected_level.is_tutorial:
@@ -3559,7 +3604,7 @@ func _on_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss: bo
 		pressure_reward_points = maxi(0, int(pressure_runtime.get(&"reward_points", 0)))
 		case_pressure_target_states.erase(handle)
 	if enemy_attack_director != null and EntityHandle.is_valid(handle):
-		enemy_attack_director.release(handle)
+		_release_enemy_attack_role(handle)
 	if crowd_renderer != null and is_instance_valid(enemy):
 		crowd_renderer.release_enemy(enemy, enemy.activation_generation)
 	if enemy_world != null and is_instance_valid(enemy):
@@ -4449,7 +4494,7 @@ func _step_case_pressure_targets(delta: float) -> void:
 				var heading := topology.shortest_delta(enemy.global_position, avatar.global_position).normalized()
 				runtime[&"locked_heading"] = heading if not heading.is_zero_approx() else Vector2.RIGHT
 				if enemy_attack_director != null:
-					enemy_attack_director.release(handle)
+					_release_enemy_attack_role(handle)
 				if hud != null:
 					hud.show_alert("KLEINER HERD · PROJEKTILFÄCHER", AlveolusVisualTheme.CORAL, CASE_PRESSURE_WARNING_SECONDS)
 		elif phase == &"warning":
@@ -4516,7 +4561,7 @@ func _queue_case_pressure_target_expiration(handle: int, runtime_override: Dicti
 	case_pressure_target_states[handle] = runtime
 	case_pressure_target_expirations.append(handle)
 	if enemy_attack_director != null:
-		enemy_attack_director.release(handle)
+		_release_enemy_attack_role(handle)
 
 
 func _flush_case_pressure_target_expirations() -> void:
@@ -4529,7 +4574,7 @@ func _flush_case_pressure_target_expirations() -> void:
 		if not is_instance_valid(enemy) or not enemies.has(enemy):
 			continue
 		if enemy_attack_director != null:
-			enemy_attack_director.release(handle)
+			_release_enemy_attack_role(handle)
 		if crowd_renderer != null:
 			crowd_renderer.release_enemy(enemy, enemy.activation_generation)
 		if enemy_world != null:

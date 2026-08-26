@@ -168,6 +168,51 @@ an improvement relative to a broken baseline is not a pass. Headless CPU
 figures remain diagnostic until a visible native 1280×720 run confirms the
 rendered result.
 
+### Local architecture/performance audit — 2026-08-26
+
+The exact local baseline was `cf45f9165d9321df194628aff19332ed601240d5`.
+Both baseline and optimized measurements used Godot 4.7.1, the same Windows
+machine and the same deterministic fixture. Headless results are CPU
+diagnostics; lower numbers do not by themselves prove GPU headroom.
+
+| Load | Metric | Baseline | Optimized | Change |
+| --- | ---: | ---: | ---: | ---: |
+| 220 enemies | total average | 18.550 ms | 15.772 ms | -15.0% |
+| 220 enemies | total p95 | 23.383 ms | 18.839 ms | -19.4% |
+| 220 enemies | total p99 | 25.067 ms | 19.490 ms | -22.2% |
+| 220 enemies | total maximum | 29.677 ms | 20.820 ms | -29.8% |
+| 220 enemies | `enemy_world` p95 | 17.811 ms | 13.902 ms | -21.9% |
+| 220 enemies | `clock_spawn` average | 0.881 ms | 0.107 ms | -87.8% |
+| 600 enemies | total average | 41.559 ms | 34.420 ms | -17.2% |
+| 600 enemies | total p95 | 56.736 ms | 42.719 ms | -24.7% |
+| 600 enemies | total p99 | 59.382 ms | 44.785 ms | -24.6% |
+| 600 enemies | total maximum | 62.613 ms | 47.005 ms | -24.9% |
+| 600 enemies | `enemy_world` p95 | 48.893 ms | 36.832 ms | -24.7% |
+| 600 enemies | `clock_spawn` average | 2.352 ms | 0.219 ms | -90.7% |
+
+The optimized 600-enemy quick soak reused 200/200 churned enemies, retained
+zero node growth and grew Godot's static-memory endpoint by 0.2054 percent
+after warm-up. Its p95 was 38.470 ms, so the strict frame budget remains red despite the bounded
+memory/lifecycle result.
+
+The visible 1280×720 diagnostic on an AMD Radeon RX 7900 XT held all 23 sampled
+load checkpoints at 600 enemies, 360 pickup stacks, 464 regular projectiles and
+80 feedback effects, with 26 draw calls and no post-warm-up node/object growth.
+It measured p95 143.636 ms and ended at approximately 35.7 ms reported physics
+time versus 2.9 ms process time. This is consistent with fixed-step CPU catch-up
+as the dominant current limit; the two monitor values are endpoint samples and
+not a direct GPU-time measurement. The current diagnostic covers only the 464
+regular slots, so the separate 512-projectile total-capacity render gate also
+remains open. The 600-enemy gate and the 220-enemy p95 gate are both red.
+
+Warm native process samples using `--quit-after 1` took 2.81–2.83 seconds and
+include process creation and shutdown. The project still lacks a dedicated
+cold-start/first-presented-frame harness, so no stronger loading-time claim is
+made from editor import or parser duration.
+
+The exact command output and machine-readable JSON lines are retained locally
+under `.codex-temp/reports/architecture-performance-audit-20260826/`.
+
 ## Render and browser telemetry
 
 The explicit stress path owns a non-gameplay observer named
@@ -224,5 +269,13 @@ p95 17.9 ms, p99 20.8 ms, max 50.9 ms and 87.44 effective FPS, with no stall
 over 100 ms. The correlated in-game trace measured p95 17.4 ms and p99 19.7
 ms. Cosmetic quality stayed on `FULL` for the entire run. The complete
 machine-readable result is stored in
-`.codex-temp/reports/browser-soak/browser-soak-latest.json` and the immutable
-`.codex-temp/reports/browser-soak/browser-soak-2026-08-16-final.json`.
+`.codex-temp/test-reports/browser-soak-latest.json` and the immutable
+`.codex-temp/test-reports/browser-soak-2026-08-16-final.json`.
+
+Current stress fixtures request the full 512-state projectile capacity but
+admit the regular-lane contract of 464 moving projectiles, preserving 48 slots
+for critical case pressure. Diagnostic projectiles wrap only inside the
+explicit stress fixture so native and browser soak windows keep that exact
+load; normal gameplay remains bounded. This validates the regular lane, not a
+simultaneous 464-regular-plus-48-critical render load. A future total-capacity
+gate needs separate regular/critical entity and renderer counters.

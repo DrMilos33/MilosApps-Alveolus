@@ -124,11 +124,14 @@ var _bulk_root_effective_speeds := PackedFloat32Array()
 var _bulk_component_effective_speeds := PackedFloat32Array()
 var _bulk_neighbor_counts := PackedByteArray()
 var _bulk_neighbor_handles := PackedInt64Array()
-var _bulk_neighbor_distances := PackedFloat32Array()
 var _bulk_build_neighbor_counts := PackedByteArray()
 var _bulk_build_neighbor_handles := PackedInt64Array()
 var _bulk_build_neighbor_distances := PackedFloat32Array()
 var _bulk_ordered_slots := PackedInt32Array()
+var _bulk_order_distances := PackedFloat64Array()
+var _bulk_component_root_slots := PackedInt32Array()
+var _bulk_sort_slots: Array[int] = []
+var _bulk_slot_precedes_callable: Callable
 var _bulk_refresh_handles := PackedInt64Array()
 var _bulk_snapshot_seconds: float = 0.0
 var _bulk_next_lease_epoch: int = 1
@@ -411,8 +414,6 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_bulk_neighbor_counts.fill(0)
 	_bulk_neighbor_handles.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
 	_bulk_neighbor_handles.fill(EntityHandle.INVALID)
-	_bulk_neighbor_distances.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
-	_bulk_neighbor_distances.fill(INF)
 	_bulk_build_neighbor_counts.resize(combat_capacity.max_enemies)
 	_bulk_build_neighbor_counts.fill(0)
 	_bulk_build_neighbor_handles.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
@@ -420,6 +421,11 @@ func configure_enemy_world(runtime_capacity: CombatCapacity = null) -> EnemyWorl
 	_bulk_build_neighbor_distances.resize(combat_capacity.max_enemies * MAX_BULK_NEIGHBORS)
 	_bulk_build_neighbor_distances.fill(INF)
 	_bulk_ordered_slots.clear()
+	_bulk_order_distances.resize(combat_capacity.max_enemies)
+	_bulk_order_distances.fill(INF)
+	_bulk_component_root_slots.clear()
+	_bulk_sort_slots.clear()
+	_bulk_slot_precedes_callable = Callable(self, "_bulk_slot_precedes")
 	_bulk_refresh_handles.clear()
 	_typed_runtime_only = true
 	regular_count = 0
@@ -1599,7 +1605,7 @@ func _continue_bulk_component_refresh() -> void:
 func _finalize_bulk_component_refresh() -> void:
 	_bulk_component_roots.fill(-1)
 	_bulk_component_effective_speeds.fill(0.0)
-	var component_roots := PackedInt32Array()
+	_bulk_component_root_slots.clear()
 	for handle_value in _bulk_refresh_handles:
 		var handle := int(handle_value)
 		if not is_active(handle):
@@ -1611,7 +1617,7 @@ func _finalize_bulk_component_refresh() -> void:
 		_bulk_component_roots[slot] = root
 		var weight := _bulk_enemy_weight(_typed_enemies[slot])
 		if _bulk_root_weights[root] == 0:
-			component_roots.append(root)
+			_bulk_component_root_slots.append(root)
 		_bulk_root_weights[root] += weight
 		if _direct_collision_queued[slot] != 0:
 			_bulk_root_queued_weights[root] += weight
@@ -1645,7 +1651,7 @@ func _finalize_bulk_component_refresh() -> void:
 			if _bulk_root_lease_epochs[root] == 0 or lease_epoch < int(_bulk_root_lease_epochs[root]):
 				_bulk_root_lease_epochs[root] = lease_epoch
 				_bulk_root_side_signs[root] = _bulk_side_signs[slot]
-	for root_value in component_roots:
+	for root_value in _bulk_component_root_slots:
 		var root := int(root_value)
 		var weight := int(_bulk_root_weights[root])
 		var queued_ratio := float(_bulk_root_queued_weights[root]) / float(weight) if weight > 0 else 0.0
@@ -1696,20 +1702,23 @@ func _finalize_bulk_component_refresh() -> void:
 	var previous_handles := _bulk_neighbor_handles
 	_bulk_neighbor_handles = _bulk_build_neighbor_handles
 	_bulk_build_neighbor_handles = previous_handles
-	var previous_distances := _bulk_neighbor_distances
-	_bulk_neighbor_distances = _bulk_build_neighbor_distances
-	_bulk_build_neighbor_distances = previous_distances
-	var ordered_slots: Array[int] = []
+	_bulk_sort_slots.clear()
+	var can_cache_order_distances := _crowd_topology != null and is_instance_valid(_crowd_avatar)
 	for handle_value in _bulk_refresh_handles:
 		var handle := int(handle_value)
 		if not is_active(handle):
 			continue
 		var slot := EntityHandle.slot(handle)
 		if _bulk_eligible[slot] != 0:
-			ordered_slots.append(slot)
-	ordered_slots.sort_custom(Callable(self, "_bulk_slot_precedes"))
+			if can_cache_order_distances:
+				_bulk_order_distances[slot] = _crowd_topology.distance_squared(
+					_typed_enemies[slot].global_position,
+					_crowd_avatar.global_position
+				)
+			_bulk_sort_slots.append(slot)
+	_bulk_sort_slots.sort_custom(_bulk_slot_precedes_callable)
 	_bulk_ordered_slots.clear()
-	for slot in ordered_slots:
+	for slot in _bulk_sort_slots:
 		_bulk_ordered_slots.append(slot)
 	_bulk_refresh_in_progress = false
 	_bulk_refresh_cursor = 0
@@ -2017,14 +2026,8 @@ func _bulk_slot_precedes(first_slot: int, second_slot: int) -> bool:
 	var second_enemy := _typed_enemies[second_slot]
 	if first_enemy == null or second_enemy == null:
 		return first_slot < second_slot
-	var first_distance := _crowd_topology.distance_squared(
-		first_enemy.global_position,
-		_crowd_avatar.global_position
-	)
-	var second_distance := _crowd_topology.distance_squared(
-		second_enemy.global_position,
-		_crowd_avatar.global_position
-	)
+	var first_distance := float(_bulk_order_distances[first_slot])
+	var second_distance := float(_bulk_order_distances[second_slot])
 	if is_equal_approx(first_distance, second_distance):
 		return first_slot < second_slot
 	return first_distance < second_distance
@@ -2036,28 +2039,65 @@ func _bulk_project_cached_proposal(slot: int) -> Vector2:
 	var own_radius := float(_direct_collision_radii[slot])
 	var neighbor_count := mini(int(_bulk_neighbor_counts[slot]), MAX_BULK_NEIGHBORS)
 	var neighbor_offset := slot * MAX_BULK_NEIGHBORS
+	# Registry membership cannot change during this synchronous solve. The first
+	# projection pass validates generations; later passes and the endpoint guard
+	# reuse that exact result instead of resolving every cached handle again.
+	var valid_neighbor_mask := 0
 	if _crowd_profile_enabled:
 		_crowd_profile_counters[CrowdProfileCounter.BULK_PROJECTION_CANDIDATES] += neighbor_count
 	for _pass_index in range(BULK_PROJECTION_PASSES):
 		for neighbor_index in range(neighbor_count):
 			var other_handle := int(_bulk_neighbor_handles[neighbor_offset + neighbor_index])
 			var other_slot := EntityHandle.slot(other_handle)
-			if not _bulk_pair_is_current(other_handle, other_slot):
+			if _pass_index == 0:
+				if (
+					other_slot < 0
+					or other_slot >= _typed_enemies.size()
+					or _retiring[other_slot] != 0
+					or _generations[other_slot] != EntityHandle.generation(other_handle)
+					or _direct_collision_active[other_slot] == 0
+					or _flow_obstacle_bodies[other_slot] != 0
+				):
+					continue
+				var current_other := _typed_enemies[other_slot]
+				if current_other == null or current_other.definition == null or current_other.definition.is_boss:
+					continue
+				valid_neighbor_mask |= 1 << neighbor_index
+			elif (valid_neighbor_mask & (1 << neighbor_index)) == 0:
+				continue
+			var other_position := _typed_enemies[other_slot].global_position
+			var minimum_distance := (
+				own_radius
+				+ float(_direct_collision_radii[other_slot])
+				+ DIRECT_COLLISION_SKIN
+			)
+			var endpoint_offset := (
+				other_position - origin - resolved_delta
+				if _crowd_bounded
+				else _crowd_topology.shortest_delta(origin + resolved_delta, other_position)
+			)
+			# Most cached neighbors are inside the conservative snapshot lookahead
+			# but cannot touch this one-tick proposal. Keep that exact broad-phase
+			# rejection in the caller so GDScript does not enter the full sweep
+			# helper for every far neighbor on every fixed tick.
+			if endpoint_offset.length_squared() >= minimum_distance * minimum_distance:
 				continue
 			resolved_delta = _bulk_clip_delta_against_circle(
 				slot,
 				origin,
 				resolved_delta,
 				other_slot,
-				_typed_enemies[other_slot].global_position,
-				own_radius + float(_direct_collision_radii[other_slot]) + DIRECT_COLLISION_SKIN
+				other_position,
+				minimum_distance
 			)
 		resolved_delta = _bulk_limit_resolved_delta(slot, resolved_delta)
 	var flow_guard_count := mini(int(_flow_guard_counts[slot]), MAX_FLOW_OBSTACLE_GUARDS)
-	var needs_static_projection := (
-		_flow_motion_active[slot] != 0
-		or EntityHandle.is_valid(_flow_first_obstacle_on_delta(slot, origin, resolved_delta))
-	)
+	var needs_static_projection := false
+	if flow_guard_count > 0:
+		needs_static_projection = (
+			_flow_motion_active[slot] != 0
+			or EntityHandle.is_valid(_flow_first_obstacle_on_delta(slot, origin, resolved_delta))
+		)
 	if _flow_fail_open[slot] == 0 and flow_guard_count > 0 and needs_static_projection:
 		var flow_guard_offset := slot * MAX_FLOW_OBSTACLE_GUARDS
 		var static_projection_passes := 2 if flow_guard_count > 1 else 1
@@ -2099,20 +2139,29 @@ func _bulk_project_cached_proposal(slot: int) -> Vector2:
 	# Projection against a later neighbor can re-enter an earlier one. Waiting at
 	# the already valid origin is the deterministic no-retreat fallback.
 	for neighbor_index in range(neighbor_count):
+		if (valid_neighbor_mask & (1 << neighbor_index)) == 0:
+			continue
 		var other_handle := int(_bulk_neighbor_handles[neighbor_offset + neighbor_index])
 		var other_slot := EntityHandle.slot(other_handle)
-		if not _bulk_pair_is_current(other_handle, other_slot):
-			continue
 		var minimum_distance := (
 			own_radius
 			+ float(_direct_collision_radii[other_slot])
 			+ DIRECT_COLLISION_SKIN
 			- DIRECT_COLLISION_EPSILON
 		)
+		var other_position := _typed_enemies[other_slot].global_position
+		var endpoint := origin + resolved_delta
+		var endpoint_squared := (
+			endpoint.distance_squared_to(other_position)
+			if _crowd_bounded
+			else _crowd_topology.distance_squared(endpoint, other_position)
+		)
+		if endpoint_squared >= minimum_distance * minimum_distance:
+			continue
 		if _endpoint_creates_or_deepens_overlap(
 			origin,
-			origin + resolved_delta,
-			_typed_enemies[other_slot].global_position,
+			endpoint,
+			other_position,
 			minimum_distance
 		):
 			return Vector2.ZERO
@@ -2138,27 +2187,13 @@ func _endpoint_creates_or_deepens_overlap(
 	return endpoint_squared + DIRECT_COLLISION_EPSILON < origin_squared
 
 
-func _bulk_pair_is_current(handle: int, slot: int) -> bool:
-	if slot < 0 or slot >= _typed_enemies.size():
-		return false
-	if _retiring[slot] != 0 or _generations[slot] != EntityHandle.generation(handle):
-		return false
-	var enemy := _typed_enemies[slot]
-	return (
-		enemy != null
-		and enemy.definition != null
-		and not enemy.definition.is_boss
-		and _flow_obstacle_bodies[slot] == 0
-		and _direct_collision_active[slot] != 0
-	)
-
-
 func _bulk_limit_resolved_delta(slot: int, value: Vector2) -> Vector2:
 	var enemy := _typed_enemies[slot]
 	if enemy == null:
 		return Vector2.ZERO
 	var origin := _bulk_origins[slot]
-	var resolved_delta := value.limit_length(_bulk_proposals[slot].length())
+	var maximum_length := _bulk_proposals[slot].length()
+	var resolved_delta := value.limit_length(maximum_length)
 	if _crowd_bounded:
 		var bounded_position := _crowd_topology.resolve_position(
 			origin + resolved_delta,
@@ -2168,7 +2203,9 @@ func _bulk_limit_resolved_delta(slot: int, value: Vector2) -> Vector2:
 	var progress_target := _crowd_avatar.global_position
 	var progress_direction := _bulk_direct_directions[slot]
 	var flow_handle := int(_flow_lease_handles[slot])
-	var flow_obstacle := _active_flow_obstacle(flow_handle)
+	var flow_obstacle: InfectionEnemy = null
+	if _flow_motion_active[slot] != 0 and EntityHandle.is_valid(flow_handle):
+		flow_obstacle = _active_flow_obstacle(flow_handle)
 	if _flow_motion_active[slot] != 0 and flow_obstacle != null:
 		var side_sign := int(_flow_side_signs[slot])
 		if side_sign == 0:
@@ -2186,7 +2223,7 @@ func _bulk_limit_resolved_delta(slot: int, value: Vector2) -> Vector2:
 	var forward := resolved_delta.dot(progress_direction)
 	if forward < 0.0:
 		resolved_delta -= progress_direction * forward
-	resolved_delta = resolved_delta.limit_length(_bulk_proposals[slot].length())
+	resolved_delta = resolved_delta.limit_length(maximum_length)
 	var origin_distance := _crowd_topology.distance(origin, progress_target)
 	var resolved_distance := _crowd_topology.distance(origin + resolved_delta, progress_target)
 	if resolved_distance > origin_distance + DIRECT_COLLISION_EPSILON:
@@ -2311,7 +2348,6 @@ func _clear_bulk_slot(slot: int) -> void:
 	var neighbor_offset := slot * MAX_BULK_NEIGHBORS
 	for neighbor_index in range(MAX_BULK_NEIGHBORS):
 		_bulk_neighbor_handles[neighbor_offset + neighbor_index] = EntityHandle.INVALID
-		_bulk_neighbor_distances[neighbor_offset + neighbor_index] = INF
 		_bulk_build_neighbor_handles[neighbor_offset + neighbor_index] = EntityHandle.INVALID
 		_bulk_build_neighbor_distances[neighbor_offset + neighbor_index] = INF
 

@@ -1,5 +1,7 @@
 extends SceneTree
 
+const GameScript = preload("res://scripts/game.gd")
+
 var assertions := 0
 var failures := 0
 
@@ -21,6 +23,7 @@ func _run() -> void:
 	_assert_near(float(timing.get("p99", 0.0)), 10.0, "p99 is calculated from rendered frame deltas")
 	_assert_near(float(timing.get("max", 0.0)), 10.0, "maximum frame time is reported")
 	_assert_equal((report.get("entities", {}) as Dictionary).get("enemies"), 600, "Entity counts come from the game snapshot")
+	_assert_equal(RenderStressTelemetry.EXPECTED_ENTITIES.projectiles, GameScript.REGULAR_PROJECTILE_LIMIT, "Stress telemetry follows the regular projectile lane and preserves the critical reserve")
 	_assert_equal((report.get("quality", {}) as Dictionary).get("current"), "FULL", "Quality tier comes from the game snapshot")
 	var acceptance: Dictionary = report.get("acceptance", {})
 	_assert_true(bool(acceptance.get("valid", false)), "Exact flow, entity and renderer load remains valid across every telemetry snapshot")
@@ -33,7 +36,7 @@ func _run() -> void:
 	(stopped["flow"] as Dictionary)["running_active"] = false
 	_assert_true(not bool(RenderStressTelemetry.validate_acceptance_snapshot(stopped).get("valid", true)), "A stopped run is rejected even when raw entity counts still match")
 	var missing_projectile_visual := _snapshot()
-	(missing_projectile_visual["render"] as Dictionary)["projectile_visuals"] = 511
+	(missing_projectile_visual["render"] as Dictionary)["projectile_visuals"] = GameScript.REGULAR_PROJECTILE_LIMIT - 1
 	_assert_true(not bool(RenderStressTelemetry.validate_acceptance_snapshot(missing_projectile_visual).get("valid", true)), "A missing projectile visual rejects the stress load")
 	var wrong_enemy_load := _snapshot()
 	(wrong_enemy_load["entities"] as Dictionary)["enemies"] = 599
@@ -50,14 +53,14 @@ func _snapshot() -> Dictionary:
 	return {
 		"quality": "FULL",
 		"flow": {"state": int(GameFlowState.State.RUNNING), "running": true, "run_active": true, "running_active": true},
-		"entities": {"enemies": 600, "pickups": 360, "projectiles": 512, "feedback": 80},
+		"entities": {"enemies": 600, "pickups": 360, "projectiles": GameScript.REGULAR_PROJECTILE_LIMIT, "feedback": 80},
 		"pools": {"enemies": {"active": 600, "capacity": 640}},
 		"render": {
 			"draw_calls_in_frame": 7,
 			"crowd_enemy_visuals": 600,
 			"crowd_pickup_visuals": 360,
 			"crowd_visuals": 960,
-			"projectile_visuals": 512,
+			"projectile_visuals": GameScript.REGULAR_PROJECTILE_LIMIT,
 			"feedback_visuals": 80,
 		},
 	}

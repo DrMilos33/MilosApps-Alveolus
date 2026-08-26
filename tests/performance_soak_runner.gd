@@ -208,6 +208,10 @@ func _spawn_at_index(game: Node, index: int, epoch: int) -> InfectionEnemy:
 	return enemy
 
 func _spawn_moving_projectiles(game: Node, count: int) -> void:
+	var soak_projectile_topology := ArenaTopology.new(
+		game.topology.bounds,
+		ArenaTopology.BoundaryMode.WRAP
+	)
 	var shots: Array[TreatmentShot] = []
 	for index in range(count):
 		var origin := Vector2.from_angle(TAU * float(index) / float(maxi(count, 1))) * 180.0
@@ -215,9 +219,10 @@ func _spawn_moving_projectiles(game: Node, count: int) -> void:
 	game._on_treatment_shots_requested(shots)
 	for index in range(game.projectiles.size()):
 		var projectile: TherapyProjectile = game.projectiles[index]
+		projectile.topology = soak_projectile_topology
 		projectile.lifetime = 100000.0
 		# Keep the entire fixed-capacity projectile workload moving inside the
-		# bounded arena for the soak instead of retiring it at the hard edge during
+		# fixture bounds for the soak instead of retiring it at the hard edge during
 		# warm-up and silently measuring an empty renderer/world.
 		projectile.speed = 24.0
 		projectile.direction = Vector2.from_angle(TAU * float(index) / float(maxi(game.projectiles.size(), 1)) + PI * 0.5)

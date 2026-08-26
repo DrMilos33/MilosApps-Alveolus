@@ -29,6 +29,8 @@ func _run() -> void:
 	_assert_contains(source, "telemetry_rendered", "Rendered telemetry is mandatory")
 	_assert_contains(source, "telemetry_web", "A Web runtime is mandatory")
 	_assert_contains(source, "telemetry_acceptance", "In-game acceptance is mandatory")
+	_assert_contains(source, "projectiles: 464", "Browser soak follows the regular projectile lane and preserves the 48-slot critical reserve")
+	_assert_contains(source, "projectile_visuals: 464", "Browser soak validates the exact regular projectile render load")
 	_assert_true(not source.contains("game_performance_not_passed"), "Web exact-load validation does not reuse native timing gates")
 	_assert_true(not source.contains("if (game?.passed !== true)"), "Web hard acceptance uses the browser performance budget")
 	_assert_contains(source, "summary.timing.p95 <= 22.2", "Browser acceptance keeps the explicit p95 budget")

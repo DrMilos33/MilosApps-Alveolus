@@ -57,6 +57,10 @@ content definitions do not depend on scene nodes.
   which resolves to the authored case baseline for the entire run. Generic
   spawns and boss adds use the same baseline; explicit request and boss health
   overrides still take precedence.
+  Roster-derived spawn pressure is cached and invalidated by enemy
+  registration, materialization, release and ranged-role transitions. An
+  unchanged clock tick must not rescan the complete enemy roster merely to
+  derive the same ambient melee weight.
 - `CombatSpatialGrid` and `CombatQuery` are the sole broad-phase query path.
   Both use `ArenaTopology`. `WRAP` remains the explicit compatibility mode;
   playable runs select `BOUNDED`, whose direct distances, clamped cell ranges
@@ -64,7 +68,10 @@ content definitions do not depend on scene nodes.
   edge. Queries are invalidated after movement and
   entity lifecycle changes, then rebuilt exactly once by the first real
   nearest, circle, or line consumer of that fixed tick. An idle system never
-  rebuilds a world-sized grid speculatively.
+  rebuilds a world-sized grid speculatively. The grid caches the topology mode
+  at configuration: bounded box/ring enumeration cannot revisit a cell and
+  therefore omits wrap-only visit stamps, while `WRAP` retains deduplication at
+  seams.
 - `CrowdRenderer` owns the visible representation of common enemies and
   pickups from registration through synchronous release. Configuration and
   registration happen in one fixed step before rendering; the detail fallback
@@ -414,8 +421,15 @@ inside a 46-world-unit surface horizon; this scales the cache to the current
 front-to-back resolution consumes only that packed cache and commits through the
 existing spatial grid. A routed mover with cached group neighbors uses this same
 bounded solver even while an obstacle temporarily splits the connected
-component. Profiling counters expose snapshot count, active ticks, examined
-projection candidates and solve time without production dictionaries.
+component. Snapshot finalization reuses persistent component and sort buffers,
+computes each Doctor-distance key once and keeps one cached comparator. During
+one synchronous projection, cached neighbor generations are validated once;
+subsequent passes reuse that fixed mask and apply an exact endpoint broad-phase
+before entering sweep geometry. These are performance invariants: do not restore
+per-snapshot scratch arrays/callables, comparator-side topology queries or
+per-pass generation resolution. Profiling counters expose snapshot count,
+active ticks, examined projection candidates and solve time without production
+dictionaries.
 Bosses, minor foci, ranged roles and tutorial enemies are disabled at
 registration. An explicit relocation invalidates only the current lease and
 cache while preserving whether an ordinary enemy may join a later island.

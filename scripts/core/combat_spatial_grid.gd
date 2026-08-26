@@ -11,6 +11,7 @@ var _cell_width: float = DEFAULT_CELL_SIZE
 var _cell_height: float = DEFAULT_CELL_SIZE
 var _bounds_position: Vector2 = Vector2.ZERO
 var _bounds_size: Vector2 = Vector2.ONE
+var _bounded: bool = false
 
 var _cells: Array = []
 var _occupied_cells: PackedInt32Array = PackedInt32Array()
@@ -20,6 +21,7 @@ var _query_stamp: int = 1
 
 func configure(arena_topology: ArenaTopology, requested_cell_size: float = DEFAULT_CELL_SIZE) -> CombatSpatialGrid:
 	topology = arena_topology
+	_bounded = topology != null and topology.is_bounded()
 	cell_size = maxf(requested_cell_size, 16.0)
 	var size := topology.bounds.size if topology != null else Vector2.ONE * cell_size
 	_bounds_position = topology.bounds.position if topology != null else Vector2.ZERO
@@ -111,8 +113,20 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 	output.clear()
 	if _cells.is_empty() or topology == null:
 		return output
-	_begin_query()
-	var resolved_center := topology.resolve_position(center)
+	# Bounded scans never revisit a cell, so wrap-deduplication stamps and the
+	# topology method dispatch are unnecessary on the production arena path.
+	# WRAP retains the original stamp contract for seam-crossing queries.
+	if not _bounded:
+		_begin_query()
+	var resolved_center := center
+	if _bounded:
+		if _bounds_size.x > 0.0 and _bounds_size.y > 0.0:
+			resolved_center = Vector2(
+				clampf(center.x, _bounds_position.x, _bounds_position.x + _bounds_size.x),
+				clampf(center.y, _bounds_position.y, _bounds_position.y + _bounds_size.y)
+			)
+	else:
+		resolved_center = topology.resolve_position(center)
 	var local_center := resolved_center - topology.bounds.position
 	var minimum := local_center - half_extent
 	var maximum := local_center + half_extent
@@ -120,7 +134,7 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 	var maximum_x := floori(maximum.x / _cell_width)
 	var minimum_y := floori(minimum.y / _cell_height)
 	var maximum_y := floori(maximum.y / _cell_height)
-	if topology.is_bounded():
+	if _bounded:
 		minimum_x = clampi(minimum_x, 0, columns - 1)
 		maximum_x = clampi(maximum_x, 0, columns - 1)
 		minimum_y = clampi(minimum_y, 0, rows - 1)
@@ -144,14 +158,15 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 					var raw_y := center_y + y_offset
 					if raw_x < minimum_x or raw_x > maximum_x or raw_y < minimum_y or raw_y > maximum_y:
 						continue
-					if topology.is_bounded() and (raw_x < 0 or raw_x >= columns or raw_y < 0 or raw_y >= rows):
+					if _bounded and (raw_x < 0 or raw_x >= columns or raw_y < 0 or raw_y >= rows):
 						continue
-					var x := raw_x if topology.is_bounded() else posmod(raw_x, columns)
-					var y := raw_y if topology.is_bounded() else posmod(raw_y, rows)
+					var x := raw_x if _bounded else posmod(raw_x, columns)
+					var y := raw_y if _bounded else posmod(raw_y, rows)
 					var index := y * columns + x
-					if _visit_stamps[index] == _query_stamp:
-						continue
-					_visit_stamps[index] = _query_stamp
+					if not _bounded:
+						if _visit_stamps[index] == _query_stamp:
+							continue
+						_visit_stamps[index] = _query_stamp
 					for handle in _cells[index]:
 						output.append(int(handle))
 						if output.size() >= maximum_candidates:
@@ -161,7 +176,7 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 	var y_count := mini(rows, maximum_y - minimum_y + 1)
 	var x_start := 0 if x_count == columns else minimum_x
 	var y_start := 0 if y_count == rows else minimum_y
-	if topology.is_bounded():
+	if _bounded:
 		x_start = clampi(minimum_x, 0, columns - 1)
 		y_start = clampi(minimum_y, 0, rows - 1)
 		var x_end := clampi(maximum_x, 0, columns - 1)
@@ -172,12 +187,13 @@ func _query_box_candidates(center: Vector2, half_extent: Vector2, output: Packed
 		var raw_y := y_start + y_offset
 		for x_offset in range(x_count):
 			var raw_x := x_start + x_offset
-			var x := raw_x if topology.is_bounded() else posmod(raw_x, columns)
-			var y := raw_y if topology.is_bounded() else posmod(raw_y, rows)
+			var x := raw_x if _bounded else posmod(raw_x, columns)
+			var y := raw_y if _bounded else posmod(raw_y, rows)
 			var index := y * columns + x
-			if _visit_stamps[index] == _query_stamp:
-				continue
-			_visit_stamps[index] = _query_stamp
+			if not _bounded:
+				if _visit_stamps[index] == _query_stamp:
+					continue
+				_visit_stamps[index] = _query_stamp
 			for handle in _cells[index]:
 				output.append(int(handle))
 				if maximum_candidates > 0 and output.size() >= maximum_candidates:
@@ -188,7 +204,7 @@ func _cell_index(position: Vector2) -> int:
 	if topology == null:
 		return 0
 	var local := position - _bounds_position
-	if topology.is_bounded():
+	if _bounded:
 		local.x = clampf(local.x, 0.0, _bounds_size.x)
 		local.y = clampf(local.y, 0.0, _bounds_size.y)
 	else:
