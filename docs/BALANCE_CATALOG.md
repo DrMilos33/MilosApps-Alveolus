@@ -382,6 +382,16 @@ bei den Breiten 38/54/70 zentriert 12/16/19 dieser Punkte; vollständige
 Hitboxabdeckung löst maximal 20-fachen Schaden aus. Andere Schadensquellen bleiben
 unverändert.
 
+Das stationäre Eventmonster in Fall 4 schießt während seiner 20-sekündigen
+Brandschnur weiterhin normale Projektile. Beim Ablauf verschwindet es und stößt
+gleichzeitig `ceil(Restleben / Maximalleben × 20)` normale Projektile mit je 6
+Schaden und Tempo 185 gleichmäßig über 360 Grad aus. Ein Stoß darf dieses
+stationäre Eventmonster ausnahmsweise eine Sekunde betäuben, verschiebt es aber
+nicht. Liegt der Stun exakt beim Ablauf an, entstehen keine Kreisprojektile.
+Ein vorzeitiger Sieg über das Eventmonster beendet den Ablauf wie bisher ohne
+Finale. Die stationären Events in Fall 5/6 behalten ihr bisheriges
+Warnungs-/Fächerfinale.
+
 Der Rauten-Infektionsherd feuert fortlaufend zwei Projektile auf gespiegelten
 Bahnen. In Fall 3 fliegen sie mit Faktor 1,26 beziehungsweise 267,75 Tempo,
 verwenden 136 Weltpunkte Amplitude und eine Wellenlänge von 550. Damit bleibt

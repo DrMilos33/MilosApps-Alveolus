@@ -442,10 +442,12 @@ Authored stationary bodies use the complete `EnemySpawnRequest` pair
 duplication and deferred activation; `InfectionEnemy.recycle()` restores
 `MOBILE`/`DEFAULT`. `DEFAULT` resolves to `FLOW_AROUND` for non-bosses and
 `PHASE_THROUGH` for bosses, while an explicit request may override either
-route. Static obstacles reject displacement and knockback, never join a bulk
-component or offscreen relocation, and register through packed per-slot flags
-and generation-safe handles. Release clears every guard and lease naming the
-old generation; same-slot reuse resets that slot's obstacle and route state
+route. Static obstacles reject displacement and knockback translation, never
+join a bulk component or offscreen relocation, and register through packed
+per-slot flags and generation-safe handles. Their default also rejects stun;
+an activation-scoped event opt-in may accept only the stun while translation
+remains zero. Release clears every guard and lease naming the old generation;
+same-slot reuse resets that slot's obstacle, stun exception and route state
 before it may represent another generation.
 
 Every four fixed ticks, `EnemyWorld` queries outward from each active obstacle
@@ -484,8 +486,15 @@ RNG. Due targets use complete critical `EnemySpawnRequest` records and
 generation-safe handles; their small lifecycle dictionaries live on the Game
 facade because at most two exist. Target expiration is applied only after the
 combat event flush, so a same-tick defeat wins and cannot lose its pickup or
-reward. The fixed-step owner emits target fans and Case-3 gates through the
-existing pooled `ProjectileWorld` and hostile renderer. Regular projectiles
+reward. The fixed-step owner emits data-selected target finales and Case-3
+gates through the existing pooled `ProjectileWorld` and hostile renderer. Fall
+4 uses a transient, entity-drawn fuse and one simultaneous radial burst of up
+to twenty projectiles, resolved as
+`ceil(20 * remaining_health_fraction)`. A stun present on the exact expiry tick
+suppresses that burst completely. Fuse and static stun exception are activation
+state on `InfectionEnemy` and are cleared by recycling; no renderer slot,
+process loop or save field is added. Falls 5/6 retain the legacy warning and
+quarter-based fan. Regular projectiles
 stop 48 slots below technical capacity; only authored pressure patterns may use
 that reserve. Gate IDs remain attached to pooled projectiles until the final
 member finishes, enforcing one incoming hit per wall without per-projectile

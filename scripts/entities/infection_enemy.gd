@@ -32,6 +32,7 @@ const CROWD_STEERING_SMOOTHING := 1.0
 const CROWD_SPEED_SMOOTHING := 1.0
 const CROWD_STEERING_WEIGHT := 1.0
 const DIRECT_CHASE_CONTACT_DEPTH := 0.5
+const EVENT_FUSE_SEGMENTS := 8
 const TREATMENT_LINE_SWARM_SAMPLE_OFFSETS: Array[Vector2] = [
 	Vector2(0.1486, 0.0000),
 	Vector2(-0.1898, 0.1739),
@@ -67,6 +68,9 @@ var runtime_defense: float = 0.0
 var incoming_player_damage_multiplier: float = 1.0
 var body_role: int = EnemySpawnRequest.BodyRole.MOBILE
 var obstacle_traversal: int = EnemySpawnRequest.ObstacleTraversal.DEFAULT
+var static_stun_enabled: bool = false
+var event_fuse_active: bool = false
+var event_fuse_progress: float = 0.0
 var projectile_attack_speed_multiplier: float = 1.0
 var projectile_width_multiplier: float = 1.0
 var projectile_speed_multiplier: float = 1.0
@@ -165,6 +169,9 @@ func configure(
 	incoming_player_damage_multiplier = 1.0
 	body_role = body_role_value
 	obstacle_traversal = obstacle_traversal_value
+	static_stun_enabled = false
+	event_fuse_active = false
+	event_fuse_progress = 0.0
 	runtime_visual_id = visual_id_override if visual_id_override != &"" else definition.visual_id
 	runtime_visual_scale = 1.0
 	projectile_attack_speed_multiplier = 1.0
@@ -229,6 +236,9 @@ func recycle() -> void:
 	incoming_player_damage_multiplier = 1.0
 	body_role = EnemySpawnRequest.BodyRole.MOBILE
 	obstacle_traversal = EnemySpawnRequest.ObstacleTraversal.DEFAULT
+	static_stun_enabled = false
+	event_fuse_active = false
+	event_fuse_progress = 0.0
 	runtime_visual_id = &""
 	runtime_visual_scale = 1.0
 	projectile_attack_speed_multiplier = 1.0
@@ -287,6 +297,23 @@ func resolved_obstacle_traversal() -> int:
 	if definition != null and definition.is_boss:
 		return EnemySpawnRequest.ObstacleTraversal.PHASE_THROUGH
 	return EnemySpawnRequest.ObstacleTraversal.FLOW_AROUND
+
+
+func configure_static_stun(enabled: bool) -> void:
+	static_stun_enabled = enabled
+
+
+func set_event_fuse_progress(progress: float, active: bool = true) -> void:
+	var resolved_progress := clampf(progress, 0.0, 1.0)
+	if event_fuse_active == active and is_equal_approx(event_fuse_progress, resolved_progress):
+		return
+	event_fuse_active = active
+	event_fuse_progress = resolved_progress
+	queue_redraw()
+
+
+func has_event_fuse() -> bool:
+	return event_fuse_active
 
 
 func configure_projectile_modifiers(
@@ -781,7 +808,7 @@ func apply_knockback(
 	stun_duration: float = DEFAULT_STUN_SECONDS
 ) -> void:
 	if (
-		is_static_flow_obstacle()
+		(is_static_flow_obstacle() and not static_stun_enabled)
 		or direction.length_squared() <= 0.0001
 		or distance <= 0.0
 		or dying
@@ -971,6 +998,8 @@ func _draw() -> void:
 		draw_circle(Vector2(-8.0, 0.0), definition.radius * 0.72, body_color)
 		draw_circle(Vector2(8.0, 0.0), definition.radius * 0.72, body_color.darkened(0.08))
 		draw_arc(Vector2.ZERO, definition.radius + 2.0, 0.0, TAU, 20, Color(body_color.lightened(0.25), 0.55 * alpha), 2.0, true)
+	if event_fuse_active and not dying and spawn_timer <= 0.0:
+		_draw_event_fuse(alpha)
 
 	if symbolic_health_bar_count > 0 and not dying and spawn_timer <= 0.0:
 		_draw_symbolic_health_bars(alpha)
@@ -979,6 +1008,39 @@ func _draw() -> void:
 		var fraction := clampf(health / max_health, 0.0, 1.0)
 		draw_rect(Rect2(-width * 0.5, -definition.radius - 17.0, width, 6.0), Color(AlveolusVisualTheme.IVORY_DEEP, alpha), true)
 		draw_rect(Rect2(-width * 0.5, -definition.radius - 17.0, width * fraction, 6.0), Color(AlveolusVisualTheme.CORAL, alpha), true)
+
+
+func _draw_event_fuse(alpha: float) -> void:
+	var fuse_width := maxf(58.0, definition.radius * 1.6)
+	var fuse_y := -maxf(definition.radius + 35.0, visual_extent() * 0.5 + 32.0)
+	var points := PackedVector2Array()
+	for index in range(EVENT_FUSE_SEGMENTS + 1):
+		var progress := float(index) / float(EVENT_FUSE_SEGMENTS)
+		points.append(Vector2(
+			lerpf(-fuse_width * 0.5, fuse_width * 0.5, progress),
+			fuse_y + sin(float(index) * 1.85) * 1.8
+		))
+	draw_polyline(points, Color(AlveolusVisualTheme.PETROL_DEEP, 0.82 * alpha), 4.0, true)
+	var scaled_progress := event_fuse_progress * float(EVENT_FUSE_SEGMENTS)
+	for index in range(EVENT_FUSE_SEGMENTS):
+		var segment_progress := clampf(scaled_progress - float(index), 0.0, 1.0)
+		if segment_progress <= 0.0:
+			break
+		draw_line(
+			points[index],
+			points[index].lerp(points[index + 1], segment_progress),
+			Color(AlveolusVisualTheme.GOLD, 0.96 * alpha),
+			2.0,
+			true
+		)
+	var tip_segment := mini(floori(scaled_progress), EVENT_FUSE_SEGMENTS - 1)
+	var tip_progress := clampf(scaled_progress - float(tip_segment), 0.0, 1.0)
+	var tip := points[tip_segment].lerp(points[tip_segment + 1], tip_progress)
+	var ember_pulse := 3.2 + sin(event_fuse_progress * 70.0) * 0.6
+	draw_circle(tip, ember_pulse + 2.0, Color(AlveolusVisualTheme.CORAL, 0.24 * alpha))
+	draw_circle(tip, ember_pulse, Color(AlveolusVisualTheme.GOLD, 0.98 * alpha))
+	draw_line(tip + Vector2(-5.0, -4.0), tip + Vector2(-8.0, -7.0), Color(AlveolusVisualTheme.GOLD, 0.72 * alpha), 1.0, true)
+	draw_line(tip + Vector2(4.0, -5.0), tip + Vector2(7.0, -8.0), Color(AlveolusVisualTheme.CORAL, 0.70 * alpha), 1.0, true)
 
 
 func _draw_symbolic_health_bars(alpha: float) -> void:

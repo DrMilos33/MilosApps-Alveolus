@@ -51,6 +51,7 @@ const CASE_PRESSURE_TARGET_ACTIVE_SECONDS := 20.0
 const CASE_PRESSURE_WARNING_SECONDS := 1.5
 const CASE_PRESSURE_SALVO_INTERVAL := 0.45
 const CASE_PRESSURE_FAN_ANGLES: Array[float] = [-24.0, -12.0, 0.0, 12.0, 24.0]
+const CASE_PRESSURE_RADIAL_MAX_PROJECTILES := 20
 const CASE_PRESSURE_PROJECTILE_DAMAGE := 6.0
 const CASE_PRESSURE_TARGET_PROJECTILE_SPEED := 185.0
 const CASE_PRESSURE_GATE_PROJECTILE_SPEED := 180.0
@@ -3112,6 +3113,7 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 		bool(request.metadata.get("treatment_line_coverage_scaled", false)),
 		float(request.metadata.get("visual_scale", 1.0))
 	)
+	enemy.configure_static_stun(bool(request.metadata.get("static_stun_enabled", false)))
 	if bool(request.metadata.get("case_pressure_target", false)):
 		_register_case_pressure_target(enemy, StringName(request.metadata.get("pressure_behavior", &"stationary_fan")))
 	if request.source_id == &"hidden_nest":
@@ -3947,6 +3949,9 @@ func _update_case_pressure_target_indicator(offscreen_boss_visible: bool) -> voi
 		selected_distance_squared = distance_squared
 		selected_handle = handle
 		var runtime: Dictionary = case_pressure_target_states[handle]
+		if StringName(runtime.get(&"behavior", &"")) == &"radial_fuse":
+			countdown_text = "ZIEL"
+			continue
 		match StringName(runtime.get(&"phase", &"active")):
 			&"active":
 				countdown_text = "%d s" % maxi(0, ceili(float(runtime.get(&"remaining", 0.0))))
@@ -4356,7 +4361,12 @@ func _active_case_pressure_target_count() -> int:
 	for handle_value in case_pressure_target_states.keys():
 		var handle := int(handle_value)
 		var enemy := enemy_world.resolve(handle) as InfectionEnemy if enemy_world != null else null
-		if not is_instance_valid(enemy) or not enemy.is_targetable():
+		if (
+			not is_instance_valid(enemy)
+			or not enemy.activation_active
+			or enemy.dying
+			or enemy.health <= 0.0
+		):
 			case_pressure_target_states.erase(handle)
 			continue
 		count += 1
@@ -4370,6 +4380,11 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 	var spawn_position := _case_pressure_spawn_position(planned_sector, _enemy_body_radius(&"minor_focus"))
 	var stationary_fan := config.case_pressure_targets_stationary
 	var pressure_plan := config.case_pressure_plan
+	var radial_fuse := (
+		stationary_fan
+		and pressure_plan != null
+		and pressure_plan.target_expiry_pattern == CasePressurePlan.TargetExpiryPattern.RADIAL_FUSE
+	)
 	var target_movement_multiplier := (
 		pressure_plan.target_movement_speed_multiplier if pressure_plan != null else 1.0
 	)
@@ -4385,7 +4400,12 @@ func _spawn_case_pressure_target(event: Dictionary) -> void:
 		&"case_pressure_target"
 	)
 	request.metadata["case_pressure_target"] = true
-	request.metadata["pressure_behavior"] = &"stationary_fan" if stationary_fan else &"ambient_focus"
+	request.metadata["pressure_behavior"] = (
+		&"radial_fuse"
+		if radial_fuse
+		else (&"stationary_fan" if stationary_fan else &"ambient_focus")
+	)
+	request.metadata["static_stun_enabled"] = pressure_plan.static_target_stun_enabled if pressure_plan != null else false
 	request.metadata["preserve_spawn_position"] = true
 	request.metadata["spawn_sector"] = case_pressure_last_spawn_sector
 	request.metadata["projectile_attack_speed_multiplier"] = (
@@ -4466,6 +4486,8 @@ func _register_case_pressure_target(enemy: InfectionEnemy, behavior: StringName)
 		# make this target worth eight only for the research calculation.
 		&"reward_points": 7,
 	}
+	if behavior == &"radial_fuse":
+		enemy.set_event_fuse_progress(1.0)
 	if behavior == &"ambient_focus":
 		hidden_nest_timers[enemy] = CASE_PRESSURE_TARGET_ACTIVE_SECONDS
 
@@ -4474,15 +4496,39 @@ func _step_case_pressure_targets(delta: float) -> void:
 	for handle_value in case_pressure_target_states.keys():
 		var handle := int(handle_value)
 		var enemy := enemy_world.resolve(handle) as InfectionEnemy if enemy_world != null else null
-		if not is_instance_valid(enemy) or not enemy.is_targetable():
+		if (
+			not is_instance_valid(enemy)
+			or not enemy.activation_active
+			or enemy.dying
+			or enemy.health <= 0.0
+		):
 			case_pressure_target_states.erase(handle)
 			continue
+		if enemy.spawn_timer > 0.0:
+			continue
 		var runtime: Dictionary = case_pressure_target_states[handle]
-		if bool(runtime.get(&"pending_expiration", false)) or StringName(runtime.get(&"behavior", &"")) == &"ambient_focus":
+		var behavior := StringName(runtime.get(&"behavior", &""))
+		if bool(runtime.get(&"pending_expiration", false)) or behavior == &"ambient_focus":
 			continue
 		if bool(runtime.get(&"just_spawned", false)):
 			runtime[&"just_spawned"] = false
 			case_pressure_target_states[handle] = runtime
+			continue
+		if behavior == &"radial_fuse":
+			var fuse_remaining := maxf(0.0, float(runtime.get(&"remaining", 0.0)) - delta)
+			runtime[&"remaining"] = fuse_remaining
+			enemy.set_event_fuse_progress(fuse_remaining / CASE_PRESSURE_TARGET_ACTIVE_SECONDS)
+			if fuse_remaining <= 0.0:
+				runtime[&"phase"] = &"expired"
+				var emitted := 0
+				if not enemy.is_stunned():
+					emitted = _emit_case_pressure_target_radial_burst(enemy)
+				runtime[&"radial_projectiles_emitted"] = emitted
+				enemy.set_event_fuse_progress(0.0, false)
+				case_pressure_target_states[handle] = runtime
+				_queue_case_pressure_target_expiration(handle)
+			else:
+				case_pressure_target_states[handle] = runtime
 			continue
 		var phase := StringName(runtime.get(&"phase", &"active"))
 		var remaining := maxf(0.0, float(runtime.get(&"remaining", 0.0)) - delta)
@@ -4549,6 +4595,39 @@ func _case_pressure_salvo_quota(current_health: float, maximum_health: float) ->
 	if maximum_health <= 0.0:
 		return 0
 	return clampi(ceili(clampf(current_health / maximum_health, 0.0, 1.0) * 4.0), 0, 4)
+
+
+func _case_pressure_radial_projectile_count(current_health: float, maximum_health: float) -> int:
+	if current_health <= 0.0 or maximum_health <= 0.0:
+		return 0
+	return clampi(
+		ceili(clampf(current_health / maximum_health, 0.0, 1.0) * CASE_PRESSURE_RADIAL_MAX_PROJECTILES),
+		1,
+		CASE_PRESSURE_RADIAL_MAX_PROJECTILES
+	)
+
+
+func _emit_case_pressure_target_radial_burst(enemy: InfectionEnemy) -> int:
+	if not is_instance_valid(enemy) or enemy.definition == null:
+		return 0
+	var projectile_count := _case_pressure_radial_projectile_count(enemy.health, enemy.max_health)
+	var emitted := 0
+	for projectile_index in range(projectile_count):
+		var heading := Vector2.RIGHT.rotated(TAU * float(projectile_index) / float(projectile_count))
+		if _spawn_hostile_projectile(
+			enemy.global_position,
+			heading,
+			CASE_PRESSURE_PROJECTILE_DAMAGE,
+			enemy.definition.damage_profile,
+			TherapyProjectile.HOSTILE_NORMAL,
+			0.0,
+			CASE_PRESSURE_TARGET_PROJECTILE_SPEED,
+			1050.0,
+			0.0,
+			true
+		):
+			emitted += 1
+	return emitted
 
 
 func _queue_case_pressure_target_expiration(handle: int, runtime_override: Dictionary = {}) -> void:

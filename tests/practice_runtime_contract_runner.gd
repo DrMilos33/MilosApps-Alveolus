@@ -64,6 +64,8 @@ func _check_event_configs(levels: Array[LevelDefinition], scenarios: Array[Pract
 		_check(is_equal_approx(config.case_pressure_plan.target_movement_speed_multiplier, source.case_pressure_plan.target_movement_speed_multiplier), "Fall %d Eventtest bewahrt das Bewegungstempo" % source.order)
 		_check(is_equal_approx(config.case_pressure_plan.target_attack_speed_multiplier, source.case_pressure_plan.target_attack_speed_multiplier), "Fall %d Eventtest bewahrt die Schussrate" % source.order)
 		_check(config.case_pressure_plan.target_visual_id == source.case_pressure_plan.target_visual_id, "Fall %d Eventtest bewahrt das aktuelle Visual" % source.order)
+		_check(config.case_pressure_plan.target_expiry_pattern == source.case_pressure_plan.target_expiry_pattern, "Fall %d Eventtest bewahrt das aktuelle Zielherdfinale" % source.order)
+		_check(config.case_pressure_plan.static_target_stun_enabled == source.case_pressure_plan.static_target_stun_enabled, "Fall %d Eventtest bewahrt die statische Stun-Regel" % source.order)
 		_check(source.case_pressure_plan.target_focus_times == original_times, "Fall %d Eventtest mutiert den Kampagnenkatalog nicht" % source.order)
 
 

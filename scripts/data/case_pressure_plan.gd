@@ -1,6 +1,11 @@
 class_name CasePressurePlan
 extends Resource
 
+enum TargetExpiryPattern {
+	LEGACY_FAN,
+	RADIAL_FUSE,
+}
+
 ## Authored, movement-independent schedule for one main-case pressure layer.
 ##
 ## The plan deliberately contains no content IDs or save-facing state. The
@@ -22,6 +27,8 @@ extends Resource
 @export_range(0, 16, 1) var symbolic_health_bar_count: int = 0
 @export_range(0.01, 100.0, 0.01) var treatment_line_damage_multiplier: float = 1.0
 @export var treatment_line_coverage_scaled: bool = false
+@export_enum("Legacy fan", "Radial fuse") var target_expiry_pattern: int = TargetExpiryPattern.LEGACY_FAN
+@export var static_target_stun_enabled: bool = false
 
 
 static func create(
@@ -70,6 +77,19 @@ func configure_target_presentation(
 	return self
 
 
+func configure_target_expiry(
+	expiry_pattern: int,
+	allow_static_stun: bool = false
+) -> CasePressurePlan:
+	target_expiry_pattern = clampi(
+		expiry_pattern,
+		TargetExpiryPattern.LEGACY_FAN,
+		TargetExpiryPattern.RADIAL_FUSE
+	)
+	static_target_stun_enabled = allow_static_stun
+	return self
+
+
 static func default_for_case_order(case_order: int) -> CasePressurePlan:
 	match case_order:
 		1:
@@ -96,7 +116,7 @@ static func default_for_case_order(case_order: int) -> CasePressurePlan:
 				PackedFloat32Array([20.0, 60.0, 100.0, 140.0]),
 				PackedFloat32Array(),
 				1
-			)
+			).configure_target_expiry(TargetExpiryPattern.RADIAL_FUSE, true)
 		5:
 			return create(
 				PackedFloat32Array([20.0, 60.0, 100.0, 140.0]),

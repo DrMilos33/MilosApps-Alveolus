@@ -72,6 +72,8 @@ func _test_default_schedules() -> void:
 	)
 	_equal(fall_four.projectile_gate_times, PackedFloat32Array(), "Fall 4 plant keine Projektiltore")
 	_equal(fall_four.max_active_targets, 1, "Fall 4 erlaubt höchstens einen aktiven Zielherd")
+	_equal(fall_four.target_expiry_pattern, CasePressurePlanScript.TargetExpiryPattern.RADIAL_FUSE, "Fall 4 verwendet exklusiv die radiale Brandschnur")
+	_true(fall_four.static_target_stun_enabled, "Der stationäre Fall-4-Zielherd darf ohne Translation betäubt werden")
 
 	var fall_five := CasePressurePlanScript.default_for_case_order(5)
 	_equal(
@@ -85,6 +87,8 @@ func _test_default_schedules() -> void:
 		"Fall 5 ergänzt Projektiltore exakt bei 65/105 Sekunden"
 	)
 	_equal(fall_five.max_active_targets, 1, "Fall 5 erlaubt höchstens einen aktiven Zielherd")
+	_equal(fall_five.target_expiry_pattern, CasePressurePlanScript.TargetExpiryPattern.LEGACY_FAN, "Fall 5 behält das bisherige Fächerfinale")
+	_true(not fall_five.static_target_stun_enabled, "Fall 5 erhält keine implizite statische Stun-Ausnahme")
 
 	var fall_six := CasePressurePlanScript.default_for_case_order(6)
 	_equal(fall_six.target_focus_times, fall_four.target_focus_times, "Fall 6 bewahrt den Zielrhythmus des bisherigen Endfalls")
@@ -94,6 +98,7 @@ func _test_default_schedules() -> void:
 		"Fall 6 bewahrt Projektiltore exakt bei 45/85/125 Sekunden"
 	)
 	_equal(fall_six.max_active_targets, 1, "Fall 6 erlaubt höchstens einen aktiven Zielherd")
+	_equal(fall_six.target_expiry_pattern, CasePressurePlanScript.TargetExpiryPattern.LEGACY_FAN, "Fall 6 behält das bisherige Fächerfinale")
 
 	var intro := CasePressurePlanScript.default_for_case_order(0)
 	_equal(intro.target_focus_times, PackedFloat32Array(), "Die Einführung erhält keinen Druckplan")
@@ -116,6 +121,8 @@ func _test_level_and_run_config_transfer() -> void:
 		_near(level.case_pressure_plan.target_movement_speed_multiplier, expected.target_movement_speed_multiplier, "Fall %d übernimmt das Zielherdtempo" % order)
 		_near(level.case_pressure_plan.target_attack_speed_multiplier, expected.target_attack_speed_multiplier, "Fall %d übernimmt die Zielherd-Schussrate" % order)
 		_near(level.case_pressure_plan.target_projectile_width_multiplier, expected.target_projectile_width_multiplier, "Fall %d übernimmt die Zielherd-Projektilbreite" % order)
+		_equal(level.case_pressure_plan.target_expiry_pattern, expected.target_expiry_pattern, "Fall %d übernimmt sein Zielherdfinale" % order)
+		_equal(level.case_pressure_plan.static_target_stun_enabled, expected.static_target_stun_enabled, "Fall %d übernimmt seine statische Stun-Regel" % order)
 
 	var source := levels[6] as LevelDefinition
 	var config := RunConfig.from_level(source)
@@ -126,6 +133,7 @@ func _test_level_and_run_config_transfer() -> void:
 	if quick_config.case_pressure_plan != null:
 		_equal(quick_config.case_pressure_plan.target_focus_times, config.case_pressure_plan.target_focus_times, "Quick-Run verändert die Zielherdtermine nicht")
 		_equal(quick_config.case_pressure_plan.projectile_gate_times, config.case_pressure_plan.projectile_gate_times, "Quick-Run verändert die Projektiltortermine nicht")
+		_equal(quick_config.case_pressure_plan.target_expiry_pattern, config.case_pressure_plan.target_expiry_pattern, "Quick-Run verändert das Zielherdfinale nicht")
 	if config.case_pressure_plan != null and source.case_pressure_plan != null:
 		var configured_times := config.case_pressure_plan.target_focus_times.duplicate()
 		source.case_pressure_plan.target_focus_times[0] = 999.0

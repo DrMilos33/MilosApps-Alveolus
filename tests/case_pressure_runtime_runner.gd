@@ -18,6 +18,7 @@ func _initialize() -> void:
 func _run() -> void:
 	_test_static_pressure_limits()
 	_test_pure_salvo_and_gate_seams()
+	await _test_case_four_radial_fuse()
 	await _test_live_target_and_gate_contract()
 	await _test_case_one_event_target_profile()
 	await _test_case_two_target_remains_mobile()
@@ -28,6 +29,7 @@ func _test_static_pressure_limits() -> void:
 	_equal(GameScript.CASE_PRESSURE_TARGET_ACTIVE_SECONDS, 20.0, "Zielherde bleiben zwanzig Sekunden aktiv")
 	_equal(GameScript.CASE_PRESSURE_WARNING_SECONDS, 1.5, "Zielherde und Tore verwenden die 1,5-Sekunden-Warnung")
 	_equal(GameScript.CASE_PRESSURE_FAN_ANGLES.size(), 5, "Eine Zielherdsalve besitzt exakt fünf Projektile")
+	_equal(GameScript.CASE_PRESSURE_RADIAL_MAX_PROJECTILES, 20, "Die volle Fall-4-Restgesundheit bewahrt insgesamt zwanzig Projektile")
 	_equal(GameScript.CASE_PRESSURE_GATE_SPACING, 52.0, "Projektiltore behalten höchstens 52 Weltpunkte Reihenabstand")
 	_equal(GameScript.CASE_PRESSURE_GATE_SAFE_GAP, 156.0, "Projektiltore behalten die sichere Lücke von mindestens 156 Weltpunkten")
 	_equal(GameScript.CASE_PRESSURE_GATE_MAX_PROJECTILES, 24, "Ein Projektiltor bleibt auf 24 Projektile begrenzt")
@@ -54,6 +56,12 @@ func _test_pure_salvo_and_gate_seams() -> void:
 	_equal(pure_game._case_pressure_salvo_quota(25.0, 100.0), 1, "Ein verbleibendes Viertel erhält eine Salve")
 	_equal(pure_game._case_pressure_salvo_quota(0.0, 100.0), 0, "Ein leerer Herd erhält keine Salve")
 	_equal(pure_game._case_pressure_salvo_quota(10.0, 0.0), 0, "Ungültige Maximalgesundheit erzeugt keine Salve")
+	_equal(pure_game._case_pressure_radial_projectile_count(100.0, 100.0), 20, "Volle Restgesundheit erzeugt zwanzig Kreisprojektile")
+	_equal(pure_game._case_pressure_radial_projectile_count(75.0, 100.0), 15, "Drei Viertel Restgesundheit erzeugen fünfzehn Kreisprojektile")
+	_equal(pure_game._case_pressure_radial_projectile_count(50.0, 100.0), 10, "Halbe Restgesundheit erzeugt zehn Kreisprojektile")
+	_equal(pure_game._case_pressure_radial_projectile_count(25.0, 100.0), 5, "Ein Viertel Restgesundheit erzeugt fünf Kreisprojektile")
+	_equal(pure_game._case_pressure_radial_projectile_count(1.0, 100.0), 1, "Positives Restleben erzeugt mindestens ein Kreisprojektil")
+	_equal(pure_game._case_pressure_radial_projectile_count(0.0, 100.0), 0, "Kein Restleben erzeugt kein Kreisprojektil")
 
 	var lanes := pure_game._case_pressure_gate_lane_coordinates(-186.0, 186.0, 0.0)
 	_true(not lanes.is_empty(), "Der reine Gate-Seam liefert Bahnen")
@@ -69,6 +77,83 @@ func _test_pure_salvo_and_gate_seams() -> void:
 	var capped_lanes := pure_game._case_pressure_gate_lane_coordinates(-2000.0, 2000.0, 0.0)
 	_equal(capped_lanes.size(), GameScript.CASE_PRESSURE_GATE_MAX_PROJECTILES, "Breite Tore werden deterministisch auf 24 Bahnen gekürzt")
 	pure_game.free()
+
+
+func _test_case_four_radial_fuse() -> void:
+	var game := MAIN_SCENE.instantiate()
+	get_root().add_child(game)
+	await process_frame
+	await process_frame
+	game.persistence_enabled = false
+	game.run_test_settings.reset_defaults()
+	for discovery_id in game.discovery_definitions:
+		game.discovery_manager.mark_seen(discovery_id)
+	game.selected_level = _level_by_id(game.levels, &"spreading_infection")
+	_true(game.selected_level != null and game.selected_level.order == 4, "Brandschnurtest verwendet Fall 4")
+	game.start_run()
+	game.set_physics_process(false)
+
+	game._spawn_case_pressure_target({&"spawn_sector": 5})
+	_equal(game.case_pressure_target_states.size(), 1, "Fall 4 erzeugt genau ein Brandschnurziel")
+	var handle := int(game.case_pressure_target_states.keys()[0])
+	var target := game.enemy_world.resolve(handle) as InfectionEnemy
+	_true(is_instance_valid(target), "Das Brandschnurziel besitzt einen gültigen Handle")
+	if is_instance_valid(target):
+		var runtime: Dictionary = game.case_pressure_target_states[handle]
+		_equal(StringName(runtime.get(&"behavior", &"")), &"radial_fuse", "Nur Fall 4 aktiviert das radiale Brandschnurfinale")
+		_true(target.is_static_flow_obstacle(), "Das Fall-4-Event bleibt ein stationäres Flusshindernis")
+		_true(target.static_stun_enabled, "Das Fall-4-Event veröffentlicht seine lokale Stun-Ausnahme")
+		_true(target.has_event_fuse(), "Die rein visuelle Brandschnur ist ab Aktivierung vorhanden")
+		_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.MINOR_FOCUS, "Während der Brandschnur schießt das Eventmonster normal weiter")
+		_equal(game._active_case_pressure_target_count(), 1, "Ein materialisierender Zielherd belegt bereits seinen Eventslot")
+		game._step_case_pressure_targets(0.25)
+		_true(game.case_pressure_target_states.has(handle), "Der Runtimevertrag überlebt den Spawntelegraphen")
+		_near(target.event_fuse_progress, 1.0, "Die Brandschnur beginnt erst nach vollständiger Materialisierung")
+
+		target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+		var stationary_position := target.global_position
+		target.apply_knockback(Vector2.RIGHT, 90.0, 0.28, 1.0)
+		_true(target.is_stunned(), "Stoß betäubt das ausdrücklich freigegebene statische Eventmonster")
+		_true(target.global_position.is_equal_approx(stationary_position), "Die Stun-Ausnahme verschiebt das stationäre Eventmonster nicht")
+		target.step_fixed(1.01)
+		_true(not target.is_stunned(), "Der kurze Stoß-Stun endet weiterhin nach einer Sekunde")
+
+		game._step_case_pressure_targets(0.0)
+		target.health = target.max_health * 0.5
+		var projectiles_before: int = game.projectiles.size()
+		game._step_case_pressure_targets(GameScript.CASE_PRESSURE_TARGET_ACTIVE_SECONDS)
+		runtime = game.case_pressure_target_states[handle]
+		_equal(int(runtime.get(&"radial_projectiles_emitted", -1)), 10, "Halbes Restleben erzeugt beim Ablauf exakt zehn Kreisprojektile")
+		_equal(game.projectiles.size() - projectiles_before, 10, "Der Ablauf materialisiert alle zehn proportionalen Projektile gleichzeitig")
+		_true(bool(runtime.get(&"pending_expiration", false)), "Der radiale Burst reiht das Ziel exakt einmal zur Freigabe ein")
+		_true(not target.has_event_fuse(), "Nach dem Ablauf bleibt keine Brandschnur am recycelten Ziel sichtbar")
+		_equal(game.enemy_attack_director.role_for(handle), EnemyAttackDirector.Role.NONE, "Der Ablauf beendet den normalen Projektilangriff")
+		for projectile_index in range(10):
+			var projectile := game.projectiles[projectiles_before + projectile_index] as TherapyProjectile
+			var expected_direction := Vector2.RIGHT.rotated(TAU * float(projectile_index) / 10.0)
+			_true(projectile.direction.dot(expected_direction) > 0.999, "Kreisprojektil %d besitzt seine gleichmäßig verteilte Richtung" % projectile_index)
+		game._flush_case_pressure_target_expirations()
+		_equal(game.case_pressure_target_states.size(), 0, "Nach dem Burst wird der abgelaufene Zielherd vollständig freigegeben")
+
+	game._spawn_case_pressure_target({&"spawn_sector": 9})
+	var stunned_handle := int(game.case_pressure_target_states.keys()[0])
+	var stunned_target := game.enemy_world.resolve(stunned_handle) as InfectionEnemy
+	_true(is_instance_valid(stunned_target), "Ein zweites Brandschnurziel kann aus dem Pool aktiviert werden")
+	if is_instance_valid(stunned_target):
+		stunned_target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+		game._step_case_pressure_targets(0.0)
+		stunned_target.apply_knockback(Vector2.UP, 90.0, 0.28, 1.0)
+		var stunned_projectiles_before: int = game.projectiles.size()
+		game._step_case_pressure_targets(GameScript.CASE_PRESSURE_TARGET_ACTIVE_SECONDS)
+		var stunned_runtime: Dictionary = game.case_pressure_target_states[stunned_handle]
+		_true(stunned_target.is_stunned(), "Der Stoß-Stun liegt im exakten Ablaufmoment noch an")
+		_equal(int(stunned_runtime.get(&"radial_projectiles_emitted", -1)), 0, "Ein im Ablaufmoment betäubtes Eventmonster wird vollständig entschärft")
+		_equal(game.projectiles.size(), stunned_projectiles_before, "Der perfekt getimte Stun hinterlässt kein einziges Projektil")
+		game._flush_case_pressure_target_expirations()
+		_true(not stunned_target.static_stun_enabled and not stunned_target.has_event_fuse(), "Pool-Recycling löscht Stun- und Brandschnurvertrag vollständig")
+
+	game.queue_free()
+	await process_frame
 
 
 func _test_live_target_and_gate_contract() -> void:
