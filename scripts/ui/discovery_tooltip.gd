@@ -2,6 +2,7 @@ class_name DiscoveryTooltip
 extends Control
 
 signal dismissed
+signal hide_hints_requested
 
 const PANEL_MIN_WIDTH := 300.0
 const PANEL_MAX_WIDTH := 400.0
@@ -20,9 +21,10 @@ var modal_content: VBoxContainer
 var action_row: HBoxContainer
 var copy_scroll: ScrollContainer
 var copy_stack: VBoxContainer
-var medical_label: Label
 var gameplay_label: Label
 var understood_button: Button
+var hide_hints_button: Button
+var neutral_focus: Control
 
 var _layout_generation := 0
 var _dismiss_queued := false
@@ -61,15 +63,6 @@ func _ready() -> void:
 	gameplay_label = gameplay_section["body"] as Label
 	copy_stack.add_child(gameplay_section["panel"] as Control)
 
-	var medical_section := AlveolusUIComponents.semantic_copy_section(
-		"Medizinischer Kontext",
-		"",
-		&"lexicon",
-		AlveolusVisualTheme.COBALT
-	)
-	medical_label = medical_section["body"] as Label
-	copy_stack.add_child(medical_section["panel"] as Control)
-
 	understood_button = AlveolusUIComponents.action_button(
 		"Verstanden",
 		AlveolusUIComponents.ACTION_PRIMARY,
@@ -78,9 +71,20 @@ func _ready() -> void:
 	understood_button.name = "Understood"
 	understood_button.pressed.connect(_request_dismiss)
 	understood_button.gui_input.connect(_on_action_gui_input)
+	hide_hints_button = AlveolusUIComponents.action_button(
+		"Hinweise ausblenden",
+		AlveolusUIComponents.ACTION_QUIET,
+		&"remove",
+		AlveolusVisualTheme.MUTED
+	)
+	hide_hints_button.name = "HideHints"
+	hide_hints_button.add_theme_font_size_override("font_size", 12)
+	hide_hints_button.set_meta(&"alveolus_accessible_name", "Weitere Hinweise ausblenden")
+	hide_hints_button.pressed.connect(_request_hide_hints)
+	hide_hints_button.gui_input.connect(_on_action_gui_input)
 
-	var actions: Array[Control] = [understood_button]
-	var modal_parts := AlveolusUIComponents.modal_sheet("Neue Entdeckung", copy_scroll, actions)
+	var actions: Array[Control] = [hide_hints_button, understood_button]
+	var modal_parts := AlveolusUIComponents.modal_sheet("Hinweis", copy_scroll, actions)
 	panel = modal_parts["panel"] as PanelContainer
 	panel.name = "DiscoveryModal"
 	panel.custom_minimum_size = Vector2(PANEL_MIN_WIDTH, 0.0)
@@ -94,8 +98,15 @@ func _ready() -> void:
 	title_label.name = "DiscoveryTitle"
 	title_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	neutral_focus = Control.new()
+	neutral_focus.name = "HintFocusSentinel"
+	neutral_focus.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	neutral_focus.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	neutral_focus.focus_mode = Control.FOCUS_ALL
+	neutral_focus.set_meta(&"alveolus_component", &"modal_focus_sentinel")
+	panel.add_child(neutral_focus)
 
-	_trap_focus_on_action()
+	_trap_focus_on_actions()
 	resized.connect(_on_resized)
 	hide()
 
@@ -105,16 +116,15 @@ func present(item: DiscoveryDefinition, target: Variant, override_text: String =
 	target_object = target
 	gameplay_override = override_text
 	_dismiss_queued = false
-	title_label.text = "Neu · %s" % definition.title
+	title_label.text = "Hinweis · %s" % definition.title
 	gameplay_label.text = gameplay_override if not gameplay_override.is_empty() else definition.gameplay_text
-	medical_label.text = definition.medical_text
 
 	_refresh_target_geometry()
 	panel.hide()
 	show()
 	_layout_generation += 1
 	_measure_and_place.call_deferred(_layout_generation, 0)
-	understood_button.grab_focus()
+	neutral_focus.grab_focus.call_deferred()
 	queue_redraw()
 
 
@@ -321,18 +331,38 @@ func _request_dismiss() -> void:
 	_clear_dismiss_guard.call_deferred()
 
 
+func _request_hide_hints() -> void:
+	if not visible or _dismiss_queued:
+		return
+	hide_hints_requested.emit()
+	_request_dismiss()
+
+
 func _clear_dismiss_guard() -> void:
 	_dismiss_queued = false
 
 
-func _trap_focus_on_action() -> void:
-	var self_path := understood_button.get_path_to(understood_button)
-	understood_button.focus_previous = self_path
-	understood_button.focus_next = self_path
-	understood_button.focus_neighbor_left = self_path
-	understood_button.focus_neighbor_right = self_path
-	understood_button.focus_neighbor_top = self_path
-	understood_button.focus_neighbor_bottom = self_path
+func _trap_focus_on_actions() -> void:
+	var first := hide_hints_button
+	var last := understood_button
+	first.focus_previous = first.get_path_to(last)
+	first.focus_next = first.get_path_to(last)
+	first.focus_neighbor_left = first.get_path_to(last)
+	first.focus_neighbor_right = first.get_path_to(last)
+	first.focus_neighbor_top = first.get_path_to(last)
+	first.focus_neighbor_bottom = first.get_path_to(last)
+	last.focus_previous = last.get_path_to(first)
+	last.focus_next = last.get_path_to(first)
+	last.focus_neighbor_left = last.get_path_to(first)
+	last.focus_neighbor_right = last.get_path_to(first)
+	last.focus_neighbor_top = last.get_path_to(first)
+	last.focus_neighbor_bottom = last.get_path_to(first)
+	neutral_focus.focus_previous = neutral_focus.get_path_to(last)
+	neutral_focus.focus_next = neutral_focus.get_path_to(first)
+	neutral_focus.focus_neighbor_left = neutral_focus.get_path_to(last)
+	neutral_focus.focus_neighbor_right = neutral_focus.get_path_to(first)
+	neutral_focus.focus_neighbor_top = neutral_focus.get_path_to(last)
+	neutral_focus.focus_neighbor_bottom = neutral_focus.get_path_to(first)
 
 
 func _is_fresh_action(event: InputEvent, action: StringName) -> bool:

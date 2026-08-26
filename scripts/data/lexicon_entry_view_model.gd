@@ -103,6 +103,46 @@ class RelatedTermPresentation:
 	func duplicate_value() -> RelatedTermPresentation:
 		return create(_id, _display_name, _explanation, _icon_id)
 
+
+class StatSectionPresentation:
+	extends RefCounted
+
+	var _id: StringName
+	var _title: String
+	var _icon_id: StringName
+	var _rows: Array[StatRowViewModel] = []
+
+	var id: StringName:
+		get: return _id
+	var title: String:
+		get: return _title
+	var icon_id: StringName:
+		get: return _icon_id
+
+	static func create(
+		id_value: StringName,
+		title_value: String,
+		icon_id_value: StringName,
+		rows_value: Array[StatRowViewModel]
+	) -> StatSectionPresentation:
+		var result := StatSectionPresentation.new()
+		result._id = id_value
+		result._title = title_value
+		result._icon_id = icon_id_value
+		for row in rows_value:
+			if row != null:
+				result._rows.append(row.duplicate_value())
+		return result
+
+	func rows() -> Array[StatRowViewModel]:
+		var result: Array[StatRowViewModel] = []
+		for row in _rows:
+			result.append(row.duplicate_value())
+		return result
+
+	func duplicate_value() -> StatSectionPresentation:
+		return create(_id, _title, _icon_id, _rows)
+
 var id: StringName
 var category: StringName
 var display_name: String
@@ -112,10 +152,12 @@ var gameplay_text: String
 var medical_text: String
 var visual_id: StringName
 var locked: bool = false
+var unlock_reason: String
 var stat_rows: Array[StatRowViewModel] = []
 var related_names: PackedStringArray = PackedStringArray()
 var _type_presentations: Array[TypePresentation] = []
 var _related_term_presentations: Array[RelatedTermPresentation] = []
+var _stat_section_presentations: Array[StatSectionPresentation] = []
 
 func has_details() -> bool:
 	return not locked
@@ -145,5 +187,19 @@ func set_related_term_presentations(values: Array[RelatedTermPresentation]) -> v
 func related_term_presentations() -> Array[RelatedTermPresentation]:
 	var result: Array[RelatedTermPresentation] = []
 	for value in _related_term_presentations:
+		result.append(value.duplicate_value())
+	return result
+
+
+func set_stat_section_presentations(values: Array[StatSectionPresentation]) -> void:
+	_stat_section_presentations.clear()
+	for value in values:
+		if value != null:
+			_stat_section_presentations.append(value.duplicate_value())
+
+
+func stat_section_presentations() -> Array[StatSectionPresentation]:
+	var result: Array[StatSectionPresentation] = []
+	for value in _stat_section_presentations:
 		result.append(value.duplicate_value())
 	return result

@@ -487,14 +487,22 @@ dem zusätzlichen Run-Faktor 1,50 multipliziert; der effektive gemeinsame Faktor
 ist damit 5,625. Die separate Introgrundbelohnung beträgt exakt 30 und verwendet
 weder Run- noch Bossmultiplikator. Kosten und Rückerstattungen bleiben
 unverändert. Zusätzlich gilt am Rundenende der Bossmultiplikator
-`1 + 0,25 × besiegte Bosse`; gerundet wird genau einmal am Ende.
+`1 + 0,25 × besiegte Bosse`. Danach erhöht jedes aktive Fallmerkmal die
+Run-Forschung additiv um 15 Prozentpunkte, also bei den regulären zwei Merkmalen
+mit dem gemeinsamen Faktor `1 + 0,15 × 2 = 1,30`; gerundet wird über die
+vollständige Berechnung genau einmal am Ende.
 
 ### Variationsregel
 
-- Ein Fall ohne früheren Sieg startet ohne Merkmal und ohne Befund.
+- Ein Fall ohne früheren Sieg startet ohne Merkmale und ohne Befund.
 - Der erste Sieg selbst enthält daher noch keine Zufallsparameter.
-- Ab dem nächsten Versuch werden genau ein Merkmal und ein Befund
-  deterministisch aus dem gespeicherten Fallseed gewählt.
+- Ab dem nächsten Versuch werden genau zwei verschiedene Merkmale und ein Befund
+  deterministisch aus dem gespeicherten Fallseed gewählt. Die alte erste
+  Merkmalsziehung bleibt unverändert, danach folgt die bisherige Befundziehung;
+  erst anschließend wird das zweite Merkmal aus den verbleibenden gültigen
+  Merkmalen gezogen.
+- Beide Merkmalswirkungen werden im Run jeweils genau einmal angewandt und geben
+  je 15 Prozentpunkte additive Run-Forschung.
 - Nur ein Sieg rotiert diesen Seed. Niederlage, Abbruch und Neustart behalten
   dieselbe Kombination.
 

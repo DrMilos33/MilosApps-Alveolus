@@ -371,6 +371,8 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	if option.compact_title():
 		title.add_theme_font_size_override("font_size", AlveolusVisualTheme.TEXT_CAPTION)
 	heading.add_child(title)
+	if option.has_effect_badge():
+		heading.add_child(_build_effect_badge(option))
 
 	var effect := _build_effect_copy(option.effect())
 	content.add_child(effect)
@@ -411,6 +413,40 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	return card
 
 
+func _build_effect_badge(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> PanelContainer:
+	var accent := _accent_color(option.effect_accent_role())
+	var badge := AlveolusUIComponents.badge(option.effect_label(), accent)
+	badge.name = "EffectBadge_%s" % String(option.effect_role())
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.set_meta(&"upgrade_effect_role", option.effect_role())
+	badge.set_meta(&"upgrade_effect_label", option.effect_label())
+	badge.set_meta(&"upgrade_effect_icon_id", option.effect_icon_id())
+	badge.set_meta(&"upgrade_effect_accent", accent)
+	var badge_labels := badge.find_children("*", "Label", true, false)
+	var text_label := badge_labels[0] as Label if not badge_labels.is_empty() else null
+	if text_label == null:
+		return badge
+	var inset := text_label.get_parent() as Container
+	if inset == null:
+		return badge
+	if inset is Control:
+		(inset as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	inset.remove_child(text_label)
+	var row := HBoxContainer.new()
+	row.name = "EffectBadgeContent"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	var icon := SimpleIcon.new()
+	icon.name = "EffectBadgeIcon"
+	icon.custom_minimum_size = Vector2(18.0, 18.0)
+	icon.configure(option.effect_icon_id(), accent)
+	row.add_child(icon)
+	row.add_child(text_label)
+	inset.add_child(row)
+	return badge
+
+
 func _card_accessible_name(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> String:
 	var parts := PackedStringArray([option.title(), option.effect()])
 	for row in option.value_rows():
@@ -419,6 +455,8 @@ func _card_accessible_name(option: UpgradeOverlayViewModel.UpgradeOptionViewMode
 			parts.append("%s%s" % [row_prefix, row.value()])
 		else:
 			parts.append("%s%s zu %s" % [row_prefix, row.before_value(), row.value()])
+	if option.has_effect_badge():
+		parts.append("Effekt %s" % option.effect_label())
 	parts.append("In dieser Runde %d Mal gewählt" % option.pick_count())
 	return ". ".join(parts)
 

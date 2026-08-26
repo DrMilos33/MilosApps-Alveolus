@@ -8,7 +8,10 @@ enum Mode {
 
 var level_id: StringName = &""
 var seed: int = 0
-var visible_trait_id: StringName = &""
+var visible_trait_ids: Array[StringName] = []
+var visible_trait_id: StringName:
+	get:
+		return visible_trait_ids[0] if not visible_trait_ids.is_empty() else &""
 var hidden_finding_id: StringName = &""
 var loadout_snapshot: PreparedLoadout
 var talent_snapshot: Dictionary = {}
@@ -22,12 +25,15 @@ static func create(
 	loadout: PreparedLoadout,
 	active_talents: Dictionary = {},
 	trait_id: StringName = &"",
-	finding_id: StringName = &""
+	finding_id: StringName = &"",
+	trait_ids: Array[StringName] = []
 ) -> RunContext:
 	var context := RunContext.new()
 	context.level_id = selected_level_id
 	context.seed = case_seed
-	context.visible_trait_id = trait_id
+	context.visible_trait_ids = trait_ids.duplicate()
+	if context.visible_trait_ids.is_empty() and trait_id != &"":
+		context.visible_trait_ids.append(trait_id)
 	context.hidden_finding_id = finding_id
 	context.loadout_snapshot = loadout.duplicate_loadout() if loadout != null else null
 	context.talent_snapshot = active_talents.duplicate(true)
@@ -54,7 +60,15 @@ func talent_rank(id: StringName) -> int:
 	return maxi(0, int(talent_snapshot.get(id, talent_snapshot.get(String(id), 0))))
 
 func duplicate_context() -> RunContext:
-	var copy := create(level_id, seed, loadout_snapshot, talent_snapshot, visible_trait_id, hidden_finding_id)
+	var copy := create(
+		level_id,
+		seed,
+		loadout_snapshot,
+		talent_snapshot,
+		visible_trait_id,
+		hidden_finding_id,
+		visible_trait_ids
+	)
 	copy.mode = mode
 	copy.practice_scenario = _duplicate_value(practice_scenario)
 	copy.practice_boss_profile = _duplicate_value(practice_boss_profile)

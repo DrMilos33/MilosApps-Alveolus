@@ -282,7 +282,7 @@ func _assert_compact_labeled_rows(screen: SettingsScreen) -> void:
 	_check(restart_purpose != null and restart_purpose.text == "Strg+R bestätigen", "Neustartoption erklärt den festen Shortcut direkt in ihrer Zeile")
 	var compact_toggle_labels := {
 		&"reduce_motion": "Animationen reduzieren",
-		&"show_discovery_info": "Neuigkeiten anzeigen",
+		&"show_discovery_info": "Hinweise anzeigen",
 		&"run_stats": "Werte im Run",
 		&"show_character_name": "Charaktername anzeigen",
 		&"show_character_health_bar": "Kleiner Lebensbalken",
@@ -420,7 +420,7 @@ func _option_fixture() -> Array[SettingsScreenViewModel.OptionSettingViewModel]:
 func _toggle_fixture() -> Array[SettingsScreenViewModel.ToggleSettingViewModel]:
 	var result: Array[SettingsScreenViewModel.ToggleSettingViewModel] = []
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Bewegung reduzieren", false))
-	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Neuigkeiten anzeigen", true))
+	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Hinweise anzeigen", true))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", true))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Name über dem Charakter", false))
 	result.append(SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_health_bar", "Kleiner Lebensbalken", false))

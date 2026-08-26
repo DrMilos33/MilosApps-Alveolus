@@ -47,6 +47,7 @@ var detail_gameplay_title: Label
 var detail_gameplay_text: Label
 var detail_gameplay_panel: PanelContainer
 var detail_stats_title: Label
+var detail_stats_sections: VBoxContainer
 var detail_stats_grid: GridContainer
 var detail_type_sections: VBoxContainer
 var detail_medical_title: Label
@@ -56,6 +57,7 @@ var detail_related_title: Label
 var detail_related_chips: HFlowContainer
 var empty_detail_label: Label
 var _context_detail_sources: Dictionary = {}
+var _detail_stat_grids: Array[GridContainer] = []
 var _detail_type_grids: Array[GridContainer] = []
 
 func _ready() -> void:
@@ -412,13 +414,19 @@ func _build_detail_content() -> void:
 	_add_separator(detail_content)
 	detail_stats_title = AlveolusUIComponents.label("Basiswerte", AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
 	detail_content.add_child(detail_stats_title)
+	detail_stats_sections = VBoxContainer.new()
+	detail_stats_sections.name = "StatSections"
+	detail_stats_sections.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_stats_sections.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	detail_content.add_child(detail_stats_sections)
 	detail_stats_grid = GridContainer.new()
 	detail_stats_grid.name = "StatsGrid"
 	detail_stats_grid.columns = 2
 	detail_stats_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	detail_stats_grid.add_theme_constant_override("h_separation", 12)
 	detail_stats_grid.add_theme_constant_override("v_separation", 8)
-	detail_content.add_child(detail_stats_grid)
+	detail_stats_sections.add_child(detail_stats_grid)
+	_detail_stat_grids.append(detail_stats_grid)
 
 	detail_type_sections = VBoxContainer.new()
 	detail_type_sections.name = "TypePresentations"
@@ -505,23 +513,36 @@ func _rebuild_entry_list() -> void:
 		row_copy.alignment = BoxContainer.ALIGNMENT_CENTER
 		row_copy.add_theme_constant_override("separation", 2)
 		row.add_child(row_copy)
+		var title_row := HBoxContainer.new()
+		title_row.name = "EntryTitleRow"
+		title_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		title_row.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+		title_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row_copy.add_child(title_row)
+		if view_model.locked:
+			var lock_icon := SimpleIcon.new()
+			lock_icon.name = "LockedIcon"
+			lock_icon.custom_minimum_size = Vector2(18.0, 18.0)
+			lock_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			lock_icon.configure(&"locked", AlveolusVisualTheme.GOLD)
+			lock_icon.set_meta(&"alveolus_accessible_name", "Gesperrt")
+			title_row.add_child(lock_icon)
 		var title := AlveolusUIComponents.label(view_model.display_name, AlveolusVisualTheme.TYPE_VALUE_LABEL)
 		title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row_copy.add_child(title)
-		var state_text := "Besiegen zum Freischalten" if view_model.locked else "Freigeschaltet"
-		if view_model.locked and view_model.category != LexiconEntryDefinition.CATEGORY_MONSTERS:
-			state_text = "Entdecken zum Freischalten"
-		var state_label := AlveolusUIComponents.label(state_text, AlveolusVisualTheme.TYPE_MUTED_LABEL)
-		state_label.custom_minimum_size.y = 30.0
-		state_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		state_label.max_lines_visible = 2
-		state_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		if not view_model.locked:
-			state_label.add_theme_color_override("font_color", accent)
-		row_copy.add_child(state_label)
+		title_row.add_child(title)
+		var state_text := view_model.unlock_reason if view_model.locked else ""
+		var state_label: Label = null
+		if view_model.locked:
+			state_label = AlveolusUIComponents.label(state_text, AlveolusVisualTheme.TYPE_MUTED_LABEL)
+			state_label.name = "UnlockReason"
+			state_label.custom_minimum_size.y = 30.0
+			state_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			state_label.max_lines_visible = 2
+			state_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			state_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row_copy.add_child(state_label)
 		button.set_meta(&"lexicon_display_name", view_model.display_name)
 		button.set_meta(&"lexicon_base_state_text", state_text)
 		button.set_meta(&"lexicon_state_label", state_label)
@@ -554,7 +575,9 @@ func _set_entry_button_selected(button: Button, is_selected: bool) -> void:
 	)
 	var display_name := String(button.get_meta(&"lexicon_display_name", "Lexikoneintrag"))
 	var state_text := String(button.get_meta(&"lexicon_base_state_text", ""))
-	var accessible_name := "%s, %s" % [display_name, state_text]
+	var accessible_name := display_name
+	if not state_text.is_empty():
+		accessible_name = "Gesperrt. %s. %s" % [display_name, state_text]
 	if is_selected:
 		accessible_name += ", ausgewählt"
 	button.set_meta(&"alveolus_accessible_name", accessible_name)
@@ -572,7 +595,9 @@ func _show_empty_detail() -> void:
 	detail_medical_name.hide()
 	detail_summary.hide()
 	detail_stats_title.hide()
+	detail_stats_sections.hide()
 	detail_stats_grid.hide()
+	_clear_stat_section_groups()
 	_clear_children(detail_type_sections)
 	_detail_type_grids.clear()
 	detail_type_sections.hide()
@@ -610,26 +635,22 @@ func _show_detail(view_model: LexiconEntryViewModel) -> void:
 
 	var type_presentations := view_model.type_presentations()
 	var has_structured_types := not type_presentations.is_empty()
-	_clear_children(detail_stats_grid)
-	for row in view_model.stat_rows:
-		if has_structured_types and _is_legacy_type_row(row.id):
-			continue
-		var stat_panel := AlveolusUIComponents.value_row(row.label, row.formatted_value())
-		stat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		stat_panel.set_meta(&"lexicon_stat_id", row.id)
-		stat_panel.tooltip_text = row.description
-		var name_label := stat_panel.find_child("ValueName", true, false) as Label
-		if name_label != null:
-			name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-			name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		var value_label := stat_panel.find_child("Value", true, false) as Label
-		if value_label != null:
-			value_label.custom_minimum_size.x = 72.0
-			value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-		detail_stats_grid.add_child(stat_panel)
-	var has_stat_rows := detail_stats_grid.get_child_count() > 0
-	detail_stats_title.visible = has_stat_rows
-	detail_stats_grid.visible = has_stat_rows
+	_clear_stat_section_groups()
+	var stat_sections := view_model.stat_section_presentations()
+	if stat_sections.is_empty():
+		detail_stats_grid.show()
+		for row in view_model.stat_rows:
+			if has_structured_types and _is_legacy_type_row(row.id):
+				continue
+			detail_stats_grid.add_child(_build_stat_panel(row))
+	else:
+		detail_stats_grid.hide()
+		for section in stat_sections:
+			_build_stat_section(section, has_structured_types)
+	var has_stat_rows := not stat_sections.is_empty() or detail_stats_grid.get_child_count() > 0
+	detail_stats_title.visible = has_stat_rows and stat_sections.is_empty()
+	detail_stats_grid.visible = has_stat_rows and stat_sections.is_empty()
+	detail_stats_sections.visible = has_stat_rows
 	_rebuild_type_presentations(type_presentations)
 
 	detail_gameplay_text.text = view_model.gameplay_text
@@ -642,6 +663,69 @@ func _show_detail(view_model: LexiconEntryViewModel) -> void:
 	detail_medical_panel.visible = detail_medical_title.visible
 	_rebuild_related_term_chips(view_model)
 	detail_scroll.scroll_vertical = 0
+
+
+func _clear_stat_section_groups() -> void:
+	if detail_stats_sections == null:
+		return
+	_clear_children(detail_stats_grid)
+	for child in detail_stats_sections.get_children():
+		if child != detail_stats_grid:
+			detail_stats_sections.remove_child(child)
+			child.free()
+	_detail_stat_grids.clear()
+	_detail_stat_grids.append(detail_stats_grid)
+
+
+func _build_stat_section(
+	section: LexiconEntryViewModel.StatSectionPresentation,
+	has_structured_types: bool
+) -> void:
+	if section == null:
+		return
+	var group := VBoxContainer.new()
+	group.name = "StatSection_%s" % String(section.id)
+	group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	group.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	group.set_meta(&"lexicon_stat_section", section.id)
+	var heading := HBoxContainer.new()
+	heading.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	var icon := SimpleIcon.new()
+	icon.name = "StatSectionIcon"
+	icon.custom_minimum_size = Vector2(20.0, 20.0)
+	icon.configure(section.icon_id, _category_accent(LexiconEntryDefinition.CATEGORY_CHARACTER))
+	heading.add_child(icon)
+	heading.add_child(AlveolusUIComponents.label(section.title, AlveolusVisualTheme.TYPE_EYEBROW_LABEL))
+	group.add_child(heading)
+	var grid := GridContainer.new()
+	grid.name = "StatGrid_%s" % String(section.id)
+	grid.columns = 1 if _is_compact() else 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 8)
+	for row in section.rows():
+		if has_structured_types and _is_legacy_type_row(row.id):
+			continue
+		grid.add_child(_build_stat_panel(row))
+	group.add_child(grid)
+	detail_stats_sections.add_child(group)
+	_detail_stat_grids.append(grid)
+
+
+func _build_stat_panel(row: StatRowViewModel) -> PanelContainer:
+	var stat_panel := AlveolusUIComponents.value_row(row.label, row.formatted_value())
+	stat_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stat_panel.set_meta(&"lexicon_stat_id", row.id)
+	stat_panel.tooltip_text = row.description
+	var name_label := stat_panel.find_child("ValueName", true, false) as Label
+	if name_label != null:
+		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	var value_label := stat_panel.find_child("Value", true, false) as Label
+	if value_label != null:
+		value_label.custom_minimum_size.x = 72.0
+		value_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	return stat_panel
 
 
 func _rebuild_related_term_chips(view_model: LexiconEntryViewModel) -> void:
@@ -936,7 +1020,7 @@ func _update_entry_count() -> void:
 		if not provider.make_view_model(definition, seen_discovery_ids).locked:
 			unlocked += 1
 	var shown := entry_buttons.size()
-	entry_count_label.text = "%d von %d freigeschaltet" % [unlocked, total]
+	entry_count_label.text = "%d von %d entdeckt" % [unlocked, total]
 	if entry_filter != null and not entry_filter.text.strip_edges().is_empty():
 		entry_count_label.text += " · %d Treffer" % shown
 
@@ -1023,7 +1107,9 @@ func _apply_responsive_layout() -> void:
 	detail_panel.visible = compact_detail_visible
 	if overview_toolbar != null:
 		overview_toolbar.visible = not compact_detail_visible
-	detail_stats_grid.columns = 1 if compact else 2
+	for stat_grid in _detail_stat_grids:
+		if stat_grid != null and is_instance_valid(stat_grid):
+			stat_grid.columns = 1 if compact else 2
 	for type_grid in _detail_type_grids:
 		if type_grid != null and is_instance_valid(type_grid):
 			type_grid.columns = 1 if compact else 2

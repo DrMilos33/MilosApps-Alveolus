@@ -114,3 +114,17 @@ func formatted_value() -> String:
 	if not unit.is_empty():
 		result += " " + unit
 	return result
+
+
+func duplicate_value() -> StatRowViewModel:
+	var copy := StatRowViewModel.new()
+	copy.id = id
+	copy.label = label
+	copy.value = value.duplicate(true) if value is Array or value is Dictionary else value
+	copy.unit = unit
+	copy.value_kind = value_kind
+	copy.decimals = decimals
+	copy.source_id = source_id
+	copy.source_field = source_field
+	copy.description = description
+	return copy

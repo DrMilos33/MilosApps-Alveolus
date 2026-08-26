@@ -9,6 +9,7 @@ func _init() -> void:
 	_test_v6_unlock_mapping()
 	_test_v7_roundtrip_and_retired_income()
 	_test_divergent_legacy_loadouts_are_preserved()
+	_test_run_context_traits_and_reward_contract()
 	if failures == 0:
 		print("SAVE_V7_CAMPAIGN_OK assertions=%d" % assertions)
 		quit(0)
@@ -125,6 +126,34 @@ func _test_divergent_legacy_loadouts_are_preserved() -> void:
 		later_plan.to_dict(),
 		"Der abweichende spätere Legacy-Plan bleibt beim Laden und Speichern unangetastet"
 	)
+
+
+func _test_run_context_traits_and_reward_contract() -> void:
+	var state := MetaProgressionState.new(func() -> int: return 700000)
+	state.reset_defaults(700000)
+	var traits: Array[StringName] = [&"monster_resistance_20", &"double_boss"]
+	var context := state.create_run_context(
+		&"localized_focus",
+		&"",
+		&"hidden_nests",
+		traits
+	)
+	traits.clear()
+	_equal(context.visible_trait_ids, [&"monster_resistance_20", &"double_boss"], "Meta erstellt den kanonischen unabhängigen Merkmals-Snapshot")
+	_equal(context.visible_trait_id, &"monster_resistance_20", "Meta bewahrt den kompatiblen singulären Lesealias")
+	_equal(context.hidden_finding_id, &"hidden_nests", "Der bestehende Befundparameter bleibt positionskompatibel")
+
+	var base_win := MetaProgressionState.calculate_run_reward(true, 0.0, 0, 0)
+	var base_loss := MetaProgressionState.calculate_run_reward(false, 0.0, 0, 0)
+	_equal(base_win, 79, "Der bisherige Sieg-Reward bleibt ohne Merkmale unverändert")
+	_equal(base_loss, 11, "Der bisherige Niederlagen-Reward bleibt ohne Merkmale unverändert")
+	_equal(MetaProgressionState.calculate_run_reward(true, 0.0, 0, 0, 1.0, 0, 2), 102, "Zwei Merkmale erhöhen den Sieg-Reward additiv um 30 Prozent und runden nur am Ende")
+	_equal(MetaProgressionState.calculate_run_reward(false, 0.0, 0, 0, 1.0, 0, 2), 15, "Zwei Merkmale erhöhen den Niederlagen-Reward mit derselben einmal gerundeten Formel")
+	_equal(MetaProgressionState.calculate_run_reward(false, 0.0, 0, 0, 1.0, 0, -2), base_loss, "Negative Merkmalszahlen können den Reward nicht senken")
+	var awarded := state.award_run(false, 367.0, 6, 47, 1.35, 1, 2)
+	_equal(awarded, MetaProgressionState.calculate_run_reward(false, 367.0, 6, 47, 1.35, 1, 2), "Auszahlung und Vorschau teilen den zentralen Merkmalsbonus")
+	_equal(state.research_points, awarded, "Die Auszahlung bucht den einmal gerundeten Reward")
+	_equal(MetaProgressionState.intro_research_reward(2), MetaProgressionState.INTRO_RESEARCH_REWARD, "Intro bleibt unabhängig von Boss- und Merkmalsbonus")
 
 
 func _level_snapshot(level: LevelDefinition) -> Dictionary:

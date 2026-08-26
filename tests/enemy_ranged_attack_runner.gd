@@ -275,6 +275,9 @@ func _test_case_two_runtime_projectile_contract() -> void:
 	_equal(String(game.hud.run_hud_vitals.get("boss_phase", "")), "Phase 80 %", "Das Boss-HUD zeigt die echte Fall-2-Beschwörungsschwelle")
 	if is_instance_valid(boss):
 		boss.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+		# The editor test-tool damage multiplier is user-persistent. This threshold
+		# contract exercises authored boss health, so isolate it from that local UI setting.
+		boss.set_incoming_player_damage_multiplier(1.0)
 		_equal(boss.phase_health_thresholds, PackedFloat32Array([0.80]), "Die echte Bossaktivierung übernimmt die 80-Prozent-Addschwelle")
 		var phase_changes: Array[int] = []
 		boss.boss_phase_changed.connect(func(phase: int) -> void: phase_changes.append(phase))

@@ -116,11 +116,12 @@ func _test_visible_settings_and_reduced_motion(hud: GameHUD) -> void:
 	_true(hud.settings_scale_option == null, "Das fokussierte Settingsprofil besitzt keine UI-Größenmatrix mehr")
 	_true(hud.settings_glyph_option == null, "Das fokussierte Settingsprofil besitzt keine Eingabemodusmatrix mehr")
 	var discovery_toggle := hud.settings_screen.control_for_setting(&"toggle.show_discovery_info") as CheckButton
-	_true(discovery_toggle != null and not discovery_toggle.button_pressed, "Neuigkeiten besitzen einen standardmäßig deaktivierten Settings-Schalter")
-	discovery_toggle.button_pressed = true
-	_true(hud.current_ui_settings.show_discovery_info, "Entdeckungsinfos lassen sich im selben Screen ausdrücklich aktivieren")
+	_true(discovery_toggle != null and discovery_toggle.button_pressed, "Hinweise besitzen einen standardmäßig aktivierten Settings-Schalter")
+	_true(_control_text(hud.settings_overlay).contains("Hinweise anzeigen"), "Der sichtbare Settings-Schalter heißt ‚Hinweise anzeigen‘")
 	discovery_toggle.button_pressed = false
-	_true(not hud.current_ui_settings.show_discovery_info, "Der Schalter deaktiviert pausierende Entdeckungsinfos wieder unmittelbar")
+	_true(not hud.current_ui_settings.show_discovery_info, "Der Schalter bewahrt ein ausdrückliches Ausschalten der Hinweise unmittelbar")
+	discovery_toggle.button_pressed = true
+	_true(hud.current_ui_settings.show_discovery_info, "Hinweise lassen sich im selben Screen wieder aktivieren")
 	var health_toggle := hud.settings_screen.control_for_setting(&"toggle.show_character_health_bar") as CheckButton
 	_true(health_toggle != null and not health_toggle.button_pressed, "Der kleine Charakter-Lebensbalken ist standardmäßig ausgeschaltet")
 	_true(health_toggle != null and health_toggle.tooltip_text.contains("ohne Zahlen") and health_toggle.tooltip_text.contains("Doctor Milos"), "Der Schalter erklärt den kleinen zahlenlosen Lebensbalken über der Figur")

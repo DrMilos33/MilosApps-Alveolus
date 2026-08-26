@@ -165,8 +165,12 @@ func centered_texture_layout(texture: Texture2D, center: Vector2, maximum_size: 
 
 func _draw_lock_mark(center: Vector2) -> void:
 	if locked:
-		draw_line(center + Vector2(-20, -20), center + Vector2(20, 20), Color("789096"), 3.0, true)
-		draw_line(center + Vector2(20, -20), center + Vector2(-20, 20), Color("789096"), 3.0, true)
+		var lock_color := Color(AlveolusVisualTheme.GOLD, 0.92)
+		var lock_center := center + Vector2(18.0, 18.0)
+		draw_circle(lock_center, 13.0, Color(AlveolusVisualTheme.PETROL_DEEP, 0.94))
+		draw_arc(lock_center + Vector2(0.0, -4.0), 6.0, PI, TAU, 16, lock_color, 2.2, true)
+		draw_rect(Rect2(lock_center + Vector2(-8.0, -2.0), Vector2(16.0, 12.0)), Color(lock_color, 0.20), true)
+		draw_rect(Rect2(lock_center + Vector2(-8.0, -2.0), Vector2(16.0, 12.0)), lock_color, false, 2.0)
 
 func _draw_pneumococcus(center: Vector2, color: Color) -> void:
 	draw_circle(center + Vector2(-10, 0), 14.0, color)

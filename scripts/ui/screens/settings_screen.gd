@@ -692,7 +692,7 @@ func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.Toggl
 	if setting.get_id() == &"reduce_motion":
 		toggle.tooltip_text = "Reduziert UI-Animationen und Bewegungseffekte."
 	elif setting.get_id() == &"show_discovery_info":
-		toggle.tooltip_text = "Zeigt neue Entdeckungen als pausierende Info an."
+		toggle.tooltip_text = "Zeigt optionale Hinweise im Campus, in der Einsatzplanung und während eines Falls."
 	elif setting.get_id() == &"show_character_name":
 		toggle.tooltip_text = "Zeigt Doctor Milos dezent über der Spielfigur."
 	_controls[key] = toggle
@@ -707,7 +707,7 @@ func _toggle_purpose(setting_id: StringName, fallback: String) -> String:
 		&"run_stats":
 			return "Werte im Run"
 		&"show_discovery_info":
-			return "Neuigkeiten anzeigen"
+			return "Hinweise anzeigen"
 		&"show_character_name":
 			return "Charaktername anzeigen"
 		&"fullscreen":

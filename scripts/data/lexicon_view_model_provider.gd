@@ -30,12 +30,12 @@ func make_view_model(entry: LexiconEntryDefinition, seen_discovery_ids: Variant 
 	view_model.visual_id = entry.visual_id
 	view_model.locked = not _is_unlocked(entry, seen_discovery_ids)
 	if view_model.locked:
+		view_model.display_name = entry.display_name
 		if entry.category == LexiconEntryDefinition.CATEGORY_MONSTERS:
-			view_model.display_name = "Noch nicht besiegt"
-			view_model.summary = "Besiege diesen Gegner, um seine Beschreibung freizuschalten."
+			view_model.unlock_reason = "Besiege diesen Gegner, um den Eintrag zu entdecken."
 		else:
-			view_model.display_name = "Noch nicht entdeckt"
-			view_model.summary = "Entdecke diesen Eintrag im Spiel, um seine Beschreibung freizuschalten."
+			view_model.unlock_reason = "Entdecke diesen Eintrag im Spiel."
+		view_model.summary = view_model.unlock_reason
 		return view_model
 
 	view_model.display_name = entry.display_name
@@ -121,6 +121,47 @@ func _apply_player_source(view_model: LexiconEntryViewModel) -> void:
 			&"damage_profile"
 		))
 	view_model.stat_rows = rows
+	var rows_by_id: Dictionary = {}
+	for row in rows:
+		rows_by_id[row.id] = row
+	var defense_ids: Array[StringName] = [&"max_life", &"defense", &"life_regeneration", &"resistances"]
+	var attack_ids: Array[StringName] = [&"treatment_damage", &"treatment_damage_type", &"treatment_interval", &"treatment_range", &"treatment_targets", &"treatment_projectiles"]
+	var other_ids: Array[StringName] = [&"movement_speed", &"pickup_range"]
+	var other_rows := _rows_for_ids(rows_by_id, other_ids)
+	var assigned_ids := defense_ids + attack_ids + other_ids
+	for row in rows:
+		if row.id not in assigned_ids:
+			other_rows.append(row)
+	var stat_sections: Array[LexiconEntryViewModel.StatSectionPresentation] = [
+		LexiconEntryViewModel.StatSectionPresentation.create(
+			&"defense",
+			"Verteidigung",
+			&"defense_training",
+			_rows_for_ids(rows_by_id, defense_ids)
+		),
+		LexiconEntryViewModel.StatSectionPresentation.create(
+			&"attack",
+			"Angriff",
+			&"treatment",
+			_rows_for_ids(rows_by_id, attack_ids)
+		),
+		LexiconEntryViewModel.StatSectionPresentation.create(
+			&"other",
+			"Sonstiges",
+			&"character_stats",
+			other_rows
+		),
+	]
+	view_model.set_stat_section_presentations(stat_sections)
+
+
+func _rows_for_ids(rows_by_id: Dictionary, ids: Array[StringName]) -> Array[StatRowViewModel]:
+	var result: Array[StatRowViewModel] = []
+	for id in ids:
+		var row := rows_by_id.get(id) as StatRowViewModel
+		if row != null:
+			result.append(row)
+	return result
 
 func _apply_discovery_source(view_model: LexiconEntryViewModel, discovery_id: StringName) -> void:
 	var discovery := discovery_definitions.get(discovery_id) as DiscoveryDefinition

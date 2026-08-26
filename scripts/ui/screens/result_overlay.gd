@@ -138,6 +138,16 @@ func get_reward_column_count() -> int:
 	return _reward_grid.columns if _reward_grid != null else 0
 
 
+func reward_anchor(reward_id: StringName) -> Control:
+	if _reward_grid == null:
+		return null
+	for child in _reward_grid.get_children():
+		if child is Control and StringName(child.get_meta(&"reward_id", &"")) == reward_id:
+			var icon := child.find_child("RewardIcon", true, false) as Control
+			return icon if icon != null else child as Control
+	return null
+
+
 func get_ability_section_header() -> Button:
 	return _ability_section_header
 

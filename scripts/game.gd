@@ -65,6 +65,10 @@ const IMPULSE_SPLASH_RADIUS := 60.0
 const IMPULSE_SPLASH_DAMAGE_FRACTION := 0.10
 const BOSS_AURA_STATUS_SOURCE := &"boss_aura"
 const BOSS_AURA_REFRESH_SECONDS := 0.10
+const FALL_ONE_ID := &"early_localized_focus"
+const DEFENSE_BURST_RESEARCH_ID := &"unlock_defense_burst"
+const DEFENSE_BURST_ABILITY_ID := &"ability_defense_burst"
+const FALL_ONE_GUIDANCE_COMPLETE := &"fall1_defense_burst_guidance_complete"
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := false
@@ -134,6 +138,7 @@ var story_return_state: GameFlowState.State = GameFlowState.State.CAMPUS
 var discovery_return_state: GameFlowState.State = GameFlowState.State.RUNNING
 var intro_skip_return_state: GameFlowState.State = GameFlowState.State.PREPARATION
 var restart_return_state: GameFlowState.State = GameFlowState.State.RUNNING
+var pending_preparation_guidance_active: bool = false
 
 var enemies: Array[InfectionEnemy] = []
 var projectiles: Array[TherapyProjectile] = []
@@ -458,6 +463,7 @@ func _ready() -> void:
 	hud.finding_confirmed.connect(_on_finding_confirmed)
 	hud.finding_reserve_swap_requested.connect(_on_finding_reserve_swap_requested)
 	hud.discovery_dismissed.connect(_on_discovery_dismissed)
+	hud.hints_disabled.connect(_on_hints_disabled)
 	hud.intro_skip_requested.connect(_on_intro_skip_requested)
 	hud.intro_skip_confirmed.connect(_on_intro_skip_confirmed)
 	hud.intro_skip_cancelled.connect(_on_intro_skip_cancelled)
@@ -916,6 +922,8 @@ func _ability_device_for_event(event: InputEvent) -> AbilityCommand.InputDevice:
 	return AbilityCommand.InputDevice.GAMEPAD if event is InputEventJoypadButton or event is InputEventJoypadMotion else AbilityCommand.InputDevice.KEYBOARD_MOUSE
 
 func _on_route_focus_requested(target: Variant) -> void:
+	if hud != null and not hud.navigation_focus_active:
+		return
 	if target is Control and is_instance_valid(target) and (target as Control).is_visible_in_tree():
 		(target as Control).grab_focus.call_deferred()
 
@@ -927,7 +935,9 @@ func _show_campus(reset_route: bool = true) -> void:
 	_save_meta()
 	_set_flow(GameFlowState.State.CAMPUS)
 	hud.show_campus(meta)
-	if bool(meta.tutorial_status.get(&"research_guidance_pending", false)) and hud.has_method("show_campus_research_guidance"):
+	if meta.ui_settings.show_discovery_info \
+		and bool(meta.tutorial_status.get(&"research_guidance_pending", false)) \
+		and hud.has_method("show_campus_research_guidance"):
 		hud.call("show_campus_research_guidance")
 	if reset_route:
 		ui_router.reset(&"campus")
@@ -1137,7 +1147,9 @@ func _show_settings(return_state: GameFlowState.State) -> void:
 	hud.show_settings(not OS.has_feature("web"), return_state != GameFlowState.State.MANUAL_PAUSE)
 
 func _on_navigate_requested(destination: StringName) -> void:
-	if flow_state == GameFlowState.State.CAMPUS and bool(meta.tutorial_status.get(&"research_guidance_pending", false)):
+	if flow_state == GameFlowState.State.CAMPUS \
+		and destination == &"research" \
+		and bool(meta.tutorial_status.get(&"research_guidance_pending", false)):
 		meta.set_tutorial_step(&"research_guidance_pending", false)
 		if hud.has_method("hide_campus_research_guidance"):
 			hud.call("hide_campus_research_guidance")
@@ -1280,6 +1292,9 @@ func _on_ui_settings_changed(settings: UISettingsState) -> void:
 	if avatar != null:
 		avatar.set_character_name_visible(meta.ui_settings.show_character_name)
 		avatar.set_character_health_bar_visible(meta.ui_settings.show_character_health_bar)
+	if not meta.ui_settings.show_discovery_info:
+		_on_hints_disabled()
+		return
 	_save_meta()
 
 
@@ -1399,6 +1414,7 @@ func _show_preparation() -> void:
 	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	pending_loadout_draft = LoadoutDraft.from_prepared(pending_preparation_loadout, loadout_modules, available, meta.preparation_capacity())
 	pending_replacement_component = &""
+	_initialize_preparation_guidance()
 	_set_flow(GameFlowState.State.PREPARATION)
 	if ui_router.current_screen_id() != &"level_select":
 		ui_router.reset(&"campus")
@@ -1414,16 +1430,46 @@ func _create_case_context(level: LevelDefinition) -> RunContext:
 		return meta.create_run_context(level.id, &"", &"")
 	var case_rng := RandomNumberGenerator.new()
 	case_rng.seed = seed
+	var first_trait := _deterministic_case_trait_choice(level.visible_trait_ids, level.id, case_rng)
+	# Preserve the established seed contract: the hidden finding remains the
+	# second draw. The additional visible trait is drawn only afterwards.
+	var hidden_finding := _deterministic_case_choice(level.hidden_finding_ids, case_rng)
+	var remaining_traits: Array[StringName] = []
+	for trait_id in level.visible_trait_ids:
+		if trait_id != first_trait:
+			remaining_traits.append(trait_id)
+	var second_trait := _deterministic_case_trait_choice(remaining_traits, level.id, case_rng)
+	var selected_traits: Array[StringName] = []
+	if first_trait != &"":
+		selected_traits.append(first_trait)
+	if second_trait != &"":
+		selected_traits.append(second_trait)
 	return meta.create_run_context(
 		level.id,
-		_deterministic_case_choice(level.visible_trait_ids, case_rng),
-		_deterministic_case_choice(level.hidden_finding_ids, case_rng)
+		first_trait,
+		hidden_finding,
+		selected_traits
 	)
 
 func _deterministic_case_choice(ids: Array[StringName], case_rng: RandomNumberGenerator) -> StringName:
 	var valid: Array[StringName] = []
 	for id in ids:
 		if id != &"":
+			valid.append(id)
+	if valid.is_empty():
+		return &""
+	return valid[case_rng.randi_range(0, valid.size() - 1)]
+
+
+func _deterministic_case_trait_choice(
+	ids: Array[StringName],
+	level_id: StringName,
+	case_rng: RandomNumberGenerator
+) -> StringName:
+	var valid: Array[StringName] = []
+	for id in ids:
+		var definition := case_traits.get(id) as CaseTraitDefinition
+		if id != &"" and definition != null and definition.is_available_for(level_id):
 			valid.append(id)
 	if valid.is_empty():
 		return &""
@@ -1436,7 +1482,12 @@ func _refresh_preparation() -> void:
 	var validation := pending_loadout_draft.validate()
 	var practice_mode := pending_run_context != null and pending_run_context.is_practice_test()
 	var scenario := pending_run_context.practice_scenario as PracticeScenarioDefinition if practice_mode else null
-	var case_trait_value: Variant = null if practice_mode else case_traits.get(pending_run_context.visible_trait_id)
+	var case_trait_values: Array = []
+	if not practice_mode:
+		for trait_id in pending_run_context.visible_trait_ids:
+			var trait_definition := case_traits.get(trait_id) as CaseTraitDefinition
+			if trait_definition != null:
+				case_trait_values.append(trait_definition)
 	var available_ids := _practice_available_loadout_ids() if practice_mode else LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	var timing_intel_revealed := practice_mode or meta.has_completed_level(selected_level.id)
 	var view_model := {
@@ -1447,7 +1498,8 @@ func _refresh_preparation() -> void:
 		"timing_intel_revealed": timing_intel_revealed,
 		"tutorial_locked": false if practice_mode else selected_level.is_tutorial,
 		"can_skip_intro": false if practice_mode else selected_level.is_tutorial and not meta.intro_skipped,
-		"trait": case_trait_value,
+		"traits": case_trait_values,
+		"trait": case_trait_values[0] if not case_trait_values.is_empty() else null,
 		"trait_title": "Lokaler Testlauf" if practice_mode else "Kein Fallmerkmal",
 		"trait_effect": "Keine Fallmerkmale, Befunde oder Belohnungen." if practice_mode else "Kein besonderer Einfluss.",
 		"validation": validation,
@@ -1462,6 +1514,7 @@ func _refresh_preparation() -> void:
 		"slot_snapshot": pending_loadout_draft.slot_snapshot(),
 		"loadout_snapshot": pending_preparation_loadout.to_dict(),
 		"replacement_component": pending_replacement_component,
+		"guidance_step": &"active_1" if pending_preparation_guidance_active else &"",
 	}
 	hud.show_preparation(view_model, _practice_loadout_catalog() if practice_mode else loadout_modules.values(), pending_preparation_loadout)
 
@@ -1482,8 +1535,35 @@ func _preparation_availability_reasons() -> Dictionary:
 			reasons[id] = reason
 	return reasons
 
+
+func _initialize_preparation_guidance() -> void:
+	pending_preparation_guidance_active = false
+	if selected_level == null \
+		or selected_level.id != FALL_ONE_ID \
+		or meta.has_completed_level(FALL_ONE_ID) \
+		or bool(meta.tutorial_status.get(FALL_ONE_GUIDANCE_COMPLETE, false)) \
+		or not meta.has_research(DEFENSE_BURST_RESEARCH_ID):
+		return
+	if pending_loadout_draft.component_at(LoadoutSlotId.ACTIVE_1) == DEFENSE_BURST_ABILITY_ID:
+		_complete_preparation_guidance()
+		return
+	if not meta.ui_settings.show_discovery_info:
+		_complete_preparation_guidance()
+		return
+	pending_preparation_guidance_active = true
+
+
+func _complete_preparation_guidance() -> void:
+	pending_preparation_guidance_active = false
+	if meta == null or bool(meta.tutorial_status.get(FALL_ONE_GUIDANCE_COMPLETE, false)):
+		return
+	meta.set_tutorial_step(FALL_ONE_GUIDANCE_COMPLETE)
+	_save_meta()
+
 func _on_preparation_component_requested(id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
+		return
+	if pending_preparation_guidance_active:
 		return
 	var available := _practice_available_loadout_ids() if pending_run_context.is_practice_test() else LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	if not bool(available.get(id, false)) or not loadout_modules.has(id):
@@ -1496,6 +1576,10 @@ func _on_preparation_slot_component_requested(slot_id: StringName, id: StringNam
 		return
 	if not LoadoutSlotId.planning().has(slot_id) or not loadout_modules.has(id):
 		return
+	if pending_preparation_guidance_active and (
+		slot_id != LoadoutSlotId.ACTIVE_1 or id != DEFENSE_BURST_ABILITY_ID
+	):
+		return
 	if slot_id == LoadoutSlotId.ACTIVE_2 and not pending_run_context.is_practice_test() and not _first_case_complete():
 		return
 	var available := _practice_available_loadout_ids() if pending_run_context.is_practice_test() else LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
@@ -1505,6 +1589,8 @@ func _on_preparation_slot_component_requested(slot_id: StringName, id: StringNam
 	# and immediately reversible. A second confirmation added friction without
 	# protecting any irreversible action.
 	var result := pending_loadout_draft.replace(id, slot_id)
+	if pending_preparation_guidance_active and result.applied:
+		_complete_preparation_guidance()
 	_handle_loadout_change(result)
 
 func _on_preparation_slot_clear_requested(slot_index: int) -> void:
@@ -1516,6 +1602,8 @@ func _on_preparation_slot_requested(slot_id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or _is_preparation_loadout_locked():
 		return
 	if not LoadoutSlotId.planning().has(slot_id):
+		return
+	if pending_preparation_guidance_active:
 		return
 	if slot_id == LoadoutSlotId.ACTIVE_2 and not pending_run_context.is_practice_test() and not _first_case_complete():
 		return
@@ -1564,6 +1652,8 @@ func _handle_loadout_change(result: LoadoutChangeResult) -> void:
 func _on_preparation_reserve_requested(id: StringName) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_loadout_draft == null or not loadout_modules.has(id) or _is_preparation_loadout_locked():
 		return
+	if pending_preparation_guidance_active:
+		return
 	var definition: LoadoutModuleDefinition = loadout_modules[id]
 	var available := LoadoutAvailabilityPolicy.selectable_ids(loadout_modules, meta.research_ranks, _first_case_complete())
 	if definition.kind != LoadoutModuleDefinition.Kind.PASSIVE or not bool(available.get(id, false)):
@@ -1584,6 +1674,9 @@ func _is_preparation_loadout_locked() -> bool:
 
 func _on_preparation_start_requested(snapshot: Dictionary) -> void:
 	if flow_state != GameFlowState.State.PREPARATION or pending_run_context == null or pending_loadout_draft == null:
+		return
+	if pending_preparation_guidance_active:
+		_refresh_preparation()
 		return
 	var requested := pending_loadout_draft.to_prepared()
 	var validation := pending_loadout_draft.validate()
@@ -1609,7 +1702,7 @@ func start_run(run_context: RunContext = null) -> void:
 		if active_run_context.is_practice_test():
 			_configure_practice_run_config(active_run_context)
 		else:
-			_apply_case_trait_to_config(active_run_context.visible_trait_id)
+			_apply_case_traits_to_config(active_run_context.visible_trait_ids)
 	if stress_test:
 		_configure_stress_run_config()
 	_compile_enemy_runtime_resistance_profiles()
@@ -2036,6 +2129,11 @@ func _spawn_practice_obstacles() -> void:
 		).configure_body_interaction(obstacle.get_body_role(), obstacle.get_obstacle_traversal())
 		request.metadata["preserve_spawn_position"] = true
 		_spawn_enemy(request.definition_id, request.position, -1.0, true, false, request)
+
+func _apply_case_traits_to_config(trait_ids: Array[StringName]) -> void:
+	for trait_id in trait_ids:
+		_apply_case_trait_to_config(trait_id)
+
 
 func _apply_case_trait_to_config(trait_id: StringName) -> void:
 	var case_trait_definition: CaseTraitDefinition = case_traits.get(trait_id)
@@ -3553,6 +3651,10 @@ func _try_present_next_discovery() -> void:
 	var context: Dictionary = item.get("context", {})
 	if definition.id == &"infection_focus" and bool(context.get("tutorial_boss", false)):
 		override = "Mini-Boss · vereinfachte Variante ohne Phasenschübe."
+	elif definition.id == &"boss_phases":
+		override = "Bei einem Phasenwechsel können zusätzliche Bakterien oder Angriffe erscheinen."
+	elif definition.id == &"research_reward" and bool(context.get("intro_completion", false)):
+		override = "Nutze Forschung im Forschungsgebäude für dauerhafte Upgrades."
 	hud.show_discovery(definition, item.get("target"), override)
 
 func _on_discovery_dismissed() -> void:
@@ -3572,6 +3674,32 @@ func _on_discovery_dismissed() -> void:
 func _on_discovery_seen(id: StringName) -> void:
 	if meta != null and id != &"":
 		meta.mark_discovery_seen(id)
+	_save_meta()
+
+
+func _on_hints_disabled() -> void:
+	if meta == null:
+		return
+	meta.ui_settings.show_discovery_info = false
+	meta.set_ui_settings(meta.ui_settings)
+	hud.configure_ui_settings(meta.ui_settings)
+	meta.set_tutorial_step(&"research_guidance_pending", false)
+	# Disabling optional hints is a durable opt-out from both guidance chains,
+	# even when the preparation guide has not been opened yet.
+	_complete_preparation_guidance()
+	if discovery_manager != null:
+		if not discovery_manager.active.is_empty():
+			discovery_manager.complete_active()
+		while not discovery_manager.queue.is_empty():
+			discovery_manager.take_next()
+			discovery_manager.complete_active()
+	hud.hide_campus_research_guidance()
+	hud.hide_discovery()
+	if flow_state == GameFlowState.State.DISCOVERY_PAUSE:
+		ui_router.close_modal(get_viewport().gui_get_focus_owner())
+		_set_flow(discovery_return_state)
+	elif flow_state == GameFlowState.State.PREPARATION:
+		_refresh_preparation()
 	_save_meta()
 
 func _on_enemy_health_changed(current: float, maximum: float, enemy: InfectionEnemy) -> void:
@@ -4837,9 +4965,16 @@ func _refresh_defeat_research_preview() -> void:
 		state.level,
 		defeats + case_pressure_reward_defeat_points,
 		multiplier,
-		state.bosses_defeated
+		state.bosses_defeated,
+		_active_case_trait_count()
 	)
 	hud.update_defeat_research_reward(reward)
+
+
+func _active_case_trait_count() -> int:
+	if active_run_context == null or active_run_context.is_practice_test():
+		return 0
+	return active_run_context.visible_trait_ids.size()
 
 
 func result_reward_presentations(research_reward: int) -> Array[RewardPresentation]:
@@ -5066,7 +5201,8 @@ func _on_run_finished(success: bool, reason: String) -> void:
 			state.level,
 			defeats + case_pressure_reward_defeat_points,
 			multiplier,
-			state.bosses_defeated
+			state.bosses_defeated,
+			_active_case_trait_count()
 		)
 		unlocked_new = meta.register_level_result(selected_level, success, state.elapsed, state.level, defeats)
 	# Der sichtbare Fallzustand bleibt bei Niederlage und Abbruch unverändert.
@@ -5085,8 +5221,6 @@ func _on_run_finished(success: bool, reason: String) -> void:
 		talents_are_unlocked,
 		not talents_were_unlocked and talents_are_unlocked
 	)
-	if first_intro_completion and hud.has_method("set_result_guidance"):
-		hud.call("set_result_guidance", "Nutze die Forschung für Upgrades im Forschungsgebäude.")
 	if hud.has_method("set_result_reward_presentations"):
 		hud.call("set_result_reward_presentations", result_reward_presentations(reward))
 	if hud.has_method("set_result_damage_statistics"):
@@ -5103,7 +5237,11 @@ func _on_run_finished(success: bool, reason: String) -> void:
 				mastery_cards.append(objective)
 				earned_points += objective.reward_points
 		hud.show_end_mastery(mastery_cards, earned_points, meta.talent_points_earned())
-	if not first_intro_completion and discovery_manager.request(&"research_reward", null):
+	if discovery_manager.request(
+		&"research_reward",
+		null,
+		{"intro_completion": first_intro_completion}
+	):
 		_try_present_next_discovery()
 
 func _resume_manual_pause() -> void:

@@ -234,6 +234,12 @@ scaling Magic and Rare, so a 5-percent relative increase changes their combined
 30-percent probability to exactly 31.5 percent while Common stays the
 complement and Magic:Rare stays 5:1.
 
+Upgrade presentation carries `family_id` and `preview_stat` into the immutable
+overlay view model. That boundary resolves only the semantic effect roles
+`damage`, `width` and `radius` to their label, icon and accent; the screen renders
+the resulting icon-text badge without maintaining a content-ID table. Effect
+role, rarity role, title and focus state remain independent presentation signals.
+
 Talent combat effects are compiled once when the run build is configured.
 `PlayerStats.treatment_damage_with_base_bonus()` combines research percentage
 and the linear 20-percent-per-rank treatment talent against the immutable
@@ -540,21 +546,35 @@ contains type/icon ID, expanded name, semantic role, effective percent/share,
 ready-formatted value, meaning and indicator; the order within each role is
 fire, water, earth, wind.
 
+Locked Lexicon view models retain the canonical display name and expose a
+category-specific `unlock_reason`, but no gameplay, medical or stat detail.
+The gallery combines that data with a semantic padlock and an accessible locked
+name. Character entries additionally expose defensive-copy stat-section DTOs
+with stable IDs `defense`, `attack` and `other`; each owns its title, icon and
+ordered rows. The view renders those sections in two columns when space allows
+and one column in compact layouts without regrouping domain data locally.
+
 `MetaProgressionState.calculate_run_reward()` is the pure reward preview and is
 the only arithmetic used by `award_run()`. A loss preview therefore shares the
 same multiplier, rounding and minimum with the eventual mutation. Positive run
 income uses the central 3.75 gain factor and an additional run-only 1.50 factor;
 purchases and refunds do not. Run rewards apply
-`1 + 0.25 * bosses_defeated` once before the single final rounding. The one-time
+`1 + 0.25 * bosses_defeated` and then
+`1 + 0.15 * case_trait_count`; the trait contribution is additive across the
+active traits and the complete reward is rounded exactly once. The one-time
 intro grant is exactly 30 for completion or skip and deliberately bypasses both
-run factors and the boss multiplier, so it equals the canonical Stoß unlock cost
+run factors and both conditional multipliers, so it equals the canonical Stoß unlock cost
 without creating surplus research. Practice runs bypass this reward path.
 
 `UISettingsState.show_discovery_info` is an additive Save-v7 setting with a
-default of `true`. When disabled, `Game` drains requested discoveries through
-`DiscoveryManager.complete_active()` without entering `DISCOVERY_PAUSE`; IDs
-remain unlocked and cannot accumulate into a later modal backlog. It does not
-disable guided intro prompts or campus guidance.
+default of `true` when the key or the complete settings object is absent;
+explicit persisted booleans retain their value. Its single visible label is
+`Hinweise anzeigen`, and it governs optional discovery pauses, campus research
+guidance and the first-Fall preparation guide. Disabling it immediately drains
+the active discovery and queue through `DiscoveryManager.complete_active()`,
+clears both optional guides and persists their completion, so no modal or guide
+can reappear as backlog. Scripted blocking intro confirmations are mandatory and
+remain outside this setting.
 Enemy discovery definitions use `enemy_defeated`. Materialization only controls
 render/detail preparation; the first non-practice defeat marks the enemy
 discovery through `MetaProgressionState` before recycling. A boss defeat writes the unlock before the
@@ -575,6 +595,13 @@ not on the spawn request. Three ordinary one-point pickup events feed the same
 applied through the same bound `RunBuildState` as the rest of the run. Intro
 learning events mark their discovery IDs as seen without entering the discovery
 modal flow.
+
+`GameHUD.navigation_focus_active` is an input-modality latch, not a screen
+default. Opening or rebuilding a view configures deterministic focus neighbors
+but releases visible focus until a deliberate directional, next or previous
+navigation event activates it. A pointer press clears the latch and releases
+non-text focus. Gold guidance borders are separate target-highlight state and
+must never be implemented by grabbing focus.
 
 Save v7 retains the legacy `ui_scale` and `glyph_mode` fields, but the current runtime normalizes
 them to 1.0 and keyboard/mouse. Those legacy fields therefore remain readable
@@ -613,10 +640,22 @@ Product cases use `total_seconds <= 0` to mean no run deadline and schedule
 their boss at 300 seconds. Their standard spawn ramp uses the same 300-second
 horizon and 125-percent authored intervals, producing roughly four thirds of
 the previous total over five minutes at free capacity. The player baseline is
-50 life. A case with no prior
-completion starts without a trait or finding; subsequent attempts derive both
-from the saved case seed. That seed advances only after a successful non-intro
-result, so failure and cancellation cannot silently reroll the case.
+50 life. A case with no prior completion starts without a trait or finding.
+Every subsequent attempt snapshots exactly two distinct visible traits and one
+hidden finding from the saved case seed. The first trait consumes the legacy
+first draw, the finding consumes the unchanged second draw, and only then is the
+second trait drawn from the remaining valid trait definitions. This preserves
+old first-trait/finding pairs while extending the contract. The seed advances
+only after a successful non-intro result, so failure and cancellation cannot
+silently reroll the case.
+
+`RunContext.visible_trait_ids` is the canonical defensive-copy plural snapshot.
+Construction still accepts the legacy singular input and promotes it when no
+plural array was supplied; the read-only `visible_trait_id` property aliases the
+first array element for older consumers. Game configuration iterates the plural
+snapshot once, so each trait modifier is applied exactly once. Practice contexts
+and first attempts carry an empty array and contribute a trait count of zero to
+the shared reward preview and award paths.
 
 `minor_focus` participates in the normal centralized enemy movement path with
 base speed 42 before case modifiers. It remains a detailed,
@@ -698,6 +737,11 @@ publishes timing intelligence separately from the values: campaign duration and
 boss facts are created only after `has_completed_level(exact_id)`, while debug
 practice scenarios keep their timing visible. Trait facts are never hidden by
 this progressive reveal.
+
+The preparation case header consumes a trait array, never a synthesized combined
+trait. Standard timing facts and the shared random-event group are separated only
+when at least one trait exists. Wide layouts use a vertical gold separator in one
+row; compact layouts stack the same groups and turn the separator horizontal.
 
 The relocation director snapshots the complete eligible offscreen backlog every
 0.5 seconds instead of deriving sources from the local target-pressure window.

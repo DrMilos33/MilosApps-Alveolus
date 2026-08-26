@@ -353,7 +353,7 @@ static func loadout_module_definitions() -> Dictionary:
 static func case_trait_definitions() -> Dictionary:
 	var all_levels: Array[StringName] = [&"early_localized_focus", &"localized_focus", &"advancing_infection", &"spreading_infection", &"critical_infection", &"severe_pneumonia"]
 	return {
-		&"monster_resistance_20": CaseTraitDefinition.create(&"monster_resistance_20", "Resistente Erreger", "+20 Prozentpunkte auf alle effektiven Gegnerresistenzen.", [{"stat_id": &"enemy_resistance_effective", "operation": &"add", "value": 20.0}], all_levels, &"negative"),
+		&"monster_resistance_20": CaseTraitDefinition.create(&"monster_resistance_20", "Resistente Erreger", "+20 % Widerstand für Gegner.", [{"stat_id": &"enemy_resistance_effective", "operation": &"add", "value": 20.0}], all_levels, &"negative"),
 		&"monster_defense_10": CaseTraitDefinition.create(&"monster_defense_10", "Gepanzerte Erreger", "+10 Gegnerverteidigung.", [{"stat_id": &"enemy_defense", "operation": &"add", "value": 10.0}], all_levels, &"negative"),
 		&"monster_speed_15": CaseTraitDefinition.create(&"monster_speed_15", "Schnelle Erreger", "+15 % Gegnergeschwindigkeit.", [{"stat_id": &"enemy_speed", "operation": &"multiply", "value": 1.15}], all_levels, &"negative"),
 		&"monster_health_15": CaseTraitDefinition.create(&"monster_health_15", "Robuste Erreger", "+15 % Leben für reguläre Gegner und Bosse.", [{"stat_id": &"enemy_health", "operation": &"multiply", "value": 1.15}, {"stat_id": &"boss_health", "operation": &"multiply", "value": 1.15}], all_levels, &"negative"),

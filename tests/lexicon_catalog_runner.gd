@@ -191,10 +191,11 @@ func _test_discovery_locks_and_visuals() -> void:
 			_check(not locked_model.locked, "%s ist standardmäßig lesbar" % entry.id)
 		else:
 			_check(locked_model.locked, "%s bleibt vor der Entdeckung verborgen" % entry.id)
+			_check(locked_model.display_name == entry.display_name, "%s behält gesperrt seinen sichtbaren Namen" % entry.id)
 			if entry.category == LexiconEntryDefinition.CATEGORY_MONSTERS:
-				_check(locked_model.display_name == "Noch nicht besiegt" and locked_model.summary.contains("Besiege"), "%s erklärt die Freischaltung ohne seinen Namen zu verraten" % entry.id)
+				_check(locked_model.unlock_reason.contains("Besiege") and locked_model.summary == locked_model.unlock_reason, "%s erklärt den konkreten Sieg als Entdeckungsgrund" % entry.id)
 			else:
-				_check(locked_model.display_name == "Noch nicht entdeckt" and locked_model.summary.contains("Entdecke"), "%s verwendet außerhalb der Monsterliste eine allgemeine Entdeckungskopie" % entry.id)
+				_check(locked_model.unlock_reason.contains("Entdecke") and locked_model.summary == locked_model.unlock_reason, "%s verwendet außerhalb der Monsterliste eine allgemeine Entdeckungskopie" % entry.id)
 			_check(locked_model.stat_rows.is_empty(), "%s verrät gesperrt keine Werte" % entry.id)
 			var seen_model := provider.make_view_model(entry, [entry.discovery_id])
 			_check(not seen_model.locked, "%s wird mit Discovery ID freigeschaltet" % entry.id)

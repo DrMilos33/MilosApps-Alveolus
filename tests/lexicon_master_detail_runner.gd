@@ -85,7 +85,7 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.list_panel.visible and lexicon.overview_toolbar.visible and not lexicon.detail_panel.visible, "Das Lexikon öffnet auf der flächenfüllenden Übersicht statt auf einer leeren Detailhälfte")
 	_check(not lexicon.compact_back_button.visible, "Die Rückkehraktion erscheint erst auf der Detail-Zweitebene")
 	_check(lexicon.entry_filter != null and lexicon.entry_filter.placeholder_text.contains("durchsuchen"), "Die Eintragsübersicht besitzt eine klare Suche")
-	_check(lexicon.entry_count_label.text.contains("freigeschaltet"), "Die gemeinsame Kopfzeile zeigt den Entdeckungsfortschritt")
+	_check(lexicon.entry_count_label.text.contains("entdeckt") and not lexicon.entry_count_label.text.contains("freigeschaltet"), "Die gemeinsame Kopfzeile benennt den Fortschritt als entdeckt")
 	_check(not lexicon.detail_type_sections.visible, "Die leere Detailfläche zeigt keine veralteten Typdaten")
 	_check(MedicalLexiconIllustration.SAFE_MARGIN >= 4.0, "Lexikonillustrationen reservieren einen festen Sicherheitsabstand zum Kachelrand")
 	for button in lexicon.entry_buttons.values():
@@ -95,6 +95,13 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 		_check(not tile.button_pressed, "Keine Lexikonkachel ist beim Öffnen automatisch markiert")
 		_check(not tile.tooltip_text.is_empty(), "Der native Kurztooltip bleibt auf Maus-Hover verfügbar")
 		_check(not String(tile.get_meta(&"alveolus_accessible_name", "")).is_empty(), "Jede Kachel benennt Inhalt und Freischaltzustand zugänglich")
+		var tile_state := String(tile.get_meta(&"lexicon_base_state_text", ""))
+		if tile_state.is_empty():
+			_check(tile.find_child("UnlockReason", true, false) == null, "Entdeckte Kacheln zeigen keine redundante Freigeschaltet-Zeile")
+		else:
+			var lock_icon := tile.find_child("LockedIcon", true, false) as SimpleIcon
+			_check(lock_icon != null and lock_icon.kind == &"locked", "Gesperrte Kacheln zeigen ein echtes Padlock vor dem Namen")
+			_check(String(tile.get_meta(&"alveolus_accessible_name", "")).contains("Gesperrt"), "Der Padlockzustand wird im Accessible Name ausgeschrieben")
 		var illustrations: Array[Node] = button.find_children("*", "MedicalLexiconIllustration", true, false)
 		_check(illustrations.size() == 1, "Jede Lexikonkachel besitzt genau eine Illustration oder Silhouette")
 		if not illustrations.is_empty():
@@ -225,7 +232,8 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 
 	_check(lexicon.select_entry(&"bacterial_cluster"), "Gesperrter Eintrag bleibt als Silhouette anwählbar")
 	_check(lexicon.detail_illustration.locked, "Gesperrter Eintrag zeichnet die Silhouette")
-	_check(lexicon.detail_title.text == "Noch nicht besiegt", "Gesperrter Eintrag verrät keinen Namen und nennt die Freischaltbedingung")
+	_check(lexicon.detail_title.text == "Bakteriengruppe", "Gesperrter Eintrag behält seinen Namen neben der sichtbaren Schlosskennzeichnung")
+	_check(lexicon.detail_summary.text.contains("Besiege"), "Gesperrter Eintrag nennt seinen konkreten Entdeckungsgrund")
 	_check(not lexicon.detail_stats_grid.visible, "Gesperrter Eintrag verrät keine Werte")
 	_check(not lexicon.detail_type_sections.visible, "Gesperrter Eintrag verrät keine Schadenstypen oder Resistenzen")
 	_check(not lexicon.detail_medical_name.visible, "Gesperrter Eintrag verrät keinen Fachbegriff")
@@ -246,6 +254,16 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(not lexicon.context_detail_payload(tempo_id).is_empty(), "Ein Charakterwert liefert seine normale Detailkarte")
 	_check(lexicon.select_entry(tempo_id), "Attack Speed ist unter Charakter direkt lesbar")
 	_check(lexicon.detail_gameplay_text.text.contains("Attack Speed"), "Detail erklärt Attack Speed verständlich")
+	lexicon.cancel_step()
+
+	_check(lexicon.select_entry(&"character_stats"), "Charakterwerte sind unter Charakter direkt lesbar")
+	var expected_sections: Array[StringName] = [&"defense", &"attack", &"other"]
+	var expected_titles := ["Verteidigung", "Angriff", "Sonstiges"]
+	for index in range(expected_sections.size()):
+		var group := lexicon.detail_stats_sections.get_node_or_null("StatSection_%s" % expected_sections[index]) as VBoxContainer
+		_check(group != null and group.get_meta(&"lexicon_stat_section", &"") == expected_sections[index], "Charakterwerte besitzen die stabile Gruppe %s" % expected_titles[index])
+		_check(group != null and group.find_children("*", "Label", true, false).any(func(node: Node) -> bool: return (node as Label).text == expected_titles[index]), "Charakterwertgruppe zeigt den Titel %s" % expected_titles[index])
+	_check(lexicon.detail_stats_grid.get_child_count() == 0 and not lexicon.detail_stats_grid.visible, "Nur Charakterwerte ersetzen das unveränderte flache Basiswerteraster")
 	lexicon.cancel_step()
 
 func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
@@ -382,6 +400,9 @@ func _test_mouse_and_focus_navigation(lexicon: LexiconMasterDetail) -> void:
 	_send_action(&"ui_accept", true)
 	await process_frame
 	_send_action(&"ui_accept", false)
+	await process_frame
+	# The detail layer and its ScrollContainer settle focus on separate deferred
+	# frames under the full headless matrix; wait for both deterministically.
 	await process_frame
 	_check(not activation_events.is_empty() and activation_events[-1] == visible_entries[0].id, "Tastatur und Gamepad Aktivierung bestätigen den fokussierten Eintrag")
 	_check(lexicon.detail_panel.visible and not lexicon.list_panel.visible, "Accept öffnet ausschließlich die Detail-Zweitebene")

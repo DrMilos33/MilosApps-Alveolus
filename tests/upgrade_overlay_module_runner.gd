@@ -15,9 +15,20 @@ func _initialize() -> void:
 
 func _run() -> void:
 	_test_source_boundaries()
+	_test_talent_copy()
 	var ordinary_single := _test_immutable_view_model()
 	await _test_overlay_contract(ordinary_single)
 	_finish()
+
+
+func _test_talent_copy() -> void:
+	var rarity_talent: TalentDefinition
+	for definition in TalentDefinition.definitions():
+		if definition.id == &"upgrade_rarity_training":
+			rarity_talent = definition
+			break
+	_check(rarity_talent != null, "Das bestehende Talent für seltenere Ausbauangebote bleibt erhalten")
+	_check(rarity_talent != null and rarity_talent.description == "Magic- und Rare-Upgrades erscheinen pro Rang 5 % häufiger.", "Talentcopy erklärt die Wirkung exakt ohne den missverständlichen Begriff relative")
 
 
 func _test_source_boundaries() -> void:
@@ -85,6 +96,8 @@ func _test_immutable_view_model() -> UpgradeOverlayViewModel:
 		"effect": "Größeres Schutzgebiet.",
 		"icon_id": &"neutrophil_orbit",
 		"rarity_role": &"rare",
+		"family_id": &"radius",
+		"preview_stat": &"defense_cell_radius",
 		"pick_count": 2,
 		"maximum_picks": 3,
 		"value_rows": [
@@ -103,6 +116,16 @@ func _test_immutable_view_model() -> UpgradeOverlayViewModel:
 	_check(values_model.option_at(0).value_rows()[1].label() == "Attack Speed" and values_model.option_at(0).value_rows()[1].value() == "1,7/s", "Attack Speed liegt mit sichtbarer /s-Einheit statt Intervallcopy vor")
 	_check(values_model.option_at(0).pick_index_text() == "2", "Jede Ausbauoption zeigt nur ihren aggregierten Rundenzähler ohne Cap")
 	_check(values_model.option_at(0).rarity_role() == &"rare", "Seltenheit wird als primitive semantische Rolle transportiert")
+	_check(values_model.option_at(0).effect_role() == &"radius" and values_model.option_at(0).effect_label() == "RADIUS", "Familie und Vorschaustat liefern die feste Radius-Badgesemantik")
+	_check(values_model.option_at(0).effect_icon_id() == &"target" and values_model.option_at(0).effect_accent_role() == &"cobalt", "Radius liefert Icon und Farbrolle vollständig im View-Model")
+	var semantic_badges: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create([
+		{"id": &"damage", "title": "Impuls", "effect": "+3 Schaden.", "family_id": &"damage", "preview_stat": &"therapy_damage"},
+		{"id": &"width", "title": "Fetter lazer", "effect": "+16 Breite.", "family_id": &"width", "preview_stat": &"ability_width"},
+		{"id": &"fallback_radius", "title": "Stoß", "effect": "+1 Radius.", "preview_stat": &"ability_radius"},
+	], 8)
+	_check(semantic_badges.option_at(0).effect_label() == "SCHADEN" and semantic_badges.option_at(0).effect_icon_id() == &"ability_defense_burst", "Schaden besitzt eine feste Icon-Text-Semantik")
+	_check(semantic_badges.option_at(1).effect_label() == "BREITE" and semantic_badges.option_at(1).effect_icon_id() == &"ability_treatment_line", "Breite besitzt eine feste Icon-Text-Semantik")
+	_check(semantic_badges.option_at(2).effect_role() == &"radius", "preview_stat liefert bei fehlender Familie denselben Radiusvertrag")
 	var invalid_rarity: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create([
 		{"id": &"invalid_rarity", "title": "Ungültig", "effect": "Fallback", "rarity_role": &"legendary"},
 	], 8)
@@ -232,6 +255,8 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 		"effect": "Größeres Schutzgebiet.",
 		"icon_id": &"neutrophil_orbit",
 		"accent_role": &"cobalt",
+		"family_id": &"radius",
+		"preview_stat": &"defense_cell_radius",
 		"value_rows": [
 			{"id": &"radius", "label": "Radius", "value": "4", "accent_role": &"gold"},
 			{"id": &"rate", "label": "Attack Speed", "before": "1,4/s", "value": "1,7/s", "accent_role": &"turquoise"},
@@ -245,8 +270,13 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var radius_row := value_card.find_child("UpgradeValue_radius", true, false) as RichTextLabel
 	var rate_row := value_card.find_child("UpgradeValue_rate", true, false) as RichTextLabel
 	var value_focus := value_card.find_child("KeyboardFocus", true, false) as Control
+	var effect_badge := value_card.find_child("EffectBadge_radius", true, false) as PanelContainer
+	var effect_badge_icon := effect_badge.find_child("EffectBadgeIcon", true, false) as SimpleIcon if effect_badge != null else null
 	_check(value_icon != null and value_icon.kind == &"neutrophil_orbit" and value_icon.custom_minimum_size == Vector2(34.0, 34.0), "Ausbaukarte rendert das Presenter-Icon deutlich größer ohne lokale ID-Zuordnung")
 	_check(value_title != null and value_title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Komponentenname verwendet die kleinere zentrale Body-Typografie")
+	_check(effect_badge != null and effect_badge.get_meta(&"upgrade_effect_label", "") == "RADIUS", "Ausbaukarte zeigt die feste Radius-Badge zusätzlich zum Komponentenname")
+	_check(effect_badge_icon != null and effect_badge_icon.kind == &"target" and effect_badge.get_meta(&"upgrade_effect_accent", Color.TRANSPARENT).is_equal_approx(AlveolusVisualTheme.COBALT), "Badge kombiniert DTO-Icon, Text und semantische Farbe")
+	_check(value_card.theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_COMMON_CARD, "Die Effektbadge verändert den Seltenheitsrahmen nicht")
 	_check(radius_row != null and radius_row.get_parsed_text().replace("  ", " ") == "Radius 4", "Abwehrzellen zeigen die fertige Copy Radius 4")
 	_check(rate_row != null and rate_row.get_parsed_text().contains("Attack Speed") and rate_row.get_parsed_text().contains("1,7/s"), "Attack Speed bleibt als /s-Wert sichtbar")
 	_check(radius_row != null and not radius_row.get_parsed_text().contains("px") and not radius_row.get_parsed_text().contains("Stufe"), "Wertzeilen zeigen weder Pixel- noch Stufencopy")
@@ -254,6 +284,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(rate_row != null and value_card.get_global_rect().encloses(rate_row.get_global_rect()), "Die zweite darstellungsfertige Wertzeile bleibt vollständig innerhalb der Karte sichtbar")
 	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Radius 4") and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Attack Speed 1,4/s zu 1,7/s"), "Fokusname enthält dieselben darstellungsfertigen Wertfakten")
 	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("In dieser Runde 0 Mal gewählt") and not String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains(" von "), "Fokusname nennt den Rundenzähler ohne verstecktes Maximum")
+	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Effekt RADIUS"), "Der feste Badgebegriff ist auch im Accessible Name enthalten")
 
 	var scripted: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
 		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Änderung."

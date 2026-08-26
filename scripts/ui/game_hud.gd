@@ -23,6 +23,7 @@ signal practice_boss_profile_selected(id: StringName)
 signal research_purchase_requested(id: StringName)
 signal research_reset_requested
 signal discovery_dismissed
+signal hints_disabled
 signal intro_skip_requested
 signal intro_skip_confirmed
 signal intro_skip_cancelled
@@ -177,6 +178,7 @@ var campus_research_status: Label
 var campus_clinic_status: Label
 var campus_research_prompt: PanelContainer
 var campus_research_guidance_arrow: Label
+var campus_research_guidance_hide: Button
 var practice_overlay: Control
 var practice_screen: PracticeScreen
 var practice_view_revision: int = 0
@@ -297,7 +299,7 @@ var preparation_scroll: ScrollContainer
 var preparation_header_back_button: Button
 var preparation_trait_title: Label
 var preparation_trait_effect: Label
-var preparation_trait_panel: Panel
+var preparation_trait_panel: PanelContainer
 var preparation_case_row: GridContainer
 var preparation_trait_row: HBoxContainer
 var preparation_level_title: Label
@@ -305,6 +307,14 @@ var preparation_level_facts: Control
 var preparation_boss_fact: Control
 var preparation_level_description: Label
 var preparation_case_facts: HFlowContainer
+var preparation_facts_group: GridContainer
+var preparation_trait_separator: ColorRect
+var preparation_random_traits: HFlowContainer
+var preparation_random_traits_header: Label
+var preparation_guidance_panel: PanelContainer
+var preparation_guidance_label: Label
+var preparation_guidance_hide: Button
+var current_preparation_guidance_step: StringName = &""
 var preparation_workspace: GridContainer
 var preparation_workspace_host: Control
 var preparation_lock_panel: Panel
@@ -434,10 +444,11 @@ var end_panel: PanelContainer
 var end_title: Label
 var end_reason: Label
 var end_stats: Label
-var end_reward: Label
+var end_reward: Control
 var end_unlock: Label
 var end_mastery_panel: Control
 var end_mastery_label: Label
+var navigation_focus_active: bool = false
 var finding_overlay: Control
 var finding_screen: FindingOverlay
 var finding_view_revision: int = 0
@@ -510,6 +521,7 @@ func _ready() -> void:
 	root.add_child(upgrade_target_preview)
 	discovery_tooltip = DiscoveryTooltip.new()
 	discovery_tooltip.dismissed.connect(func() -> void: discovery_dismissed.emit())
+	discovery_tooltip.hide_hints_requested.connect(func() -> void: hints_disabled.emit())
 	root.add_child(discovery_tooltip)
 	_install_run_prompt()
 	_hide_all()
@@ -529,6 +541,14 @@ func _process(delta: float) -> void:
 		set_process(false)
 
 func _input(event: InputEvent) -> void:
+	if _is_intentional_navigation_event(event) and _active_navigation_scope() != null:
+		navigation_focus_active = true
+		_activate_navigation_focus.call_deferred()
+	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		var pointer_position := (event as InputEventMouseButton).position
+		navigation_focus_active = false
+		_release_pointer_focus_for_pointer.call_deferred(pointer_position)
+		_release_pointer_focus_after_frame(pointer_position)
 	if settings_overlay != null and settings_overlay.is_visible_in_tree() and settings_screen != null and settings_screen.is_binding_conflict_open():
 		var cancel_conflict: bool = (event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE) \
 			or (event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_B)
@@ -761,29 +781,45 @@ func _build_campus() -> Control:
 	top_status.add_child(campus_clinic_status)
 	campus_research_prompt = PanelContainer.new()
 	campus_research_prompt.name = "ResearchGuidance"
-	campus_research_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	campus_research_prompt.mouse_filter = Control.MOUSE_FILTER_STOP
 	AlveolusUIComponents.apply_surface_role(
 		campus_research_prompt,
 		AlveolusVisualTheme.SurfaceRole.HUD_ALERT,
 		AlveolusVisualTheme.GOLD,
 		true
 	)
-	campus_research_prompt.custom_minimum_size = Vector2(380.0, 108.0)
-	campus_research_prompt.size = Vector2(380.0, 108.0)
+	campus_research_prompt.custom_minimum_size.x = 320.0
 	var guidance_stack := VBoxContainer.new()
-	guidance_stack.alignment = BoxContainer.ALIGNMENT_CENTER
-	var guidance_text := _label("Hier kannst du deine Fähigkeiten verbessern", 18, AlveolusVisualTheme.IVORY)
-	guidance_text.custom_minimum_size.x = 348.0
-	guidance_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	guidance_stack.add_theme_constant_override("separation", 4)
+	var guidance_text := _label("Hier kannst du deine Fähigkeiten verbessern", 16, AlveolusVisualTheme.IVORY)
+	guidance_text.custom_minimum_size.x = 288.0
+	guidance_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	guidance_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	guidance_text.max_lines_visible = 2
 	guidance_text.add_theme_color_override("font_outline_color", AlveolusVisualTheme.PETROL_DEEP)
-	guidance_text.add_theme_constant_override("outline_size", 3)
+	guidance_text.add_theme_constant_override("outline_size", 2)
 	guidance_stack.add_child(guidance_text)
+	var guidance_footer := HBoxContainer.new()
+	guidance_footer.add_theme_constant_override("separation", 8)
+	guidance_stack.add_child(guidance_footer)
+	campus_research_guidance_hide = Button.new()
+	campus_research_guidance_hide.name = "HideResearchGuidance"
+	campus_research_guidance_hide.text = "Hinweise ausblenden"
+	campus_research_guidance_hide.flat = true
+	campus_research_guidance_hide.focus_mode = Control.FOCUS_ALL
+	campus_research_guidance_hide.add_theme_font_size_override("font_size", 12)
+	campus_research_guidance_hide.add_theme_color_override("font_color", AlveolusVisualTheme.MUTED)
+	campus_research_guidance_hide.pressed.connect(func() -> void: hints_disabled.emit())
+	guidance_footer.add_child(campus_research_guidance_hide)
+	var guidance_spacer := Control.new()
+	guidance_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	guidance_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	guidance_footer.add_child(guidance_spacer)
 	campus_research_guidance_arrow = _label("↘", 30, AlveolusVisualTheme.GOLD)
 	campus_research_guidance_arrow.name = "ResearchGuidanceArrow"
 	campus_research_guidance_arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	guidance_stack.add_child(campus_research_guidance_arrow)
-	campus_research_prompt.add_child(AlveolusUIComponents.margin(guidance_stack, 12))
+	guidance_footer.add_child(campus_research_guidance_arrow)
+	campus_research_prompt.add_child(AlveolusUIComponents.margin(guidance_stack, 10))
 	campus_research_prompt.hide()
 	overlay.add_child(campus_research_prompt)
 	_position_campus_research_guidance()
@@ -912,7 +948,7 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 	]
 	var toggle_settings: Array[SettingsScreenViewModel.ToggleSettingViewModel] = [
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Animationen reduzieren", current_ui_settings.reduce_motion),
-		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Neuigkeiten anzeigen", current_ui_settings.show_discovery_info),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Hinweise anzeigen", current_ui_settings.show_discovery_info),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", run_stats_enabled),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Charaktername anzeigen", current_ui_settings.show_character_name),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_health_bar", "Kleiner Lebensbalken", current_ui_settings.show_character_health_bar),
@@ -1510,7 +1546,7 @@ func _build_preparation() -> Control:
 
 	# Bio-Lumen case ribbon: orientation on the left, semantic facts on the
 	# right. It is intentionally one compact membrane instead of a prose card.
-	preparation_trait_panel = Panel.new()
+	preparation_trait_panel = PanelContainer.new()
 	preparation_trait_panel.name = "CaseDossier"
 	preparation_trait_panel.custom_minimum_size = Vector2(0.0, 84.0)
 	preparation_trait_panel.clip_contents = true
@@ -1543,16 +1579,70 @@ func _build_preparation() -> Control:
 	preparation_level_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	preparation_level_description.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	case_copy.add_child(preparation_level_description)
+	preparation_facts_group = GridContainer.new()
+	preparation_facts_group.name = "CaseFactsAndTraits"
+	preparation_facts_group.columns = 3
+	preparation_facts_group.custom_minimum_size.x = 430.0
+	preparation_facts_group.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preparation_facts_group.add_theme_constant_override("h_separation", 10)
+	preparation_facts_group.add_theme_constant_override("v_separation", 6)
+	preparation_case_row.add_child(preparation_facts_group)
 	preparation_case_facts = HFlowContainer.new()
-	preparation_case_facts.custom_minimum_size.x = 320.0
+	preparation_case_facts.name = "StandardFacts"
 	preparation_case_facts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preparation_case_facts.alignment = FlowContainer.ALIGNMENT_END
 	preparation_case_facts.add_theme_constant_override("h_separation", 8)
 	preparation_case_facts.add_theme_constant_override("v_separation", 6)
-	preparation_case_row.add_child(preparation_case_facts)
+	preparation_facts_group.add_child(preparation_case_facts)
+	preparation_trait_separator = ColorRect.new()
+	preparation_trait_separator.name = "RandomTraitSeparator"
+	preparation_trait_separator.color = Color(AlveolusVisualTheme.GOLD, 0.42)
+	preparation_trait_separator.custom_minimum_size = Vector2(1.0, 42.0)
+	preparation_trait_separator.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preparation_facts_group.add_child(preparation_trait_separator)
+	var random_trait_stack := VBoxContainer.new()
+	random_trait_stack.name = "RandomTraitGroup"
+	random_trait_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	random_trait_stack.add_theme_constant_override("separation", 3)
+	preparation_facts_group.add_child(random_trait_stack)
+	preparation_random_traits_header = _label("ZUFALLSEREIGNISSE", 12, AlveolusVisualTheme.GOLD)
+	preparation_random_traits_header.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
+	random_trait_stack.add_child(preparation_random_traits_header)
+	preparation_random_traits = HFlowContainer.new()
+	preparation_random_traits.name = "RandomTraitItems"
+	preparation_random_traits.add_theme_constant_override("h_separation", 6)
+	preparation_random_traits.add_theme_constant_override("v_separation", 4)
+	random_trait_stack.add_child(preparation_random_traits)
 	preparation_trait_effect = _label("Kein besonderer Einfluss", 14, COLOR_MUTED)
 	preparation_trait_effect.hide()
 	case_copy.add_child(preparation_trait_effect)
+
+	preparation_guidance_panel = PanelContainer.new()
+	preparation_guidance_panel.name = "PreparationGuidance"
+	preparation_guidance_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	AlveolusUIComponents.apply_surface_role(
+		preparation_guidance_panel,
+		AlveolusVisualTheme.SurfaceRole.HUD_ALERT,
+		AlveolusVisualTheme.GOLD,
+		true
+	)
+	var guidance_row := HBoxContainer.new()
+	guidance_row.add_theme_constant_override("separation", 10)
+	preparation_guidance_panel.add_child(AlveolusUIComponents.margin(guidance_row, 8))
+	preparation_guidance_label = _label("Wähle zuerst Aktiv 1.", 14, AlveolusVisualTheme.IVORY)
+	preparation_guidance_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	preparation_guidance_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	guidance_row.add_child(preparation_guidance_label)
+	preparation_guidance_hide = Button.new()
+	preparation_guidance_hide.name = "HidePreparationGuidance"
+	preparation_guidance_hide.text = "Hinweise ausblenden"
+	preparation_guidance_hide.flat = true
+	preparation_guidance_hide.add_theme_font_size_override("font_size", 12)
+	preparation_guidance_hide.add_theme_color_override("font_color", AlveolusVisualTheme.MUTED)
+	preparation_guidance_hide.pressed.connect(func() -> void: hints_disabled.emit())
+	guidance_row.add_child(preparation_guidance_hide)
+	preparation_guidance_panel.hide()
+	body.add_child(preparation_guidance_panel)
 
 	preparation_workspace_host = Control.new()
 	preparation_workspace_host.name = "PlanningWorkspaceHost"
@@ -2032,7 +2122,7 @@ func show_campus(meta: MetaProgressionState) -> void:
 	campus_overlay.modulate = Color.WHITE
 	refresh_campus(meta)
 	campus_overlay.show()
-	_focus_first_button.call_deferred(campus_overlay)
+	_prepare_optional_navigation_focus.call_deferred(campus_overlay)
 
 func show_campus_research_guidance() -> void:
 	if campus_research_prompt != null:
@@ -2588,7 +2678,7 @@ func show_level_select(meta: MetaProgressionState, levels: Array[LevelDefinition
 			"record": button.find_child("Record", true, false),
 		}
 	level_overlay.show()
-	level_screen.grab_initial_focus.call_deferred()
+	_prepare_optional_navigation_focus.call_deferred(level_overlay, level_screen.get_default_focus_control())
 
 func show_lexicon(meta: MetaProgressionState) -> void:
 	_hide_all()
@@ -2602,8 +2692,7 @@ func show_lexicon(meta: MetaProgressionState) -> void:
 			meta.seen_discovery_ids,
 			LexiconCatalog.entries()
 		)
-		_configure_focus_cycle.call_deferred(lexicon_overlay)
-		lexicon_master_detail.grab_initial_focus.call_deferred()
+		_prepare_optional_navigation_focus.call_deferred(lexicon_overlay)
 
 func cancel_lexicon_step() -> bool:
 	return lexicon_master_detail != null and lexicon_master_detail.cancel_step()
@@ -2732,9 +2821,7 @@ func show_settings(show_quit: bool = true, campus_context: bool = true) -> void:
 		settings_scroll.scroll_horizontal = 0
 		settings_scroll.scroll_vertical = 0
 	settings_overlay.show()
-	_configure_focus_cycle.call_deferred(settings_overlay)
-	if settings_initial_focus != null:
-		_grab_focus_if_valid.call_deferred(settings_initial_focus)
+	_prepare_optional_navigation_focus.call_deferred(settings_overlay, settings_initial_focus)
 	# Focus restoration and ScrollContainer.follow_focus are both deferred. Run
 	# the opening position last so Settings always begins with Gesamtlautstärke
 	# instead of inheriting a construction- or binding-row offset.
@@ -2774,13 +2861,17 @@ func show_preparation(view_model: Variant, catalog: Array = [], loadout: Variant
 
 func refresh_preparation(view_model: Variant, catalog: Array = [], loadout: Variant = null) -> void:
 	var trait_data: Variant = _view_value(view_model, &"trait", null)
+	var trait_values := _variant_array(_view_value(view_model, &"traits", []))
+	if trait_values.is_empty() and trait_data != null:
+		trait_values.append(trait_data)
+	current_preparation_guidance_step = StringName(_view_value(view_model, &"guidance_step", &""))
 	preparation_level_title.text = String(_view_value(view_model, &"level_title", "Fall"))
 	preparation_level_description.text = String(_view_value(view_model, &"level_description", ""))
 	preparation_trait_title.text = String(_view_value(trait_data, &"title", _view_value(view_model, &"trait_title", "Kein Fallmerkmal")))
 	preparation_trait_effect.text = String(_view_value(trait_data, &"description", _view_value(trait_data, &"effect", _view_value(view_model, &"trait_effect", "Kein besonderer Einfluss."))))
 	preparation_trait_panel.tooltip_text = preparation_trait_effect.text
 	preparation_trait_title.tooltip_text = preparation_trait_effect.text
-	_refresh_preparation_case_facts(view_model, trait_data)
+	_refresh_preparation_case_facts(view_model, trait_values)
 	var source_loadout: Variant = loadout if loadout != null else _view_value(view_model, &"loadout", view_model)
 	var snapshot_value: Variant = _view_value(view_model, &"loadout_snapshot", _view_value(source_loadout, &"snapshot", {}))
 	if snapshot_value is Dictionary and (snapshot_value as Dictionary).is_empty() and source_loadout is Object and (source_loadout as Object).has_method("to_dict"):
@@ -2866,12 +2957,16 @@ func refresh_preparation(view_model: Variant, catalog: Array = [], loadout: Vari
 	_apply_preparation_editor_state(preparation_locked)
 	_apply_preparation_layout()
 
-func _refresh_preparation_case_facts(view_model: Variant, trait_data: Variant) -> void:
+func _refresh_preparation_case_facts(view_model: Variant, traits: Array) -> void:
 	if preparation_case_facts == null:
 		return
 	for child in preparation_case_facts.get_children():
 		preparation_case_facts.remove_child(child)
 		child.queue_free()
+	if preparation_random_traits != null:
+		for child in preparation_random_traits.get_children():
+			preparation_random_traits.remove_child(child)
+			child.queue_free()
 	preparation_level_facts = null
 	preparation_boss_fact = null
 	if bool(_view_value(view_model, &"timing_intel_revealed", false)):
@@ -2893,11 +2988,76 @@ func _refresh_preparation_case_facts(view_model: Variant, trait_data: Variant) -
 			Color("f0bc57")
 		)
 		preparation_case_facts.add_child(preparation_boss_fact)
-	for modifier_value in _variant_array(_view_value(trait_data, &"modifiers", [])):
-		var fact := _case_modifier_fact(modifier_value)
-		if fact.is_empty():
-			continue
-		preparation_case_facts.add_child(_case_fact_chip(&"circle", String(fact["text"]), fact["color"]))
+	var show_traits := not traits.is_empty() and preparation_random_traits != null
+	if preparation_trait_separator != null:
+		preparation_trait_separator.visible = show_traits
+	if preparation_random_traits_header != null:
+		preparation_random_traits_header.visible = show_traits
+	if preparation_random_traits != null:
+		preparation_random_traits.visible = show_traits
+	if not show_traits:
+		return
+	for trait_data in traits:
+		var title := String(_view_value(trait_data, &"title", "Zufallsereignis"))
+		var description := String(_view_value(trait_data, &"description", _view_value(trait_data, &"effect", "")))
+		var role := StringName(_view_value(trait_data, &"semantic_role", &"negative"))
+		preparation_random_traits.add_child(_case_trait_chip(title, description, role))
+
+
+func _case_trait_chip(title: String, description: String, semantic_role: StringName) -> PanelContainer:
+	var accent := _case_trait_accent(semantic_role)
+	var chip := PanelContainer.new()
+	chip.custom_minimum_size.y = 44.0
+	chip.mouse_filter = Control.MOUSE_FILTER_STOP
+	chip.focus_mode = Control.FOCUS_ALL
+	chip.tooltip_text = description
+	chip.set_meta(&"alveolus_accessible_name", "%s. %s. 15 Prozent mehr Forschung." % [title, description])
+	chip.set_meta(&"stable_focus_id", StringName("case_trait_%s" % title.to_snake_case()))
+	chip.add_theme_stylebox_override("panel", PreparationBioLumenStyle.chip(accent))
+	register_context_detail(chip, _case_trait_context_payload.bind(title, description, semantic_role))
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation", 5)
+	chip.add_child(row)
+	var copy := VBoxContainer.new()
+	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy.add_theme_constant_override("separation", 0)
+	row.add_child(copy)
+	var title_label := _label(title, 12, accent.lightened(0.16))
+	title_label.add_theme_font_override("font", AlveolusVisualTheme.body_font())
+	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title_label.custom_minimum_size.x = 96.0
+	copy.add_child(title_label)
+	var effect_label := _label(description, 12, AlveolusVisualTheme.MUTED)
+	effect_label.max_lines_visible = 1
+	effect_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	copy.add_child(effect_label)
+	var reward_icon := SimpleIcon.new()
+	reward_icon.custom_minimum_size = Vector2(13.0, 13.0)
+	reward_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	reward_icon.configure(&"research", AlveolusVisualTheme.GOLD)
+	row.add_child(reward_icon)
+	var bonus := _label("+15 %", 12, AlveolusVisualTheme.GOLD)
+	bonus.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
+	row.add_child(bonus)
+	return chip
+
+
+func _case_trait_accent(semantic_role: StringName) -> Color:
+	match semantic_role:
+		&"positive": return AlveolusVisualTheme.TURQUOISE
+		&"mixed": return AlveolusVisualTheme.GOLD
+	return AlveolusVisualTheme.CORAL
+
+
+func _case_trait_context_payload(title: String, description: String, semantic_role: StringName) -> Dictionary:
+	return {
+		"title": title,
+		"body": description,
+		"meta": "+15 % Forschung",
+		"accent": _case_trait_accent(semantic_role),
+		"icon_kind": &"research",
+	}
 
 func _case_fact_chip(icon_kind: StringName, text: String, color: Color) -> PanelContainer:
 	var chip := PanelContainer.new()
@@ -3472,6 +3632,8 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 			"icon_id": icon_id,
 			"accent_role": _upgrade_accent_role(definition),
 			"rarity_role": definition.rarity_role(),
+			"family_id": definition.family_id,
+			"preview_stat": definition.preview_stat,
 			"pick_count": stats.upgrade_pick_count(definition),
 			"compact_title": definition.heading_component_id(stats.prepared_treatment.id if stats.prepared_treatment != null else &"") == &"movement",
 		})
@@ -3486,8 +3648,7 @@ func show_upgrade_choices(options: Array[UpgradeDefinition], stats: PlayerStats,
 	# Both flags remain accepted by the public facade, but no longer replace
 	# normal comparison values or switch into the former one-card lesson.
 	upgrade_screen.set_meta(&"legacy_education_requested", show_education or scripted_intro)
-	var request_focus := input_glyph_service != null and input_glyph_service.current_method == InputGlyphService.GAMEPAD
-	upgrade_screen.present(model, request_focus)
+	upgrade_screen.present(model, false)
 	var selection_helper := upgrade_screen.selection_helper()
 	if selection_helper != null:
 		selection_helper.text = "1 von 3 Upgrades aussuchen" if scripted_intro else ""
@@ -3556,7 +3717,8 @@ func show_pause(is_intro: bool = false, player_stats: PlayerStats = null, run_st
 	pause_is_intro = is_intro
 	pause_stats_overlay.hide()
 	pause_view_revision += 1
-	pause_screen.present(_pause_view_model(), PauseOverlay.Mode.MENU, true)
+	pause_screen.present(_pause_view_model(), PauseOverlay.Mode.MENU, false)
+	_prepare_optional_navigation_focus.call_deferred(pause_overlay)
 
 func hide_pause() -> void:
 	pause_screen.dismiss()
@@ -3576,7 +3738,7 @@ func _show_pause_stats() -> void:
 	pause_screen.apply_view_model(_pause_view_model(), PauseOverlay.Mode.STATS)
 	pause_screen.show()
 	pause_stats_overlay.show()
-	pause_screen.grab_initial_focus.call_deferred()
+	_prepare_optional_navigation_focus.call_deferred(pause_overlay)
 
 
 func _show_pause_test_values() -> void:
@@ -3584,7 +3746,7 @@ func _show_pause_test_values() -> void:
 	pause_screen.apply_view_model(_pause_view_model(), PauseOverlay.Mode.TEST)
 	pause_screen.show()
 	pause_stats_overlay.show()
-	pause_screen.grab_initial_focus.call_deferred()
+	_prepare_optional_navigation_focus.call_deferred(pause_overlay)
 
 func _hide_pause_stats() -> void:
 	pause_stats_overlay.hide()
@@ -3617,18 +3779,21 @@ func _pause_stat_group_role(group: String) -> StringName:
 func show_abort_confirmation() -> void:
 	pause_overlay.hide()
 	_apply_abort_confirmation()
-	abort_confirmation.present(abort_confirmation.view_model(), true)
+	abort_confirmation.present(abort_confirmation.view_model(), false)
+	_prepare_optional_navigation_focus.call_deferred(abort_overlay, abort_confirmation.get_default_focus_control())
 
 func show_intro_skip_confirmation() -> void:
 	pause_overlay.hide()
 	_apply_intro_skip_confirmation()
-	intro_skip_confirmation.present(intro_skip_confirmation.view_model(), true)
+	intro_skip_confirmation.present(intro_skip_confirmation.view_model(), false)
+	_prepare_optional_navigation_focus.call_deferred(intro_skip_overlay, intro_skip_confirmation.get_default_focus_control())
 
 func show_restart_confirmation() -> void:
 	pause_overlay.hide()
 	pause_stats_overlay.hide()
 	_apply_restart_confirmation()
-	restart_confirmation.present(restart_confirmation.view_model(), true)
+	restart_confirmation.present(restart_confirmation.view_model(), false)
+	_prepare_optional_navigation_focus.call_deferred(restart_overlay, restart_confirmation.get_default_focus_control())
 
 func hide_restart_confirmation() -> void:
 	restart_confirmation.dismiss()
@@ -3684,7 +3849,8 @@ func show_finding(definition: Variant, reactions: Array, reserve: Variant = null
 	)
 	finding_swap_valid = true
 	finding_validation_text = ""
-	_apply_finding_screen_model(true)
+	_apply_finding_screen_model(false)
+	_prepare_optional_navigation_focus.call_deferred(finding_overlay, finding_screen.get_default_focus_control())
 
 
 func hide_finding() -> void:
@@ -3835,7 +4001,7 @@ func show_end(level: LevelDefinition, success: bool, reason: String, elapsed: fl
 	result_campus_action_text = "Zum Campus"
 	_refresh_result_screen()
 	end_overlay.show()
-	result_screen.grab_initial_focus.call_deferred()
+	_prepare_optional_navigation_focus.call_deferred(end_overlay, result_screen.get_default_focus_control())
 
 
 func show_practice_end(scenario_title: String, success: bool, reason: String, elapsed: float, analysis_level: int, defeats: int) -> void:
@@ -3864,7 +4030,7 @@ func show_practice_end(scenario_title: String, success: bool, reason: String, el
 	result_campus_action_text = "Zum Campus"
 	_refresh_result_screen()
 	end_overlay.show()
-	result_screen.grab_initial_focus.call_deferred()
+	_prepare_optional_navigation_focus.call_deferred(end_overlay, result_screen.get_default_focus_control())
 
 func set_result_reward_presentations(presentations: Array[RewardPresentation]) -> void:
 	result_reward_text = ""
@@ -3958,7 +4124,7 @@ func _map_result_compatibility_controls() -> void:
 	end_reason = result_screen.find_child("Reason", true, false) as Label
 	var time_row := result_screen.find_child("Stat_time", true, false) as Control
 	end_stats = time_row.find_child("Value", true, false) as Label if time_row != null else null
-	end_reward = result_screen.find_child("Optional_reward_Body", true, false) as Label
+	end_reward = result_screen.reward_anchor(&"research")
 	end_unlock = result_screen.find_child("Optional_unlock_Body", true, false) as Label
 	end_mastery_panel = result_screen.find_child("Optional_mastery", true, false) as Control
 	end_mastery_label = result_screen.find_child("Optional_mastery_Body", true, false) as Label
@@ -3999,6 +4165,11 @@ func _all_overlays() -> Array[Control]:
 	return [campus_overlay, practice_overlay, research_overlay, level_overlay, lexicon_overlay, story_overlay, settings_overlay, preparation_overlay, upgrade_overlay, pause_overlay, pause_stats_overlay, abort_overlay, intro_skip_overlay, restart_overlay, finding_overlay, end_overlay]
 
 func _hide_all() -> void:
+	navigation_focus_active = false
+	if get_viewport() != null:
+		var focus_owner := get_viewport().gui_get_focus_owner()
+		if focus_owner != null:
+			focus_owner.release_focus()
 	_clear_binding_interaction()
 	boss_announcement_time = 0.0
 	if run_prompt != null:
@@ -4027,15 +4198,83 @@ func _prepare_optional_navigation_focus(scope: Control, preferred: Control = nul
 	var focusable := _configure_focus_cycle(scope)
 	if focusable.is_empty():
 		return
-	if input_glyph_service != null and input_glyph_service.method() == InputGlyphService.GAMEPAD:
-		if preferred != null and preferred.is_visible_in_tree() and preferred.focus_mode != Control.FOCUS_NONE and not (preferred is BaseButton and (preferred as BaseButton).disabled):
-			preferred.grab_focus()
-		else:
-			focusable[0].grab_focus()
-		return
 	var focus_owner := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
 	if focus_owner != null and scope.is_ancestor_of(focus_owner):
 		focus_owner.release_focus()
+	if navigation_focus_active:
+		_focus_preferred_or_first(preferred, focusable)
+
+
+func _is_intentional_navigation_event(event: InputEvent) -> bool:
+	if event == null:
+		return false
+	for action in [&"ui_focus_next", &"ui_focus_prev", &"ui_left", &"ui_right", &"ui_up", &"ui_down"]:
+		if event.is_action_pressed(action):
+			return true
+	return false
+
+
+func _activate_navigation_focus() -> void:
+	if not navigation_focus_active or get_viewport() == null:
+		return
+	var current := get_viewport().gui_get_focus_owner()
+	if current != null and current.is_visible_in_tree():
+		return
+	var scope := _active_navigation_scope()
+	if scope == null:
+		return
+	_focus_preferred_or_first(null, _configure_focus_cycle(scope))
+
+
+func _active_navigation_scope() -> Control:
+	if discovery_tooltip != null and discovery_tooltip.is_visible_in_tree():
+		return discovery_tooltip
+	var overlays := _all_overlays()
+	for index in range(overlays.size() - 1, -1, -1):
+		var overlay := overlays[index]
+		# The stats marker exists only for legacy visibility checks. Its actual
+		# controls live in PauseOverlay, which remains the navigation authority.
+		if overlay == pause_stats_overlay and pause_overlay != null and pause_overlay.is_visible_in_tree():
+			continue
+		if overlay != null and overlay.is_visible_in_tree():
+			return overlay
+	return null
+
+
+func _focus_preferred_or_first(preferred: Control, focusable: Array[Control]) -> void:
+	if preferred != null and preferred.is_visible_in_tree() and preferred.focus_mode != Control.FOCUS_NONE \
+		and not (preferred is BaseButton and (preferred as BaseButton).disabled):
+		preferred.grab_focus()
+	elif not focusable.is_empty():
+		focusable[0].grab_focus()
+
+
+func _release_pointer_focus() -> void:
+	if get_viewport() == null:
+		return
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if focus_owner != null:
+		focus_owner.release_focus()
+
+
+func _release_pointer_focus_for_pointer(pointer_position: Vector2) -> void:
+	if get_viewport() == null:
+		return
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if focus_owner == null:
+		return
+	var editable_text := focus_owner is LineEdit or focus_owner is TextEdit
+	if editable_text and focus_owner.get_global_rect().has_point(pointer_position):
+		return
+	focus_owner.release_focus()
+
+
+func _release_pointer_focus_after_frame(pointer_position: Vector2) -> void:
+	if not is_inside_tree():
+		return
+	await get_tree().process_frame
+	if not navigation_focus_active:
+		_release_pointer_focus_for_pointer(pointer_position)
 
 func _configure_focus_cycle(scope: Control) -> Array[Control]:
 	if scope == null or not scope.is_visible_in_tree():
@@ -4168,8 +4407,14 @@ func _on_preparation_slot_gui_input(event: InputEvent) -> void:
 func _on_preparation_slot_pressed(slot_id: StringName) -> void:
 	if preparation_locked or not LoadoutSlotId.planning().has(slot_id) or planning_snapshot.mode == PlanningSnapshot.Mode.REPLACE_CONFIRM:
 		return
+	if current_preparation_guidance_step == &"active_1" and slot_id != LoadoutSlotId.ACTIVE_1:
+		return
+	if current_preparation_guidance_step == &"defense_burst":
+		return
 	if bool(current_preparation_locked_slots.get(slot_id, current_preparation_locked_slots.get(String(slot_id), false))):
 		return
+	if current_preparation_guidance_step == &"active_1":
+		current_preparation_guidance_step = &"defense_burst"
 	var navigation_activation := preparation_slot_keyboard_activation \
 		or (input_glyph_service != null and input_glyph_service.method() == InputGlyphService.GAMEPAD)
 	preparation_slot_keyboard_activation = false
@@ -4661,6 +4906,10 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 func _on_preparation_component(id: StringName, is_passive: bool) -> void:
 	if preparation_locked:
 		return
+	if current_preparation_guidance_step == &"active_1":
+		return
+	if current_preparation_guidance_step == &"defense_burst" and id != &"ability_defense_burst":
+		return
 	var button := preparation_component_buttons.get(id, null) as Button
 	if button == null or not bool(button.get_meta(&"catalog_available", false)):
 		return
@@ -4817,8 +5066,47 @@ func _apply_preparation_editor_state(tutorial_locked: bool = false) -> void:
 	preparation_lock_panel.visible = tutorial_locked
 	preparation_editor_back_button.hide()
 	_refresh_preparation_slot_styles()
+	_apply_preparation_guidance_state()
 	_configure_focus_cycle.call_deferred(preparation_overlay)
 	_configure_preparation_catalog_focus.call_deferred()
+
+
+func _apply_preparation_guidance_state() -> void:
+	var active := current_preparation_guidance_step in [&"active_1", &"defense_burst"]
+	if preparation_guidance_panel != null:
+		preparation_guidance_panel.visible = active
+	if not active:
+		return
+	if preparation_guidance_label != null:
+		preparation_guidance_label.text = (
+			"Wähle zuerst den Planplatz Aktiv 1."
+			if current_preparation_guidance_step == &"active_1"
+			else "Wähle jetzt Stoß für Aktiv 1."
+		)
+	for slot_id_value in preparation_slot_buttons:
+		var slot_id := StringName(slot_id_value)
+		var slot_button := preparation_slot_buttons[slot_id] as Button
+		var is_target := current_preparation_guidance_step == &"active_1" and slot_id == LoadoutSlotId.ACTIVE_1
+		AlveolusUIComponents.set_button_disabled(slot_button, not is_target)
+		if is_target:
+			var target_style := PreparationBioLumenStyle.slot(&"normal", true)
+			target_style.border_color = AlveolusVisualTheme.GOLD
+			target_style.set_border_width_all(3)
+			slot_button.add_theme_stylebox_override("normal", target_style)
+	for id_value in preparation_component_buttons:
+		var id := StringName(id_value)
+		var button := preparation_component_buttons[id] as Button
+		var is_target := current_preparation_guidance_step == &"defense_burst" and id == &"ability_defense_burst" and bool(button.get_meta(&"catalog_available", false))
+		AlveolusUIComponents.set_button_disabled(button, not is_target)
+		if is_target:
+			var target_style := PreparationBioLumenStyle.candidate(&"normal", true, false)
+			target_style.border_color = AlveolusVisualTheme.GOLD
+			target_style.set_border_width_all(3)
+			button.add_theme_stylebox_override("normal", target_style)
+	if preparation_start_button != null:
+		AlveolusUIComponents.set_button_disabled(preparation_start_button, true)
+	if preparation_remove_button != null:
+		AlveolusUIComponents.set_button_disabled(preparation_remove_button, true)
 
 func _apply_preparation_layout() -> void:
 	if root == null or preparation_workspace == null:
@@ -4831,8 +5119,14 @@ func _apply_preparation_layout() -> void:
 	preparation_workspace.columns = 1 if compact else 2
 	preparation_slots.columns = (2 if logical_width >= 620.0 else 1) if compact else 1
 	preparation_case_row.columns = 2 if logical_width >= 760.0 else 1
-	preparation_case_facts.custom_minimum_size.x = 320.0 if preparation_case_row.columns == 2 else 0.0
-	preparation_trait_panel.custom_minimum_size.y = 118.0 if preparation_case_row.columns == 1 else 84.0
+	var has_random_traits := preparation_trait_separator != null and preparation_trait_separator.visible
+	preparation_case_facts.custom_minimum_size.x = 160.0 if preparation_case_row.columns == 2 else 0.0
+	if preparation_facts_group != null:
+		preparation_facts_group.columns = 1 if compact or not has_random_traits else 3
+		preparation_facts_group.custom_minimum_size.x = 430.0 if preparation_case_row.columns == 2 else 0.0
+	if preparation_trait_separator != null:
+		preparation_trait_separator.custom_minimum_size = Vector2(0.0, 1.0) if compact else Vector2(1.0, 42.0)
+	preparation_trait_panel.custom_minimum_size.y = 136.0 if preparation_case_row.columns == 1 and has_random_traits else (104.0 if has_random_traits else 84.0)
 	preparation_trait_panel.show()
 	if preparation_lock_stack != null:
 		preparation_lock_stack.custom_minimum_size.x = 220.0 if compact else 320.0
@@ -5105,6 +5399,9 @@ func _preparation_catalog_neighbor(cells: Array[Button], index: int, delta_x: in
 	return null
 
 func _restore_preparation_focus() -> void:
+	if not navigation_focus_active:
+		_release_pointer_focus()
+		return
 	var focus_id := planning_snapshot.focus_return_id
 	if preparation_component_buttons.has(focus_id):
 		var component_button := preparation_component_buttons[focus_id] as Button

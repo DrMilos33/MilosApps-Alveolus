@@ -4,6 +4,7 @@ extends RefCounted
 const RESEARCH_GAIN_MULTIPLIER := 3.75
 const RUN_RESEARCH_GAIN_MULTIPLIER := 1.50
 const BOSS_RESEARCH_MULTIPLIER_PER_DEFEAT := 0.25
+const CASE_TRAIT_RESEARCH_MULTIPLIER_PER_TRAIT := 0.15
 const INTRO_RESEARCH_REWARD := 30
 
 signal research_changed(points: int, claimable: int)
@@ -183,9 +184,18 @@ func award_run(
 	level: int,
 	defeats: int,
 	multiplier: float = 1.0,
-	bosses_defeated: int = 0
+	bosses_defeated: int = 0,
+	case_trait_count: int = 0
 ) -> int:
-	var reward := calculate_run_reward(success, elapsed, level, defeats, multiplier, bosses_defeated)
+	var reward := calculate_run_reward(
+		success,
+		elapsed,
+		level,
+		defeats,
+		multiplier,
+		bosses_defeated,
+		case_trait_count
+	)
 	research_points += reward
 	lifetime_runs += 1
 	research_changed.emit(research_points, claimable_research())
@@ -198,7 +208,8 @@ static func calculate_run_reward(
 	level: int,
 	defeats: int,
 	multiplier: float = 1.0,
-	bosses_defeated: int = 0
+	bosses_defeated: int = 0,
+	case_trait_count: int = 0
 ) -> int:
 	var survival_bonus := mini(floori(elapsed / 120.0), 5)
 	var analysis_bonus := mini(maxi(level, 0), 10)
@@ -212,6 +223,7 @@ static func calculate_run_reward(
 		* RESEARCH_GAIN_MULTIPLIER
 		* RUN_RESEARCH_GAIN_MULTIPLIER
 		* boss_research_multiplier(bosses_defeated)
+		* case_trait_reward_multiplier(case_trait_count)
 	))
 
 
@@ -221,6 +233,10 @@ static func scaled_research_gain(base_amount: float) -> int:
 
 static func boss_research_multiplier(bosses_defeated: int) -> float:
 	return 1.0 + float(maxi(bosses_defeated, 0)) * BOSS_RESEARCH_MULTIPLIER_PER_DEFEAT
+
+
+static func case_trait_reward_multiplier(case_trait_count: int) -> float:
+	return 1.0 + float(maxi(case_trait_count, 0)) * CASE_TRAIT_RESEARCH_MULTIPLIER_PER_TRAIT
 
 
 static func intro_research_reward(_bosses_defeated: int = 0) -> int:
@@ -470,7 +486,8 @@ func advance_case_seed(level_id: StringName) -> int:
 func create_run_context(
 	level_id: StringName,
 	visible_trait_id: StringName = &"",
-	hidden_finding_id: StringName = &""
+	hidden_finding_id: StringName = &"",
+	visible_trait_ids: Array[StringName] = []
 ) -> RunContext:
 	return RunContext.create(
 		level_id,
@@ -478,7 +495,8 @@ func create_run_context(
 		get_prepared_loadout(level_id),
 		talent_ranks,
 		visible_trait_id,
-		hidden_finding_id
+		hidden_finding_id,
+		visible_trait_ids
 	)
 
 func to_dict() -> Dictionary:

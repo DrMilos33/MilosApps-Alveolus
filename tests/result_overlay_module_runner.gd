@@ -97,6 +97,8 @@ func _run() -> void:
 	var reward_icon := reward_column.find_child("RewardIcon", true, false) as SimpleIcon if reward_column != null else null
 	var reward_value := overlay.find_child("Optional_reward_Body", true, false) as Label
 	_check(reward_icon != null and reward_icon.kind == &"research" and reward_value != null and reward_value.text == "+22", "Forschungsreward zeigt ausschließlich Datenicon und Wert darunter")
+	_check(overlay.reward_anchor(&"research") == reward_icon, "Der Ergebnis-Hinweis verankert sich am tatsächlichen Forschungssymbol")
+	_check(overlay.reward_anchor(&"missing") == null, "Unbekannte Ergebnisbelohnungen erzeugen keinen falschen Hinweisanker")
 	_check(reward_column != null and reward_column.get_meta(&"alveolus_accessible_name", "") == "Forschung +22", "Iconreward transportiert einen redundanten Accessible Name")
 	_check(_reward_placeholder_texts(overlay) == PackedStringArray(["+ irgendwas", "+ maybe nochwas", "+ idk"]), "Drei zusätzliche Rewardspalten besitzen exakt die freigegebene Placeholder-Copy")
 	_check(_primary_action_count(overlay) == 1, "Genau eine Folgeaktion ist visuell primär")

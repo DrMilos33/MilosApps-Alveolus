@@ -61,6 +61,9 @@ func _capture_suite(game: Node) -> void:
 	game._show_practice()
 	await _capture("practice")
 	game.meta.research_ranks[&"stability_reserve"] = 3
+	# Talent captures must not depend on the developer's persisted campaign
+	# progress. Unlock the production tree only inside this disposable fixture.
+	game.meta.get_level_record(&"localized_focus").victories = 1
 	game._show_research()
 	await _settle()
 	_verify_document_page(game.hud, game.hud.research_overlay, "research")
@@ -170,6 +173,11 @@ func _capture_suite(game: Node) -> void:
 		push_error("Einführungsplan zeigt keine vollständige Sperrfläche")
 		return
 	await _capture("preparation_intro_locked")
+	# Re-enter through the real level-selection route. Reusing the still-open
+	# intro overlay would intentionally preserve its compact lock scroll offset
+	# and hide the case dossier in the following capture.
+	game._show_level_select()
+	await _settle()
 
 	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
 	game.meta.research_ranks[&"unlock_piercing_treatment"] = 1

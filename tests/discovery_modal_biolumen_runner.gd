@@ -34,7 +34,9 @@ func _run() -> void:
 	await _settle()
 
 	var dismissed_count := [0]
+	var hide_hints_count := [0]
 	tooltip.dismissed.connect(func() -> void: dismissed_count[0] += 1)
+	tooltip.hide_hints_requested.connect(func() -> void: hide_hints_count[0] += 1)
 	var short_definition := DiscoveryDefinition.create(
 		&"short_biolumen_discovery",
 		&"test",
@@ -55,24 +57,24 @@ func _run() -> void:
 	_check(tooltip.panel.get_meta(&"alveolus_surface_role", -1) == AlveolusVisualTheme.SurfaceRole.MODAL_SHEET, "Die Entdeckung bezieht ihre sichtbare Rolle aus der zentralen ModalSheet-Komponente")
 	_check(tooltip.panel.get_node_or_null("BioLumenSurface") is BioLumenSurfaceFill, "Die Entdeckung nutzt die zentrale Bio-Lumen-Fläche statt einer lokalen Stylekopie")
 	_check(tooltip.panel.size.y <= tooltip.copy_stack.get_combined_minimum_size().y + 170.0, "Das Modal folgt seiner tatsächlichen Inhaltshöhe ohne Leerraumreserve")
-	_check(tooltip.title_label.text == "Neu · Schnelltest", "Der Titel benennt die konkrete neue Entdeckung ohne Obertitel-Dopplung")
+	_check(tooltip.title_label.text == "Hinweis · Schnelltest", "Die UI benennt die Entdeckung spielernah als Hinweis")
 	_check(tooltip.gameplay_label.text == short_definition.gameplay_text, "Die Spielwirkung übernimmt ihre unveränderten Inhaltsdaten")
-	_check(tooltip.medical_label.text == short_definition.medical_text, "Der medizinische Kontext übernimmt seine unveränderten Inhaltsdaten")
-	_check(tooltip.copy_stack.get_child_count() == 2, "Spielwirkung und medizinischer Kontext bilden exakt zwei semantische Flächen")
+	_check(tooltip.copy_stack.get_child_count() == 1, "Der Hinweis zeigt ausschließlich die unmittelbare Spielwirkung")
 	for section in tooltip.copy_stack.get_children():
 		_check(
 			section.get_meta(&"alveolus_component", &"") == &"semantic_copy_section",
-			"Beide Informationsbereiche stammen aus der zentralen semantischen Copy-Komponente"
+			"Die Spielwirkung stammt aus der zentralen semantischen Copy-Komponente"
 		)
 
 	var actions := _action_buttons(tooltip.panel)
-	_check(actions.size() == 1 and actions[0] == tooltip.understood_button, "Der Pflichtdialog besitzt genau eine Aktion")
+	_check(actions.size() == 2 and actions.has(tooltip.understood_button) and actions.has(tooltip.hide_hints_button), "Der Hinweis besitzt Verstanden und das kleine Ausblenden-Signal")
 	_check(tooltip.understood_button.get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_PRIMARY, "Verstanden ist die einzige semantische Hauptaktion")
+	_check(tooltip.hide_hints_button.get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "Hinweise ausblenden bleibt eine ruhige Nebenaktion")
 	_check(tooltip.understood_button.theme_type_variation == AlveolusVisualTheme.TYPE_PRIMARY_BUTTON, "Verstanden verwendet den globalen PrimaryButton statt eines lokalen Styles")
 	_check(not tooltip.understood_button.has_theme_stylebox_override(&"normal"), "Die Hauptaktion besitzt keine lokale StyleBox-Kopie")
 	_check(tooltip.understood_button.get_node_or_null("BioLumenFill") != null, "Die Hauptaktion nutzt die zentrale Bio-Lumen-Füllung")
-	_check(get_root().gui_get_focus_owner() == tooltip.understood_button, "present setzt den Fokus auf die einzige sichere Aktion")
-	_check(_focus_cycle_returns_to_self(tooltip.understood_button), "Der Ein-Aktions-Dialog fängt Tab und Richtungsfokus vollständig")
+	_check(get_root().gui_get_focus_owner() == tooltip.neutral_focus, "present parkt Fokus unsichtbar statt eine sichtbare Aktion hervorzuheben")
+	_check(_focus_cycle_stays_in_actions(tooltip.hide_hints_button, tooltip.understood_button), "Der Zwei-Aktions-Hinweis fängt Tab und Richtungsfokus vollständig")
 	_check(_inside_viewport(tooltip.panel, host.size), "Das inhaltsgetriebene Modal bleibt im logischen Viewport")
 	_check(not tooltip.is_compact_sheet_active() and tooltip.highlighter.visible, "Mit ausreichendem Seitenraum bleibt die Entdeckung am sichtbaren Ziel verankert")
 	_check(not tooltip.panel.get_global_rect().intersects(target.get_global_rect()), "Neue Entdeckungen überdecken ihr zugehöriges Feld nicht")
@@ -99,6 +101,11 @@ func _run() -> void:
 	_check(tooltip.panel.size.y > short_height, "Die Modalhöhe wächst mit tatsächlichem Mehrinhalt statt mit einer festen Reserve")
 	_check(_inside_viewport(tooltip.panel, host.size), "Auch mehrzeiliger Inhalt bleibt vollständig im Viewport")
 
+	tooltip.hide_hints_button.pressed.emit()
+	_check(hide_hints_count[0] == 1 and dismissed_count[0] == 1, "Hinweise ausblenden emittiert nur Intents und schließt den aktuellen Hinweis")
+	tooltip.present(longer_definition, target)
+	await _settle()
+
 	host.size = Vector2(480.0, 270.0)
 	target.position = Vector2(216.0, 111.0)
 	tooltip.present(longer_definition, target)
@@ -116,9 +123,9 @@ func _run() -> void:
 	cancel_event.action = &"ui_cancel"
 	cancel_event.pressed = true
 	tooltip._gui_input(cancel_event)
-	_check(dismissed_count[0] == 1, "ui_cancel fordert genau einmal das Schließen der obersten Entdeckung an")
+	_check(dismissed_count[0] == 2, "ui_cancel fordert genau einmal das Schließen des obersten Hinweises an")
 	tooltip._gui_input(cancel_event)
-	_check(dismissed_count[0] == 1, "Ein einzelner Eingabeimpuls kann die dismiss-Absicht nicht doppelt auslösen")
+	_check(dismissed_count[0] == 2, "Ein einzelner Eingabeimpuls kann die dismiss-Absicht nicht doppelt auslösen")
 
 	tooltip.conceal()
 	_check(not tooltip.visible and tooltip.target_object == null, "conceal versteckt den Dialog und löst sein Ziel ohne API-Änderung")
@@ -143,17 +150,18 @@ func _action_buttons(root: Node) -> Array[Button]:
 	return result
 
 
-func _focus_cycle_returns_to_self(button: Button) -> bool:
-	for path in [
-		button.focus_previous,
-		button.focus_next,
-		button.focus_neighbor_left,
-		button.focus_neighbor_right,
-		button.focus_neighbor_top,
-		button.focus_neighbor_bottom,
-	]:
-		if button.get_node_or_null(path) != button:
-			return false
+func _focus_cycle_stays_in_actions(first: Button, second: Button) -> bool:
+	for button in [first, second]:
+		for path in [
+			button.focus_previous,
+			button.focus_next,
+			button.focus_neighbor_left,
+			button.focus_neighbor_right,
+			button.focus_neighbor_top,
+			button.focus_neighbor_bottom,
+		]:
+			if button.get_node_or_null(path) not in [first, second]:
+				return false
 	return true
 
 

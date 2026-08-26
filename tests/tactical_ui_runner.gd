@@ -45,13 +45,18 @@ func _run() -> void:
 		# Dense fixture for the approved two-by-two picker. These IDs exist only in
 		# this UI test and deliberately do not add production loadout content.
 		{"id": &"pulse", "title": "Pulswelle", "description": "Mehrere Impulse in kurzer Folge", "kind": 1, "capacity_cost": 3, "visual_id": &"ability_treatment_line"},
-		{"id": &"twin", "title": "Zwillingsimpuls", "description": "Zwei Ziele gleichzeitig", "kind": 1, "capacity_cost": 3, "visual_id": &"ability_sample_pull"}
+		{"id": &"twin", "title": "Zwillingsimpuls", "description": "Zwei Ziele gleichzeitig", "kind": 1, "capacity_cost": 3, "visual_id": &"ability_sample_pull"},
+		{"id": &"ability_defense_burst", "title": "Stoß", "description": "Drängt Erreger am Ziel zurück", "kind": 1, "capacity_cost": 2, "visual_id": &"ability_defense_burst"}
 	]
 	var prep_view := {
 		"level_title": "Testfall",
 		"level_description": "Kurze Beschreibung für die Einsatzplanung.",
 		"duration_text": "3:00 Min.",
 		"boss_time_text": "2:15 Min.",
+		"traits": [
+			{"title": "Hohe Keimlast", "description": "Mehr Bakterien, aber weniger Widerstand.", "semantic_role": &"negative"},
+			{"title": "Empfindliche Hülle", "description": "Erreger nehmen mehr Behandlungsschaden.", "semantic_role": &"positive"},
+		],
 		"trait": {"title": "Hohe Keimlast", "description": "Mehr Bakterien, aber weniger Widerstand."},
 		"slot_snapshot": {
 			LoadoutSlotId.TREATMENT: &"precise",
@@ -71,7 +76,97 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_check(hud.preparation_overlay.visible, "Vorbereitung ist sichtbar")
+	_check(get_root().gui_get_focus_owner() == null, "Pointer-neutrales Öffnen der Vorbereitung setzt keinen sichtbaren Fokus")
+	var pointer_press := InputEventMouseButton.new()
+	pointer_press.button_index = MOUSE_BUTTON_LEFT
+	pointer_press.pressed = true
+	hud._input(pointer_press)
+	await process_frame
+	await process_frame
+	_check(get_root().gui_get_focus_owner() == null, "Ein Pointer-Klick aktiviert keinen automatischen Navigationsfokus")
+	var tab_navigation := InputEventAction.new()
+	tab_navigation.action = &"ui_focus_next"
+	tab_navigation.pressed = true
+	hud._input(tab_navigation)
+	await process_frame
+	await process_frame
+	var tab_focus := get_root().gui_get_focus_owner()
+	_check(tab_focus != null and hud.preparation_overlay.is_ancestor_of(tab_focus), "Tab aktiviert Fokus innerhalb der sichtbaren Vorbereitung")
+	hud._input(pointer_press)
+	await process_frame
+	await process_frame
+	_check(get_root().gui_get_focus_owner() == null, "Ein anschließender Pointer-Klick entfernt den Navigationsfokus wieder")
+	var directional_navigation := InputEventAction.new()
+	directional_navigation.action = &"ui_right"
+	directional_navigation.pressed = true
+	hud._input(directional_navigation)
+	await process_frame
+	await process_frame
+	var directional_focus := get_root().gui_get_focus_owner()
+	_check(directional_focus != null and hud.preparation_overlay.is_ancestor_of(directional_focus), "Eine Richtungseingabe aktiviert ebenfalls Fokus innerhalb der sichtbaren Vorbereitung")
+	hud._input(pointer_press)
+	await process_frame
+	await process_frame
+
+	# Pointer mode clears a text focus only when the click is outside that text
+	# field. Otherwise an intentional click into search would immediately lose
+	# its caret again.
+	hud.show_lexicon(campus_meta)
+	await process_frame
+	await process_frame
+	var lexicon_filter := hud.lexicon_master_detail.entry_filter
+	lexicon_filter.grab_focus()
+	var outside_text_press := InputEventMouseButton.new()
+	outside_text_press.button_index = MOUSE_BUTTON_LEFT
+	outside_text_press.pressed = true
+	outside_text_press.position = Vector2(1270.0, 710.0)
+	hud._input(outside_text_press)
+	await process_frame
+	await process_frame
+	_check(get_root().gui_get_focus_owner() == null, "Ein Pointer-Klick außerhalb der Lexikonsuche entfernt auch deren Textfokus")
+	lexicon_filter.grab_focus()
+	var inside_text_press := InputEventMouseButton.new()
+	inside_text_press.button_index = MOUSE_BUTTON_LEFT
+	inside_text_press.pressed = true
+	inside_text_press.position = lexicon_filter.get_global_rect().get_center()
+	hud._input(inside_text_press)
+	await process_frame
+	await process_frame
+	_check(get_root().gui_get_focus_owner() == lexicon_filter, "Ein Pointer-Klick in die Lexikonsuche behält den benötigten Texteingabefokus")
+
+	# PauseStatsCompatibilityState is only a visibility marker. Directional
+	# navigation must enter the real pause subview instead of that empty marker.
+	hud._hide_all()
+	hud.show_pause(false)
+	hud._show_pause_stats()
+	await process_frame
+	await process_frame
+	_check(hud._active_navigation_scope() == hud.pause_overlay, "Charakterwerte verwenden den echten Pause-Overlay als Navigationsbereich")
+	hud._input(outside_text_press)
+	await process_frame
+	await process_frame
+	hud._input(directional_navigation)
+	await process_frame
+	await process_frame
+	var pause_stats_focus := get_root().gui_get_focus_owner()
+	_check(pause_stats_focus != null and hud.pause_overlay.is_ancestor_of(pause_stats_focus), "Pfeil- und D-Pad-Eingaben betreten Charakterwerte nach Pointermodus wieder zuverlässig")
+	hud.hide_pause()
+	hud.show_preparation(prep_view, components)
+	await process_frame
+	await process_frame
 	_check(hud.preparation_trait_title.text.to_lower().contains("hohe keimlast"), "Fallmerkmal wird erklärt")
+	_check(hud.preparation_random_traits.get_child_count() == 2, "Die Fallkurzinfo zeigt beide Fallmerkmale als getrennte sichtbare Einträge")
+	_check(hud.preparation_random_traits_header.visible and hud.preparation_random_traits_header.text == "ZUFALLSEREIGNISSE", "Das Merkmalspaar besitzt eine gemeinsame sichtbare Überschrift")
+	_check(hud.preparation_trait_separator.visible and hud.preparation_facts_group.columns == 3, "Ein sichtbarer Separator trennt Fakten und das zweifache Merkmalspaar")
+	for trait_chip in hud.preparation_random_traits.get_children():
+		_check(str((trait_chip as Control).get_meta(&"alveolus_accessible_name", "")).contains("15 Prozent mehr Forschung"), "Jedes sichtbare Fallmerkmal erklärt seinen eigenen Forschungsbonus")
+		_check((trait_chip as Control).focus_mode == Control.FOCUS_ALL, "Jedes sichtbare Fallmerkmal ist für ui_info fokussierbar")
+	var first_trait_chip := hud.preparation_random_traits.get_child(0) as Control
+	first_trait_chip.grab_focus()
+	_check(hud.toggle_focused_context_detail(first_trait_chip), "ui_info öffnet die vollständige Erklärung des fokussierten Fallmerkmals")
+	var trait_detail := hud.context_detail_controller.current_payload()
+	_check(String(trait_detail.get("body", "")).contains("Mehr Bakterien") and trait_detail.get("meta", "") == "+15 % Forschung", "Fallmerkmal-Tooltip und ui_info teilen Wirkung und Forschungsbonus")
+	hud.close_context_detail()
 	var dossier_style := hud.preparation_trait_panel.get_theme_stylebox("panel") as StyleBoxFlat
 	_check(_stylebox_matches(dossier_style, PreparationBioLumenStyle.dossier()), "Fallkurzinfo verwendet die freigegebene Bio-Lumen-Membran")
 	var plan_frame_style := hud.preparation_plan_panel.get_theme_stylebox("panel") as StyleBoxFlat
@@ -182,7 +277,7 @@ func _run() -> void:
 	await process_frame
 	var active_two_order := _catalog_component_order(hud)
 	_check(
-		active_one_order == [&"focus", &"emergency", &"shield", &"pulse", &"twin"] and active_two_order == active_one_order,
+		active_one_order == [&"focus", &"emergency", &"shield", &"pulse", &"twin", &"ability_defense_burst"] and active_two_order == active_one_order,
 		"Aktive Fähigkeiten behalten über alle Zielslots dieselbe räumliche Reihenfolge"
 	)
 	hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
@@ -333,6 +428,35 @@ func _run() -> void:
 	hud._begin_reserve_selection()
 	_check(slot_component_events.size() == slot_event_count_before_intro and direct_slot_events.size() == clear_event_count_before_intro and reserve_events.is_empty(), "Die volle Intro-Sperre blockiert Ausrüsten, Entfernen und Reservewahl auf Signalebene")
 	_check(hud.planning_snapshot.selected_slot_id == locked_slot_before and not hud.preparation_editor_confirm.visible, "Direkte HUD-Aufrufe können den gesperrten Einführungsplan nicht mutieren")
+
+	var guided_view := prep_view.duplicate(true)
+	guided_view["guidance_step"] = &"active_1"
+	(guided_view["slot_snapshot"] as Dictionary)[LoadoutSlotId.ACTIVE_1] = &""
+	(guided_view["loadout_snapshot"] as Dictionary)["ability_ids"] = [&"emergency"]
+	hud.show_preparation(guided_view, components)
+	await process_frame
+	await process_frame
+	_check(hud.preparation_guidance_panel.visible and hud.preparation_guidance_label.text.contains("Aktiv 1"), "Die Fall-1-Vorbereitung zeigt zuerst die Führung zum Zielplatz Aktiv 1")
+	_check(not (hud.preparation_slot_buttons[LoadoutSlotId.ACTIVE_1] as Button).disabled and (hud.preparation_slot_buttons[LoadoutSlotId.TREATMENT] as Button).disabled, "Der erste Führungsschritt lässt nur den Zielplatz Aktiv 1 bedienbar")
+	_check(hud.preparation_start_button.disabled, "Während der Fall-1-Führung kann der Run nicht vorzeitig starten")
+	hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
+	await process_frame
+	_check(hud.preparation_guidance_label.text.contains("Stoß") and hud.current_preparation_guidance_step == &"defense_burst", "Nach dem Zielplatz führt die Vorbereitung ausdrücklich zu Stoß")
+	var guided_burst := hud.preparation_component_buttons.get(&"ability_defense_burst", null) as Button
+	_check(guided_burst != null and not guided_burst.disabled, "Stoß bleibt im zweiten Führungsschritt als einziger Zielkandidat bedienbar")
+	for component_id_value in hud.preparation_component_buttons:
+		var component_id := StringName(component_id_value)
+		var component_button := hud.preparation_component_buttons[component_id] as Button
+		if component_id != &"ability_defense_burst":
+			_check(component_button.disabled, "Die Stoß-Führung sperrt den abweichenden Kandidaten %s" % component_id)
+	var guided_events_before := slot_component_events.size()
+	hud._on_preparation_component(&"ability_defense_burst", false)
+	_check(slot_component_events.size() == guided_events_before + 1 and slot_component_events.back() == [LoadoutSlotId.ACTIVE_1, &"ability_defense_burst"], "Die geführte Stoß-Auswahl meldet exakt Aktiv 1 und die Stoß-ID")
+	var hints_disabled_count := [0]
+	hud.hints_disabled.connect(func() -> void: hints_disabled_count[0] += 1)
+	_check(hud.preparation_guidance_hide.text == "Hinweise ausblenden", "Die Fall-1-Führung bietet den verständlichen Ausblendpfad")
+	hud.preparation_guidance_hide.pressed.emit()
+	_check(hints_disabled_count[0] == 1, "Der Ausblendpfad emittiert genau den globalen Hinweise-aus-Intent")
 
 	var meta := MetaProgressionState.new()
 	meta.reset_defaults(1000)
@@ -546,6 +670,9 @@ func _run() -> void:
 
 	var level := ContentCatalog.level_definitions()[1]
 	hud.show_end(level, true, "Kontrolliert", 120.0, 4, 50, 20, false)
+	await process_frame
+	await process_frame
+	_check(get_root().gui_get_focus_owner() == null, "Auch das Ergebnis öffnet pointer-neutral ohne automatischen Fokus")
 	hud.show_end_mastery([{"title": "Erster Sieg"}], 1, 4)
 	_check(hud.end_mastery_panel.visible, "Ergebnis zeigt neue Meisterschaft")
 	_check(hud.end_mastery_label.text.to_lower().contains("+1 talentpunkte"), "Talentbelohnung ist unabhängig von der Sentence-Case-Darstellung getrennt ausgewiesen")

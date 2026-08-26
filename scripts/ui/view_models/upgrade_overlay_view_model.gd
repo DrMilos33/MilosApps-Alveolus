@@ -55,6 +55,10 @@ class UpgradeOptionViewModel:
 	var _icon_id: StringName
 	var _accent_role: StringName
 	var _rarity_role: StringName
+	var _effect_role: StringName
+	var _effect_label: String
+	var _effect_icon_id: StringName
+	var _effect_accent_role: StringName
 	var _value_rows: Array[ValueRowViewModel]
 	var _pick_count: int
 	var _maximum_picks: int
@@ -69,6 +73,10 @@ class UpgradeOptionViewModel:
 		icon_value: StringName,
 		accent_value: StringName,
 		rarity_value: StringName,
+		effect_role_value: StringName,
+		effect_label_value: String,
+		effect_icon_value: StringName,
+		effect_accent_value: StringName,
 		value_rows_value: Array[ValueRowViewModel] = [],
 		pick_count_value: int = 0,
 		maximum_picks_value: int = 1,
@@ -82,6 +90,10 @@ class UpgradeOptionViewModel:
 		_icon_id = icon_value
 		_accent_role = accent_value
 		_rarity_role = rarity_value
+		_effect_role = effect_role_value
+		_effect_label = effect_label_value
+		_effect_icon_id = effect_icon_value
+		_effect_accent_role = effect_accent_value
 		_value_rows.assign(value_rows_value)
 		_pick_count = maxi(0, pick_count_value)
 		_maximum_picks = maxi(1, maximum_picks_value)
@@ -118,6 +130,21 @@ class UpgradeOptionViewModel:
 	func rarity_role() -> StringName:
 		return _rarity_role
 
+	func effect_role() -> StringName:
+		return _effect_role
+
+	func effect_label() -> String:
+		return _effect_label
+
+	func effect_icon_id() -> StringName:
+		return _effect_icon_id
+
+	func effect_accent_role() -> StringName:
+		return _effect_accent_role
+
+	func has_effect_badge() -> bool:
+		return _effect_role != &"" and not _effect_label.is_empty() and _effect_icon_id != &""
+
 	func value_rows() -> Array[ValueRowViewModel]:
 		var result: Array[ValueRowViewModel] = []
 		result.assign(_value_rows)
@@ -149,6 +176,7 @@ var _content_hash := ""
 
 
 ## Accepted row keys: id, title, effect, before, after, icon_id, accent_role, rarity_role,
+## family_id, preview_stat,
 ## value_rows, pick_count, maximum_picks and compact_title. Each value row is
 ## already display-ready and accepts id, label, value, optional before and
 ## accent_role. The UI never derives units or maps content IDs. Invalid or
@@ -192,6 +220,10 @@ static func create(
 		var rarity_value := StringName(String(row.get("rarity_role", "common")))
 		if rarity_value not in [&"common", &"magic", &"rare"]:
 			rarity_value = &"common"
+		var effect_badge := _effect_badge_presentation(
+			StringName(String(row.get("family_id", ""))),
+			StringName(String(row.get("preview_stat", "")))
+		)
 		var value_rows := _copy_value_rows(row.get("value_rows", []), accent_value)
 		result._options.append(UpgradeOptionViewModel.new(
 			option_id,
@@ -202,6 +234,10 @@ static func create(
 			icon_value,
 			accent_value,
 			rarity_value,
+			StringName(effect_badge.get("role", &"")),
+			String(effect_badge.get("label", "")),
+			StringName(effect_badge.get("icon_id", &"")),
+			StringName(effect_badge.get("accent_role", &"")),
 			value_rows,
 			int(row.get("pick_count", 0)),
 			int(row.get("maximum_picks", 1)),
@@ -209,6 +245,26 @@ static func create(
 		))
 	result._content_hash = result._calculate_content_hash()
 	return result
+
+
+static func _effect_badge_presentation(family_id: StringName, preview_stat: StringName) -> Dictionary:
+	var role := family_id
+	if role not in [&"damage", &"width", &"radius"]:
+		var stat_text := String(preview_stat)
+		if stat_text.ends_with("_damage") or stat_text == "damage":
+			role = &"damage"
+		elif stat_text.ends_with("_width") or stat_text == "width":
+			role = &"width"
+		elif stat_text.ends_with("_radius") or stat_text == "radius":
+			role = &"radius"
+	match role:
+		&"damage":
+			return {"role": role, "label": "SCHADEN", "icon_id": &"ability_defense_burst", "accent_role": &"coral"}
+		&"width":
+			return {"role": role, "label": "BREITE", "icon_id": &"ability_treatment_line", "accent_role": &"turquoise"}
+		&"radius":
+			return {"role": role, "label": "RADIUS", "icon_id": &"target", "accent_role": &"cobalt"}
+	return {}
 
 
 func revision() -> int:
@@ -306,6 +362,10 @@ func _calculate_content_hash() -> String:
 		canonical.append(_length_prefixed(String(option.icon_id())))
 		canonical.append(_length_prefixed(String(option.accent_role())))
 		canonical.append(_length_prefixed(String(option.rarity_role())))
+		canonical.append(_length_prefixed(String(option.effect_role())))
+		canonical.append(_length_prefixed(option.effect_label()))
+		canonical.append(_length_prefixed(String(option.effect_icon_id())))
+		canonical.append(_length_prefixed(String(option.effect_accent_role())))
 		canonical.append(str(option.pick_count()))
 		canonical.append(str(option.maximum_picks()))
 		canonical.append("1" if option.compact_title() else "0")

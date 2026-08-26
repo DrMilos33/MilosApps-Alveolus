@@ -104,8 +104,9 @@ func _run() -> void:
 	var intro_boss: InfectionEnemy = game.active_boss
 	game.run_session.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	intro_boss.take_damage(intro_boss.health, &"therapy")
-	_check(game.flow_state == GameFlowState.State.RESULT and game.hud.end_overlay.visible, "Der erste Introabschluss zeigt den normalen Rundenergebnis-Screen")
-	_check(game.hud.result_detail_text.contains("Nutze die Forschung für Upgrades im Forschungsgebäude."), "Intro-Ergebnis erklärt den nächsten Forschungsschritt")
+	_check(game.flow_state == GameFlowState.State.DISCOVERY_PAUSE and game.hud.end_overlay.visible, "Der erste Introabschluss zeigt den normalen Rundenergebnis-Screen mit pausierendem Hinweis")
+	_check(game.hud.discovery_tooltip.visible and game.hud.discovery_tooltip.gameplay_label.text == "Nutze Forschung im Forschungsgebäude für dauerhafte Upgrades.", "Intro-Hinweis erklärt kompakt den nächsten Forschungsschritt")
+	_check(game.hud.discovery_tooltip.target_object == game.hud.end_reward, "Intro-Hinweis ist am tatsächlichen Forschungssymbol der Belohnung verankert")
 	var expected_intro_reward := MetaProgressionState.intro_research_reward(1)
 	_check(game.meta.research_points == expected_intro_reward, "Intro-Ergebnis vergibt Basisforschung plus Bossmultiplikator: %d (aktuell %d)" % [expected_intro_reward, game.meta.research_points])
 	_check(game.meta.talent_points_earned() == 0, "Intro-Ergebnis vergibt noch keinen Talentpunkt")

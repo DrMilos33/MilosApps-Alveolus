@@ -51,10 +51,11 @@ func _run_flow() -> void:
 	game._on_preparation_start_requested(game.pending_preparation_loadout.to_dict())
 	_check(game.flow_state == GameFlowState.State.RUNNING, "Die Einsatzplanung startet einen laufenden Run")
 	_check(game.hud.run_prompt != null and game.hud.run_prompt.message_label().text == "Beobachte den ersten Erreger.", "Der laufende Introfall startet mit dem containerlosen Beobachtungsprompt")
+	_check(game.meta.ui_settings.show_discovery_info, "Hinweise sind für neue und migrierte Profile standardmäßig aktiviert")
 	game.meta.ui_settings.show_discovery_info = false
-	_check(game.discovery_manager.request(&"pneumococcus"), "Eine neue Info wird bei ausgeschalteten Neuigkeiten zunächst normal angefordert")
+	_check(game.discovery_manager.request(&"pneumococcus"), "Eine neue Info wird bei ausgeschalteten Hinweisen zunächst normal angefordert")
 	game._try_present_next_discovery()
-	_check(game.flow_state == GameFlowState.State.RUNNING, "Ausgeschaltete Neuigkeiten pausieren den Run nicht")
+	_check(game.flow_state == GameFlowState.State.RUNNING, "Ausgeschaltete Hinweise pausieren den Run nicht")
 	_check(game.discovery_manager.has_seen(&"pneumococcus") and game.discovery_manager.queue.is_empty(), "Unterdrückte Infos werden ohne späteren Rückstau als gesehen gespeichert")
 	game.meta.ui_settings.show_discovery_info = true
 	var research_before_abort: int = game.meta.research_points

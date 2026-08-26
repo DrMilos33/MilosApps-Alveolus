@@ -100,7 +100,7 @@ static func definitions() -> Array[TalentDefinition]:
 		create(
 			&"upgrade_rarity_training",
 			"Seltene Upgrades",
-			"Erhöht pro Rang die relative Chance auf ein Magic- oder Rare-Upgrade um 5 %.",
+			"Magic- und Rare-Upgrades erscheinen pro Rang 5 % häufiger.",
 			Category.PLANNING,
 			1,
 			&"upgrade_rarity_bias",

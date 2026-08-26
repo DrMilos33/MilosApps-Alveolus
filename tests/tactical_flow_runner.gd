@@ -25,6 +25,8 @@ func _run() -> void:
 		game.discovery_manager.mark_seen(StringName(discovery_id))
 	await process_frame
 
+	_test_fall_one_preparation_guidance(game)
+	_test_case_trait_reward_bonus()
 	_test_preparation_and_determinism(game)
 	_test_quick_restart_contract(game)
 	await _test_run_abilities_finding_and_mastery(game)
@@ -41,6 +43,44 @@ func _run() -> void:
 			push_error(failure)
 		printerr("ALVEOLUS_TACTICAL_FLOW_FAILED failures=%d assertions=%d" % [failures.size(), assertions])
 		quit(1)
+
+func _test_fall_one_preparation_guidance(game: Node) -> void:
+	const GUIDANCE_COMPLETE := &"fall1_defense_burst_guidance_complete"
+	game._show_level_select()
+	game._on_level_selected(&"early_localized_focus")
+	_check(game.pending_preparation_guidance_active and game.hud.preparation_guidance_panel.visible, "Fall 1 startet vor dem ersten Abschluss mit der sichtbaren Stoß-Führung")
+	_check(game.hud.preparation_guidance_label.text.contains("Aktiv 1") and game.hud.preparation_guidance_hide.text == "Hinweise ausblenden", "Die Fall-1-Führung nennt zuerst den Zielplatz und bietet den globalen Ausblendpfad")
+	game.hud.preparation_guidance_hide.pressed.emit()
+	_check(not game.meta.ui_settings.show_discovery_info and not game.pending_preparation_guidance_active and not game.hud.preparation_guidance_panel.visible, "‚Hinweise ausblenden‘ beendet die aktuelle Führung und bewahrt den ausgeschalteten Zustand")
+	_check(bool(game.meta.tutorial_status.get(GUIDANCE_COMPLETE, false)), "Der Ausblendpfad markiert die Fall-1-Führung als erledigt")
+
+	game._on_back_requested()
+	game.meta.set_tutorial_step(GUIDANCE_COMPLETE, false)
+	game.meta.ui_settings.show_discovery_info = true
+	game._on_hints_disabled()
+	game.meta.ui_settings.show_discovery_info = true
+	game._on_level_selected(&"early_localized_focus")
+	_check(not game.pending_preparation_guidance_active and bool(game.meta.tutorial_status.get(GUIDANCE_COMPLETE, false)), "Globales Ausblenden erledigt die Fall-1-Führung dauerhaft auch vor ihrem Öffnen")
+	game._on_back_requested()
+	game.meta.ui_settings.show_discovery_info = true
+	game.meta.set_tutorial_step(GUIDANCE_COMPLETE, false)
+	game._on_level_selected(&"early_localized_focus")
+	_check(game.pending_preparation_guidance_active and game.hud.current_preparation_guidance_step == &"active_1", "Aktive Hinweise führen Fall 1 erneut kontrolliert zum Platz Aktiv 1")
+	game.hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
+	_check(game.hud.current_preparation_guidance_step == &"defense_burst" and game.hud.preparation_guidance_label.text.contains("Stoß"), "Nach Aktiv 1 führt der zweite Schritt ausdrücklich zu Stoß")
+	var defense_burst_button := game.hud.preparation_component_buttons.get(&"ability_defense_burst", null) as Button
+	_check(defense_burst_button != null and not defense_burst_button.disabled, "Im zweiten Führungsschritt bleibt Stoß als Ziel auswählbar")
+	game.hud._on_preparation_component(&"ability_defense_burst", false)
+	_check(game.pending_loadout_draft.component_at(LoadoutSlotId.ACTIVE_1) == &"ability_defense_burst", "Die geführte Auswahl rüstet Stoß exakt auf Aktiv 1 aus")
+	_check(not game.pending_preparation_guidance_active and not game.hud.preparation_guidance_panel.visible and bool(game.meta.tutorial_status.get(GUIDANCE_COMPLETE, false)), "Die erfolgreiche Stoß-Auswahl beendet und speichert die Führung")
+	game._on_back_requested()
+
+
+func _test_case_trait_reward_bonus() -> void:
+	var reward_without_traits := MetaProgressionState.calculate_run_reward(false, 0.0, 10, 80, 1.0, 0, 0)
+	var reward_with_two_traits := MetaProgressionState.calculate_run_reward(false, 0.0, 10, 80, 1.0, 0, 2)
+	_check(is_equal_approx(MetaProgressionState.case_trait_reward_multiplier(2), 1.30), "Zwei Fallmerkmale addieren exakt 30 Prozent Forschungsbonus")
+	_check(reward_without_traits == 90 and reward_with_two_traits == 117, "Der additive 30-Prozent-Bonus wird ohne Rundungsunschärfe auf die Forschungsbelohnung angewendet")
 
 func _test_preparation_and_determinism(game: Node) -> void:
 	var historical_plan := PreparedLoadout.create(
@@ -65,7 +105,7 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	_check(bool((game.hud.preparation_slot_buttons[LoadoutSlotId.TREATMENT] as Button).get_meta(&"selected_slot", false)), "Der zuerst bediente Behandlungsplatz ist sichtbar ausgewählt")
 	var first_seed: int = game.pending_run_context.seed
 	_check(first_seed != 0, "Der vorbereitete Fall besitzt einen stabilen Seed")
-	_check(game.pending_run_context.visible_trait_id == &"" and game.pending_run_context.hidden_finding_id == &"", "Vor dem ersten Abschluss besitzt der Fall keine Zufallsparameter")
+	_check(game.pending_run_context.visible_trait_ids.is_empty() and game.pending_run_context.hidden_finding_id == &"", "Der erste Versuch vor einem Abschluss besitzt keine Fallmerkmale und keinen Zufallsbefund")
 	_check(game.pending_loadout_draft.validate().valid, "Das Default-Loadout ist gegen den aktuellen Testkatalog gültig")
 
 	game._on_back_requested()
@@ -85,14 +125,16 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	game._on_level_selected(&"localized_focus")
 	_check(game.hud.preparation_level_facts != null and game.hud.preparation_boss_fact != null, "Nur der konkrete abgeschlossene Fall enthüllt Dauer und Bossspawn")
 	first_seed = game.pending_run_context.seed
-	var first_trait: StringName = game.pending_run_context.visible_trait_id
+	var first_traits: Array[StringName] = game.pending_run_context.visible_trait_ids.duplicate()
 	var first_finding: StringName = game.pending_run_context.hidden_finding_id
-	_check(first_trait != &"" and game.case_traits.has(first_trait), "Nach einem Abschluss stammt das sichtbare Fallmerkmal aus dem Katalog")
+	_check(first_traits.size() == 2 and first_traits[0] != first_traits[1], "Nach dem ersten Fallsieg erscheinen genau zwei unterschiedliche sichtbare Fallmerkmale")
+	_check(first_traits.all(func(trait_id: StringName) -> bool: return game.case_traits.has(trait_id)), "Beide sichtbaren Fallmerkmale stammen aus dem Katalog")
 	_check(first_finding != &"" and game.finding_definitions.has(first_finding), "Nach einem Abschluss stammt der verborgene Befund aus dem Katalog")
+	game.meta.register_level_result(level, false, 90.0, 2, 12)
 	game._on_back_requested()
 	game._on_level_selected(&"localized_focus")
-	_check(game.pending_run_context.seed == first_seed, "Erneutes Öffnen ohne Sieg bewahrt den Fall-Seed")
-	_check(game.pending_run_context.visible_trait_id == first_trait, "Fallmerkmal ist für denselben Seed deterministisch")
+	_check(game.pending_run_context.seed == first_seed, "Niederlage und erneutes Öffnen bewahren den Fall-Seed")
+	_check(game.pending_run_context.visible_trait_ids == first_traits, "Niederlage und erneutes Öffnen bewahren dasselbe geordnete Merkmalspaar")
 	_check(game.pending_run_context.hidden_finding_id == first_finding, "Befund ist für denselben Seed deterministisch")
 
 	var loadout: PreparedLoadout = game.pending_preparation_loadout.duplicate_loadout()
@@ -346,7 +388,7 @@ func _run_context_snapshot(context: RunContext) -> Dictionary:
 	return {
 		"level_id": context.level_id,
 		"seed": context.seed,
-		"visible_trait_id": context.visible_trait_id,
+		"visible_trait_ids": context.visible_trait_ids.duplicate(),
 		"hidden_finding_id": context.hidden_finding_id,
 		"loadout": context.loadout_snapshot.to_dict() if context.loadout_snapshot != null else {},
 		"talents": context.talent_snapshot.duplicate(true),

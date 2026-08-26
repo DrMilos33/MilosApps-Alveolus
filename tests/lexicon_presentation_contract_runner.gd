@@ -11,6 +11,7 @@ func _initialize() -> void:
 func _run() -> void:
 	_test_structured_type_presentations()
 	_test_related_term_presentations()
+	_test_character_stat_sections()
 	_test_units_and_retired_terms()
 	if failures.is_empty():
 		print("ALVEOLUS_LEXICON_PRESENTATION_OK assertions=%d" % assertions)
@@ -70,6 +71,34 @@ func _test_related_term_presentations() -> void:
 	var second_read := model.related_term_presentations()
 	_equal(second_read.size(), 3, "Related-Term-Getter liefert ein defensiv kopiertes Array")
 	_true(second_read[0] != first_item, "Related-Term-Getter kopiert auch die immutable DTO-Instanzen defensiv")
+
+
+func _test_character_stat_sections() -> void:
+	var provider := LexiconViewModelProvider.create_default()
+	var entry: LexiconEntryDefinition = LexiconCatalog.entries_by_id()[&"character_stats"]
+	var model := provider.make_view_model(entry)
+	var sections := model.stat_section_presentations()
+	_equal(sections.size(), 3, "Charakterwerte liefern genau drei präsentationsfertige Gruppen")
+	_equal(sections[0].id, &"defense", "Verteidigung steht zuerst")
+	_equal(sections[1].id, &"attack", "Angriff steht an zweiter Stelle")
+	_equal(sections[2].id, &"other", "Sonstiges steht zuletzt")
+	var grouped_ids: Array[StringName] = []
+	for section in sections:
+		for row in section.rows():
+			grouped_ids.append(row.id)
+	_equal(grouped_ids.size(), model.stat_rows.size(), "Die Gruppierung behält jede bestehende Charakterwertzeile")
+	for row in model.stat_rows:
+		_true(grouped_ids.has(row.id), "Die Gruppierung bewahrt den Charakterwert %s" % row.id)
+	var first_section := sections[0]
+	var first_rows := first_section.rows()
+	var original_label := first_rows[0].label
+	first_rows[0].label = "Manipuliert"
+	sections.pop_back()
+	var second_read := model.stat_section_presentations()
+	_equal(second_read.size(), 3, "Charakterwertgruppen liefern ein defensiv kopiertes Array")
+	_true(second_read[0] != first_section, "Charakterwertgruppen kopieren auch die Sektions-DTOs defensiv")
+	_true(second_read[0].rows()[0] != first_rows[0], "Charakterwertgruppen kopieren verschachtelte Wertzeilen defensiv")
+	_equal(second_read[0].rows()[0].label, original_label, "Mutationen eines Consumers verändern spätere Charakterwert-Reads nicht")
 
 
 func _test_units_and_retired_terms() -> void:
