@@ -14,6 +14,8 @@ func _run() -> void:
 	var reward_source: Array[ResultOverlayViewModel.RewardViewModel] = [
 		ResultOverlayViewModel.RewardViewModel.new(&"research", &"research", "+22", &"gold", "Forschung +22"),
 	]
+	var ability_damage_source := _ability_damage_fixture()
+	var talent_source := _talent_fixture()
 	var success_model := ResultOverlayViewModel.new(
 		1,
 		true,
@@ -24,19 +26,35 @@ func _run() -> void:
 		"+22 Forschung",
 		"Fall 02 ist jetzt verfügbar.",
 		"Erster Sieg · +1 Talentpunkt",
-		reward_source
+		reward_source,
+		"Fallübersicht",
+		"Erneut behandeln",
+		"Zum Campus",
+		ability_damage_source,
+		talent_source,
+		true
 	)
 	var success_hash := success_model.get_content_hash()
 	stats_source.clear()
 	reward_source.clear()
+	ability_damage_source.clear()
+	talent_source.clear()
 	_check(success_model.get_stats().size() == 3, "Ergebniswerte werden tief kopiert")
 	_check(success_model.get_reward_items().size() == 1 and success_model.get_reward_items()[0].get_value() == "+22", "Reward-DTOs werden tief und wertfertig kopiert")
+	_check(success_model.get_ability_damage_stats().size() == 3, "Fähigkeitsschäden werden getrennt und tief kopiert")
+	_check(success_model.get_talent_stats().size() == 2 and success_model.are_talents_unlocked(), "Aktive Talente und Fall-2-Gate werden immutable übernommen")
 	var returned_stats := success_model.get_stats()
 	returned_stats.clear()
 	var returned_rewards := success_model.get_reward_items()
 	returned_rewards.clear()
+	var returned_ability_damage := success_model.get_ability_damage_stats()
+	returned_ability_damage.clear()
+	var returned_talents := success_model.get_talent_stats()
+	returned_talents.clear()
 	_check(success_model.get_stats().size() == 3, "Ergebnis-VM gibt keine veränderbare interne Collection frei")
 	_check(success_model.get_reward_items().size() == 1, "Ergebnis-VM gibt keine veränderbare Reward-Collection frei")
+	_check(success_model.get_ability_damage_stats().size() == 3, "Ergebnis-VM gibt keine veränderbare Schadenscollection frei")
+	_check(success_model.get_talent_stats().size() == 2, "Ergebnis-VM gibt keine veränderbare Talentcollection frei")
 	_check(success_model.get_content_hash() == success_hash, "Externe Mutationen verändern den Content-Hash nicht")
 
 	var overlay := ResultOverlay.new()
@@ -53,6 +71,19 @@ func _run() -> void:
 	_check(outcome_title != null and outcome_title.size.x >= 180.0, "Ergebnistitel erhält die verfügbare Überschriftenbreite")
 	_check(overlay.get_modal().size.y < host.size.y * 0.9, "Breites Ergebnis bleibt inhaltsgetrieben statt viewportfüllend")
 	_check(overlay.get_stats_column_count() == 3, "Drei kompakte Wertezeilen stehen breit nebeneinander")
+	var ability_section := overlay.find_child("AbilitySection", true, false) as PanelContainer
+	var ability_header := overlay.get_ability_section_header()
+	var ability_title := ability_header.find_child("AbilitySectionTitle", true, false) as Label if ability_header != null else null
+	var ability_chevron := ability_header.find_child("AbilitySectionChevron", true, false) as SimpleIcon if ability_header != null else null
+	var ability_body := overlay.get_ability_section_body()
+	_check(ability_section != null and ability_section.get_meta(&"alveolus_component", &"") == &"stat_accordion_section", "Fähigkeitsdetails verwenden die semantische Accordionfläche")
+	_check(ability_header != null and ability_header.toggle_mode and ability_header.focus_mode == Control.FOCUS_ALL, "Der vollständige Fähigkeitskopf ist klick- und fokussierbar")
+	_check(ability_header != null and ability_header.get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "Der Fähigkeitskopf verwendet die zentrale Quiet-Buttonrolle")
+	_check(ability_title != null and ability_title.text == "Fähigkeiten", "Der klickbare Kopf trägt exakt Fähigkeiten")
+	_check(ability_title != null and ability_title.mouse_filter == Control.MOUSE_FILTER_IGNORE and ability_chevron != null and ability_chevron.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Text und Chevron geben die vollständige Klickfläche an den Kopf weiter")
+	_check(not overlay.is_ability_section_expanded() and ability_body != null and not ability_body.visible, "Fähigkeitsdetails beginnen standardmäßig eingeklappt")
+	_check(ability_chevron != null and ability_chevron.kind == &"chevron_right" and ability_chevron.get_meta(&"accordion_state", &"") == &"collapsed", "Der eingeklappte Zustand verwendet das semantische Rechts-Chevron")
+	_check(ability_header != null and String(ability_header.get_meta(&"alveolus_accessible_name", "")).contains("eingeklappt"), "Der Accessible Name benennt den eingeklappten Zustand")
 	_check(overlay.get_action_column_count() == 3, "Folgeaktionen stehen breit in drei Spalten")
 	var result_actions := overlay.find_child("ResultActions", true, false) as GridContainer
 	_check(overlay.get_modal().is_ancestor_of(overlay.get_scroll_container()), "Ergebnis besitzt einen internen Body-Scroll innerhalb des ModalSheets")
@@ -77,6 +108,12 @@ func _run() -> void:
 	_assert_focus_cycle(overlay)
 	_check(not overlay.get_scroll_container().follow_focus and overlay.get_scroll_container().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Ergebnisrumpf bleibt vom Footerfokus entkoppelt und horizontal stabil")
 	_assert_intents(overlay)
+	ability_header.toggled.emit(true)
+	await _settle()
+	_check(overlay.is_ability_section_expanded() and ability_body.visible and ability_header.button_pressed, "Klick beziehungsweise Accept klappt die Fähigkeitsdetails vollständig aus")
+	_check(ability_chevron.kind == &"chevron_down" and ability_chevron.get_meta(&"accordion_state", &"") == &"expanded", "Der ausgeklappte Zustand verwendet das semantische Abwärts-Chevron")
+	_check(String(ability_header.get_meta(&"alveolus_accessible_name", "")).contains("ausgeklappt"), "Der Accessible Name benennt den ausgeklappten Zustand")
+	_assert_ability_detail_order(overlay)
 
 	_resize_logical_host(host, Vector2i(480, 270))
 	await _settle()
@@ -104,8 +141,56 @@ func _run() -> void:
 	_check(_is_fully_visible(result_actions, overlay), "Defaultfokus bleibt im sichtbaren Aktionsfooter ohne den Ergebnisrumpf zu verschieben")
 
 	_resize_logical_host(host, Vector2i(1280, 720))
-	var failure_model := ResultOverlayViewModel.new(
+	var empty_talent_model := ResultOverlayViewModel.new(
 		2,
+		true,
+		"Herd kontrolliert",
+		"",
+		"",
+		_stats_fixture(),
+		"",
+		"",
+		"",
+		[],
+		"Fallübersicht",
+		"Erneut behandeln",
+		"Zum Campus",
+		_ability_damage_fixture(),
+		[],
+		true
+	)
+	_check(overlay.apply(empty_talent_model), "Leerer freigeschalteter Talentzustand wird angewendet")
+	await _settle()
+	_check(not overlay.is_ability_section_expanded() and not overlay.get_ability_section_body().visible, "Jeder neue Ergebnisinhalt startet mit eingeklappten Fähigkeitsdetails")
+	var empty_talent_title := overlay.find_child("TalentSectionTitle", true, false) as Label
+	var empty_talent_copy := overlay.find_child("TalentEmptyState", true, false) as Label
+	_check(empty_talent_title != null and empty_talent_title.text == "Talente", "Freigeschaltete Talente erhalten ihren Untertitel unterhalb der Fähigkeitsschäden")
+	_check(empty_talent_copy != null and empty_talent_copy.text == "Noch keine Talente aktiv", "Ein Run ohne aktive Talente zeigt exakt den freigegebenen Leerzustand")
+	_check(overlay.find_child("TalentRows", true, false) == null, "Der Talent-Leerzustand reserviert kein leeres Zeilenraster")
+
+	var locked_talent_model := ResultOverlayViewModel.new(
+		3,
+		false,
+		"You suck",
+		"",
+		"",
+		_stats_fixture(),
+		"",
+		"",
+		"",
+		[],
+		"Fallübersicht",
+		"Erneut behandeln",
+		"Zum Campus",
+		_ability_damage_fixture()
+	)
+	_check(overlay.apply(locked_talent_model), "Vor Fall 2 bleiben reine Fähigkeitsschäden darstellbar")
+	await _settle()
+	_check(overlay.find_child("AbilitySection", true, false) != null, "Fähigkeitsschäden bleiben unabhängig vom Talent-Gate im Accordion")
+	_check(overlay.find_child("TalentSectionTitle", true, false) == null and overlay.find_child("TalentEmptyState", true, false) == null, "Vor Fall 2 entsteht weder Talentuntertitel noch irreführender Leerzustand")
+
+	var failure_model := ResultOverlayViewModel.new(
+		4,
 		false,
 		"You suck",
 		"",
@@ -119,6 +204,7 @@ func _run() -> void:
 	await _settle()
 	_check(not bool(overlay.get_modal().get_meta(&"result_success", true)), "Niederlage besitzt die semantische Gefahrenrolle")
 	_check(_optional_section_count(overlay) == 0, "Leere Belohnungssektionen erzeugen weder Karten noch Blank-Space")
+	_check(overlay.find_child("AbilitySection", true, false) == null and not overlay.is_ability_section_expanded(), "Ein Ergebnis ohne Detaildaten erzeugt kein Accordion und setzt dessen nächsten Default zurück")
 	_check(overlay.find_child("RewardStrip", true, false) == null, "Ohne Reward-DTO entsteht weder Strip noch Placeholder-Leerraum")
 	var failure_title := overlay.find_child("OutcomeTitle", true, false) as Label
 	_check(failure_title != null and failure_title.text == "You suck", "Niederlagen-View-Model stellt den verbindlichen Titel exakt dar")
@@ -159,11 +245,34 @@ func _assert_focus_cycle(overlay: ResultOverlay) -> void:
 	var levels_button := overlay.find_child("LevelsButton", true, false) as Button
 	var retry_button := overlay.find_child("RetryButton", true, false) as Button
 	var campus_button := overlay.find_child("CampusButton", true, false) as Button
+	var ability_header := overlay.get_ability_section_header()
 	_check(levels_button != null and retry_button != null and campus_button != null, "Alle drei Ergebnisaktionen sind fokussierbar vorhanden")
 	if levels_button == null or retry_button == null or campus_button == null:
 		return
 	_check(levels_button.get_node_or_null(levels_button.focus_neighbor_left) == campus_button, "Rückwärtsfokus bleibt in den Ergebnisaktionen")
 	_check(campus_button.get_node_or_null(campus_button.focus_neighbor_right) == levels_button, "Vorwärtsfokus bleibt in den Ergebnisaktionen")
+	_check(ability_header != null and levels_button.get_node_or_null(levels_button.focus_neighbor_top) == ability_header, "Vertikalfokus erreicht den Fähigkeitskopf aus dem festen Footer")
+	_check(ability_header != null and ability_header.get_node_or_null(ability_header.focus_neighbor_bottom) == levels_button, "Der Fähigkeitskopf führt per D-Pad zur dominanten Ergebnisaktion zurück")
+
+
+func _assert_ability_detail_order(overlay: ResultOverlay) -> void:
+	var body := overlay.get_ability_section_body()
+	var damage_rows := overlay.find_child("AbilityDamageRows", true, false) as GridContainer
+	var talent_title := overlay.find_child("TalentSectionTitle", true, false) as Label
+	var talent_rows := overlay.find_child("TalentRows", true, false) as GridContainer
+	_check(body != null and damage_rows != null and talent_title != null and talent_rows != null, "Ausgeklappte Fähigkeitsdetails besitzen Schaden, Talentuntertitel und Talentzeilen")
+	if body == null or damage_rows == null or talent_title == null or talent_rows == null:
+		return
+	_check(damage_rows.get_index() < talent_title.get_index() and talent_title.get_index() < talent_rows.get_index(), "Fähigkeitsschäden stehen vor dem optionalen Talentblock")
+	_check(damage_rows.get_child_count() == 3 and talent_rows.get_child_count() == 2, "Alle gelieferten Schadens- und Talentzeilen erscheinen genau einmal")
+	var first_damage := damage_rows.get_child(0) as PanelContainer
+	var first_talent := talent_rows.get_child(0) as PanelContainer
+	var first_damage_name := first_damage.find_child("ValueName", true, false) as Label if first_damage != null else null
+	var first_damage_value := first_damage.find_child("Value", true, false) as Label if first_damage != null else null
+	var first_talent_name := first_talent.find_child("ValueName", true, false) as Label if first_talent != null else null
+	var first_talent_value := first_talent.find_child("Value", true, false) as Label if first_talent != null else null
+	_check(first_damage_name != null and first_damage_name.text == "Impuls" and first_damage_value != null and first_damage_value.text == "42 Schaden", "Erste Fähigkeitsschadenszeile bewahrt Label und formatierten Wert")
+	_check(first_talent_name != null and first_talent_name.text == "Behandlungsgrundlage" and first_talent_value != null and first_talent_value.text == "Rang 1/1", "Erste Talentzeile bewahrt aktiven Run-Rang")
 
 
 func _optional_section_count(overlay: ResultOverlay) -> int:
@@ -212,6 +321,21 @@ func _stats_fixture() -> Array[ResultOverlayViewModel.StatViewModel]:
 	result.append(ResultOverlayViewModel.StatViewModel.new(&"time", "Zeit", "2:31"))
 	result.append(ResultOverlayViewModel.StatViewModel.new(&"analysis", "Befundstufe", "5", true))
 	result.append(ResultOverlayViewModel.StatViewModel.new(&"defeats", "Bakterien", "74"))
+	return result
+
+
+func _ability_damage_fixture() -> Array[ResultOverlayViewModel.StatViewModel]:
+	var result: Array[ResultOverlayViewModel.StatViewModel] = []
+	result.append(ResultOverlayViewModel.StatViewModel.new(&"treatment_precision", "Impuls", "42 Schaden"))
+	result.append(ResultOverlayViewModel.StatViewModel.new(&"ability_defense_burst", "Stoß", "0 Schaden"))
+	result.append(ResultOverlayViewModel.StatViewModel.new(&"ability_treatment_line", "Fetter lazer", "30 Schaden"))
+	return result
+
+
+func _talent_fixture() -> Array[ResultOverlayViewModel.StatViewModel]:
+	var result: Array[ResultOverlayViewModel.StatViewModel] = []
+	result.append(ResultOverlayViewModel.StatViewModel.new(&"treatment_damage_training", "Behandlungsgrundlage", "Rang 1/1"))
+	result.append(ResultOverlayViewModel.StatViewModel.new(&"piercing_persistence", "Anhaltender Laser", "Rang 2/2"))
 	return result
 
 

@@ -24,6 +24,7 @@ enum Rarity {
 @export var medical_name: String
 @export var required_component_ids: Array[StringName] = []
 @export var required_upgrade_ids: Array[StringName] = []
+@export var required_talent_ids: Array[StringName] = []
 @export var synergy_tags: Array[StringName] = []
 @export var modifiers: Array[Dictionary] = []
 @export var preview_stat: StringName
@@ -88,6 +89,11 @@ func configure_offer(
 
 func require_upgrades(ids: Array[StringName]) -> UpgradeDefinition:
 	required_upgrade_ids = ids.duplicate()
+	return self
+
+
+func require_talents(ids: Array[StringName]) -> UpgradeDefinition:
+	required_talent_ids = ids.duplicate()
 	return self
 
 

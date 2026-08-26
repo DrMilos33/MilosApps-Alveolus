@@ -43,7 +43,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 			"Ein lokaler Bakterienherd belastet Doctor Milos. Stoppe ihn, bevor das Leben auf null fällt.",
 			"Der lokalisierte Infektionsherd wurde kontrolliert.",
 			"Die Infektionslast konnte in diesem Versuch nicht ausreichend kontrolliert werden."
-		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", true, 1.5).configure_boss_reinforcements(15.0, 4, 1).configure_boss_projectile_contract(1.8, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.5).configure_boss_projectile_pattern(&"double_turn").configure_boss_projectile_turn_time_variation(0.10).configure_boss_phase_thresholds(PackedFloat32Array([0.80])).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
+		).configure_runtime(3).configure_case_variation(all_traits, all_findings, 30).configure_boss(&"localized_boss", true, 1.5).configure_boss_reinforcements(15.0, 4, 1).configure_boss_projectile_contract(1.53, EnemyDefinition.DEFAULT_NON_BOSS_SHOOTING_LOCK_SECONDS, 1.5).configure_boss_projectile_pattern(&"double_turn").configure_boss_projectile_turn_time_variation(0.10).configure_boss_phase_thresholds(PackedFloat32Array([0.80])).configure_case_pressure(CasePressurePlan.default_for_case_order(2)),
 		LevelDefinition.create(
 			&"advancing_infection", 3, "Fortschreitender Verlauf", "Fall 03 · fortschreitende Pneumonie", false,
 			-1.0, 300.0, 50.0, 0.9075, 0.200, 1.25, 1.875, 1.12, 1.35, 0.14, 0.33,
@@ -168,7 +168,7 @@ static func discovery_definitions() -> Dictionary:
 		&"localized_boss": DiscoveryDefinition.create(
 			&"localized_boss", &"enemy_defeated", "Bakterienkern",
 			"Der Bakterienkern steht vereinfacht für einen noch lokal begrenzten Schwerpunkt der Infektion.",
-			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und ruft alle 15 Sekunden vier schnell schießende Bakterien. Ist seine Aura leer, feuert der Kern selbst. In Fall 2 feuert er mit 1,8-facher Rate 50 %% schnellere und stärkere Doppelkurven-Projektile; ab 80 %% Leben erscheinen drei Bakterien und danach alle 15 Sekunden vier weitere. Ein Stoß unterbindet den Beschuss schießender Nichtbosse zehn Sekunden lang; der Kern selbst bleibt schussfähig." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
+			"%s\nBossgegner mit fallabhängigem Verhalten. In Fall 1 verstärkt seine Aura Tempo und Schaden naher Monster um 45 %% und ruft alle 15 Sekunden vier schnell schießende Bakterien. Ist seine Aura leer, feuert der Kern selbst. In Fall 2 feuert er mit 1,53-facher Rate 50 %% schnellere und stärkere Doppelkurven-Projektile; ab 80 %% Leben erscheinen drei Bakterien und danach alle 15 Sekunden vier weitere. Ein Stoß unterbindet den Beschuss schießender Nichtbosse zehn Sekunden lang; der Kern selbst bleibt schussfähig." % _enemy_values_text(localized_boss, "Bossgegner", false), &"enemy", 105, &"erreger", &"infection_focus", "Lokaler Bakterienkern"
 		),
 		&"minor_focus": DiscoveryDefinition.create(
 			&"minor_focus", &"enemy_defeated", "Kleiner Herd",
@@ -278,8 +278,11 @@ static func upgrade_definitions() -> Array[UpgradeDefinition]:
 		_run_upgrade(&"spread_density", "Durchdringender Streuimpuls", "+1 Durchdringung.", UpgradeDefinition.Path.ANTIBIOTIC, 3, &"run_modifier", 1.0, "Vertiefte Streuwirkung", [&"treatment_spread"], [&"spread", &"line"], RunBuildState.TREATMENT_MAX_HITS, &"add", 1.0, &"count", "Durchdringung", "Treffer", 1.0, 0, &"enemy", PackedStringArray(["spread"])).configure_offer(&"penetration", UpgradeDefinition.Rarity.RARE, false, false, 5.0, 0.60),
 		_run_upgrade(&"pierce_depth", "Tieferer Impuls", "+2 Durchdringungen.", UpgradeDefinition.Path.ANTIBIOTIC, 2, &"run_modifier", 2.0, "Erhöhte Gewebegängigkeit", [&"treatment_pierce"], [&"piercing", &"line"], RunBuildState.TREATMENT_MAX_HITS, &"add", 2.0, &"count", "Durchdringungen", "Treffer", 4.0, 0, &"enemy", PackedStringArray(["piercing"])).configure_offer(&"penetration", UpgradeDefinition.Rarity.MAGIC, false, false, 1.0, 0.70),
 
-		# Stoß bleibt bis zum späteren Talent vollständig schadensfrei.
+		# Stoß bleibt ohne das ausdrückliche Aktivtalent vollständig schadensfrei.
 		_run_upgrade(&"burst_radius", "Breiter Stoß", "+1 Radius.", UpgradeDefinition.Path.IMMUNE, 2, &"run_modifier", 30.0, "Ausgedehnte Immunreaktion", [&"ability_defense_burst"], [&"active", &"defense", &"area"], RunBuildState.ABILITY_RADIUS, &"add", 30.0, &"distance_stage", "Radius", "Radius", 150.0, 0, &"ability", PackedStringArray(["active", "defense", "area"])).configure_offer(&"radius", UpgradeDefinition.Rarity.COMMON, false, false),
+		_run_upgrade(&"burst_effect", "Stoßschaden", "+6 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"run_modifier", 6.0, "Stoßwirkung", [&"ability_defense_burst"], [&"active", &"defense", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 6.0, &"delta", "Schaden", "Schaden", 0.0, 0, &"enemy", PackedStringArray(["active", "defense", "area"])).require_talents([&"defense_burst_damage"]).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
+		_run_upgrade(&"burst_effect_magic", "Stoßschaden", "+10 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"run_modifier", 10.0, "Vertiefte Stoßwirkung", [&"ability_defense_burst"], [&"active", &"defense", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 10.0, &"delta", "Schaden", "Schaden", 0.0, 0, &"enemy", PackedStringArray(["active", "defense", "area"])).require_talents([&"defense_burst_damage"]).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
+		_run_upgrade(&"burst_effect_rare", "Stoßschaden", "+14 Schaden.", UpgradeDefinition.Path.IMMUNE, 0, &"run_modifier", 14.0, "Maximale Stoßwirkung", [&"ability_defense_burst"], [&"active", &"defense", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 14.0, &"delta", "Schaden", "Schaden", 0.0, 0, &"enemy", PackedStringArray(["active", "defense", "area"])).require_talents([&"defense_burst_damage"]).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
 		_run_upgrade(&"line_effect", "Lazerschaden", "+9 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 9.0, "Linienverstärkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 9.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.COMMON, true, false, 70.0),
 		_run_upgrade(&"line_effect_magic", "Lazerschaden", "+15 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 15.0, "Vertiefte Linienwirkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 15.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.MAGIC, true, false, 25.0),
 		_run_upgrade(&"line_effect_rare", "Lazerschaden", "+21 Schaden.", UpgradeDefinition.Path.ANTIBIOTIC, 0, &"run_modifier", 21.0, "Maximale Linienwirkung", [&"ability_treatment_line"], [&"active", &"line", &"damage"], RunBuildState.ABILITY_DAMAGE, &"add", 21.0, &"delta", "Schaden", "Schaden", 30.0, 0, &"enemy", PackedStringArray(["active", "treatment", "line"])).configure_offer(&"damage", UpgradeDefinition.Rarity.RARE, true, false, 5.0),
@@ -341,7 +344,7 @@ static func loadout_module_definitions() -> Dictionary:
 		&"treatment_pierce": LoadoutModuleDefinition.create(&"treatment_pierce", "Durchdringender Impuls", "Durchquert mehrere Gegner in einer Linie.", LoadoutModuleDefinition.Kind.TREATMENT, 2, [&"treatment", &"pierce"], &"unlock_piercing_treatment"),
 		&"ability_focus_field": LoadoutModuleDefinition.create(&"ability_focus_field", "Fokusfeld", "Behandlung im Zielgebiet verursacht 25 % mehr Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"focus", &"control"], &"", true),
 		&"ability_emergency_support": LoadoutModuleDefinition.create(&"ability_emergency_support", "Notfallhilfe", "Stellt 14 Leben wieder her und gewährt 8 Schild.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"support"], &"", true),
-		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Stoß", "Stößt Gegner zurück, betäubt sie für 1 Sekunde und unterbindet den Beschuss getroffener Nichtbosse für 10 Sekunden. Verursacht derzeit keinen Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control"], &"unlock_defense_burst"),
+		&"ability_defense_burst": LoadoutModuleDefinition.create(&"ability_defense_burst", "Stoß", "Stößt Gegner zurück, betäubt sie für 1 Sekunde und unterbindet den Beschuss getroffener Nichtbosse für 10 Sekunden. Verursacht ohne Talent keinen Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control"], &"unlock_defense_burst"),
 		&"ability_treatment_line": LoadoutModuleDefinition.create(&"ability_treatment_line", "Fetter lazer", "30 Schaden in einer durchdringenden Linie.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"damage", &"pierce"], &"unlock_treatment_line"),
 		&"ability_protection_field": LoadoutModuleDefinition.create(&"ability_protection_field", "Schildfeld", "Gegner im Feld: −35 % Geschwindigkeit und Schaden.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"control", &"support"], &"unlock_protection_field"),
 		&"ability_sample_pull": LoadoutModuleDefinition.create(&"ability_sample_pull", "Erfahrungszug", "Zieht Erfahrung an und beschleunigt kurz den Befund.", LoadoutModuleDefinition.Kind.ABILITY, 2, [&"active", &"samples", &"diagnosis"], &"unlock_sample_pull"),
@@ -383,7 +386,9 @@ static func choose_upgrades(
 	count: int = 3,
 	force_all_paths: bool = false,
 	excluded_ids: Array[StringName] = [],
-	campaign_case_order: int = -1
+	campaign_case_order: int = -1,
+	talent_ranks: Dictionary = {},
+	higher_rarity_factor: float = 1.0
 ) -> Array[UpgradeDefinition]:
 	var definitions := upgrade_definitions()
 	var component_ids: Array[StringName] = [
@@ -401,7 +406,7 @@ static func choose_upgrades(
 			for definition in definitions:
 				if definition.path == path:
 					matching.append(definition)
-			var path_pick := UpgradePoolBuilder.choose(matching, levels, rng, component_ids, tags, 1, excluded_ids, false, campaign_case_order)
+			var path_pick := UpgradePoolBuilder.choose(matching, levels, rng, component_ids, tags, 1, excluded_ids, false, campaign_case_order, talent_ranks, higher_rarity_factor)
 			if not path_pick.is_empty():
 				selected.append(path_pick[0])
 	var combined_excluded := excluded_ids.duplicate()
@@ -417,7 +422,9 @@ static func choose_upgrades(
 			count - selected.size(),
 			combined_excluded,
 			false,
-			campaign_case_order
+			campaign_case_order,
+			talent_ranks,
+			higher_rarity_factor
 		)
 		selected.append_array(remaining)
 	return selected

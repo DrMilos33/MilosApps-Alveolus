@@ -15,6 +15,7 @@ func _run() -> void:
 	_test_bounded_spatial_grid()
 	_test_bounded_bodies()
 	_test_bounded_projectile()
+	_test_friendly_projectile_hit_callback()
 	if failures == 0:
 		print("ALVEOLUS_BOUNDED_ARENA_OK assertions=%d" % assertions)
 	else:
@@ -113,6 +114,36 @@ func _test_bounded_projectile() -> void:
 	_equal(finished_count[0], 1, "Ein Projektil endet beim Überschreiten der harten Grenze")
 	_equal(projectile.global_position, Vector2(180.0, 100.0), "Ein endendes Projektil klebt nicht sichtbar am Rand")
 	projectile.free()
+
+
+func _test_friendly_projectile_hit_callback() -> void:
+	var topology := ArenaTopology.new(Rect2(0.0, 0.0, 300.0, 300.0), ArenaTopology.BoundaryMode.BOUNDED)
+	var definition := EnemyDefinition.create(&"callback_target", "Callbackziel", 100.0, 0.0, 0.0, 0, 12.0, Color.WHITE)
+	var target := InfectionEnemy.new()
+	target.global_position = Vector2(130.0, 100.0)
+	target.configure(definition, null, topology)
+	var callback_hits: Array[Variant] = []
+	var projectile := TherapyProjectile.new()
+	projectile.global_position = Vector2(100.0, 100.0)
+	projectile.configure_directional(
+		Vector2.RIGHT,
+		10.0,
+		topology,
+		100.0,
+		30.0,
+		target,
+		EntityHandle.INVALID,
+		Callable(),
+		&"treatment_precision",
+		func(enemy: InfectionEnemy, amount: float, source: StringName) -> void:
+			callback_hits.append([enemy, amount, source])
+	)
+	projectile.step_fixed(0.1)
+	_equal(callback_hits.size(), 1, "Ein freundliches Impulsprojektil delegiert seinen Treffer exakt einmal")
+	_equal(callback_hits[0], [target, 10.0, &"treatment_precision"], "Der Treffer-Callback erhält Ziel, Rohschaden und stabile Quelle")
+	_near(target.health, 100.0, "Mit Callback wendet das Projektil keinen zweiten Direktschaden an")
+	projectile.free()
+	target.free()
 
 
 func _true(condition: bool, message: String) -> void:

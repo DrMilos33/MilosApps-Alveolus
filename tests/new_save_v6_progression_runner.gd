@@ -11,7 +11,7 @@ func _init() -> void:
 func _run() -> void:
 	_test_ranked_talent_contract()
 	_test_v7_roundtrip()
-	_test_v7_revision4_refunds_penetration_tree()
+	_test_v7_revision5_refunds_previous_tree()
 	_test_v6_revision3_refunds_retired_tree()
 	_test_v5_migration_refunds_retired_tree()
 	_test_independent_resets_and_seed_advance()
@@ -25,26 +25,42 @@ func _run() -> void:
 
 func _test_ranked_talent_contract() -> void:
 	var definitions := TalentDefinition.definitions()
-	_equal(definitions.size(), 4, "Der neue Baum enthält genau vier Talente")
-	_equal(TalentDefinition.catalog()[&"spread_shotgun"].max_rank, 1, "Schrotwirkung besitzt einen Rang")
-	_equal(TalentDefinition.catalog()[&"piercing_persistence"].max_rank, 2, "Laserbestand besitzt zwei Ränge")
+	var catalog := TalentDefinition.catalog()
+	_equal(definitions.size(), 26, "Talentbaumrevision 6 serialisiert alle drei Baumgerüste")
+	var tree_ids: Dictionary = {}
+	for definition in definitions:
+		tree_ids[definition.tree_id] = true
+	_equal(tree_ids.size(), 3, "Revision 6 trennt Upgrade-, Aktiv- und Behandlungstalente")
+	_equal(catalog[&"treatment_damage_training"].max_rank, 3, "Die Behandlungsgrundlage besitzt drei Ränge")
+	_near(catalog[&"treatment_damage_training"].magnitude, 0.20, "Jeder Behandlungsgrundlagenrang liefert 20 Prozent")
+	_equal(catalog[&"upgrade_rarity_training"].max_rank, 3, "Das Seltenheitstalent besitzt drei Ränge")
+	_near(catalog[&"upgrade_rarity_training"].magnitude, 0.05, "Jeder Seltenheitsrang liefert fünf Prozent")
+	for stable_id in [&"treatment_damage_training", &"manual_treatment_aim", &"spread_shotgun", &"piercing_persistence"]:
+		_true(catalog.has(stable_id), "%s bleibt über die Baumrevision stabil" % String(stable_id))
 
 	var meta := _fully_funded_meta(1000)
 	_true(not meta.purchase_talent_rank(&"spread_shotgun"), "Ein Kind kann seine Voraussetzung nicht überspringen")
-	_true(meta.purchase_talent_rank(&"treatment_damage_training"), "Das Wurzeltalent kann gekauft werden")
+	_true(meta.set_talent_rank(&"treatment_damage_training", 3), "Alle drei Ränge der Behandlungsgrundlage können atomar gesetzt werden")
 	_true(meta.purchase_talent_rank(&"spread_shotgun"), "Schrotwirkung kann gekauft werden")
 	_true(not meta.purchase_talent_rank(&"spread_shotgun"), "Schrotwirkung bleibt am Maximum gedeckelt")
 	_equal(meta.talent_rank(&"spread_shotgun"), 1, "Rangabfrage liefert die aktive Schrotwirkung")
-	_equal(meta.talent_points_spent(), 2, "Rangkosten werden einzeln summiert")
+	_true(not meta.purchase_talent_rank(&"spread_placeholder_1"), "Ein erfüllter Vorgänger macht einen unimplementierten Platzhalter nicht kaufbar")
+	_equal(meta.talent_points_spent(), 4, "Die drei Wurzelränge und Schrotwirkung werden einzeln summiert")
 	_true(not meta.set_talent_active(&"treatment_damage_training", false), "Eine belegte Voraussetzung wird nicht still entfernt")
 	meta.clear_talents()
 	_equal(meta.talent_points_spent(), 0, "Talentreset gibt alle Rangkosten frei")
 	_equal(meta.available_talent_points(), meta.talent_points_earned(), "Nach dem Reset sind alle verdienten Punkte verfügbar")
 
+	var active_meta := _fully_funded_meta(1100)
+	_true(not active_meta.purchase_talent_rank(&"defense_burst_damage"), "Stoßschaden kann das aktive Gateway nicht überspringen")
+	_true(active_meta.purchase_talent_rank(&"active_foundation_placeholder"), "Das aktive Platzhalter-Gateway ist bewusst kaufbar")
+	_true(active_meta.purchase_talent_rank(&"defense_burst_damage"), "Stoßschaden wird nach dem Gateway kaufbar")
+	_true(not active_meta.purchase_talent_rank(&"active_placeholder_left"), "Andere aktive Platzhalter bleiben trotz erfülltem Gateway gesperrt")
+
 
 func _test_v7_roundtrip() -> void:
 	var source := _fully_funded_meta(2000)
-	_true(source.set_talent_rank(&"treatment_damage_training", 1), "Wurzeltalent wird gesetzt")
+	_true(source.set_talent_rank(&"treatment_damage_training", 3), "Alle drei Wurzelränge werden gesetzt")
 	_true(source.set_talent_rank(&"spread_shotgun", 1), "Schrotwirkung wird atomar gesetzt")
 	_true(source.set_talent_rank(&"piercing_persistence", 2), "Laserbestand wird vollständig gesetzt")
 	source.research_points = 77
@@ -54,38 +70,50 @@ func _test_v7_roundtrip() -> void:
 
 	var saved := source.to_dict()
 	_equal(int(saved.get("version", 0)), 7, "Neue Spielstände verwenden Save-Version 7")
-	_equal(int(saved.get("talent_tree_revision", 0)), 5, "Save markiert Talentbaumrevision 5")
+	_equal(int(saved.get("talent_tree_revision", 0)), 6, "Save markiert die aktuelle Talentbaumrevision 6")
+	_equal((saved.get("talent_ranks", {}) as Dictionary).get("treatment_damage_training", 0), 3, "Save schreibt alle drei Wurzelränge")
 	_equal((saved.get("talent_ranks", {}) as Dictionary).get("spread_shotgun", 0), 1, "Save schreibt Schrotwirkung als Dictionary")
 
 	var restored := MetaProgressionState.new(func() -> int: return 2000)
 	_true(restored.load_dict(saved), "Save-Version 7 wird geladen")
+	_equal(restored.talent_rank(&"treatment_damage_training"), 3, "V7 bewahrt alle drei Wurzelränge der Revision 6")
 	_equal(restored.talent_rank(&"spread_shotgun"), 1, "V7 bewahrt die Schrotwirkung")
 	_equal(restored.talent_rank(&"piercing_persistence"), 2, "V7 bewahrt den zweistufigen Laserbestand")
+	_true(not restored.talent_tree_refund_pending, "Ein aktueller Revision-6-Roundtrip benötigt keine Rückerstattung")
 	_true(restored.has_talent(&"treatment_damage_training"), "Kompatible Aktivabfrage erkennt Rangtalente")
 	_equal(restored.research_points, 77, "V7 bewahrt Forschungspunkte")
 	_equal(restored.rank(&"stability_reserve"), 3, "V7 bewahrt Forschungsränge")
 	_equal(restored.get_or_create_case_seed(&"localized_focus"), 424242, "V7 bewahrt den aktuellen Fallseed")
 
 	var context := restored.create_run_context(&"localized_focus")
+	_equal(context.talent_rank(&"treatment_damage_training"), 3, "RunContext übernimmt alle Behandlungsgrundlagenränge")
 	_equal(context.talent_rank(&"spread_shotgun"), 1, "RunContext übernimmt den exakten Schrotwirkungsrang")
 	_true(context.has_talent(&"piercing_persistence"), "RunContext hält die boolesche Kompatibilitätsabfrage")
 
 
-func _test_v7_revision4_refunds_penetration_tree() -> void:
-	var revision4 := {
+func _test_v7_revision5_refunds_previous_tree() -> void:
+	var revision5 := {
 		"version": 7,
 		"research_points": 88,
 		"research_ranks": {"movement_training": 1},
-		"completed_mastery_ids": ["fall_2_first_victory"],
-		"talent_tree_revision": 4,
-		"talent_ranks": {"spread_penetration": 3},
+		"completed_mastery_ids": [
+			"fall_2_first_victory",
+			"fall_2_reserve_win",
+			"fall_2_active_usage",
+			"fall_3_first_victory",
+			"fall_3_fast_boss",
+			"fall_3_safe_condition",
+		],
+		"talent_tree_revision": 5,
+		"talent_ranks": {"treatment_damage_training": 1, "spread_shotgun": 1, "piercing_persistence": 2},
 	}
 	var migrated := MetaProgressionState.new(func() -> int: return 2400)
-	_true(migrated.load_dict(revision4), "Ein V7-Spielstand mit Revisionsbaum 4 wird geladen")
-	_true(migrated.talent_ranks.is_empty(), "Revision-4-Durchdringung wird nicht still als Schrotwirkung interpretiert")
-	_true(migrated.talent_tree_refund_pending, "Revision-4-Auswahl markiert die zurückgegebenen Talentpunkte")
-	_equal(migrated.research_points, 88, "Forschung bleibt beim Wechsel auf Schrotwirkung erhalten")
-	_equal(migrated.rank(&"movement_training"), 1, "Forschungsränge bleiben beim Talentwechsel erhalten")
+	_true(migrated.load_dict(revision5), "Ein V7-Spielstand mit Talentbaumrevision 5 wird geladen")
+	_true(migrated.talent_ranks.is_empty(), "Revision-5-Ränge werden trotz stabiler IDs atomar zurückgesetzt")
+	_true(migrated.talent_tree_refund_pending, "Revision-5-Auswahl markiert die zurückgegebenen Talentpunkte")
+	_equal(migrated.available_talent_points(), 6, "Nach dem Revision-5-Refund sind alle verdienten Talentpunkte wieder verfügbar")
+	_equal(migrated.research_points, 88, "Forschung bleibt beim Wechsel auf Revision 6 erhalten")
+	_equal(migrated.rank(&"movement_training"), 1, "Forschungsränge bleiben beim Wechsel auf Revision 6 erhalten")
 
 
 func _test_v6_revision3_refunds_retired_tree() -> void:
@@ -178,6 +206,14 @@ func _true(condition: bool, message: String) -> void:
 func _equal(actual: Variant, expected: Variant, message: String) -> void:
 	assertions += 1
 	if actual == expected:
+		return
+	failures += 1
+	printerr("FAIL: %s | expected=%s actual=%s" % [message, str(expected), str(actual)])
+
+
+func _near(actual: float, expected: float, message: String, tolerance: float = 0.0001) -> void:
+	assertions += 1
+	if absf(actual - expected) <= tolerance:
 		return
 	failures += 1
 	printerr("FAIL: %s | expected=%s actual=%s" % [message, str(expected), str(actual)])

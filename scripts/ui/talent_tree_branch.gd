@@ -15,6 +15,7 @@ var _layout: Dictionary = {}
 var _requirements: Dictionary = {}
 var _states: Dictionary = {}
 var _maximum_tier: int = 0
+var _maximum_lane: int = 0
 var _exit_top: Control
 var _exit_left: Control
 var _exit_right: Control
@@ -43,10 +44,11 @@ func add_talent_node(
 	if id == &"" or button == null:
 		return
 	_nodes[id] = button
-	_layout[id] = Vector2i(clampi(lane, 0, 2), maxi(0, tier))
+	_layout[id] = Vector2i(clampi(lane, 0, 7), maxi(0, tier))
 	_requirements[id] = required_ids.duplicate()
 	_states[id] = state
 	_maximum_tier = maxi(_maximum_tier, maxi(0, tier))
+	_maximum_lane = maxi(_maximum_lane, clampi(lane, 0, 7))
 	add_child(button)
 	custom_minimum_size.y = OUTER_PADDING * 2.0 + float(_maximum_tier + 1) * NODE_HEIGHT + float(_maximum_tier) * ROW_GAP
 	_layout_nodes.call_deferred()
@@ -94,7 +96,7 @@ func _layout_nodes() -> void:
 		return
 	var usable_width := maxf(1.0, size.x - OUTER_PADDING * 2.0)
 	var node_width := minf(NODE_WIDTH, usable_width)
-	var lane_step := maxf(0.0, (usable_width - node_width) * 0.5)
+	var lane_step := maxf(0.0, (usable_width - node_width) / float(maxi(_maximum_lane, 1)))
 	for id_value in _nodes:
 		var id := StringName(id_value)
 		var button := _nodes[id] as Button

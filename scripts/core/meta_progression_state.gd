@@ -19,7 +19,7 @@ const SAVE_VERSION := 7
 const PASSIVE_INTERVAL_SECONDS := 240.0 # V6 API compatibility; offline income is retired.
 const PASSIVE_CAP_SECONDS := 28800.0
 const UNLIMITED_TEST_POINT_POOL := 1_000_000_000
-const TALENT_TREE_REVISION := 5
+const TALENT_TREE_REVISION := 6
 const SHARED_CAMPAIGN_LOADOUT_ID := &"campaign_shared"
 const CAMPAIGN_LEVEL_IDS: Array[StringName] = [
 	&"early_localized_focus", &"localized_focus", &"advancing_infection",
@@ -691,6 +691,8 @@ func _talent_ranks_are_valid(requested: Dictionary, enforce_economy: bool) -> bo
 		if not catalog.has(id):
 			return false
 		var definition: TalentDefinition = catalog[id]
+		if not definition.implemented:
+			return false
 		var purchased_rank := int(requested[raw_id])
 		if purchased_rank <= 0 or purchased_rank > definition.max_rank:
 			return false

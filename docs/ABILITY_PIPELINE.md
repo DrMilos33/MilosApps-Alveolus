@@ -64,4 +64,21 @@ already damaged by the same volley without spending its own penetration count,
 so it remains visible and may continue to a later target. Individual ray
 penetration stays a regular `TREATMENT_MAX_HITS` build value.
 
+Talent effects keep the same ownership boundary. Treatment Damage Training is
+compiled into the run's `TREATMENT_DAMAGE` base before additive cards. A
+tracking Impulse projectile delegates its impact to the Game facade through an
+optional hit callback; the facade resolves the primary hit and, when
+`impulse_splash` is present in the immutable run snapshot, one generation-safe
+60-unit circle snapshot for secondary 10-percent hits. Splash events use the
+internal source `treatment_precision_splash`, which result aggregation maps back
+to `treatment_precision`. The projectile remains responsible only for travel,
+generation validation and exactly-once impact.
+
+Defense Burst remains a zero-damage control definition. The
+`defense_burst_damage` talent adds a tagged 20-point `ABILITY_DAMAGE` modifier
+when the run build is compiled. Its +6/+10/+14 run family declares
+`required_talent_ids`, so neither the pool nor preview can expose those cards
+without the talent. This keeps unlock policy out of `AbilityController` while
+the resulting execution still follows the normal command/result pipeline.
+
 The regression entrypoint is `tests/ability_pipeline_runner.gd`.

@@ -22,10 +22,15 @@ const ROUTE_ID := &"research"
 const CONTEXT_DETAIL_SCOPE_ID := &"progression"
 const RESEARCH_WIDE_COLUMNS := 4
 const TALENT_SYMBOLS_BY_ID := {
+	&"upgrade_rarity_training": &"research",
+	&"defense_cells_first": &"immune",
+	&"active_foundation_placeholder": &"ability",
+	&"defense_burst_damage": &"ability_defense_burst",
 	&"treatment_damage_training": &"treatment",
 	&"manual_treatment_aim": &"target",
 	&"spread_shotgun": &"treatment_spread",
 	&"piercing_persistence": &"treatment_pierce",
+	&"impulse_splash": &"treatment_precision",
 }
 const TALENT_SYMBOL_FALLBACKS: Array[StringName] = [
 	&"plan", &"components", &"reserve", &"target",

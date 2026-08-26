@@ -1,6 +1,6 @@
 # ALVEOLUS – aktueller Werte- und Ausbaukatalog
 
-**Stand:** 25. August 2026
+**Stand:** 26. August 2026
 **Geprüfte Codebasis:** lokaler Arbeitsbaum `codex/alveolus-local-main`
 **Zweck:** Verbindliche Ist-Aufnahme für die nächste Balanceiteration.
 
@@ -20,9 +20,10 @@ im Kampf ist dagegen vollständig enthalten.
   aber für 0 Forschung freigeschaltet werden.
   Vier weitere aktive Fähigkeiten bleiben mit ihren Werten sichtbar, aber gesperrt.
 - Es gibt derzeit **keine Passivmodule** im aktiven Produktkatalog.
-- Dauerhafte Progression besteht aus zehn globalen Forschungen und vier
-  Talenten in einem Behandlungsbaum.
-- Ein Run enthält 32 Ausbaudefinitionen; endlose Familien besitzen kein Rangmaximum.
+- Dauerhafte Progression besteht aus zehn globalen Forschungen sowie 26
+  sichtbaren Talentknoten in drei Bäumen; neun Knoten sind belegbar und 17
+  ausdrückliche Platzhalter.
+- Ein Run enthält 35 Ausbaudefinitionen; endlose Familien besitzen kein Rangmaximum.
 - Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 300 Sekunden.
 - Die harte Hauptarena misst **8.640 × 4.860 Weltpunkte**. Spawnraten und
   Gegnerabstände bleiben von dieser dichteren Spielfläche unberührt.
@@ -54,7 +55,10 @@ IDs oder Save-Kompatibilität sie noch erfordern.
 Forschung erhöht diese Basis auf höchstens 59 Leben, 6 Verteidigungsrating
 (effektiv 5,6 % Minderung), 0,75 Leben/s Regeneration, 1,15-fache Erfahrung
 und ganzzahligen Galopp 196. Behandlungen erhalten bis zu 6 Prozent zusätzlichen
-Basisschaden, bevor der Wert ganzzahlig aufgelöst wird.
+Basisschaden. Das Talent `Behandlungsgrundlage` addiert bis zu weitere 60
+Prozent des unveränderten Behandlungsausgangswerts; Forschung und Talent werden
+vor genau einer Ganzzahlauflösung zusammengeführt. Run-Schadenskarten addieren
+erst danach ihre absoluten Werte.
 
 ### Resistenzen
 
@@ -128,7 +132,10 @@ Besonderheiten:
 
 - **Impuls** verfolgt ohne Talent automatisch die nächsten gültigen
   Ziele. Der Run-Ausbau `Zusätzliches Projektil` kann bis zu fünf weitere
-  eigenständige Projektile erzeugen.
+  eigenständige Projektile erzeugen. Mit `Impulsexplosion` verursacht jeder
+  Treffer in einem kleinen 60-Weltpunkte-Radius zusätzlich ganzzahlig
+  aufgelöste 10 Prozent Rohschaden auf nahe Gegner; dieser Anteil zählt zur
+  Impuls-Schadensstatistik.
 - **Streuimpuls** erzeugt Strahlen bei −14, 0 und +14 Grad. Ohne Schrotwirkung
   kann ein Gegner pro Salve nur von einem Strahl Schaden erhalten. Weitere
   überlappende Strahlen verschwinden nicht, sondern suchen entlang ihrer Bahn
@@ -148,7 +155,7 @@ Besonderheiten:
 
 | Fähigkeit | Status | Zielart | Abklingzeit | Werte | Schadenstyp |
 |---|---|---|---:|---|---|
-| Stoß | Forschung für 30 | Zielkreis | 14 s | 0 Schaden, Radiusstufe 5, 120 Rückstoß; getroffene Nichtboss-Schützen feuern 10 Sekunden nicht | keiner |
+| Stoß | Forschung für 30 | Zielkreis | 14 s | ohne Talent 0 Schaden; mit Talent 20 Erdschaden; Radiusstufe 5, 120 Rückstoß; getroffene Nichtboss-Schützen feuern 10 Sekunden nicht | Erde erst mit Talent |
 | Fetter lazer | nach Fall 1 manuell für 0 Forschung | Zielrichtung | 18 s | 30 Schaden, Reichweitenstufe 21, 38 Breite | Wasser |
 | Fokusfeld | sichtbar gesperrt | Zielkreis | 16 s | Radiusstufe 6, 7 s, Behandlungsschaden ×1,25 | keiner |
 | Notfallhilfe | sichtbar gesperrt | selbst | 28 s | +14 Leben, +8 Schild | keiner |
@@ -200,23 +207,61 @@ Forschungsränge umgehen sie nicht. Nach Fall 1 öffnet sich die Karte als
 kostenlose manuelle Freischaltung. Der zweite Aktivslot ist davon unabhängig
 bereits durch den Fallabschluss verfügbar.
 
-## 9. Behandlungs-Talentbaum
+## 9. Talentbäume
+
+### Upgrades
 
 | Talent | Max. Rang | Kosten | Voraussetzung | Wirkung |
 |---|---:|---:|---|---|
-| Behandlungsgrundlage | 1 | 1 | keine | +2 Schaden aller drei Grundbehandlungen. |
-| Schrotwirkung | 1 | 1 | Behandlungsgrundlage | Mehrere Strahlen derselben Streuimpuls-Salve dürfen dasselbe Ziel treffen. |
+| Seltene Upgrades | 3 | 1 je Rang | keine | Die kombinierte Magic-/Rare-Chance steigt pro Rang relativ um 5 %. |
+| Platzhalter links | – | – | Seltene Upgrades | sichtbar, noch nicht belegbar |
+| Platzhalter Mitte | – | – | Seltene Upgrades | sichtbar, noch nicht belegbar |
+| Abwehrzellen zuerst | 1 | 1 | Seltene Upgrades | Ab Fall 3 ist Abwehrzellen im ersten Level-up garantiert, solange das System noch nicht erworben wurde. |
+| Zwei Folgeplatzhalter | – | – | Abwehrzellen zuerst | sichtbar, noch nicht belegbar |
+
+Für vollständige Common/Magic/Rare-Familien gelten dadurch:
+
+| Rang | Common | Magic | Rare | Magic oder Rare |
+|---:|---:|---:|---:|---:|
+| 0 | 70 % | 25 % | 5 % | 30 % |
+| 1 | 68,5 % | 26,25 % | 5,25 % | 31,5 % |
+| 2 | 66,925 % | 27,5625 % | 5,5125 % | 33,075 % |
+| 3 | 65,27125 % | 28,940625 % | 5,788125 % | 34,72875 % |
+
+Das ist eine relative, keine absolute Erhöhung: Rang 1 addiert nicht fünf
+Prozentpunkte. Zuerst wird eine passende Komponentenfamilie nach Relevanz,
+Voraussetzungen und Familienfrequenz gewählt; die Tabelle beschreibt danach die
+Seltenheitsziehung innerhalb einer vollständigen Dreierfamilie. Einzelne Magic-
+oder Rare-Utility-Familien behalten ihre zusätzliche Seltenheitsfrequenz.
+
+### Aktive Fähigkeiten
+
+| Talent | Max. Rang | Kosten | Voraussetzung | Wirkung |
+|---|---:|---:|---|---|
+| Aktivgrundlage | 1 | 1 | keine | belegbares, derzeit wirkungsloses Gateway für die drei Äste |
+| Stoß verursacht Schaden | 1 | 1 | Aktivgrundlage | Stoß erhält 20 Erdschaden; +6/+10/+14-Schadenskarten werden freigeschaltet. |
+| Zwei weitere Äste | – | – | Aktivgrundlage | sichtbar, noch nicht belegbar |
+
+### Behandlungen
+
+| Talent | Max. Rang | Kosten | Voraussetzung | Wirkung |
+|---|---:|---:|---|---|
+| Behandlungsgrundlage | 3 | 1 je Rang | keine | +20 % des unveränderten Basisschadens aller drei Behandlungen je Rang. |
 | Manuelle Zielsteuerung | 1 | 1 | Behandlungsgrundlage | Alle Behandlungen schießen zur Maus. |
+| Schrotwirkung | 1 | 1 | Behandlungsgrundlage | Mehrere Strahlen derselben Streuimpuls-Salve dürfen dasselbe Ziel treffen. |
 | Anhaltender Laser | 2 | 1 je Rang | Behandlungsgrundlage | +0,5 s Strahldauer je Rang; Tick alle 0,25 s. |
+| Impulsexplosion | 1 | 1 | Behandlungsgrundlage | Impulstreffer verursachen zusätzlich 10 % Schaden auf nahe Gegner. |
+| Elf Folgeplatzhalter | – | – | jeweiliger Ast | sichtbar, noch nicht belegbar |
 
-Der vollständige Baum kostet **5 Talentpunkte**. Bei 0,5 Sekunden Dauer trifft
-eine Phase zu 0,00 und 0,25 Sekunden; bei 1,0 Sekunde zu 0,00, 0,25, 0,50 und
-0,75 Sekunden. `piercing_return` bleibt entfernt und reserviert. Savegame-
-Version 7 und Talentbaum-Revision 5 setzen ältere Baumbelegungen atomar zurück
-und bewahren Meisterschaft sowie Forschung. Die pensionierte ID
-`spread_penetration` wird nicht als Schrotwirkung neu interpretiert.
+Alle aktuell belegbaren Ränge kosten zusammen **14 Talentpunkte**. Bei 0,5
+Sekunden Laserdauer trifft eine Phase zu 0,00 und 0,25 Sekunden; bei 1,0
+Sekunde zu 0,00, 0,25, 0,50 und 0,75 Sekunden. `piercing_return` und
+`spread_penetration` bleiben entfernt und reserviert. Savegame-Version 7 und
+Talentbaum-Revision 6 setzen ältere Baumbelegungen atomar zurück und bewahren
+Meisterschaft, Forschung sowie verdiente Talentpunkte.
 
-Der Baum kann über den Fortschrittsscreen zurückgesetzt werden.
+Alle drei Bäume können gemeinsam über den Fortschrittsscreen zurückgesetzt
+werden; investierte Punkte werden vollständig frei.
 
 ## 10. Run-Ausbaustufen
 
@@ -224,7 +269,8 @@ Schaden, Attack Speed und Galopp besitzen endlos sammelbare Familien. Der
 Impuls bleibt die Schadensbaseline mit +3/+5/+7; andere Schadensfamilien lösen
 einmalig ganzzahlig 30/50/70 Prozent ihres Basisschadens auf. Bei gleicher Relevanz gilt für
 Angebote immer Common häufiger als Magic häufiger als Rare. Vollständige
-Dreierfamilien verwenden 70 / 25 / 5. Pro Level-up kann dieselbe
+Dreierfamilien verwenden ohne Talent 70 / 25 / 5; `Seltene Upgrades` ersetzt
+diese Verteilung rangabhängig durch die Tabelle aus Abschnitt 9. Pro Level-up kann dieselbe
 Komponente-Wert-Familie höchstens einmal erscheinen. Karten zeigen nur den
 gemeinsamen Rundenzähler. Der Rahmen signalisiert Common in Elfenbein, Magic in
 Kobalt und Rare in Gold.
@@ -265,17 +311,20 @@ der Karte angezeigt.
 | Ausbau | Seltenheiten/Wahlen | Wirkung | Grenze | Voraussetzung |
 |---|---|---|---|---|
 | Breiter Stoß | 2 Wahlen | +1 Radius | Radius 7 | Stoß ausgerüstet |
+| Stoßschaden | Common / Magic / Rare | +6 / +10 / +14 Schaden | unbegrenzt | Stoß ausgerüstet und Talent `Stoß verursacht Schaden` |
 | Lazerschaden | Common / Magic / Rare | +9 / +15 / +21 Schaden | unbegrenzt | Fetter lazer ausgerüstet |
 | Breiterer Lazer | 2 Wahlen | +16 Breite | 70 Breite | Fetter lazer ausgerüstet |
 | Galopp | Common / Magic / Rare | +6 / +10 / +14 Galopp | unbegrenzt | keine |
 
-Stoß besitzt 0 Schaden und hat keinen Schadensausbau. Ein späterer Talentknoten
-darf diese Familie ausdrücklich freischalten; in diesem Meilenstein existiert
-sie nicht.
+Stoß besitzt ohne Talent 0 Schaden und seine drei Schadenskarten werden bereits
+beim Aufbau des Pools vollständig herausgefiltert. Das Talent setzt 20
+Basisschaden und schaltet die absolute, endlos sammelbare 6/10/14-Familie frei.
 
 Bis zum ersten erfolgreichen Abschluss von Fall 3 ist dessen erstes Level-up
 die einzige Ausnahme: Es zeigt dreimal Abwehrzellen und erlaubt keinen Reroll.
-Nach dem ersten Sieg gilt dort bereits beim ersten Level-up die normale Auswahl.
+Nach dem ersten Sieg gilt dort bereits beim ersten Level-up die normale Auswahl,
+sofern `Abwehrzellen zuerst` nicht aktiv ist. Mit diesem Talent gilt dieselbe
+Garantie in jedem Kampagnenfall ab Fall 3.
 In Fall 1/2 befinden sich Abwehrzellen überhaupt nicht im Pool; ab Fall 3 gelten
 nach der Akquisition die normalen Verbesserungen. Die erste Auswahl eines sonst normalen Levelaufstiegs enthält, solange noch ein
 passender Rang verfügbar ist, mindestens einen Ausbau der ausgerüsteten
@@ -313,7 +362,7 @@ Attack-Speed-Ausbaupfade reserviert.
 | Bakterium | 22 | 94 | 2 | – | 100 % Feuer | 1 | Klein | Wasser +10 (+8,8 %), Erde −10 |
 | Bakteriengruppe | 74 | 94 | 5 | – | 60 % Erde, 40 % Feuer | 4 | Mittel | Erde +20 (+15,8 %), Feuer −15 |
 | Kleiner Herd | 180 | 42 | 0 | 2 alle 2,6 s | 100 % Luft | 8 | Groß | Luft +25 (+18,8 %), Wasser −20 |
-| Bakterienkern | 900 | 73 | 6 | 4 alle 0,89 s in Fall 2 | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
+| Bakterienkern | 900 | 73 | 6 | 4 alle 1,05 s in Fall 2 | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 | Infektionsherd | 2.200 | 79 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 
 Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
@@ -351,7 +400,8 @@ anschließend gegen Resistenzen, Verteidigung und Schild von Doctor Milos
 aufgelöst. Nach einem gültigen Treffer schützt die globale 0,5-Sekunden-Frist
 vor einem sofortigen weiteren Gegnertreffer.
 
-Der Bakterienkern aus Fall 2 schießt alle 0,89 Sekunden ein Projektil mit
+Der Bakterienkern aus Fall 2 schießt mit dem relativ um 15 Prozent reduzierten
+Ratenfaktor 1,53 ungefähr alle 1,05 Sekunden ein Projektil mit
 375 Tempo und authored 1,5-fachem Schaden. Der erste Kurvenzeitpunkt entspricht
 bei diesem Referenztempo ungefähr 40 Prozent der sichtbaren Bildschirmbreite,
 der zweite weiteren 25 Prozent. Beide Zeiten werden beim Spawn eingefroren;

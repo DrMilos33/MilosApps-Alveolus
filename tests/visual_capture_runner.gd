@@ -1,7 +1,7 @@
 extends SceneTree
 
 const OUTPUT_DIR := "res://.codex-temp/visual_restart/screens"
-const EXPECTED_CAPTURE_COUNT := 31
+const EXPECTED_CAPTURE_COUNT := 32
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
@@ -238,10 +238,26 @@ func _capture_suite(game: Node) -> void:
 	await _capture_transient_dialogs(game)
 	game.hud.show_end(game.selected_level, true, "Der Herd ist kontrolliert.", 151.0, 5, 74, 22, true)
 	game.hud.set_result_reward_presentations(game.result_reward_presentations(22))
+	var visual_damage_stats: Array[Dictionary] = [
+		{"id": &"treatment_precision", "label": "Impuls", "damage": 812},
+		{"id": &"ability_defense_burst", "label": "Stoß", "damage": 164},
+	]
+	var visual_talent_stats: Array[Dictionary] = [
+		{"id": &"treatment_damage_training", "label": "Behandlungsgrundlage", "rank": 2, "max_rank": 3},
+	]
+	game.hud.set_result_damage_statistics(visual_damage_stats)
+	game.hud.set_result_talent_statistics(visual_talent_stats, true, true)
 	await _settle()
 	if not _verify_result_rewards(game.hud.result_screen):
 		return
+	if not _verify_result_ability_section(game.hud.result_screen, false):
+		return
 	await _capture("result")
+	game.hud.result_screen.get_ability_section_header().button_pressed = true
+	await _settle()
+	if not _verify_result_ability_section(game.hud.result_screen, true):
+		return
+	await _capture("result_abilities")
 
 func _populate_character_stats_capture(game: Node) -> void:
 	# Keep the visual contract honest by capturing the densest supported sheet,
@@ -375,18 +391,23 @@ func _verify_research_capture(game: Node) -> bool:
 
 func _verify_talent_tree(screen: ProgressionScreen) -> bool:
 	var branch := screen.talent_branch(&"treatment")
-	if branch == null:
+	var upgrades := screen.talent_branch(&"upgrades")
+	var active := screen.talent_branch(&"active")
+	if branch == null or upgrades == null or active == null:
 		capture_failed = true
-		push_error("Talentbaum besitzt keinen Behandlungshauptast")
+		push_error("Talentansicht besitzt nicht alle drei produktiven Bäume")
 		return false
 	var ids: Array[StringName] = [
 		&"treatment_damage_training",
-		&"spread_shotgun",
 		&"manual_treatment_aim",
+		&"spread_shotgun",
 		&"piercing_persistence",
+		&"impulse_splash",
 	]
 	var symbols: Dictionary = {}
-	var valid := branch.node_count() == 4 and branch.edge_count() == 3
+	var valid := branch.node_count() == 16 and branch.edge_count() == 15 \
+		and upgrades.node_count() == 6 and upgrades.edge_count() == 5 \
+		and active.node_count() == 4 and active.edge_count() == 3
 	var root := screen.talent_action(ids[0])
 	for id in ids:
 		var action := screen.talent_action(id)
@@ -401,11 +422,11 @@ func _verify_talent_tree(screen: ProgressionScreen) -> bool:
 			symbols[StringName(action.get_meta(&"talent_symbol_kind", &""))] = true
 			if id != ids[0] and root != null:
 				valid = valid and root.global_position.y < action.global_position.y
-	valid = valid and symbols.size() == 4
+	valid = valid and symbols.size() == 5
 	if valid:
 		return true
 	capture_failed = true
-	push_error("Talent-Capture besitzt nicht Root, drei Abzweigungen, eindeutige Symbole und drei sichtbare Voraussetzungen")
+	push_error("Talent-Capture besitzt nicht drei Bäume, vier Behandlungsäste, eindeutige Symbole und alle sichtbaren Voraussetzungen")
 	return false
 
 
@@ -487,6 +508,29 @@ func _verify_result_rewards(result: ResultOverlay) -> bool:
 		return true
 	capture_failed = true
 	push_error("Ergebnis-Capture besitzt nicht Forschung plus exakt drei angeforderte Placeholder im responsiven Raster")
+	return false
+
+
+func _verify_result_ability_section(result: ResultOverlay, expanded: bool) -> bool:
+	var header := result.get_ability_section_header()
+	var body := result.get_ability_section_body()
+	var title := header.find_child("AbilitySectionTitle", true, false) as Label if header != null else null
+	var damage_row := result.find_child("AbilityDamage_*", true, false)
+	var talent_row := result.find_child("Talent_*", true, false)
+	var valid := header != null \
+		and body != null \
+		and title != null \
+		and title.text == "Fähigkeiten" \
+		and result.is_ability_section_expanded() == expanded \
+		and body.visible == expanded
+	if expanded:
+		valid = valid \
+			and damage_row != null \
+			and talent_row != null
+	if valid:
+		return true
+	capture_failed = true
+	push_error("Ergebnis-Capture besitzt nicht den klickbaren Fähigkeiten-Header mit konsistentem Disclosure-Zustand (erwartet=%s, state=%s, body=%s, titel=%s, damage=%s, talent=%s)" % [expanded, result.is_ability_section_expanded(), body.visible if body != null else false, title.text if title != null else "", damage_row != null, talent_row != null])
 	return false
 
 

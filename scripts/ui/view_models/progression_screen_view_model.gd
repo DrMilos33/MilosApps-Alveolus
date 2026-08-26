@@ -214,7 +214,7 @@ class TalentNodeViewModel extends RefCounted:
 		model._cost_text = cost_text_value
 		model._icon_kind = icon_kind_value
 		model._tier = maxi(0, tier_value)
-		model._lane = clampi(lane_value, 0, 2)
+		model._lane = clampi(lane_value, 0, 7)
 		model._required_ids = required_ids_value.duplicate()
 		model._state = clampi(state_value, ItemState.ACTIVE, ItemState.LOCKED)
 		model._interactive = interactive_value and id_value != &"" and model._state != ItemState.LOCKED

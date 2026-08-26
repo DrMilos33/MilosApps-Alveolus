@@ -98,6 +98,9 @@ var _rewards: Array[RewardViewModel]
 var _levels_action_text: String
 var _retry_action_text: String
 var _campus_action_text: String
+var _ability_damage_stats: Array[StatViewModel]
+var _talent_stats: Array[StatViewModel]
+var _talents_unlocked: bool
 
 
 func _init(
@@ -113,7 +116,10 @@ func _init(
 	reward_items_value: Array[RewardViewModel] = [],
 	levels_action_text_value: String = "Fallübersicht",
 	retry_action_text_value: String = "Erneut behandeln",
-	campus_action_text_value: String = "Zum Campus"
+	campus_action_text_value: String = "Zum Campus",
+	ability_damage_stats_value: Array[StatViewModel] = [],
+	talent_stats_value: Array[StatViewModel] = [],
+	talents_unlocked_value: bool = false
 ) -> void:
 	_revision = maxi(revision_value, 0)
 	_success = success_value
@@ -128,6 +134,9 @@ func _init(
 	_levels_action_text = levels_action_text_value
 	_retry_action_text = retry_action_text_value
 	_campus_action_text = campus_action_text_value
+	_ability_damage_stats = _copy_stats(ability_damage_stats_value)
+	_talent_stats = _copy_stats(talent_stats_value)
+	_talents_unlocked = talents_unlocked_value
 	# Compatibility bridge for the current GameHUD facade. New callers pass a
 	# value-only RewardViewModel so the icon, not copied prose, carries meaning.
 	if _rewards.is_empty() and not _reward_text.strip_edges().is_empty():
@@ -185,6 +194,18 @@ func get_reward_items() -> Array[RewardViewModel]:
 	return _copy_rewards(_rewards)
 
 
+func get_ability_damage_stats() -> Array[StatViewModel]:
+	return _copy_stats(_ability_damage_stats)
+
+
+func get_talent_stats() -> Array[StatViewModel]:
+	return _copy_stats(_talent_stats)
+
+
+func are_talents_unlocked() -> bool:
+	return _talents_unlocked
+
+
 func get_levels_action_text() -> String:
 	return _levels_action_text
 
@@ -211,7 +232,10 @@ func duplicate_immutable() -> ResultOverlayViewModel:
 		_rewards,
 		_levels_action_text,
 		_retry_action_text,
-		_campus_action_text
+		_campus_action_text,
+		_ability_damage_stats,
+		_talent_stats,
+		_talents_unlocked
 	)
 
 
@@ -246,11 +270,18 @@ func _calculate_content_hash() -> int:
 		_signature_part(_campus_action_text),
 		str(_stats.size()),
 		str(_rewards.size()),
+		str(_ability_damage_stats.size()),
+		str(_talent_stats.size()),
+		"1" if _talents_unlocked else "0",
 	])
 	for stat in _stats:
 		stat.append_signature(parts)
 	for reward in _rewards:
 		reward.append_signature(parts)
+	for stat in _ability_damage_stats:
+		stat.append_signature(parts)
+	for stat in _talent_stats:
+		stat.append_signature(parts)
 	return hash("|".join(parts))
 
 

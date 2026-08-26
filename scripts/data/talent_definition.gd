@@ -1,8 +1,8 @@
 class_name TalentDefinition
 extends Resource
 
-## Category values stay source-compatible until the progression view moves to
-## its single treatment tree. All current definitions use DEPLOYMENT.
+## Category values stay source-compatible while the visible tree identity is
+## carried separately by tree_id/tree_title/tree_icon_id.
 enum Category { PLANNING, DIAGNOSIS, DEPLOYMENT }
 
 ## Temporary source-compatibility constants for the still-unmigrated Game
@@ -23,6 +23,10 @@ const ALTERNATING_RHYTHM_WINDOW_SECONDS := 4.0
 @export var magnitude: float = 0.0
 @export var tree_tier: int = 0
 @export var tree_lane: int = 1
+@export var tree_id: StringName = &"treatment"
+@export var tree_title: String = "Behandlungen"
+@export var tree_icon_id: StringName = &"treatment"
+@export var implemented: bool = true
 
 
 static func create(
@@ -59,9 +63,23 @@ static func create(
 	return definition
 
 
-func place_in_tree(tier: int, lane: int) -> TalentDefinition:
+func place_in_tree(
+	tier: int,
+	lane: int,
+	resolved_tree_id: StringName = &"treatment",
+	resolved_tree_title: String = "Behandlungen",
+	resolved_tree_icon_id: StringName = &"treatment"
+) -> TalentDefinition:
 	tree_tier = maxi(0, tier)
-	tree_lane = clampi(lane, 0, 2)
+	tree_lane = clampi(lane, 0, 7)
+	tree_id = resolved_tree_id
+	tree_title = resolved_tree_title
+	tree_icon_id = resolved_tree_icon_id
+	return self
+
+
+func mark_placeholder(selectable_gateway: bool = false) -> TalentDefinition:
+	implemented = selectable_gateway
 	return self
 
 
@@ -78,25 +96,124 @@ func total_rank_cost() -> int:
 
 static func definitions() -> Array[TalentDefinition]:
 	return [
+		# Upgrades
+		create(
+			&"upgrade_rarity_training",
+			"Seltene Upgrades",
+			"Erhöht pro Rang die relative Chance auf ein Magic- oder Rare-Upgrade um 5 %.",
+			Category.PLANNING,
+			1,
+			&"upgrade_rarity_bias",
+			0.05,
+			PackedStringArray(),
+			3,
+			PackedInt32Array([1, 1, 1])
+		).place_in_tree(0, 1, &"upgrades", "Upgrades", &"research"),
+		create(
+			&"upgrade_placeholder_left",
+			"Platzhalter",
+			"Platzhalter · Wirkung folgt später.",
+			Category.PLANNING,
+			1,
+			&"placeholder",
+			0.0,
+			PackedStringArray(["upgrade_rarity_training"])
+		).place_in_tree(1, 0, &"upgrades", "Upgrades", &"research").mark_placeholder(),
+		create(
+			&"upgrade_placeholder_middle",
+			"Platzhalter",
+			"Platzhalter · Wirkung folgt später.",
+			Category.PLANNING,
+			1,
+			&"placeholder",
+			0.0,
+			PackedStringArray(["upgrade_rarity_training"])
+		).place_in_tree(1, 1, &"upgrades", "Upgrades", &"research").mark_placeholder(),
+		create(
+			&"defense_cells_first",
+			"Abwehrzellen zuerst",
+			"Ab Fall 3 sind Abwehrzellen immer die erste Level-up-Auswahl.",
+			Category.PLANNING,
+			1,
+			&"defense_cells_first",
+			1.0,
+			PackedStringArray(["upgrade_rarity_training"])
+		).place_in_tree(1, 2, &"upgrades", "Upgrades", &"research"),
+		create(
+			&"defense_cells_placeholder_1",
+			"Platzhalter",
+			"Platzhalter · Wirkung folgt später.",
+			Category.PLANNING,
+			1,
+			&"placeholder",
+			0.0,
+			PackedStringArray(["defense_cells_first"])
+		).place_in_tree(2, 2, &"upgrades", "Upgrades", &"research").mark_placeholder(),
+		create(
+			&"defense_cells_placeholder_2",
+			"Platzhalter",
+			"Platzhalter · Wirkung folgt später.",
+			Category.PLANNING,
+			1,
+			&"placeholder",
+			0.0,
+			PackedStringArray(["defense_cells_placeholder_1"])
+		).place_in_tree(3, 2, &"upgrades", "Upgrades", &"research").mark_placeholder(),
+
+		# Aktive Fähigkeiten
+		create(
+			&"active_foundation_placeholder",
+			"Aktivgrundlage",
+			"Platzhalter · Wirkung folgt später. Schaltet die drei Äste für aktive Fähigkeiten frei.",
+			Category.DIAGNOSIS,
+			1,
+			&"placeholder",
+			0.0
+		).place_in_tree(0, 1, &"active", "Aktive Fähigkeiten", &"ability").mark_placeholder(true),
+		create(
+			&"active_placeholder_left",
+			"Platzhalter",
+			"Platzhalter · Wirkung folgt später.",
+			Category.DIAGNOSIS,
+			1,
+			&"placeholder",
+			0.0,
+			PackedStringArray(["active_foundation_placeholder"])
+		).place_in_tree(1, 0, &"active", "Aktive Fähigkeiten", &"ability").mark_placeholder(),
+		create(
+			&"defense_burst_damage",
+			"Stoß verursacht Schaden",
+			"Stoß verursacht 20 Schaden und Schadensupgrades für Stoß können beim Level-up erscheinen.",
+			Category.DIAGNOSIS,
+			1,
+			&"defense_burst_damage",
+			20.0,
+			PackedStringArray(["active_foundation_placeholder"])
+		).place_in_tree(1, 1, &"active", "Aktive Fähigkeiten", &"ability"),
+		create(
+			&"active_placeholder_right",
+			"Platzhalter",
+			"Platzhalter · Wirkung folgt später.",
+			Category.DIAGNOSIS,
+			1,
+			&"placeholder",
+			0.0,
+			PackedStringArray(["active_foundation_placeholder"])
+		).place_in_tree(1, 2, &"active", "Aktive Fähigkeiten", &"ability").mark_placeholder(),
+
+		# Behandlungen
 		create(
 			&"treatment_damage_training",
 			"Behandlungsgrundlage",
-			"Erhöht den Schaden aller drei Behandlungen um 2.",
+			"Erhöht den Basisschaden aller drei Behandlungen pro Rang um 20 %.",
 			Category.DEPLOYMENT,
 			1,
-			&"treatment_damage_flat",
-			2.0
-		).place_in_tree(0, 1),
-		create(
-			&"spread_shotgun",
-			"Schrotwirkung",
-			"Mehrere Strahlen derselben Streuimpuls-Salve können dasselbe Ziel treffen.",
-			Category.DEPLOYMENT,
-			1,
-			&"spread_shotgun",
-			1.0,
-			PackedStringArray(["treatment_damage_training"])
-		).place_in_tree(1, 0),
+			&"treatment_base_damage_percent",
+			0.20,
+			PackedStringArray(),
+			3,
+			PackedInt32Array([1, 1, 1])
+		).place_in_tree(0, 1, &"treatment", "Behandlungen", &"treatment"),
 		create(
 			&"manual_treatment_aim",
 			"Manuelle Zielsteuerung",
@@ -106,7 +223,37 @@ static func definitions() -> Array[TalentDefinition]:
 			&"manual_treatment_aim",
 			1.0,
 			PackedStringArray(["treatment_damage_training"])
-		).place_in_tree(1, 1),
+		).place_in_tree(1, 0, &"treatment", "Behandlungen", &"treatment"),
+		create(
+			&"manual_aim_placeholder_1", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["manual_treatment_aim"])
+		).place_in_tree(2, 0, &"treatment", "Behandlungen", &"treatment").mark_placeholder(),
+		create(
+			&"manual_aim_placeholder_2", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["manual_aim_placeholder_1"])
+		).place_in_tree(3, 0, &"treatment", "Behandlungen", &"treatment").mark_placeholder(),
+		create(
+			&"spread_shotgun",
+			"Schrotwirkung",
+			"Mehrere Strahlen derselben Streuimpuls-Salve können dasselbe Ziel treffen.",
+			Category.DEPLOYMENT,
+			1,
+			&"spread_shotgun",
+			1.0,
+			PackedStringArray(["treatment_damage_training"])
+		).place_in_tree(1, 1, &"treatment", "Behandlungen", &"treatment"),
+		create(
+			&"spread_placeholder_1", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["spread_shotgun"])
+		).place_in_tree(2, 1, &"treatment", "Behandlungen", &"treatment").mark_placeholder(),
+		create(
+			&"spread_placeholder_2", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["spread_placeholder_1"])
+		).place_in_tree(3, 1, &"treatment", "Behandlungen", &"treatment").mark_placeholder(),
+		create(
+			&"spread_placeholder_3", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["spread_placeholder_2"])
+		).place_in_tree(4, 1, &"treatment", "Behandlungen", &"treatment").mark_placeholder(),
 		create(
 			&"piercing_persistence",
 			"Anhaltender Laser",
@@ -118,7 +265,41 @@ static func definitions() -> Array[TalentDefinition]:
 			PackedStringArray(["treatment_damage_training"]),
 			2,
 			PackedInt32Array([1, 1])
-		).place_in_tree(1, 2),
+		).place_in_tree(1, 2, &"treatment", "Behandlungen", &"treatment"),
+		create(
+			&"piercing_placeholder_1", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["piercing_persistence"])
+		).place_in_tree(2, 2, &"treatment", "Behandlungen", &"treatment").mark_placeholder(),
+		create(
+			&"piercing_placeholder_2", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["piercing_placeholder_1"])
+		).place_in_tree(3, 2, &"treatment", "Behandlungen", &"treatment").mark_placeholder(),
+		create(
+			&"piercing_placeholder_3", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["piercing_placeholder_2"])
+		).place_in_tree(4, 2, &"treatment", "Behandlungen", &"treatment").mark_placeholder(),
+		create(
+			&"impulse_splash",
+			"Impulsexplosion",
+			"Impuls erzeugt beim Treffer eine kleine Explosion. Nahe Gegner erleiden 10 % des Treffers als Schaden.",
+			Category.DEPLOYMENT,
+			1,
+			&"impulse_splash",
+			0.10,
+			PackedStringArray(["treatment_damage_training"])
+		).place_in_tree(1, 3, &"treatment", "Behandlungen", &"treatment_precision"),
+		create(
+			&"impulse_placeholder_1", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["impulse_splash"])
+		).place_in_tree(2, 3, &"treatment", "Behandlungen", &"treatment_precision").mark_placeholder(),
+		create(
+			&"impulse_placeholder_2", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["impulse_placeholder_1"])
+		).place_in_tree(3, 3, &"treatment", "Behandlungen", &"treatment_precision").mark_placeholder(),
+		create(
+			&"impulse_placeholder_3", "Platzhalter", "Platzhalter · Wirkung folgt später.",
+			Category.DEPLOYMENT, 1, &"placeholder", 0.0, PackedStringArray(["impulse_placeholder_2"])
+		).place_in_tree(4, 3, &"treatment", "Behandlungen", &"treatment_precision").mark_placeholder(),
 	]
 
 

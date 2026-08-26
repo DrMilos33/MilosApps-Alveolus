@@ -1,6 +1,6 @@
 # ALVEOLUS – Projektstand
 
-Letzte inhaltliche Aktualisierung: 25. August 2026
+Letzte inhaltliche Aktualisierung: 26. August 2026
 
 Dieses Dokument ist die einzige veränderliche Quelle für Produktstatus,
 Prioritäten, bekannte Grenzen und dauerhafte Entscheidungen. Technische
@@ -28,7 +28,7 @@ entsteht durch:
 
 - Vollständiger lokaler Ablauf:
   `Prolog → Campus → Fallarchiv → Einsatzplanung → Run → Ergebnis`.
-- Vier wiederholbare Fälle einschließlich ereignisgesteuertem Intro und Bossen.
+- Sechs wiederholbare Kampagnenfälle sowie das ereignisgesteuerte Intro mit Bossen.
 - Einsatzplan mit einer Grundbehandlung und bis zu zwei aktiven Fähigkeiten.
   Impuls ist sofort verfügbar; Streuimpuls und Durchdringender Impuls
   werden durch Forschung freigeschaltet. `Stoß` benötigt Forschung; nach Fall 1
@@ -39,7 +39,8 @@ entsteht durch:
   verbliebene Passiv- und Reservefelder dienen ausschließlich der
   Save-/Schema-Kompatibilität.
 - Der aktuelle Produktkatalog umfasst drei Behandlungen, sechs sichtbare aktive
-  Fähigkeiten, zehn Forschungsfelder, vier Rangtalente und 26 Run-Ausbaustufen.
+  Fähigkeiten, zehn Forschungsfelder, 26 sichtbare Talentknoten in drei Bäumen
+  (neun belegbar, 17 ausdrückliche Platzhalter) und 35 Run-Ausbaustufen.
 - Editor-only Praxis-Testbereich, Forschungsbrett, Talente, Meisterschaft,
   kategorisiertes Lexikon und lokale Savegame-Version 7; Offline-Forschung und
   Klinikfälle sind entfernt.
@@ -245,6 +246,7 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-132 | Ersetzt D-049/D-080/D-124 ausschließlich für den linken Streuimpuls-Talentast und die betroffenen Run-Ausbauwerte: Talentbaum-Revision 5 ersetzt `spread_penetration` durch das einrangige `spread_shotgun`; alte Belegungen werden atomar zurückgegeben und niemals still umgedeutet. Ohne dieses Talent kann ein Ziel pro Streuimpuls-Salve nur einmal getroffen werden; ein dadurch schadensloser Strahl bleibt bestehen und sucht weiter nach einem anderen Ziel. Das Rare-Upgrade mit stabiler ID `spread_density` erhöht statt der Projektilzahl die Durchdringung jedes Strahls um 1. Galoppkarten geben +6/+10/+14. Mobile Eventherde in Fall 1 besitzen 135 Leben. Der Campus enthält keine laufenden Doctor-Figuren. Dynamische Gegner-MultiMeshes verwenden ausschließlich den gepackten CPU-Puffer, nie gemischte per-Slot-Schreibzugriffe, und besitzen einen expliziten arenaweiten Sichtbarkeitsbereich. |
 | D-133 | Präzisiert D-124 ausschließlich für die verpflichtende Fall-3-Auswahl: Das erste Level-up von Fall 3 zeigt nur so lange drei Abwehrzellenkarten ohne Reroll, bis Fall 3 erstmals erfolgreich abgeschlossen wurde. Eine Niederlage hebt die Garantie nicht auf. Nach dem ersten Sieg verwendet auch dieses Level-up dauerhaft den normalen Pool; Abwehrzellen bleiben ab Fall 3 regulär verfügbar. Der bestehende Levelrecord ist die alleinige persistente Quelle, daher entsteht kein neues Savefeld. |
 | D-134 | Ersetzt D-130 ausschließlich für die Fall-3-Rautenlänge: Boss 3 verwendet Wellenlänge 550 statt 500; seine gespiegelten Projektile treffen sich dadurch nach 275 statt 250 Vorwärts-Weltpunkten wieder. Amplitude 136, Projektiltempo, Schaden, Feuertakt und Praxisableitung bleiben unverändert, sodass die Raute länger, aber nicht breiter wird. |
+| D-135 | Talentbaum-Revision 6 ersetzt den bisherigen Einzelbaum durch die getrennten Bäume `Upgrades`, `Aktive Fähigkeiten` und `Behandlungen`; bestehende Rangbelegungen werden atomar erstattet, stabile aktive IDs bleiben erhalten und 17 noch wirkungslose Folgeknoten bleiben sichtbar, aber unbelegbar. `Seltene Upgrades` erhöht die kombinierte Magic-/Rare-Wahrscheinlichkeit pro Rang relativ um exakt 5 Prozent: aus 30 Prozent werden bei Rang 1/2/3 31,5/33,075/34,72875 Prozent, während das Verhältnis Magic:Rare 5:1 bleibt. `Abwehrzellen zuerst` garantiert ab Fall 3 die erste Level-up-Auswahl. `Stoß verursacht Schaden` gibt 20 Basisschaden und schaltet die endlose +6/+10/+14-Schadensfamilie frei. `Behandlungsgrundlage` addiert je Rang 20 Prozent des unveränderten Behandlungsbasiswerts vor der einmaligen Ganzzahlauflösung; `Impulsexplosion` fügt beim Impulstreffer 10 Prozent Flächenschaden im kleinen Radius hinzu und rechnet ihn derselben Impulsstatistik zu. Das Ergebnis zeigt Fähigkeitsschäden standardmäßig eingeklappt unter dem vollständig klickbaren Header `Fähigkeiten`; nach Fall 2 erscheint `Talente freigeschaltet` zusätzlich im unteren Freischaltungsbereich und aktive Talentränge stehen im Disclosure. Boss 2 feuert relativ 15 Prozent langsamer, sein Schussratenfaktor sinkt von 1,8 auf 1,53; Projektiltempo und Flugmuster bleiben unverändert. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

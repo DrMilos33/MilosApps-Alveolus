@@ -218,18 +218,40 @@ the first successful completion of Fall 3, its first level-up is a scripted
 three-card presentation of the canonical `neutrophils` acquisition. Its three
 transient presentation IDs normalize back to that stable ID before
 `PlayerStats` mutates the run, and reroll is rejected both in presentation and
-handler. After that persisted victory, the first level-up uses the normal pool.
+handler. After that persisted victory, the first level-up uses the normal pool
+unless the immutable run snapshot contains `defense_cells_first`.
+`UpgradeDefinition.required_talent_ids` is an AND-gate evaluated only against
+that `RunContext.talent_snapshot`. The ranked rarity talent supplies an exact
+relative probability multiplier. The builder converts it to draw odds before
+scaling Magic and Rare, so a 5-percent relative increase changes their combined
+30-percent probability to exactly 31.5 percent while Common stays the
+complement and Magic:Rare stays 5:1.
 
-Savegame version 7 and `talent_tree_revision` 4 are the current outer formats.
+Talent combat effects are compiled once when the run build is configured.
+`PlayerStats.treatment_damage_with_base_bonus()` combines research percentage
+and the linear 20-percent-per-rank treatment talent against the immutable
+authored treatment base, then rounds exactly once before additive run cards.
+The Stoß damage talent contributes a tagged `ABILITY_DAMAGE +20` source; only
+then may its talent-gated +6/+10/+14 family enter the pool. Impulse projectiles
+carry raw shot damage into a Game-owned hit callback. That boundary resolves
+the primary hit, snapshots the generation-safe nearby handles for the optional
+10-percent splash and maps both applied amounts back to the stable Impuls result
+statistic. `TherapyProjectile` owns travel and impact timing, never talent or
+damage-stat policy.
+
+Savegame version 7 and `talent_tree_revision` 6 are the current outer formats.
 The v6-to-v7 migration maps the old highest completed campaign order
 `0/1/2/3` to `0/2/4/6` while retaining stable case IDs, records, seeds,
 loadouts, talents and already claimed research. Retired offline-research and
 clinic-job fields are read only as legacy input and are never written again.
-The treatment tree contains exactly four ranked definitions: the root
-Treatment Damage Training plus Spread Penetration, Manual Treatment Aim and
-Piercing Persistence. `piercing_return` is absent from the active catalog and
-its ID remains retired. Loading revision 3 discards/refunds that whole
-selection atomically while preserving mastery, research and earned points. The
+The visible talent catalog contains 26 nodes in three independently presented
+trees: Upgrades, Active Abilities and Treatments. Nine nodes are selectable;
+17 future nodes are explicit non-purchasable placeholders. The treatment tree
+keeps the stable revision-5 IDs for Treatment Damage Training, Manual Treatment
+Aim, Spread Shotgun and Piercing Persistence and adds Impulse Splash as its
+fourth lane. `piercing_return` and `spread_penetration` remain retired. Loading
+any older tree revision discards/refunds that whole selection atomically while
+preserving mastery, research and earned points. The
 inner loadout adapter can retain its older schema version independently; it is
 not the savegame version. Campaign cases resolve `prepared_loadouts` through the
 additive `campaign_shared` key. Intro and practice never use that shared key.
@@ -242,7 +264,9 @@ The temporary unlimited progression mode is runtime configuration rather than
 save data and must be set on `MetaProgressionState` before deserialization. In
 that mode both research and talent economies expose a resettable one-billion
 point pool. Current-revision selections are still validated atomically against
-stable IDs, rank limits, prerequisites and the active economy mode.
+stable IDs, rank limits, prerequisites, the explicit `implemented` flag and the
+active economy mode. `RunContext` snapshots ranks at run start; later meta
+edits never mutate an active run.
 
 ## Typed damage and player durability
 

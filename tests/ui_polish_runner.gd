@@ -80,7 +80,7 @@ func _run() -> void:
 
 	var meta := MetaProgressionState.new()
 	meta.set_unlimited_test_progression(true)
-	_check(meta.set_talent_active(&"treatment_damage_training", true), "Der Testzustand aktiviert die Revision-4-Wurzel des Behandlungsbaums")
+	_check(meta.set_talent_active(&"treatment_damage_training", true), "Der Testzustand aktiviert die Revision-6-Wurzel des Behandlungsbaums")
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
 	await process_frame
 	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 10, "Die zehn aktiven Forschungen zeigen bei 1280 Pixeln vier kompakte Spalten")
@@ -89,8 +89,8 @@ func _run() -> void:
 		_check((research_card as Control).custom_minimum_size.y <= 76.0, "Forschungskarten überschreiten die kompakte Höhe nicht")
 	hud._select_research_tab(&"talents")
 	await process_frame
-	_check(hud.talent_grid.get_child_count() == 1, "Talente zeigen den einen aktiven Behandlungsbaum")
-	_check(hud.talent_buttons.size() == 4, "Alle vier Talente bleiben im Behandlungsbaum erreichbar")
+	_check(hud.talent_grid.get_child_count() == 3, "Talente zeigen die drei aktiven Talentbaeume")
+	_check(hud.talent_buttons.size() == 26, "Alle 26 aktiven und reservierten Talentknoten bleiben erreichbar")
 	var talent_tree_count := 0
 	var talent_node_count := 0
 	var talent_edge_count := 0
@@ -106,9 +106,9 @@ func _run() -> void:
 			_check(branch.get_child_count() == branch.node_count(), "Talentverbindungen werden als ruhige Linien gezeichnet und erzeugen keine zusätzlichen Kreispunkt-Controls")
 			for node in branch.get_children():
 				_check(node is Button, "Im Talentbaum bleiben ausschließlich die interaktiven Knoten als Controls bestehen")
-	_check(talent_tree_count == 1 and talent_node_count == 4, "Der aktive Bereich besitzt einen echten verzweigten Behandlungsbaum")
-	_check(talent_edge_count == 3, "Alle drei Abhängigkeiten bleiben als Baumverbindungen erhalten")
-	_check(branch_accents.size() == 1, "Der Behandlungsbaum verwendet einen einheitlichen Astakzent")
+	_check(talent_tree_count == 3 and talent_node_count == 26, "Der aktive Bereich besitzt drei echte verzweigte Talentbaeume")
+	_check(talent_edge_count == 23, "Alle 23 Abhaengigkeiten bleiben als Baumverbindungen erhalten")
+	_check(branch_accents.size() == 3, "Jeder Talentbaum verwendet seinen eigenen einheitlichen Astakzent")
 	for talent_button in hud.talent_buttons.values():
 		var node_button := talent_button as Button
 		_check(node_button.custom_minimum_size.y <= TalentTreeBranch.NODE_HEIGHT, "Talentknoten bleiben auf die kompakte Baumhöhe begrenzt")
@@ -118,7 +118,7 @@ func _run() -> void:
 	var active_state_icon := active_talent.find_child("StateIcon", true, false) as SimpleIcon
 	_check(active_talent.get_meta(&"item_state", &"") == &"active" and active_talent.theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_TALENT_NODE and active_state_icon != null and active_state_icon.kind == &"check", "Aktive Talente werden durch Highlight und Check-Icon statt Statustext markiert")
 	var available_talent := hud.talent_buttons[&"manual_treatment_aim"] as Button
-	_check(available_talent.get_meta(&"item_state", &"") == &"available" and bool(available_talent.get_meta(&"item_interactive", false)), "Nach aktiver Wurzel sind die drei Revision-4-Kinder ohne künstliche Zwischenstufe verfügbar")
+	_check(available_talent.get_meta(&"item_state", &"") == &"available" and bool(available_talent.get_meta(&"item_interactive", false)), "Nach aktiver Wurzel sind die vier Behandlungszweige ohne kuenstliche Zwischenstufe verfuegbar")
 	_check(not hud.talent_buttons.has(&"piercing_return"), "Die reservierte Revision-3-ID piercing_return erscheint nicht mehr im aktiven Talentbaum")
 
 	var finding_reactions: Array = [

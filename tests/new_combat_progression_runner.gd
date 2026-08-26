@@ -88,12 +88,14 @@ func _test_global_research_is_idempotent() -> void:
 		stats.configure_prepared_treatment(treatment)
 		stats.apply_meta_progression(ranks)
 		var expected_damage := float(roundi(treatment.base_damage * 1.06))
+		var expected_max_talent_damage := float(roundi(treatment.base_damage * 1.66))
 		_near(PlayerStats.BASE_MAX_HEALTH + stats.max_stability_bonus, 59.0, "Lebensforschung gilt global")
 		_near(stats.therapy_damage, expected_damage, "Schadensforschung gilt für jede Grundbehandlung")
 		_near(stats.experience_gain_multiplier, 1.15, "Erfahrungsforschung gilt global")
 		_near(stats.defense, 6.0, "Defensivforschung gilt global")
 		_near(stats.life_regeneration_per_second, 0.75, "Regenerationsforschung gilt global")
 		_near(stats.movement_speed, 186.0, "Galoppforschung gilt global und bleibt ganzzahlig")
+		_near(stats.treatment_damage_with_base_bonus(0.60), expected_max_talent_damage, "Forschung und drei Talentstufen addieren ihre Basisprozente vor genau einer Ganzzahlauflösung")
 
 		stats.apply_meta_progression(ranks)
 		_near(stats.therapy_damage, expected_damage, "Wiederholtes Anwenden vervielfacht den Grundschaden nicht")
@@ -105,6 +107,7 @@ func _test_global_research_is_idempotent() -> void:
 
 		stats.apply_meta_progression({})
 		_near(stats.therapy_damage, treatment.base_damage, "Ein Forschungsreset stellt den Behandlungsschaden wieder her")
+		_near(stats.treatment_damage_with_base_bonus(0.60), float(roundi(treatment.base_damage * 1.60)), "Das Talent erhöht ausschließlich den unveränderten Behandlungsbasiswert")
 		_near(stats.max_stability_bonus, 0.0, "Ein Forschungsreset stellt das Basisleben wieder her")
 		_near(stats.experience_gain_multiplier, 1.0, "Ein Forschungsreset stellt den Erfahrungsfaktor wieder her")
 		_near(stats.defense, PlayerStats.BASE_DEFENSE, "Ein Forschungsreset stellt die Basisdefensive wieder her")
@@ -135,39 +138,63 @@ func _test_experience_fraction_is_carried() -> void:
 
 
 func _test_ranked_talent_contract_and_reset() -> void:
-	var expected_max_ranks := {
-		&"treatment_damage_training": 1,
-		&"manual_treatment_aim": 1,
-		&"spread_shotgun": 1,
-		&"piercing_persistence": 2,
-	}
 	var definitions := TalentDefinition.definitions()
-	_equal(definitions.size(), expected_max_ranks.size(), "Der Behandlungstalentbaum enthält exakt vier Talente")
-	_equal(TalentDefinition.total_cost(), 5, "Der vollständige Talentbaum kostet fünf Rangpunkte")
+	var catalog := TalentDefinition.catalog()
+	_equal(definitions.size(), 26, "Talentbaumrevision 6 enthält die drei vollständigen Baumgerüste")
+	var tree_ids: Dictionary = {}
+	var treatment_branch_lanes: Dictionary = {}
 	for definition in definitions:
-		_true(expected_max_ranks.has(definition.id), "Der Talentbaum enthält keine entfernten Talent-IDs")
-		if not expected_max_ranks.has(definition.id):
-			continue
-		_equal(definition.max_rank, int(expected_max_ranks[definition.id]), "Jedes Talent besitzt seine vorgesehene Ranggrenze")
+		tree_ids[definition.tree_id] = true
+		if definition.tree_id == &"treatment" and definition.tree_tier == 1:
+			treatment_branch_lanes[definition.tree_lane] = definition.id
+	_equal(tree_ids.size(), 3, "Upgrades, aktive Fähigkeiten und Behandlungen sind getrennte Bäume")
+	_equal(treatment_branch_lanes.size(), 4, "Der Behandlungsbaum verzweigt in genau vier Lanes")
+	_equal(treatment_branch_lanes.get(0), &"manual_treatment_aim", "Lane 0 behält die allgemeine Zielsteuerung")
+	_equal(treatment_branch_lanes.get(1), &"spread_shotgun", "Lane 1 behält den Streuimpuls")
+	_equal(treatment_branch_lanes.get(2), &"piercing_persistence", "Lane 2 behält den durchdringenden Impuls")
+	_equal(treatment_branch_lanes.get(3), &"impulse_splash", "Lane 3 ergänzt die Impulsexplosion")
+	for stable_id in [&"treatment_damage_training", &"manual_treatment_aim", &"spread_shotgun", &"piercing_persistence"]:
+		_true(catalog.has(stable_id), "%s bleibt als bestehende Talent-ID erhalten" % String(stable_id))
 
 	var meta := MetaProgressionState.new(func() -> int: return 0)
 	meta.reset_defaults(0)
 	meta.set_unlimited_test_progression(true)
+	_true(not meta.purchase_talent_rank(&"defense_cells_first"), "Der Abwehrzellenast kann sein Seltenheits-Wurzeltalent nicht überspringen")
+	for _rank in range(3):
+		_true(meta.purchase_talent_rank(&"upgrade_rarity_training"), "Alle drei Ränge mit je fünf Prozent Seltenheitsgewicht sind kaufbar")
+	_true(not meta.purchase_talent_rank(&"upgrade_rarity_training"), "Das Seltenheitstalent bleibt bei drei Rängen gedeckelt")
+	_equal(meta.talent_rank(&"upgrade_rarity_training"), 3, "Der Seltenheitsrang wird vollständig gespeichert")
+	_true(meta.purchase_talent_rank(&"defense_cells_first"), "Abwehrzellen zuerst wird nach dem Upgrade-Wurzeltalent kaufbar")
+	_true(not meta.set_talent_active(&"upgrade_rarity_training", false), "Ein belegtes Upgrade-Gateway wird nicht unter seinem Kind entfernt")
+
+	_true(not meta.purchase_talent_rank(&"defense_burst_damage"), "Stoßschaden kann das aktive Gateway nicht überspringen")
+	_true(meta.purchase_talent_rank(&"active_foundation_placeholder"), "Die wirkungslose Aktivgrundlage ist ausdrücklich als Gateway kaufbar")
+	_true(meta.purchase_talent_rank(&"defense_burst_damage"), "Stoßschaden wird nach dem aktiven Gateway kaufbar")
+	_true(not meta.set_talent_active(&"active_foundation_placeholder", false), "Das aktive Gateway bleibt erhalten, solange Stoßschaden darauf aufbaut")
+
 	_true(not meta.purchase_talent_rank(&"spread_shotgun"), "Das Schrotwirkungstalent kann seine Voraussetzung nicht überspringen")
-	_true(meta.purchase_talent_rank(&"treatment_damage_training"), "Die Behandlungsgrundlage kann gekauft werden")
+	_true(not meta.purchase_talent_rank(&"impulse_splash"), "Die Impulsexplosion kann ihre Behandlungsgrundlage nicht überspringen")
+	for _rank in range(3):
+		_true(meta.purchase_talent_rank(&"treatment_damage_training"), "Alle drei Behandlungsgrundlagenränge mit je 20 Prozent sind kaufbar")
+	_true(not meta.purchase_talent_rank(&"treatment_damage_training"), "Die Behandlungsgrundlage bleibt bei drei Rängen gedeckelt")
+	_equal(meta.talent_rank(&"treatment_damage_training"), 3, "Der Behandlungsgrundlagenrang wird vollständig gespeichert")
 	_true(meta.purchase_talent_rank(&"manual_treatment_aim"), "Die manuelle Zielsteuerung kann unter der Grundlage gekauft werden")
 	_true(meta.purchase_talent_rank(&"spread_shotgun"), "Schrotwirkung kann nach der Grundlage gekauft werden")
 	_true(not meta.purchase_talent_rank(&"spread_shotgun"), "Schrotwirkung bleibt auf einen Rang gedeckelt")
 	for _rank in range(2):
 		_true(meta.purchase_talent_rank(&"piercing_persistence"), "Beide Laserdauerränge können gekauft werden")
 	_true(not meta.purchase_talent_rank(&"piercing_persistence"), "Die Laserdauer bleibt bei zwei Rängen gedeckelt")
+	_true(meta.purchase_talent_rank(&"impulse_splash"), "Die neue Impulsexplosion ist nach der Behandlungsgrundlage kaufbar")
+	for definition in definitions:
+		if not definition.implemented:
+			_true(not meta.purchase_talent_rank(definition.id), "%s bleibt als unimplementierter Platzhalter nicht kaufbar" % String(definition.id))
 	_true(not TalentDefinition.catalog().has(&"piercing_return"), "Der rückkehrende Laser bleibt aus dem aktiven Katalog entfernt")
-	_equal(meta.talent_points_spent(), 5, "Alle Talentränge werden einzeln berechnet")
+	_equal(meta.talent_points_spent(), 14, "Nur die neun implementierten Knoten und ihre Ränge werden berechnet")
 
 	meta.clear_talents()
 	_equal(meta.talent_points_spent(), 0, "Der Talentreset gibt alle Rangpunkte frei")
-	_true(meta.talent_ranks.is_empty(), "Der Talentreset entfernt alle vier Talente")
-	for talent_id in expected_max_ranks:
+	_true(meta.talent_ranks.is_empty(), "Der Talentreset entfernt Ränge aus allen drei Bäumen")
+	for talent_id in catalog:
 		_equal(meta.talent_rank(talent_id), 0, "Nach dem Reset besitzt kein Talent einen Rest-Rang")
 	meta.clear_talents()
 	_true(meta.talent_ranks.is_empty(), "Ein wiederholter Talentreset bleibt idempotent")

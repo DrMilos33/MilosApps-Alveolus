@@ -381,12 +381,18 @@ func _run() -> void:
 	_check(sound_service.next_player == (sound_before_locked_research + 1) % UISoundService.PLAYER_COUNT, "Eine gesperrte Forschung erzeugt genau einen Fehler-Cue")
 	hud._select_research_tab(&"talents")
 	_check(hud.talent_content.visible and not hud.research_content.visible, "Talenttab ersetzt Forschung ohne neue Seite")
-	_check(hud.talent_buttons.size() == 4 and hud.talent_grid.get_child_count() == 1, "Talentbaum baut vier Talente in einem Behandlungsast auf")
+	_check(hud.talent_buttons.size() == 26 and hud.talent_grid.get_child_count() == 3, "Talenttab baut die drei produktiven Bäume mit allen sichtbaren Platzhaltern auf")
 	for talent_button in hud.talent_buttons.values():
 		_check((talent_button as Button).tooltip_text.is_empty(), "Talente nutzen ausschließlich die gemeinsame Kontextkarte")
+	var expected_tree_topology := {
+		"TalentBranch_upgrades": Vector2i(6, 5),
+		"TalentBranch_active": Vector2i(4, 3),
+		"TalentBranch_treatment": Vector2i(16, 15),
+	}
 	for branch_panel in hud.talent_grid.get_children():
 		var branch := (branch_panel as Control).find_child("Tree", true, false) as TalentTreeBranch
-		_check(branch != null and branch.node_count() == 4 and branch.edge_count() == 3, "Der Talentast besitzt Einstieg, Voraussetzungen und eine sichtbare Verzweigung")
+		var expected: Vector2i = expected_tree_topology.get(String(branch_panel.name), Vector2i.ZERO)
+		_check(branch != null and branch.node_count() == expected.x and branch.edge_count() == expected.y, "Jeder Talentbaum besitzt seine vollständige, gezeichnete Topologie")
 		_check(branch_panel is VBoxContainer and (branch_panel as Control).theme_type_variation != AlveolusVisualTheme.TYPE_ACTION_CARD, "Der kompakte Talentbaum verwendet keine große Astkarte")
 	await process_frame
 	await process_frame
@@ -394,17 +400,19 @@ func _run() -> void:
 	var spread_branch := hud.talent_buttons[&"spread_shotgun"] as Button
 	var manual_branch := hud.talent_buttons[&"manual_treatment_aim"] as Button
 	var persistence_branch := hud.talent_buttons[&"piercing_persistence"] as Button
+	var impulse_branch := hud.talent_buttons[&"impulse_splash"] as Button
 	_check(
-		int(treatment_root.get_meta(&"talent_rank_maximum", 0)) == 1
+		int(treatment_root.get_meta(&"talent_rank_maximum", 0)) == 3
 		and int(spread_branch.get_meta(&"talent_rank_maximum", 0)) == 1
 		and String(spread_branch.get_meta(&"alveolus_accessible_name", "")).contains("Rang 0 von 1"),
 		"Produktive Talentwerte steuern Rangpips und Accessible Name direkt"
 	)
 	var root_child := treatment_root.get_node_or_null(treatment_root.focus_neighbor_bottom) as Button
 	var branch_sibling := spread_branch.get_node_or_null(spread_branch.focus_neighbor_right) as Button
-	var branch_sibling_right := manual_branch.get_node_or_null(manual_branch.focus_neighbor_right) as Button
-	_check(root_child in [spread_branch, manual_branch, persistence_branch], "D-Pad nach unten folgt vom Wurzeltalent einem gezeichneten Kind")
-	_check(branch_sibling == manual_branch and branch_sibling_right == persistence_branch, "D-Pad seitwärts folgt den drei Geschwistertalenten derselben Baumstufe")
+	var branch_sibling_left := manual_branch.get_node_or_null(manual_branch.focus_neighbor_right) as Button
+	var branch_sibling_right := persistence_branch.get_node_or_null(persistence_branch.focus_neighbor_right) as Button
+	_check(root_child in [manual_branch, spread_branch, persistence_branch, impulse_branch], "D-Pad nach unten folgt vom Wurzeltalent einem gezeichneten Kind")
+	_check(branch_sibling_left == spread_branch and branch_sibling == persistence_branch and branch_sibling_right == impulse_branch, "D-Pad seitwärts folgt den vier Geschwistertalenten derselben Baumstufe")
 	_check(treatment_root.get_node_or_null(treatment_root.focus_neighbor_top) == hud.talent_tab_button, "D-Pad kann den Behandlungsbaum nach oben zu den festen Tabs verlassen")
 	_check(not hud.talent_buttons.has(&"piercing_return"), "Die reservierte Revision-3-ID piercing_return erscheint nicht mehr im aktiven Talentbaum")
 	_check(treatment_root.custom_minimum_size.y <= 76.0, "Talentknoten bleiben auf die kompakte Baumdichte begrenzt")
@@ -436,7 +444,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var focus_after_reset := get_root().gui_get_focus_owner()
-	var first_tree_root := hud.talent_buttons[&"treatment_damage_training"] as Button
+	var first_tree_root := hud.talent_buttons[&"upgrade_rarity_training"] as Button
 	_check(hud.talent_reset_button.disabled and focus_after_reset == first_tree_root, "Nach dem Talent-Reset wechselt der Fokus vom deaktivierten Reset sicher zum ersten Baumknoten")
 	_check(_inside_viewport(first_tree_root, get_root().size), "Der Fokus nach dem Talent-Reset bleibt sichtbar im Talentbaum")
 

@@ -7,8 +7,11 @@ const GENERAL_WEIGHT := 1.0
 const COMMON_FREQUENCY := 1.0
 const MAGIC_FREQUENCY := 25.0 / 70.0
 const RARE_FREQUENCY := 5.0 / 70.0
+const BASE_HIGHER_RARITY_PROBABILITY := 0.30
 
 
+## The trailing talent context preserves all legacy positional calls. The
+## rarity factor scales Magic/Rare variants and singleton families, not Common.
 static func choose(
 	definitions: Array[UpgradeDefinition],
 	levels: Dictionary,
@@ -18,7 +21,9 @@ static func choose(
 	count: int = 3,
 	excluded_ids: Array[StringName] = [],
 	guarantee_treatment: bool = false,
-	campaign_case_order: int = -1
+	campaign_case_order: int = -1,
+	talent_ranks: Dictionary = {},
+	higher_rarity_factor: float = 1.0
 ) -> Array[UpgradeDefinition]:
 	var prepared_treatment_id := _prepared_treatment_id(prepared_component_ids)
 	var family_counts := _resolved_family_counts(definitions, levels, prepared_treatment_id)
@@ -40,11 +45,25 @@ static func choose(
 			continue
 		if not _upgrade_requirements_met(definition, levels):
 			continue
+		if not _talent_requirements_met(definition, talent_ranks):
+			continue
 		if not _requirements_met(definition, prepared_component_ids):
 			continue
 		candidates.append(definition)
 	if _unique_family_count(candidates, prepared_treatment_id) < count and not excluded_ids.is_empty():
-		return choose(definitions, levels, rng, prepared_component_ids, prepared_tags, count, [], guarantee_treatment, campaign_case_order)
+		return choose(
+			definitions,
+			levels,
+			rng,
+			prepared_component_ids,
+			prepared_tags,
+			count,
+			[],
+			guarantee_treatment,
+			campaign_case_order,
+			talent_ranks,
+			higher_rarity_factor
+		)
 
 	var selected: Array[UpgradeDefinition] = []
 	if guarantee_treatment and prepared_treatment_id != &"":
@@ -59,7 +78,8 @@ static func choose(
 				prepared_component_ids,
 				prepared_tags,
 				family_counts,
-				prepared_treatment_id
+				prepared_treatment_id,
+				higher_rarity_factor
 			)
 			selected.append(guaranteed)
 			_erase_family(candidates, guaranteed.resolved_family_key(prepared_treatment_id), prepared_treatment_id)
@@ -71,7 +91,8 @@ static func choose(
 			prepared_component_ids,
 			prepared_tags,
 			family_counts,
-			prepared_treatment_id
+			prepared_treatment_id,
+			higher_rarity_factor
 		)
 		selected.append(picked)
 		_erase_family(candidates, picked.resolved_family_key(prepared_treatment_id), prepared_treatment_id)
@@ -101,7 +122,8 @@ static func _weighted_family_pick(
 	prepared_component_ids: Array[StringName],
 	prepared_tags: Array[StringName],
 	family_counts: Dictionary,
-	prepared_treatment_id: StringName
+	prepared_treatment_id: StringName,
+	higher_rarity_factor: float
 ) -> UpgradeDefinition:
 	var family_keys: Array[StringName] = []
 	var family_weights := PackedFloat32Array()
@@ -115,7 +137,7 @@ static func _weighted_family_pick(
 			prepared_component_ids,
 			prepared_tags,
 			int(family_counts.get(family_key, 0))
-		) * _family_rarity_frequency(candidates, family_key, prepared_treatment_id)
+		) * _family_rarity_frequency(candidates, family_key, prepared_treatment_id, higher_rarity_factor)
 		family_keys.append(family_key)
 		family_weights.append(family_weight)
 		total += family_weight
@@ -126,14 +148,15 @@ static func _weighted_family_pick(
 		if cursor <= 0.0:
 			selected_family = family_keys[index]
 			break
-	return _weighted_rarity_pick(candidates, selected_family, rng, prepared_treatment_id)
+	return _weighted_rarity_pick(candidates, selected_family, rng, prepared_treatment_id, higher_rarity_factor)
 
 
 static func _weighted_rarity_pick(
 	candidates: Array[UpgradeDefinition],
 	family_key: StringName,
 	rng: RandomNumberGenerator,
-	prepared_treatment_id: StringName
+	prepared_treatment_id: StringName,
+	higher_rarity_factor: float
 ) -> UpgradeDefinition:
 	var variants: Array[UpgradeDefinition] = []
 	var total := 0.0
@@ -141,28 +164,58 @@ static func _weighted_rarity_pick(
 		if definition.resolved_family_key(prepared_treatment_id) != family_key:
 			continue
 		variants.append(definition)
-		total += maxf(definition.rarity_weight, 0.001)
+		total += adjusted_rarity_weight(definition.rarity_weight, definition.rarity, higher_rarity_factor)
 	var cursor := rng.randf() * maxf(total, 0.001)
 	for definition in variants:
-		cursor -= maxf(definition.rarity_weight, 0.001)
+		cursor -= adjusted_rarity_weight(definition.rarity_weight, definition.rarity, higher_rarity_factor)
 		if cursor <= 0.0:
 			return definition
 	return variants.back()
 
 
-static func rarity_frequency(rarity: UpgradeDefinition.Rarity) -> float:
+static func adjusted_rarity_weight(
+	base_weight: float,
+	rarity: UpgradeDefinition.Rarity,
+	higher_rarity_factor: float = 1.0
+) -> float:
+	var weight := maxf(base_weight, 0.001)
+	if rarity == UpgradeDefinition.Rarity.MAGIC or rarity == UpgradeDefinition.Rarity.RARE:
+		weight *= maxf(higher_rarity_factor, 0.001)
+	return weight
+
+
+## Converts an exact relative probability multiplier into the weight factor
+## required by the 70/25/5 draw. For example, 1.05 moves the combined
+## Magic-or-Rare probability from 30.0% to exactly 31.5%, not 35.0%.
+static func relative_higher_rarity_weight_factor(relative_probability_multiplier: float) -> float:
+	var target_probability := clampf(
+		BASE_HIGHER_RARITY_PROBABILITY * maxf(relative_probability_multiplier, 0.0),
+		0.0,
+		0.999
+	)
+	var base_odds := BASE_HIGHER_RARITY_PROBABILITY / (1.0 - BASE_HIGHER_RARITY_PROBABILITY)
+	var target_odds := target_probability / maxf(1.0 - target_probability, 0.001)
+	return target_odds / base_odds
+
+
+static func rarity_frequency(
+	rarity: UpgradeDefinition.Rarity,
+	higher_rarity_factor: float = 1.0
+) -> float:
+	var factor := maxf(higher_rarity_factor, 0.001)
 	match rarity:
 		UpgradeDefinition.Rarity.MAGIC:
-			return MAGIC_FREQUENCY
+			return MAGIC_FREQUENCY * factor
 		UpgradeDefinition.Rarity.RARE:
-			return RARE_FREQUENCY
+			return RARE_FREQUENCY * factor
 	return COMMON_FREQUENCY
 
 
 static func _family_rarity_frequency(
 	candidates: Array[UpgradeDefinition],
 	family_key: StringName,
-	prepared_treatment_id: StringName
+	prepared_treatment_id: StringName,
+	higher_rarity_factor: float
 ) -> float:
 	# A complete Common/Magic/Rare family remains a normal offer family and
 	# resolves its tier through rarity_weight. A singleton Magic or Rare family
@@ -171,8 +224,8 @@ static func _family_rarity_frequency(
 	var frequency := 0.0
 	for definition in candidates:
 		if definition.resolved_family_key(prepared_treatment_id) == family_key:
-			frequency = maxf(frequency, rarity_frequency(definition.rarity))
-	return maxf(frequency, RARE_FREQUENCY)
+			frequency = maxf(frequency, rarity_frequency(definition.rarity, higher_rarity_factor))
+	return maxf(frequency, 0.001)
 
 
 static func _erase_family(
@@ -226,6 +279,13 @@ static func _requirements_met(definition: UpgradeDefinition, prepared_component_
 static func _upgrade_requirements_met(definition: UpgradeDefinition, levels: Dictionary) -> bool:
 	for required_id in definition.required_upgrade_ids:
 		if int(levels.get(required_id, 0)) <= 0:
+			return false
+	return true
+
+
+static func _talent_requirements_met(definition: UpgradeDefinition, talent_ranks: Dictionary) -> bool:
+	for required_id in definition.required_talent_ids:
+		if int(talent_ranks.get(required_id, 0)) <= 0:
 			return false
 	return true
 

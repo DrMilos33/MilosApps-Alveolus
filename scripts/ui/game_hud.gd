@@ -420,6 +420,9 @@ var result_title_text: String = ""
 var result_reason_text: String = ""
 var result_detail_text: String = ""
 var result_stats_data: Array[ResultOverlayViewModel.StatViewModel] = []
+var result_ability_damage_stats_data: Array[ResultOverlayViewModel.StatViewModel] = []
+var result_talent_stats_data: Array[ResultOverlayViewModel.StatViewModel] = []
+var result_talents_unlocked: bool = false
 var result_reward_text: String = ""
 var result_reward_items: Array[ResultOverlayViewModel.RewardViewModel] = []
 var result_unlock_text: String = ""
@@ -2219,14 +2222,28 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 	progression_talent_balance = "Talentbaum erneuert · Punkte zurück · %s" % balance if refunded else balance
 	progression_talent_reset_enabled = progression_talents_unlocked and spent > 0
 	var grouped: Dictionary = {}
+	var tree_presentations: Dictionary = {}
 	for talent in _variant_array(_view_value(talent_view, &"talents", [])):
-		var category := _talent_category_text(_view_value(talent, &"category", &""))
-		var category_items: Array = grouped.get(category, [])
-		category_items.append(talent)
-		grouped[category] = category_items
-	for category in ["BEHANDLUNG"]:
+		var tree_id := StringName(_view_value(talent, &"tree_id", _view_value(talent, &"category", &"treatment")))
+		var tree_items: Array = grouped.get(tree_id, [])
+		tree_items.append(talent)
+		grouped[tree_id] = tree_items
+		if not tree_presentations.has(tree_id):
+			tree_presentations[tree_id] = {
+				"title": String(_view_value(talent, &"tree_title", _talent_category_text(tree_id).capitalize())),
+				"icon_id": StringName(_view_value(talent, &"tree_icon_id", _talent_icon_kind(String(tree_id)))),
+			}
+	var tree_order: Array[StringName] = [&"upgrades", &"active", &"treatment"]
+	for tree_id_value in grouped:
+		var discovered_tree_id := StringName(tree_id_value)
+		if not tree_order.has(discovered_tree_id):
+			tree_order.append(discovered_tree_id)
+	for tree_id in tree_order:
+		var presentation: Dictionary = tree_presentations.get(tree_id, {})
+		var tree_title := String(presentation.get("title", String(tree_id).capitalize()))
+		var tree_icon_id := StringName(presentation.get("icon_id", &"ability"))
 		var node_models: Array = []
-		for talent in grouped.get(category, []):
+		for talent in grouped.get(tree_id, []):
 			var id := StringName(_view_value(talent, &"id", &""))
 			var title := String(_view_value(talent, &"title", "Talent"))
 			var description := String(_view_value(talent, &"description", _view_value(talent, &"effect", "")))
@@ -2248,8 +2265,8 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 				requirement = "Benötigt %s" % requirement
 			elif not active and available_points < cost:
 				requirement = "%d Talentpunkte fehlen" % (cost - available_points)
-			var accent := _talent_branch_accent(category)
-			var icon_kind := _talent_icon_kind(category)
+			var accent := _talent_branch_accent(String(tree_id))
+			var icon_kind := tree_icon_id
 			var info := ProgressionScreenViewModel.InfoViewModel.create(
 				title,
 				description,
@@ -2273,12 +2290,11 @@ func _refresh_progression_talent_cache(talent_view: Variant) -> void:
 			))
 		if node_models.is_empty():
 			continue
-		var branch_id := &"treatment"
 		progression_talent_branches.append(ProgressionScreenViewModel.TalentBranchViewModel.create(
-			branch_id,
-			"Behandlungen",
-			_talent_icon_kind(category),
-			_talent_branch_accent(category),
+			tree_id,
+			tree_title,
+			tree_icon_id,
+			_talent_branch_accent(String(tree_id)),
 			node_models
 		))
 
@@ -2462,10 +2478,10 @@ func _add_talent_tree_branch(category: String, talents: Array, available_points:
 	panel.custom_minimum_size.y = branch.custom_minimum_size.y + 54.0
 
 func _talent_branch_accent(category: String) -> Color:
-	match category:
-		"BEHANDLUNG": return COLOR_TEAL
-		"PLANUNG": return COLOR_GOLD
-		"DIAGNOSE": return COLOR_RED
+	match category.to_upper():
+		"UPGRADES", "PLANUNG": return COLOR_GOLD
+		"ACTIVE", "AKTIVE FÄHIGKEITEN", "DIAGNOSE": return COLOR_BLUE
+		"TREATMENT", "BEHANDLUNGEN", "BEHANDLUNG": return COLOR_TEAL
 		"EINSATZ": return COLOR_BLUE
 	return COLOR_TEAL
 
@@ -2492,18 +2508,22 @@ func _talent_view_from_meta(meta: MetaProgressionState, definitions: Array) -> D
 			requirement_titles.append(String(definition_titles.get(StringName(required_id), String(required_id))))
 			if not meta.has_talent(StringName(required_id)):
 				prerequisites_met = false
-				break
 		for candidate in definitions:
 			var candidate_id := StringName(_view_value(candidate, &"id", &""))
 			var candidate_requirements := PackedStringArray(_view_value(candidate, &"required_ids", PackedStringArray()))
 			if meta.has_talent(candidate_id) and candidate_requirements.has(String(definition_id)):
 				active_dependents.append(String(_view_value(candidate, &"title", String(candidate_id))))
+		var definition_tree_id := StringName(_view_value(definition, &"tree_id", &"treatment"))
 		cards.append({
 			"id": definition_id,
 			"title": _view_value(definition, &"title", "Talent"),
 			"description": _view_value(definition, &"description", ""),
 			"cost": next_cost,
-			"category": &"treatment",
+			"category": definition_tree_id,
+			"tree_id": definition_tree_id,
+			"tree_title": String(_view_value(definition, &"tree_title", "Behandlungen")),
+			"tree_icon_id": StringName(_view_value(definition, &"tree_icon_id", &"treatment")),
+			"unlocked": bool(_view_value(definition, &"implemented", true)),
 			"active": current_rank > 0,
 			"current_rank": current_rank,
 			"max_rank": max_rank,
@@ -3795,6 +3815,9 @@ func show_end(level: LevelDefinition, success: bool, reason: String, elapsed: fl
 		ResultOverlayViewModel.StatViewModel.new(&"analysis", "Erfahrungslevel", str(analysis_level), true),
 		ResultOverlayViewModel.StatViewModel.new(&"defeats", "Bakterien", str(defeats), false),
 	]
+	result_ability_damage_stats_data.clear()
+	result_talent_stats_data.clear()
+	result_talents_unlocked = false
 	result_reward_text = ""
 	result_reward_items.clear()
 	if reward > 0:
@@ -3829,6 +3852,9 @@ func show_practice_end(scenario_title: String, success: bool, reason: String, el
 		ResultOverlayViewModel.StatViewModel.new(&"analysis", "Erfahrungslevel", str(analysis_level), true),
 		ResultOverlayViewModel.StatViewModel.new(&"defeats", "Bakterien", str(defeats), false),
 	]
+	result_ability_damage_stats_data.clear()
+	result_talent_stats_data.clear()
+	result_talents_unlocked = false
 	result_reward_text = ""
 	result_reward_items.clear()
 	result_unlock_text = ""
@@ -3865,21 +3891,39 @@ func set_result_guidance(guidance: String) -> void:
 	_refresh_result_screen()
 
 func set_result_damage_statistics(statistics: Array[Dictionary]) -> void:
-	var retained: Array[ResultOverlayViewModel.StatViewModel] = []
-	for stat in result_stats_data:
-		if stat != null and not String(stat.get_id()).begins_with("damage:"):
-			retained.append(stat)
-	result_stats_data = retained
+	result_ability_damage_stats_data.clear()
 	for item in statistics:
 		var source_id := StringName(item.get("id", &""))
 		if source_id == &"":
 			continue
-		result_stats_data.append(ResultOverlayViewModel.StatViewModel.new(
+		result_ability_damage_stats_data.append(ResultOverlayViewModel.StatViewModel.new(
 			StringName("damage:%s" % String(source_id)),
 			String(item.get("label", String(source_id))),
 			"%d Schaden" % int(item.get("damage", 0)),
 			false
 		))
+	_refresh_result_screen()
+
+
+func set_result_talent_statistics(statistics: Array[Dictionary], unlocked: bool, newly_unlocked: bool = false) -> void:
+	result_talent_stats_data.clear()
+	result_talents_unlocked = unlocked
+	for item in statistics:
+		var talent_id := StringName(item.get("id", &""))
+		if talent_id == &"":
+			continue
+		result_talent_stats_data.append(ResultOverlayViewModel.StatViewModel.new(
+			StringName("talent:%s" % String(talent_id)),
+			String(item.get("label", String(talent_id))),
+			"Rang %d/%d" % [int(item.get("rank", 0)), int(item.get("max_rank", 1))],
+			false
+		))
+	if newly_unlocked:
+		var unlock_line := "Talente freigeschaltet"
+		if result_unlock_text.is_empty():
+			result_unlock_text = unlock_line
+		elif not result_unlock_text.contains(unlock_line):
+			result_unlock_text += "\n%s" % unlock_line
 	_refresh_result_screen()
 
 func _refresh_result_screen() -> void:
@@ -3899,7 +3943,10 @@ func _refresh_result_screen() -> void:
 		result_reward_items,
 		result_levels_action_text,
 		result_retry_action_text,
-		result_campus_action_text
+		result_campus_action_text,
+		result_ability_damage_stats_data,
+		result_talent_stats_data,
+		result_talents_unlocked
 	))
 	_map_result_compatibility_controls()
 
@@ -5341,9 +5388,9 @@ func _research_category_text(category: StringName) -> String:
 
 func _talent_icon_kind(category: String) -> StringName:
 	match category.to_upper():
-		"BEHANDLUNG": return &"treatment"
-		"PLANUNG": return &"plan"
-		"DIAGNOSE": return &"finding"
+		"TREATMENT", "BEHANDLUNGEN", "BEHANDLUNG": return &"treatment"
+		"UPGRADES", "PLANUNG": return &"research"
+		"ACTIVE", "AKTIVE FÄHIGKEITEN", "DIAGNOSE": return &"ability"
 		_: return &"ability"
 
 
@@ -5351,6 +5398,10 @@ func _talent_category_text(category: Variant) -> String:
 	var normalized := str(category).to_upper()
 	if normalized in ["TREATMENT", "BEHANDLUNG"]:
 		return "BEHANDLUNG"
+	if normalized in ["UPGRADES", "UPGRADE"]:
+		return "UPGRADES"
+	if normalized in ["ACTIVE", "AKTIVE FÄHIGKEITEN"]:
+		return "AKTIVE FÄHIGKEITEN"
 	if normalized in ["0", "PLANNING", "PLANUNG"]:
 		return "PLANUNG"
 	if normalized in ["1", "DIAGNOSIS", "DIAGNOSE"]:

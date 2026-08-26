@@ -10,6 +10,8 @@ const COMPACT_WIDTH := 700.0
 const MODAL_MAXIMUM_WIDTH := 660.0
 const MODAL_PADDING := 16
 const MINIMUM_BODY_VIEWPORT_HEIGHT := 34.0
+const SECTION_CHEVRON_SIZE := 20.0
+const ABILITY_SECTION_TITLE := "Fähigkeiten"
 const REWARD_PLACEHOLDERS: Array[String] = [
 	"+ irgendwas",
 	"+ maybe nochwas",
@@ -33,6 +35,12 @@ var _compact_secondary_grid: GridContainer
 var _levels_button: Button
 var _retry_button: Button
 var _campus_button: Button
+var _ability_section: PanelContainer
+var _ability_section_header: Button
+var _ability_section_body: VBoxContainer
+var _ability_damage_grid: GridContainer
+var _talent_grid: GridContainer
+var _ability_section_expanded := false
 var _compact_layout := false
 
 
@@ -130,6 +138,18 @@ func get_reward_column_count() -> int:
 	return _reward_grid.columns if _reward_grid != null else 0
 
 
+func get_ability_section_header() -> Button:
+	return _ability_section_header
+
+
+func get_ability_section_body() -> VBoxContainer:
+	return _ability_section_body
+
+
+func is_ability_section_expanded() -> bool:
+	return _ability_section_expanded
+
+
 func is_compact_layout() -> bool:
 	return _compact_layout
 
@@ -170,6 +190,12 @@ func _rebuild_modal() -> void:
 	for child in _modal_host.get_children():
 		_modal_host.remove_child(child)
 		child.queue_free()
+	_ability_section_expanded = false
+	_ability_section = null
+	_ability_section_header = null
+	_ability_section_body = null
+	_ability_damage_grid = null
+	_talent_grid = null
 
 	var accent := AlveolusVisualTheme.TEAL if _view_model.is_success() else AlveolusVisualTheme.CORAL
 	_body_content = VBoxContainer.new()
@@ -225,6 +251,7 @@ func _rebuild_modal() -> void:
 	if _stats_grid.get_child_count() > 0:
 		_body_content.add_child(_stats_grid)
 
+	_build_ability_section(_body_content)
 	_build_reward_strip(_body_content)
 	_add_optional_section(_body_content, &"unlock", "Freigeschaltet", _view_model.get_unlock_text(), &"archive", AlveolusVisualTheme.COBALT)
 	_add_optional_section(_body_content, &"mastery", "Meisterschaft", _view_model.get_mastery_text(), &"check", AlveolusVisualTheme.TURQUOISE)
@@ -282,7 +309,6 @@ func _rebuild_modal() -> void:
 	_compact_secondary_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	_compact_secondary_grid.hide()
 	_action_grid.add_child(_compact_secondary_grid)
-	_link_action_focus_cycle()
 
 	var modal_actions: Array[Control] = [_action_grid]
 	var sheet := AlveolusUIComponents.modal_sheet("", _scroll, modal_actions, MODAL_PADDING, accent)
@@ -294,6 +320,7 @@ func _rebuild_modal() -> void:
 	_modal.set_meta(&"result_success", _view_model.is_success())
 	_modal.set_meta(&"cancel_policy", CANCEL_POLICY)
 	_modal_host.add_child(_modal)
+	_link_action_focus_cycle()
 	if _scroll != null:
 		_scroll.follow_focus = false
 		_scroll.scroll_vertical = 0
@@ -308,9 +335,167 @@ func _link_action_focus_cycle() -> void:
 		var previous := actions[(index - 1 + actions.size()) % actions.size()]
 		var next := actions[(index + 1) % actions.size()]
 		action.focus_neighbor_left = action.get_path_to(previous)
-		action.focus_neighbor_top = action.get_path_to(previous)
 		action.focus_neighbor_right = action.get_path_to(next)
 		action.focus_neighbor_bottom = action.get_path_to(next)
+		action.focus_neighbor_top = (
+			action.get_path_to(_ability_section_header)
+			if _ability_section_header != null
+			else action.get_path_to(previous)
+		)
+	if _ability_section_header != null:
+		_ability_section_header.focus_neighbor_left = _ability_section_header.get_path_to(_campus_button)
+		_ability_section_header.focus_neighbor_top = _ability_section_header.get_path_to(_campus_button)
+		_ability_section_header.focus_neighbor_right = _ability_section_header.get_path_to(_levels_button)
+		_ability_section_header.focus_neighbor_bottom = _ability_section_header.get_path_to(_levels_button)
+
+
+func _build_ability_section(parent: VBoxContainer) -> void:
+	var ability_stats := _view_model.get_ability_damage_stats()
+	var talent_stats := _view_model.get_talent_stats()
+	var show_talents := _view_model.are_talents_unlocked() or not talent_stats.is_empty()
+	if ability_stats.is_empty() and not show_talents:
+		_ability_section_expanded = false
+		return
+
+	_ability_section = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_PANEL_INSET)
+	_ability_section.name = "AbilitySection"
+	_ability_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ability_section.set_meta(&"alveolus_component", &"stat_accordion_section")
+	_ability_section.set_meta(&"result_detail_section", &"abilities")
+	var stack := VBoxContainer.new()
+	stack.name = "AbilitySectionStack"
+	stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+
+	_ability_section_header = AlveolusUIComponents.action_button(
+		"",
+		AlveolusUIComponents.ACTION_QUIET
+	)
+	_ability_section_header.name = "AbilitySectionHeader"
+	_ability_section_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_ability_section_header.toggle_mode = true
+	_ability_section_header.focus_mode = Control.FOCUS_ALL
+	_ability_section_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ability_section_header.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	_ability_section_header.set_meta(&"result_detail_section", &"abilities")
+	_ability_section_header.toggled.connect(_on_ability_section_toggled)
+	_ability_section_header.focus_entered.connect(_ensure_ability_header_visible)
+	var header_inset := MarginContainer.new()
+	header_inset.name = "AbilitySectionHeaderInset"
+	header_inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	header_inset.add_theme_constant_override("margin_left", AlveolusVisualTheme.CONTROL_GAP)
+	header_inset.add_theme_constant_override("margin_right", AlveolusVisualTheme.CONTROL_GAP)
+	header_inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var header_row := HBoxContainer.new()
+	header_row.name = "AbilitySectionHeaderRow"
+	header_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	header_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header_inset.add_child(header_row)
+	var chevron := SimpleIcon.new()
+	chevron.name = "AbilitySectionChevron"
+	chevron.custom_minimum_size = Vector2.ONE * SECTION_CHEVRON_SIZE
+	chevron.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	chevron.configure(&"chevron_right", AlveolusVisualTheme.TURQUOISE)
+	chevron.set_meta(&"alveolus_component", &"accordion_chevron")
+	header_row.add_child(chevron)
+	var title := AlveolusUIComponents.label(
+		ABILITY_SECTION_TITLE,
+		AlveolusVisualTheme.TYPE_VALUE_LABEL
+	)
+	title.name = "AbilitySectionTitle"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header_row.add_child(title)
+	_ability_section_header.add_child(header_inset)
+	stack.add_child(_ability_section_header)
+
+	_ability_section_body = VBoxContainer.new()
+	_ability_section_body.name = "AbilitySectionBody"
+	_ability_section_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_ability_section_body.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	if not ability_stats.is_empty():
+		_ability_damage_grid = GridContainer.new()
+		_ability_damage_grid.name = "AbilityDamageRows"
+		_ability_damage_grid.columns = 1
+		_ability_damage_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_ability_damage_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
+		for stat in ability_stats:
+			var row := AlveolusUIComponents.value_row(stat.get_label(), stat.get_value(), stat.is_highlighted())
+			row.name = "AbilityDamage_%s" % String(stat.get_id())
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.set_meta(&"result_detail_kind", &"ability_damage")
+			_ability_damage_grid.add_child(row)
+		_ability_section_body.add_child(_ability_damage_grid)
+	if show_talents:
+		var talent_title := AlveolusUIComponents.label("Talente", AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
+		talent_title.name = "TalentSectionTitle"
+		_ability_section_body.add_child(talent_title)
+		if talent_stats.is_empty():
+			var empty_talents := AlveolusUIComponents.label(
+				"Noch keine Talente aktiv",
+				AlveolusVisualTheme.TYPE_MUTED_LABEL
+			)
+			empty_talents.name = "TalentEmptyState"
+			empty_talents.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			_ability_section_body.add_child(empty_talents)
+		else:
+			_talent_grid = GridContainer.new()
+			_talent_grid.name = "TalentRows"
+			_talent_grid.columns = 1
+			_talent_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_talent_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.GRID_UNIT)
+			for stat in talent_stats:
+				var row := AlveolusUIComponents.value_row(stat.get_label(), stat.get_value(), stat.is_highlighted())
+				row.name = "Talent_%s" % String(stat.get_id())
+				row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				row.set_meta(&"result_detail_kind", &"talent")
+				_talent_grid.add_child(row)
+			_ability_section_body.add_child(_talent_grid)
+	stack.add_child(_ability_section_body)
+	_ability_section.add_child(AlveolusUIComponents.margin(stack, AlveolusVisualTheme.GRID_UNIT))
+	parent.add_child(_ability_section)
+	_apply_ability_section_expansion()
+
+
+func _on_ability_section_toggled(expanded: bool) -> void:
+	_ability_section_expanded = expanded
+	_apply_ability_section_expansion()
+	_refresh_responsive_layout.call_deferred()
+
+
+func _apply_ability_section_expansion() -> void:
+	if _ability_section_header != null:
+		_ability_section_header.set_pressed_no_signal(_ability_section_expanded)
+		var state: StringName = &"expanded" if _ability_section_expanded else &"collapsed"
+		var chevron := _ability_section_header.find_child("AbilitySectionChevron", true, false) as SimpleIcon
+		if chevron != null:
+			chevron.configure(
+				&"chevron_down" if _ability_section_expanded else &"chevron_right",
+				AlveolusVisualTheme.TURQUOISE
+			)
+			chevron.set_meta(&"accordion_state", state)
+		_ability_section_header.set_meta(&"accordion_state", state)
+		_ability_section_header.set_meta(
+			&"alveolus_accessible_name",
+			"%s, %s. %s" % [
+				ABILITY_SECTION_TITLE,
+				"ausgeklappt" if _ability_section_expanded else "eingeklappt",
+				"Einklappen" if _ability_section_expanded else "Ausklappen",
+			]
+		)
+		_ability_section_header.tooltip_text = "%s %s" % [
+			ABILITY_SECTION_TITLE,
+			"einklappen" if _ability_section_expanded else "ausklappen",
+		]
+	if _ability_section_body != null:
+		_ability_section_body.visible = _ability_section_expanded
+
+
+func _ensure_ability_header_visible() -> void:
+	if _scroll != null and _ability_section_header != null:
+		_scroll.ensure_control_visible(_ability_section_header)
 
 
 func _add_optional_section(

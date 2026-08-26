@@ -51,6 +51,7 @@ var hostile_second_leg_seconds: float = 0.0
 var hostile_turn_sign: float = 1.0
 var hostile_turn_count: int = 0
 var hostile_time_bounded_double_turn: bool = false
+var friendly_hit_callback: Callable
 
 func _ready() -> void:
 	visual_body = UnitBody2D.new()
@@ -68,7 +69,8 @@ func configure(
 	source_id: StringName = &"therapy",
 	entity_handle: int = EntityHandle.INVALID,
 	resolve_target: Callable = Callable(),
-	move_speed: float = DEFAULT_SPEED
+	move_speed: float = DEFAULT_SPEED,
+	resolved_hit_callback: Callable = Callable()
 ) -> void:
 	target = target_enemy
 	damage = amount
@@ -81,6 +83,7 @@ func configure(
 	target_generation = target.activation_generation if is_instance_valid(target) else -1
 	target_handle = entity_handle
 	target_resolver = resolve_target
+	friendly_hit_callback = resolved_hit_callback
 	direction = Vector2.RIGHT
 	directional_mode = false
 	hostile_mode = false
@@ -111,7 +114,8 @@ func configure_directional(
 	resolved_target: InfectionEnemy = null,
 	entity_handle: int = EntityHandle.INVALID,
 	resolve_target: Callable = Callable(),
-	source_id: StringName = &"treatment"
+	source_id: StringName = &"treatment",
+	resolved_hit_callback: Callable = Callable()
 ) -> void:
 	target = resolved_target
 	damage = amount
@@ -123,6 +127,7 @@ func configure_directional(
 	target_generation = target.activation_generation if is_instance_valid(target) else -1
 	target_handle = entity_handle
 	target_resolver = resolve_target
+	friendly_hit_callback = resolved_hit_callback
 	direction = heading.normalized() if heading.length_squared() > 0.0001 else Vector2.RIGHT
 	directional_mode = true
 	hostile_mode = false
@@ -164,6 +169,7 @@ func configure_hostile(
 	target_generation = -1
 	target_handle = EntityHandle.INVALID
 	target_resolver = Callable()
+	friendly_hit_callback = Callable()
 	direction = heading.normalized() if heading.length_squared() > 0.0001 else Vector2.RIGHT
 	directional_mode = false
 	maximum_distance = maxf(max_distance, 1.0)
@@ -217,7 +223,7 @@ func step_fixed(delta: float) -> void:
 			global_position = impact_position
 			travelled_distance = impact_distance
 			if _target_is_current():
-				target.take_damage(damage, damage_source)
+				_apply_friendly_hit()
 			_finish()
 			return
 		if travelled_distance + step_distance >= maximum_distance:
@@ -236,7 +242,7 @@ func step_fixed(delta: float) -> void:
 		if target_delta.length_squared() <= hit_radius * hit_radius:
 			if _emit_discovery():
 				return
-			target.take_damage(damage, damage_source)
+			_apply_friendly_hit()
 			_finish()
 			return
 	var next_position := global_position + direction * speed * delta
@@ -350,6 +356,15 @@ func _finish() -> void:
 	finished.emit(self)
 
 
+func _apply_friendly_hit() -> void:
+	if not _target_is_current():
+		return
+	if friendly_hit_callback.is_valid():
+		friendly_hit_callback.call(target, damage, damage_source)
+	else:
+		target.take_damage(damage, damage_source)
+
+
 func _finish_if_outside_bounded_arena(position: Vector2) -> bool:
 	if topology == null or not topology.is_bounded() or topology.contains_position(position, BOUNDARY_RADIUS):
 		return false
@@ -363,6 +378,7 @@ func recycle() -> void:
 	target_generation = -1
 	target_handle = EntityHandle.INVALID
 	target_resolver = Callable()
+	friendly_hit_callback = Callable()
 	topology = null
 	direction = Vector2.ZERO
 	lifetime = 1.65

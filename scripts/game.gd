@@ -60,6 +60,8 @@ const CASE_PRESSURE_GATE_MAX_PROJECTILES := 24
 const CASE_TWO_DOUBLE_TURN_REFERENCE_SPEED := 375.0
 const CASE_TWO_DOUBLE_TURN_FIRST_WIDTH_FRACTION := 0.40
 const CASE_TWO_DOUBLE_TURN_SECOND_WIDTH_FRACTION := 0.25
+const IMPULSE_SPLASH_RADIUS := 60.0
+const IMPULSE_SPLASH_DAMAGE_FRACTION := 0.10
 const BOSS_AURA_STATUS_SOURCE := &"boss_aura"
 const BOSS_AURA_REFRESH_SECONDS := 0.10
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
@@ -2083,7 +2085,14 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 		treatment_controller.enabled = false
 		ability_controller.clear()
 		return
-	build_state.set_base(RunBuildState.TREATMENT_DAMAGE, stats.therapy_damage)
+	var talent_context := active_run_context
+	var damage_rank := talent_context.talent_rank(&"treatment_damage_training") if talent_context != null else 0
+	var treatment_base_damage := stats.therapy_damage
+	if damage_rank > 0:
+		treatment_base_damage = stats.treatment_damage_with_base_bonus(
+			TalentDefinition.magnitude_for(&"treatment_damage_training", 0.20) * float(damage_rank)
+		)
+	build_state.set_base(RunBuildState.TREATMENT_DAMAGE, treatment_base_damage)
 	build_state.set_base(RunBuildState.TREATMENT_INTERVAL, stats.therapy_cooldown)
 	build_state.set_base(RunBuildState.TREATMENT_RANGE, stats.therapy_range)
 	build_state.set_base(RunBuildState.TREATMENT_TARGETS, stats.therapy_targets)
@@ -2105,17 +2114,20 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 		treatment_controller.enabled = false
 		ability_controller.clear()
 		return
-	var talent_context := active_run_context
-	var damage_rank := talent_context.talent_rank(&"treatment_damage_training") if talent_context != null else 0
+	# bind_run_build synchronizes the legacy field surface once. Reapply the
+	# talent-resolved run baseline afterwards so later additive cards remain
+	# absolute and are never multiplied by this percentage talent.
+	build_state.set_base(RunBuildState.TREATMENT_DAMAGE, treatment_base_damage)
 	var spread_shotgun_rank := talent_context.talent_rank(&"spread_shotgun") if talent_context != null else 0
 	var persistence_rank := talent_context.talent_rank(&"piercing_persistence") if talent_context != null else 0
 	var manual_rank := talent_context.talent_rank(&"manual_treatment_aim") if talent_context != null else 0
-	if damage_rank > 0:
-		build_state.add_modifier_dictionary(&"talent_treatment_damage_training", 0, {
-			"stat_id": RunBuildState.TREATMENT_DAMAGE,
+	var burst_damage_rank := talent_context.talent_rank(&"defense_burst_damage") if talent_context != null else 0
+	if burst_damage_rank > 0:
+		build_state.add_modifier_dictionary(&"talent_defense_burst_damage", 0, {
+			"stat_id": RunBuildState.ABILITY_DAMAGE,
 			"operation": &"add",
-			"value": TalentDefinition.magnitude_for(&"treatment_damage_training", 2.0) * float(damage_rank),
-			"required_tags": PackedStringArray(["treatment"]),
+			"value": TalentDefinition.magnitude_for(&"defense_burst_damage", 20.0),
+			"required_tags": PackedStringArray(["active", "defense", "area"]),
 		})
 	if treatment.id == &"treatment_spread":
 		build_state.set_base(RunBuildState.TREATMENT_SPREAD_SHOTGUN, 1.0 if spread_shotgun_rank > 0 else 0.0)
@@ -2416,7 +2428,7 @@ func _on_treatment_shots_requested(shots: Array[TreatmentShot]) -> void:
 			continue
 		if shot.mode == TreatmentShot.Mode.TRACKING and is_instance_valid(shot.target):
 			if projectiles.size() >= REGULAR_PROJECTILE_LIMIT:
-				shot.target.take_damage(_resolved_treatment_damage(shot.damage, shot.target), shot.source_id)
+				_apply_treatment_hit(shot.target, shot.damage, shot.source_id)
 				continue
 			var projectile: TherapyProjectile
 			if not projectile_pool.is_empty():
@@ -2430,12 +2442,14 @@ func _on_treatment_shots_requested(shots: Array[TreatmentShot]) -> void:
 			projectile.global_position = shot.origin
 			projectile.configure(
 				shot.target,
-				_resolved_treatment_damage(shot.damage, shot.target),
+				shot.damage,
 				topology,
 				false,
 				shot.source_id,
 				enemy_world.handle_for(shot.target),
-				enemy_world.resolve
+				enemy_world.resolve,
+				TherapyProjectile.DEFAULT_SPEED,
+				_apply_treatment_hit
 			)
 			projectile.global_position = shot.origin
 			projectile.reset_physics_interpolation()
@@ -2443,12 +2457,12 @@ func _on_treatment_shots_requested(shots: Array[TreatmentShot]) -> void:
 			var projectile_handle := projectile_world.register_projectile(projectile)
 			if not EntityHandle.is_valid(projectile_handle):
 				_store_projectile(projectile)
-				shot.target.take_damage(_resolved_treatment_damage(shot.damage, shot.target), shot.source_id)
+				_apply_treatment_hit(shot.target, shot.damage, shot.source_id)
 				continue
 			if projectile_renderer == null or not projectile_renderer.register_projectile(projectile, projectile_handle, projectile.discovery_pending):
 				projectile_world.release(projectile_handle, false)
 				_store_projectile(projectile)
-				shot.target.take_damage(_resolved_treatment_damage(shot.damage, shot.target), shot.source_id)
+				_apply_treatment_hit(shot.target, shot.damage, shot.source_id)
 				continue
 			projectiles.append(projectile)
 		elif shot.mode == TreatmentShot.Mode.LINE or shot.mode == TreatmentShot.Mode.DIRECTIONAL:
@@ -2749,6 +2763,37 @@ func _treatment_aim_world_position() -> Vector2:
 func _on_treatment_fired(_treatment_id: StringName) -> void:
 	if not selected_level.is_tutorial and discovery_manager.request(&"automatic_therapy", avatar):
 		_try_present_next_discovery()
+
+
+func _apply_treatment_hit(enemy: InfectionEnemy, base_damage: float, source: StringName) -> void:
+	if not is_instance_valid(enemy) or not enemy.is_targetable():
+		return
+	var splash_handles := PackedInt64Array()
+	var primary_handle := EntityHandle.INVALID
+	var impact_position := enemy.global_position
+	var splash_enabled := source == &"treatment_precision" \
+		and active_run_context != null \
+		and active_run_context.has_talent(&"impulse_splash")
+	if splash_enabled:
+		_ensure_combat_query()
+		primary_handle = enemy_world.handle_for(enemy)
+		splash_handles = combat_query.circle(impact_position, IMPULSE_SPLASH_RADIUS)
+	enemy.take_damage(_resolved_treatment_damage(base_damage, enemy), source)
+	if not splash_enabled:
+		return
+	var splash_base_damage := float(maxi(1, roundi(base_damage * IMPULSE_SPLASH_DAMAGE_FRACTION)))
+	var splash_applied := false
+	for handle in splash_handles:
+		if handle == primary_handle:
+			continue
+		var nearby := enemy_world.resolve(handle) as InfectionEnemy
+		if not is_instance_valid(nearby) or not nearby.is_targetable():
+			continue
+		nearby.take_damage(_resolved_treatment_damage(splash_base_damage, nearby), &"treatment_precision_splash")
+		splash_applied = true
+	if splash_applied:
+		_spawn_visual_burst(impact_position, &"impulse_splash", AlveolusVisualTheme.TURQUOISE, 7, 0.22, IMPULSE_SPLASH_RADIUS)
+
 
 func _resolved_treatment_damage(base_damage: float, enemy: InfectionEnemy) -> float:
 	if enemy == null or enemy.definition == null:
@@ -3379,6 +3424,8 @@ func _damage_stat_source(source: StringName) -> StringName:
 		return &"ability_defense_burst"
 	if source == &"treatment_line":
 		return &"ability_treatment_line"
+	if source == &"treatment_precision_splash":
+		return &"treatment_precision"
 	if source in treatment_definitions or source in ability_definitions:
 		return source
 	return source
@@ -3406,6 +3453,24 @@ func result_damage_statistics() -> Array[Dictionary]:
 			"damage": roundi(float(run_damage_by_source.get(source_id, 0.0))),
 		})
 	return result
+
+
+func result_talent_statistics() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if active_run_context == null:
+		return result
+	for definition in TalentDefinition.definitions():
+		var rank := active_run_context.talent_rank(definition.id)
+		if rank <= 0:
+			continue
+		result.append({
+			"id": definition.id,
+			"label": definition.title,
+			"rank": rank,
+			"max_rank": definition.max_rank,
+		})
+	return result
+
 
 func _damage_stat_label(source_id: StringName) -> String:
 	if treatment_definitions.has(source_id):
@@ -4718,8 +4783,14 @@ func _on_reroll_requested() -> void:
 
 func _choose_tactical_upgrades(excluded: Array[StringName], guarantee_treatment: bool, count: int = 3) -> Array[UpgradeDefinition]:
 	var campaign_case_order := -1 if _is_practice_test() or selected_level == null else selected_level.order
+	var talent_ranks: Dictionary = active_run_context.talent_snapshot if active_run_context != null else {}
+	var rarity_rank := active_run_context.talent_rank(&"upgrade_rarity_training") if active_run_context != null else 0
+	var rarity_step := 1.0 + TalentDefinition.magnitude_for(&"upgrade_rarity_training", 0.05)
+	var higher_rarity_factor := UpgradePoolBuilder.relative_higher_rarity_weight_factor(
+		pow(rarity_step, float(rarity_rank))
+	)
 	if active_loadout == null:
-		return ContentCatalog.choose_upgrades(stats.upgrade_levels, rng, count, guarantee_treatment, excluded, campaign_case_order)
+		return ContentCatalog.choose_upgrades(stats.upgrade_levels, rng, count, guarantee_treatment, excluded, campaign_case_order, talent_ranks, higher_rarity_factor)
 	var component_ids := active_loadout.active_component_ids()
 	var tags: Array[StringName] = []
 	for id in component_ids:
@@ -4729,17 +4800,17 @@ func _choose_tactical_upgrades(excluded: Array[StringName], guarantee_treatment:
 		for tag in module.tags:
 			if not tags.has(tag):
 				tags.append(tag)
-	return UpgradePoolBuilder.choose(ContentCatalog.upgrade_definitions(), stats.upgrade_levels, rng, component_ids, tags, count, excluded, guarantee_treatment, campaign_case_order)
+	return UpgradePoolBuilder.choose(ContentCatalog.upgrade_definitions(), stats.upgrade_levels, rng, component_ids, tags, count, excluded, guarantee_treatment, campaign_case_order, talent_ranks, higher_rarity_factor)
 
 
 func _should_offer_mandatory_defense_cells(level: int) -> bool:
-	return not _is_practice_test() \
-		and selected_level != null \
-		and selected_level.order == 3 \
-		and (meta == null or not meta.has_completed_level(selected_level.id)) \
-		and level == 1 \
-		and stats != null \
-		and stats.immune_level <= 0
+	if _is_practice_test() or selected_level == null or selected_level.order < 3 or level != 1 or stats == null or stats.immune_level > 0:
+		return false
+	var first_fall_three_onboarding := selected_level.order == 3 \
+		and (meta == null or not meta.has_completed_level(selected_level.id))
+	var talent_guarantee := active_run_context != null \
+		and active_run_context.has_talent(&"defense_cells_first")
+	return first_fall_three_onboarding or talent_guarantee
 
 
 func _mandatory_defense_cell_options() -> Array[UpgradeDefinition]:
@@ -4851,7 +4922,9 @@ func _on_run_finished(success: bool, reason: String) -> void:
 			defeats
 		)
 		hud.set_result_damage_statistics(result_damage_statistics())
+		hud.set_result_talent_statistics(result_talent_statistics(), _talents_unlocked())
 		return
+	var talents_were_unlocked := _talents_unlocked()
 	var first_intro_completion := success and selected_level.is_tutorial and not meta.has_completed_level(selected_level.id)
 	var reward := 0
 	var unlocked_new := false
@@ -4882,6 +4955,12 @@ func _on_run_finished(success: bool, reason: String) -> void:
 	_set_flow(GameFlowState.State.RESULT)
 	ui_router.replace_screen(&"result", null, get_viewport().gui_get_focus_owner())
 	hud.show_end(selected_level, success, reason, state.elapsed, state.level, defeats, reward, unlocked_new)
+	var talents_are_unlocked := _talents_unlocked()
+	hud.set_result_talent_statistics(
+		result_talent_statistics(),
+		talents_are_unlocked,
+		not talents_were_unlocked and talents_are_unlocked
+	)
 	if first_intro_completion and hud.has_method("set_result_guidance"):
 		hud.call("set_result_guidance", "Nutze die Forschung für Upgrades im Forschungsgebäude.")
 	if hud.has_method("set_result_reward_presentations"):
@@ -5047,7 +5126,6 @@ func _talent_view_model() -> Dictionary:
 			requirement_titles.append(String(titles.get(StringName(required_id), String(required_id))))
 			if not meta.has_talent(StringName(required_id)):
 				prerequisites_met = false
-				break
 		var current_rank := meta.talent_rank(definition.id)
 		var maximum := current_rank >= definition.max_rank
 		cards.append({
@@ -5055,7 +5133,11 @@ func _talent_view_model() -> Dictionary:
 			"title": definition.title,
 			"description": definition.description,
 			"cost": 0 if maximum else definition.cost_for_rank(current_rank),
-			"category": &"treatment",
+			"category": definition.tree_id,
+			"tree_id": definition.tree_id,
+			"tree_title": definition.tree_title,
+			"tree_icon_id": definition.tree_icon_id,
+			"unlocked": definition.implemented,
 			"active": current_rank > 0,
 			"current_rank": current_rank,
 			"max_rank": definition.max_rank,

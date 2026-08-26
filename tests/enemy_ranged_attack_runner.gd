@@ -85,7 +85,7 @@ func _test_anchor_case_boss_contract() -> void:
 	_equal(localized_boss.projectile_pattern, &"double_turn", "Der Fall-2-Bakterienkern verwendet die doppelte 90-Grad-Bahn")
 	var case_two := levels[2] as LevelDefinition
 	_true(case_two.boss_ranged_enabled, "Fall 2 aktiviert den neuen Projektilboss")
-	_near(case_two.boss_projectile_attack_speed_multiplier, 1.8, "Fall 2 erhöht die Bossrate linear um 80 Prozent")
+	_near(case_two.boss_projectile_attack_speed_multiplier, 1.53, "Fall 2 reduziert die bisherige Bossrate relativ um 15 Prozent")
 	_near(case_two.boss_projectile_speed_multiplier, 1.5, "Fall 2 erhöht das Bossprojektiltempo um 50 Prozent")
 	_near(case_two.boss_projectile_damage_multiplier, 1.5, "Fall 2 erhöht den Bossprojektilschaden um 50 Prozent")
 	_equal(case_two.boss_phase_health_thresholds, PackedFloat32Array([0.80]), "Fall 2 beginnt seine Addphase bei 80 Prozent Leben")
