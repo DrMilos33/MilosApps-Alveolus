@@ -415,7 +415,7 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 
 func _build_effect_badge(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> PanelContainer:
 	var accent := _accent_color(option.effect_accent_role())
-	var badge := AlveolusUIComponents.badge(option.effect_label(), accent)
+	var badge := AlveolusUIComponents.icon_badge(option.effect_icon_id(), accent)
 	badge.name = "EffectBadge_%s" % String(option.effect_role())
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -423,27 +423,9 @@ func _build_effect_badge(option: UpgradeOverlayViewModel.UpgradeOptionViewModel)
 	badge.set_meta(&"upgrade_effect_label", option.effect_label())
 	badge.set_meta(&"upgrade_effect_icon_id", option.effect_icon_id())
 	badge.set_meta(&"upgrade_effect_accent", accent)
-	var badge_labels := badge.find_children("*", "Label", true, false)
-	var text_label := badge_labels[0] as Label if not badge_labels.is_empty() else null
-	if text_label == null:
-		return badge
-	var inset := text_label.get_parent() as Container
-	if inset == null:
-		return badge
-	if inset is Control:
-		(inset as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-	inset.remove_child(text_label)
-	var row := HBoxContainer.new()
-	row.name = "EffectBadgeContent"
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
-	var icon := SimpleIcon.new()
-	icon.name = "EffectBadgeIcon"
-	icon.custom_minimum_size = Vector2(18.0, 18.0)
-	icon.configure(option.effect_icon_id(), accent)
-	row.add_child(icon)
-	row.add_child(text_label)
-	inset.add_child(row)
+	var icon := badge.find_child("BadgeIcon", true, false) as SimpleIcon
+	if icon != null:
+		icon.name = "EffectBadgeIcon"
 	return badge
 
 

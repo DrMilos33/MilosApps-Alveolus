@@ -69,6 +69,7 @@ const FALL_ONE_ID := &"early_localized_focus"
 const DEFENSE_BURST_RESEARCH_ID := &"unlock_defense_burst"
 const DEFENSE_BURST_ABILITY_ID := &"ability_defense_burst"
 const FALL_ONE_GUIDANCE_COMPLETE := &"fall1_defense_burst_guidance_complete"
+const FALL_ONE_EVENT_HINT_ID := &"fall_one_event_vulnerability"
 # Temporärer Content-Testmodus. Abschalten, sobald Forschung und Talente
 # balanciert werden; der gespeicherte echte Punktestand bleibt unangetastet.
 const UNLIMITED_PROGRESSION_TEST_MODE := false
@@ -3543,6 +3544,21 @@ func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
 		elif intro_role in [INTRO_ROLE_FOLLOWUP, INTRO_ROLE_BOSS]:
 			discovery_manager.mark_seen(enemy.definition.discovery_id)
 		return
+	if (
+		selected_level != null
+		and selected_level.id == FALL_ONE_ID
+		and meta != null
+		and not meta.has_completed_level(FALL_ONE_ID)
+		and enemy_world != null
+		and discovery_manager != null
+	):
+		var handle := enemy_world.handle_for(enemy)
+		if (
+			EntityHandle.is_valid(handle)
+			and case_pressure_target_states.has(handle)
+			and discovery_manager.request(FALL_ONE_EVENT_HINT_ID, enemy)
+		):
+			_try_present_next_discovery()
 
 
 func _on_enemy_stun_changed(enemy: InfectionEnemy, _stunned: bool) -> void:
@@ -4008,7 +4024,8 @@ func _release_pressure_gate_projectile(projectile: TherapyProjectile) -> void:
 
 
 func _update_boss_direction_indicator() -> bool:
-	if hud == null or topology == null or enemy_world == null or active_boss_handles.is_empty():
+	var arrows_enabled := meta == null or meta.ui_settings.show_boss_target_arrows
+	if not arrows_enabled or hud == null or topology == null or enemy_world == null or active_boss_handles.is_empty():
 		if hud != null:
 			hud.set_boss_direction_indicator(false, Vector2.ZERO)
 		return false
@@ -4046,7 +4063,8 @@ func _update_boss_direction_indicator() -> bool:
 func _update_case_pressure_target_indicator(offscreen_boss_visible: bool) -> void:
 	if hud == null:
 		return
-	if offscreen_boss_visible or topology == null or enemy_world == null or case_pressure_target_states.is_empty():
+	var arrows_enabled := meta == null or meta.ui_settings.show_event_target_arrows
+	if not arrows_enabled or offscreen_boss_visible or topology == null or enemy_world == null or case_pressure_target_states.is_empty():
 		hud.set_target_focus_direction_indicator(false, Vector2.ZERO, "")
 		return
 	var visible_rect := _visible_world_rect()

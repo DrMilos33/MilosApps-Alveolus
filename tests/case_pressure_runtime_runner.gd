@@ -241,7 +241,10 @@ func _test_case_one_event_target_profile() -> void:
 	game.persistence_enabled = false
 	game.run_test_settings.reset_defaults()
 	for discovery_id in game.discovery_definitions:
-		game.discovery_manager.mark_seen(discovery_id)
+		if discovery_id != GameScript.FALL_ONE_EVENT_HINT_ID:
+			game.discovery_manager.mark_seen(discovery_id)
+	game.discovery_manager.seen_ids.erase(GameScript.FALL_ONE_EVENT_HINT_ID)
+	game.meta.seen_discovery_ids.erase(GameScript.FALL_ONE_EVENT_HINT_ID)
 	game.selected_level = _level_by_id(game.levels, &"early_localized_focus")
 	_true(game.selected_level != null and game.selected_level.order == 1, "Eventherdtest verwendet Fall 1")
 	game.start_run()
@@ -253,6 +256,7 @@ func _test_case_one_event_target_profile() -> void:
 		var target := game.enemy_world.resolve(handle) as InfectionEnemy
 		_true(is_instance_valid(target), "Der Fall-1-Eventherd besitzt einen gültigen Handle")
 		if is_instance_valid(target):
+			_true(game.discovery_manager.active.is_empty(), "Der Fall-1-Hinweis wartet bis zur tatsächlichen Materialisierung")
 			_equal(target.definition.id, &"minor_focus", "Der Fall-1-Eventherd bewahrt seine stabile Gameplay-ID")
 			_equal(target.definition.visual_id, &"infection_focus", "Normale kleine Herde behalten ihr bisheriges Katalogvisual")
 			_equal(target.resolved_visual_id(), &"case_one_event_monster", "Nur der Fall-1-Eventherd löst auf die Nutzerzeichnung auf")
@@ -271,6 +275,14 @@ func _test_case_one_event_target_profile() -> void:
 			_near(target.projectile_speed_multiplier, 1.95, "Der Fall-1-Eventherd veröffentlicht relativ nochmals 30 Prozent schnellere Projektile")
 			_near(target.defense_burst_shooting_lock_seconds, 10.0, "Der Fall-1-Eventherd übernimmt die zehnsekündige Stoßsperre")
 			target.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
+			_true(target.materialized_emitted, "Der Eventherd überschreitet vor dem Hinweis die echte Materialisierungsgrenze")
+			_true(game.case_pressure_target_states.has(game.enemy_world.handle_for(target)), "Der materialisierte Eventherd bleibt als Fallziel registriert")
+			_true(not game.meta.has_completed_level(GameScript.FALL_ONE_ID), "Der Hinweisvertrag läuft ausschließlich vor dem ersten Fallsieg")
+			_equal(game.discovery_manager.active.get("id", &""), GameScript.FALL_ONE_EVENT_HINT_ID, "Die Materialisierung des ersten Fall-1-Eventherds öffnet den einmaligen Fähigkeits-Hinweis")
+			_equal(game.discovery_manager.active.get("target"), target, "Der Fähigkeits-Hinweis zeigt auf das tatsächlich materialisierte Eventmonster")
+			_equal(game.hud.discovery_tooltip.gameplay_label.text, "Manche Monster sind anfällig gegen bestimmte Fähigkeiten. Probiere Stoß aus.", "Der erste Event-Hinweis verwendet die freigegebene Copy")
+			game._on_discovery_dismissed()
+			_true(game.discovery_manager.has_seen(GameScript.FALL_ONE_EVENT_HINT_ID), "Bestätigter Event-Hinweis wird profilweit nicht wiederholt")
 			var projectiles_before: int = game.projectiles.size()
 			game.enemy_attack_director.step_fixed(0.899)
 			_equal(game.projectiles.size(), projectiles_before, "Der unveränderte erste Telegraph feuert nicht vor 0,9 Sekunden")

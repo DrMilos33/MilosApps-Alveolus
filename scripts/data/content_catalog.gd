@@ -214,6 +214,11 @@ static func discovery_definitions() -> Dictionary:
 			&"research_reward", &"run_result", "Forschungsbelohnung",
 			"Forschung fasst die aus einem Fall gewonnenen, dauerhaft nutzbaren Erkenntnisse zusammen.",
 			"Wird im Forschungsgebäude für kleine dauerhafte Verbesserungen ausgegeben.", &"reward", 50, &"praxis"
+		),
+		&"fall_one_event_vulnerability": DiscoveryDefinition.create(
+			&"fall_one_event_vulnerability", &"case_event", "Anfällige Monster",
+			"",
+			"Manche Monster sind anfällig gegen bestimmte Fähigkeiten. Probiere Stoß aus.", &"enemy", 125, &"erreger"
 		)
 	}
 

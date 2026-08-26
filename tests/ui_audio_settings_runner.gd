@@ -75,11 +75,13 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_equal(defaults.glyph_mode, UISettingsState.GLYPH_AUTO, "Eingabesymbole erkennen das Gerät standardmäßig automatisch")
 	_true(not defaults.reduce_motion, "Reduzierte Bewegung ist optional")
 	_true(defaults.show_discovery_info, "Hinweise sind standardmäßig aktiviert")
+	_true(defaults.show_boss_target_arrows and defaults.show_event_target_arrows, "Boss- und Eventmonster-Pfeile sind standardmäßig sichtbar")
 	_true(not defaults.show_character_name, "Der Charaktername ist standardmäßig dezent ausgeblendet")
 	_true(not defaults.show_character_health_bar, "Der kleine Charakter-Lebensbalken ist standardmäßig ausgeblendet")
 	_true(defaults.confirm_run_restart, "Strg+R verlangt standardmäßig eine bewusste Bestätigung")
 	_true(UISettingsState.from_dict({}).confirm_run_restart, "Ältere Einstellungsdaten erhalten den sicheren Neustart-Standard")
 	_true(UISettingsState.from_dict({}).show_discovery_info, "Ältere Einstellungsdaten erhalten den aktivierten Hinweis-Standard")
+	_true(UISettingsState.from_dict({}).show_boss_target_arrows and UISettingsState.from_dict({}).show_event_target_arrows, "Ältere Einstellungsdaten behalten beide Zielpfeile")
 	_true(not UISettingsState.from_dict({}).show_character_health_bar, "Ältere Einstellungsdaten blenden den optionalen Charakter-Lebensbalken aus")
 	_true(UISettingsState.CONFIGURABLE_ACTIONS.has(&"ui_info"), "Kontextinformationen besitzen eine konfigurierbare Eingabeaktion")
 	for upgrade_action in [&"upgrade_1", &"upgrade_2", &"upgrade_3", &"reroll_upgrades"]:
@@ -96,6 +98,8 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 		"glyph_mode": "invalid",
 		"reduce_motion": true,
 		"show_discovery_info": false,
+		"show_boss_target_arrows": false,
+		"show_event_target_arrows": false,
 		"show_character_name": true,
 		"show_character_health_bar": true,
 		"fullscreen": true,
@@ -108,6 +112,8 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_equal(sanitized.glyph_mode, UISettingsState.GLYPH_AUTO, "Unbekannter Glyphmodus fällt sicher auf Automatisch zurück")
 	_true(sanitized.reduce_motion and not sanitized.show_discovery_info and sanitized.show_character_name and sanitized.fullscreen, "Ein ausdrücklich ausgeschalteter Hinweiswert und die übrigen Anzeigeoptionen überleben das Laden")
 	_true(not bool(sanitized.to_dict().get("show_discovery_info", true)), "Das Einstellungs-Dictionary bewahrt einen ausdrücklich ausgeschalteten Hinweiswert")
+	_true(not sanitized.show_boss_target_arrows and not sanitized.show_event_target_arrows, "Beide Zielpfeile lassen sich unabhängig vom Hinweiswert ausschalten")
+	_true(not bool(sanitized.to_dict().get("show_boss_target_arrows", true)) and not bool(sanitized.to_dict().get("show_event_target_arrows", true)), "Das Einstellungs-Dictionary speichert beide Zielpfeile explizit")
 	_true(sanitized.show_character_health_bar, "Der Charakter-Lebensbalken überlebt das Laden")
 	_true(not sanitized.confirm_run_restart, "Die Neustartbestätigung lässt sich im Einstellungs-Dictionary ausschalten")
 	_true(bool(sanitized.to_dict().get("show_character_health_bar", false)), "Das Einstellungs-Dictionary speichert den Charakter-Lebensbalken explizit")
@@ -116,6 +122,7 @@ func _test_settings_defaults_validation_and_roundtrip() -> void:
 	_equal(UISettingsState.from_dict({"ui_scale": 0.88}).ui_scale, 0.90, "Niedrige Save-Skalierung rastet sicher auf 90 Prozent ein")
 	var copy := sanitized.duplicate_settings()
 	_true(not copy.show_discovery_info, "Einstellungsduplikate bewahren ausdrücklich ausgeschaltete Hinweise")
+	_true(not copy.show_boss_target_arrows and not copy.show_event_target_arrows, "Einstellungsduplikate bewahren beide Zielpfeile")
 	_true(not copy.confirm_run_restart, "Einstellungsduplikate bewahren die Neustartbestätigung")
 	_true(copy.show_character_name, "Einstellungsduplikate bewahren die Namensanzeige")
 	_true(copy.show_character_health_bar, "Einstellungsduplikate bewahren den Charakter-Lebensbalken")
@@ -396,6 +403,8 @@ func _test_save_v7_settings_roundtrip() -> void:
 	settings.ui_scale = 0.90
 	settings.reduce_motion = true
 	settings.show_discovery_info = false
+	settings.show_boss_target_arrows = false
+	settings.show_event_target_arrows = false
 	settings.show_character_health_bar = true
 	settings.glyph_mode = UISettingsState.GLYPH_GAMEPAD
 	settings.confirm_run_restart = false
@@ -419,6 +428,7 @@ func _test_save_v7_settings_roundtrip() -> void:
 	_equal(restored.ui_settings.ui_scale, 0.90, "Eine UI-Skalierung unter 100 Prozent überlebt den Savegame-Roundtrip")
 	_true(restored.ui_settings.reduce_motion, "Reduzierte Bewegung überlebt den Savegame-Roundtrip")
 	_true(not restored.ui_settings.show_discovery_info, "Ausdrücklich ausgeschaltete Hinweise überleben im Save-v7-Container")
+	_true(not restored.ui_settings.show_boss_target_arrows and not restored.ui_settings.show_event_target_arrows, "Beide Zielpfeiloptionen überleben den Savegame-Roundtrip")
 	_true(restored.ui_settings.show_character_health_bar, "Der Charakter-Lebensbalken überlebt den Savegame-Roundtrip")
 	_equal(restored.ui_settings.glyph_mode, UISettingsState.GLYPH_GAMEPAD, "Glyphmodus überlebt den Savegame-Roundtrip")
 	_true(not restored.ui_settings.confirm_run_restart, "Die ausgeschaltete Neustartbestätigung überlebt den Savegame-Roundtrip")

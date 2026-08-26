@@ -35,6 +35,8 @@ var music_muted: bool = false
 var ui_scale: float = 1.0
 var reduce_motion: bool = false
 var show_discovery_info: bool = true
+var show_boss_target_arrows: bool = true
+var show_event_target_arrows: bool = true
 var show_character_name: bool = false
 var show_character_health_bar: bool = false
 var glyph_mode: StringName = GLYPH_AUTO
@@ -58,6 +60,8 @@ func to_dict() -> Dictionary:
 		"ui_scale": ui_scale,
 		"reduce_motion": reduce_motion,
 		"show_discovery_info": show_discovery_info,
+		"show_boss_target_arrows": show_boss_target_arrows,
+		"show_event_target_arrows": show_event_target_arrows,
 		"show_character_name": show_character_name,
 		"show_character_health_bar": show_character_health_bar,
 		"glyph_mode": String(glyph_mode),
@@ -83,6 +87,8 @@ static func from_dict(data: Variant) -> UISettingsState:
 	# Keep the established save key, but treat an absent value as the new
 	# player-facing default. Explicit values from existing saves remain intact.
 	settings.show_discovery_info = bool(data.get("show_discovery_info", true))
+	settings.show_boss_target_arrows = bool(data.get("show_boss_target_arrows", true))
+	settings.show_event_target_arrows = bool(data.get("show_event_target_arrows", true))
 	settings.show_character_name = bool(data.get("show_character_name", false))
 	settings.show_character_health_bar = bool(data.get("show_character_health_bar", false))
 	var requested_glyph := StringName(str(data.get("glyph_mode", GLYPH_AUTO)))

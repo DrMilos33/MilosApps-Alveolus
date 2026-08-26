@@ -237,8 +237,10 @@ complement and Magic:Rare stays 5:1.
 Upgrade presentation carries `family_id` and `preview_stat` into the immutable
 overlay view model. That boundary resolves only the semantic effect roles
 `damage`, `width` and `radius` to their label, icon and accent; the screen renders
-the resulting icon-text badge without maintaining a content-ID table. Effect
-role, rarity role, title and focus state remain independent presentation signals.
+the resulting icon-only marker without maintaining a content-ID table. The
+written label remains presenter metadata for accessibility and hashing but is
+not rendered inside the marker. Effect role, rarity role, title and focus state
+remain independent presentation signals.
 
 Talent combat effects are compiled once when the run build is configured.
 `PlayerStats.treatment_damage_with_base_bonus()` combines research percentage
@@ -570,11 +572,18 @@ without creating surplus research. Practice runs bypass this reward path.
 default of `true` when the key or the complete settings object is absent;
 explicit persisted booleans retain their value. Its single visible label is
 `Hinweise anzeigen`, and it governs optional discovery pauses, campus research
-guidance and the first-Fall preparation guide. Disabling it immediately drains
+guidance, the first-Fall preparation guide and the one-time first-event
+vulnerability hint. Disabling it immediately drains
 the active discovery and queue through `DiscoveryManager.complete_active()`,
 clears both optional guides and persists their completion, so no modal or guide
 can reappear as backlog. Scripted blocking intro confirmations are mandatory and
 remain outside this setting.
+`UISettingsState.show_boss_target_arrows` and
+`UISettingsState.show_event_target_arrows` are independent additive Save-v7
+booleans with absent-key defaults of `true`. `Game` gates the two offscreen
+indicator presenters before resolving their targets; disabling one immediately
+hides only that HUD indicator and never changes enemy simulation or the other
+indicator's saved state.
 Enemy discovery definitions use `enemy_defeated`. Materialization only controls
 render/detail preparation; the first non-practice defeat marks the enemy
 discovery through `MetaProgressionState` before recycling. A boss defeat writes the unlock before the

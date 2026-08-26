@@ -693,6 +693,10 @@ func _build_toggle_row(parent: Container, setting: SettingsScreenViewModel.Toggl
 		toggle.tooltip_text = "Reduziert UI-Animationen und Bewegungseffekte."
 	elif setting.get_id() == &"show_discovery_info":
 		toggle.tooltip_text = "Zeigt optionale Hinweise im Campus, in der Einsatzplanung und während eines Falls."
+	elif setting.get_id() == &"show_boss_target_arrows":
+		toggle.tooltip_text = "Zeigt am Bildschirmrand die Richtung zu Bossen außerhalb des Bildes."
+	elif setting.get_id() == &"show_event_target_arrows":
+		toggle.tooltip_text = "Zeigt am Bildschirmrand die Richtung zu Eventmonstern außerhalb des Bildes."
 	elif setting.get_id() == &"show_character_name":
 		toggle.tooltip_text = "Zeigt Doctor Milos dezent über der Spielfigur."
 	_controls[key] = toggle
@@ -708,6 +712,10 @@ func _toggle_purpose(setting_id: StringName, fallback: String) -> String:
 			return "Werte im Run"
 		&"show_discovery_info":
 			return "Hinweise anzeigen"
+		&"show_boss_target_arrows":
+			return "Boss-Pfeile anzeigen"
+		&"show_event_target_arrows":
+			return "Eventmonster-Pfeile anzeigen"
 		&"show_character_name":
 			return "Charaktername anzeigen"
 		&"fullscreen":

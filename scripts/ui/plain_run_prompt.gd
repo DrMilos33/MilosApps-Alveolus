@@ -15,8 +15,9 @@ const MODE_NORMAL := &"normal"
 const MODE_CORAL := &"coral"
 
 const MAXIMUM_TEXT_WIDTH := 720.0
-const RUN_HUD_BAND_TOP := 44.0
-const RUN_HUD_BAND_BOTTOM := 102.0
+const RUN_HUD_BAND_TOP := 52.0
+const RUN_HUD_BAND_BOTTOM := 120.0
+const MESSAGE_FONT_SIZE := 24
 
 var _semantic_mode := MODE_NORMAL
 var _confirmation_required := false
@@ -277,6 +278,7 @@ func _build_content() -> void:
 	_message_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_message_label.modulate = AlveolusVisualTheme.IVORY
+	_message_label.add_theme_font_size_override("font_size", MESSAGE_FONT_SIZE)
 	_content_stack.add_child(_message_label)
 
 	_mouse_hint_label = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)

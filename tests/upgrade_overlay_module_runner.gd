@@ -274,8 +274,9 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var effect_badge_icon := effect_badge.find_child("EffectBadgeIcon", true, false) as SimpleIcon if effect_badge != null else null
 	_check(value_icon != null and value_icon.kind == &"neutrophil_orbit" and value_icon.custom_minimum_size == Vector2(34.0, 34.0), "Ausbaukarte rendert das Presenter-Icon deutlich größer ohne lokale ID-Zuordnung")
 	_check(value_title != null and value_title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Komponentenname verwendet die kleinere zentrale Body-Typografie")
-	_check(effect_badge != null and effect_badge.get_meta(&"upgrade_effect_label", "") == "RADIUS", "Ausbaukarte zeigt die feste Radius-Badge zusätzlich zum Komponentenname")
-	_check(effect_badge_icon != null and effect_badge_icon.kind == &"target" and effect_badge.get_meta(&"upgrade_effect_accent", Color.TRANSPARENT).is_equal_approx(AlveolusVisualTheme.COBALT), "Badge kombiniert DTO-Icon, Text und semantische Farbe")
+	_check(effect_badge != null and effect_badge.get_meta(&"upgrade_effect_label", "") == "RADIUS", "Ausbaukarte bewahrt die feste Radiussemantik in Presenter-Metadaten")
+	_check(effect_badge_icon != null and effect_badge_icon.kind == &"target" and effect_badge.get_meta(&"upgrade_effect_accent", Color.TRANSPARENT).is_equal_approx(AlveolusVisualTheme.COBALT), "Effektmarker kombiniert DTO-Icon und semantische Farbe")
+	_check(effect_badge != null and effect_badge.find_children("*", "Label", true, false).is_empty(), "Effektmarker zeigt nur ein Icon und keinen redundanten Badge-Text")
 	_check(value_card.theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_COMMON_CARD, "Die Effektbadge verändert den Seltenheitsrahmen nicht")
 	_check(radius_row != null and radius_row.get_parsed_text().replace("  ", " ") == "Radius 4", "Abwehrzellen zeigen die fertige Copy Radius 4")
 	_check(rate_row != null and rate_row.get_parsed_text().contains("Attack Speed") and rate_row.get_parsed_text().contains("1,7/s"), "Attack Speed bleibt als /s-Wert sichtbar")
@@ -286,8 +287,29 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("In dieser Runde 0 Mal gewählt") and not String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains(" von "), "Fokusname nennt den Rundenzähler ohne verstecktes Maximum")
 	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Effekt RADIUS"), "Der feste Badgebegriff ist auch im Accessible Name enthalten")
 
+	var icon_only_effects := UpgradeOverlayViewModelScript.create([
+		{"id": &"damage_marker", "title": "Impuls", "effect": "+3 Schaden.", "family_id": &"damage", "preview_stat": &"therapy_damage"},
+		{"id": &"width_marker", "title": "Fetter lazer", "effect": "+16 Breite.", "family_id": &"width", "preview_stat": &"ability_width"},
+		{"id": &"radius_marker", "title": "Stoß", "effect": "+1 Radius.", "family_id": &"radius", "preview_stat": &"ability_radius"},
+	], 10)
+	_check(overlay.present(icon_only_effects, false), "Alle drei semantischen Effektmarker werden gemeinsam präsentiert")
+	await _settle()
+	var expected_markers := [
+		[&"damage", &"ability_defense_burst", AlveolusVisualTheme.CORAL],
+		[&"width", &"ability_treatment_line", AlveolusVisualTheme.TURQUOISE],
+		[&"radius", &"target", AlveolusVisualTheme.COBALT],
+	]
+	for index in range(expected_markers.size()):
+		var expected: Array = expected_markers[index]
+		var marker := overlay.cards()[index].find_child("EffectBadge_%s" % String(expected[0]), true, false) as PanelContainer
+		var marker_icon := marker.find_child("EffectBadgeIcon", true, false) as SimpleIcon if marker != null else null
+		_check(marker != null and marker.find_children("*", "Label", true, false).is_empty(), "%s rendert genau ein Icon ohne sichtbaren Begriff" % String(expected[0]))
+		_check(marker_icon != null and marker_icon.kind == expected[1] and marker.get_meta(&"upgrade_effect_accent", Color.TRANSPARENT).is_equal_approx(expected[2]), "%s bewahrt seine feste Glyphe und Farbe" % String(expected[0]))
+		var marker_focus := overlay.cards()[index].find_child("KeyboardFocus", true, false) as Control
+		_check(marker_focus != null and String(marker_focus.get_meta(&"alveolus_accessible_name", "")).contains("Effekt"), "%s bleibt ausgeschrieben zugänglich" % String(expected[0]))
+
 	var scripted: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
-		_single_option_rows(), 10, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Änderung."
+		_single_option_rows(), 11, true, "Der erste Ausbau erklärt kurz die Vorher-nachher-Änderung."
 	)
 	_check(overlay.present(scripted, false), "Expliziter Einführungssnapshot wird angewendet")
 	await _settle()
@@ -297,7 +319,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.education_panel().find_children("*", "Label", true, false).any(func(node: Node) -> bool: return (node as Label).text.contains("Vorher-nachher")), "Education bindet ihren geskripteten Text")
 	_check(education_copy != null and overlay.cards().size() == 1, "Education ergänzt die eine Option statt sie aus der Anzahl abzuleiten")
 
-	var three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_three_option_rows(), 11, false, "", true, true)
+	var three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_three_option_rows(), 12, false, "", true, true)
 	_check(overlay.present(three, false), "Drei Ausbauoptionen werden gemeinsam präsentiert")
 	await _settle()
 	_check(overlay.cards().size() == 3 and overlay.cards_grid().columns == 3, "Breiter Viewport zeigt drei kompakte Karten ohne Browse-Churn")
@@ -308,14 +330,14 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(not overlay.selection_helper().visible and overlay.selection_helper().text.is_empty(), "Normale Drei-Karten-Auswahl benötigt keinen zusätzlichen Auswahlhinweis")
 	_check(overlay.selection_helper().get_index() < overlay.cards_grid().get_index(), "Auswahlhinweis steht direkt vor den Karten in der Leserichtung")
 	var legacy_flagged_three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(
-		_three_option_rows(), 12, true, "Veralteter Einführungstext"
+		_three_option_rows(), 13, true, "Veralteter Einführungstext"
 	)
 	_check(overlay.present(legacy_flagged_three, false), "Der alte Kompatibilitätsmarker darf drei normale Karten weiterhin präsentieren")
 	await _settle()
 	_check(overlay.cards().size() == 3 and not overlay.selection_helper().visible, "Drei Karten bleiben auch ohne redundanten Auswahlhinweis vollständig sichtbar")
 	var legacy_comparison := overlay.cards()[0].find_child("UpgradeComparison", true, false) as RichTextLabel
 	_check(legacy_comparison != null and not String(legacy_comparison.get_meta(&"semantic_before", "")).is_empty() and not String(legacy_comparison.get_meta(&"semantic_after", "")).is_empty(), "Auch markierte Legacy-Aufrufe bewahren normale Vergleichswerte")
-	var restored_three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_three_option_rows(), 13, false, "", true, true)
+	var restored_three: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_three_option_rows(), 14, false, "", true, true)
 	_check(overlay.present(restored_three, false), "Die normale Drei-Karten-Revision wird nach dem Kompatibilitätscheck wiederhergestellt")
 	await _settle()
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Drei normale Karten passen ohne Scrollbalken")
@@ -353,7 +375,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	await process_frame
 	_check(get_root().gui_get_focus_owner() == overlay.focus_targets()[0], "Kompakter Fokus bleibt am ersten Auswahlfeld")
 
-	var mandatory: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_single_option_rows(), 14, false, "", false, false)
+	var mandatory: UpgradeOverlayViewModel = UpgradeOverlayViewModelScript.create(_single_option_rows(), 15, false, "", false, false)
 	_check(overlay.present(mandatory, false), "Pflichtauswahl kann optionale Actions entfernen")
 	await _settle()
 	var prior_cancel_count := cancel_intents.size()

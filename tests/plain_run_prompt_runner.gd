@@ -37,6 +37,8 @@ func _assert_static_contract() -> void:
 	_check(source.contains("AlveolusUIComponents.label"), "Promptcopy wird ausschließlich über die zentrale Label-Komponente gebaut")
 	_check(source.contains("AlveolusVisualTheme.TYPE_HUD_VALUE_LABEL"), "Haupttext verwendet die zentrale lesbare HUD-Typografie")
 	_check(source.contains("AlveolusVisualTheme.CORAL"), "Korallenwarnung stammt aus der zentralen semantischen Farbe")
+	_check(PlainRunPrompt.RUN_HUD_BAND_TOP > 44.0, "Die gemeinsame Leseband beginnt sichtbar tiefer als die alte HUD-Kante")
+	_check(PlainRunPrompt.MESSAGE_FONT_SIZE > AlveolusVisualTheme.TEXT_SECTION, "Der Laufhinweis ist größer als gewöhnliche Abschnittscopy")
 	_check(source.contains("func wait_for_left_click"), "Komponente besitzt eine ausdrückliche await-fähige Linksklickgrenze")
 
 
@@ -63,6 +65,7 @@ func _assert_presentation_contract() -> void:
 	_check(prompt.get_meta(&"blocking_input", true) == false, "Hostmetadata kennzeichnet die passive Ebene eindeutig")
 	_check(prompt.content_stack().size.x <= PlainRunPrompt.MAXIMUM_TEXT_WIDTH + 0.5, "Breiter Prompt begrenzt seine Zeilenlänge")
 	_check(prompt.message_label().horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "Run-Prompt ist als Textblock zentriert")
+	_check(prompt.message_label().get_theme_font_size("font_size") == PlainRunPrompt.MESSAGE_FONT_SIZE, "Run-Prompt wendet die größere feste HUD-Lesegröße an")
 	_check(prompt.get_global_rect().is_equal_approx(host.get_global_rect()), "Die transparente Prompt-Ebene deckt trotz begrenzter Textzone den vollständigen Eingaberaum ab")
 	var message_rect := prompt.message_label().get_global_rect()
 	_check(message_rect.position.y >= PlainRunPrompt.RUN_HUD_BAND_TOP and message_rect.end.y <= PlainRunPrompt.RUN_HUD_BAND_BOTTOM, "Der Host kann die Plain-Copy direkt unter dem Lebensbalken in eine feste Bandzone legen")

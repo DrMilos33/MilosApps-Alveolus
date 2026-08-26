@@ -566,6 +566,30 @@ static func badge(text_value: String, accent: Color = AlveolusVisualTheme.COBALT
 	badge_panel.add_child(margin(text_label, 8))
 	return badge_panel
 
+
+## Compact semantic marker for dense selection surfaces. The glyph and accent
+## carry the visible distinction while callers retain the written meaning in
+## their accessible name and presenter metadata.
+static func icon_badge(
+	icon_id: StringName,
+	accent: Color = AlveolusVisualTheme.COBALT,
+	icon_size: float = 20.0
+) -> PanelContainer:
+	var badge_panel := panel(AlveolusVisualTheme.TYPE_BADGE)
+	badge_panel.add_theme_stylebox_override("panel", AlveolusVisualTheme.surface_role_style(
+		AlveolusVisualTheme.SurfaceRole.DOCUMENT_INSET,
+		accent,
+		AlveolusVisualTheme.CornerTreatment.CONTROL_4
+	))
+	badge_panel.custom_minimum_size = Vector2(icon_size + 12.0, icon_size + 12.0)
+	var icon := SimpleIcon.new()
+	icon.name = "BadgeIcon"
+	icon.custom_minimum_size = Vector2(icon_size, icon_size)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.configure(icon_id, accent)
+	badge_panel.add_child(margin(icon, 6))
+	return badge_panel
+
 static func progress(value: float, maximum: float = 100.0, show_percentage: bool = false) -> ProgressBar:
 	var control := ProgressBar.new()
 	control.min_value = 0.0

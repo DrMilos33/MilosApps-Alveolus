@@ -919,6 +919,8 @@ func _on_settings_toggle_changed(setting_id: StringName, enabled: bool) -> void:
 	match setting_id:
 		&"reduce_motion": _on_settings_reduce_motion(enabled)
 		&"show_discovery_info": _on_settings_discovery_info(enabled)
+		&"show_boss_target_arrows": _on_settings_boss_target_arrows(enabled)
+		&"show_event_target_arrows": _on_settings_event_target_arrows(enabled)
 		&"run_stats": _on_run_stats_toggle(enabled)
 		&"show_character_name": _on_settings_character_name(enabled)
 		&"show_character_health_bar": _on_settings_character_health_bar(enabled)
@@ -953,6 +955,8 @@ func _refresh_settings_screen(show_quit: bool = settings_show_quit) -> void:
 	var toggle_settings: Array[SettingsScreenViewModel.ToggleSettingViewModel] = [
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"reduce_motion", "Animationen reduzieren", current_ui_settings.reduce_motion),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_discovery_info", "Hinweise anzeigen", current_ui_settings.show_discovery_info),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_boss_target_arrows", "Boss-Pfeile anzeigen", current_ui_settings.show_boss_target_arrows),
+		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_event_target_arrows", "Eventmonster-Pfeile anzeigen", current_ui_settings.show_event_target_arrows),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"run_stats", "Charakterwerte im Run", run_stats_enabled),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_name", "Charaktername anzeigen", current_ui_settings.show_character_name),
 		SettingsScreenViewModel.ToggleSettingViewModel.new(&"show_character_health_bar", "Kleiner Lebensbalken", current_ui_settings.show_character_health_bar),
@@ -1107,6 +1111,24 @@ func _on_settings_discovery_info(enabled: bool) -> void:
 	if current_ui_settings == null:
 		return
 	current_ui_settings.show_discovery_info = enabled
+	_emit_ui_settings_changed()
+
+
+func _on_settings_boss_target_arrows(enabled: bool) -> void:
+	if current_ui_settings == null:
+		return
+	current_ui_settings.show_boss_target_arrows = enabled
+	if not enabled:
+		set_boss_direction_indicator(false, Vector2.ZERO)
+	_emit_ui_settings_changed()
+
+
+func _on_settings_event_target_arrows(enabled: bool) -> void:
+	if current_ui_settings == null:
+		return
+	current_ui_settings.show_event_target_arrows = enabled
+	if not enabled:
+		set_target_focus_direction_indicator(false, Vector2.ZERO, "")
 	_emit_ui_settings_changed()
 
 func _on_settings_fullscreen(enabled: bool) -> void:

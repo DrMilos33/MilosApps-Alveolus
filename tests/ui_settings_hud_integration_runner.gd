@@ -162,6 +162,20 @@ func _test_visible_settings_and_reduced_motion(hud: GameHUD) -> void:
 	_true(not hud.current_ui_settings.show_discovery_info, "Der Schalter bewahrt ein ausdrückliches Ausschalten der Hinweise unmittelbar")
 	discovery_toggle.button_pressed = true
 	_true(hud.current_ui_settings.show_discovery_info, "Hinweise lassen sich im selben Screen wieder aktivieren")
+	var boss_arrow_toggle := hud.settings_screen.control_for_setting(&"toggle.show_boss_target_arrows") as CheckButton
+	var event_arrow_toggle := hud.settings_screen.control_for_setting(&"toggle.show_event_target_arrows") as CheckButton
+	_true(boss_arrow_toggle != null and boss_arrow_toggle.button_pressed, "Boss-Pfeile besitzen einen eigenen standardmäßig aktiven Schalter")
+	_true(event_arrow_toggle != null and event_arrow_toggle.button_pressed, "Eventmonster-Pfeile besitzen einen getrennten standardmäßig aktiven Schalter")
+	hud.set_boss_direction_indicator(true, Vector2.RIGHT)
+	hud.set_target_focus_direction_indicator(true, Vector2.LEFT, "8 s")
+	boss_arrow_toggle.button_pressed = false
+	_true(not hud.current_ui_settings.show_boss_target_arrows and hud.current_ui_settings.show_event_target_arrows, "Boss-Pfeile lassen sich ohne Einfluss auf Eventmonster-Pfeile abschalten")
+	_true(not hud.run_hud_screen.boss_direction_indicator().visible and hud.run_hud_screen.target_focus_direction_indicator().visible, "Boss-Schalter entfernt sofort ausschließlich den Boss-Randpfeil")
+	event_arrow_toggle.button_pressed = false
+	_true(not hud.current_ui_settings.show_event_target_arrows, "Eventmonster-Pfeile lassen sich separat abschalten")
+	_true(not hud.run_hud_screen.target_focus_direction_indicator().visible, "Eventmonster-Schalter entfernt seinen Randpfeil sofort")
+	boss_arrow_toggle.button_pressed = true
+	event_arrow_toggle.button_pressed = true
 	var health_toggle := hud.settings_screen.control_for_setting(&"toggle.show_character_health_bar") as CheckButton
 	_true(health_toggle != null and not health_toggle.button_pressed, "Der kleine Charakter-Lebensbalken ist standardmäßig ausgeschaltet")
 	_true(health_toggle != null and health_toggle.tooltip_text.contains("ohne Zahlen") and health_toggle.tooltip_text.contains("Doctor Milos"), "Der Schalter erklärt den kleinen zahlenlosen Lebensbalken über der Figur")
