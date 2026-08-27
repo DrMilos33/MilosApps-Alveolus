@@ -349,6 +349,8 @@ static func _section_title(section_id: StringName) -> String:
 		return "Grundwerte"
 	if value.begins_with("treatment:"):
 		return "Behandlung"
+	if value.begins_with("ability:run:"):
+		return "Im Run"
 	if value.begins_with("ability:"):
 		var parts := value.split(":")
 		var slot := int(parts[1]) if parts.size() > 1 else 0
@@ -360,6 +362,10 @@ static func _section_icon(section_id: StringName) -> StringName:
 	var value := String(section_id)
 	if value.begins_with("treatment:"):
 		return &"treatment"
+	if value == "ability:run:defense_cells":
+		return &"immune"
+	if value == "ability:run:regeneration":
+		return &"life_regeneration"
 	if value.begins_with("ability:"):
 		var parts := value.split(":")
 		if parts.size() > 2 and not parts[2].is_empty() and parts[2] != "legacy":

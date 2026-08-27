@@ -129,6 +129,12 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	_assert_compact_modal(hud.end_panel, GameHUD.END_PANEL_SIZE.y, "Ergebnis You suck")
+	var result_levels := hud.result_screen.find_child("LevelsButton", true, false) as Button
+	var result_retry := hud.result_screen.find_child("RetryButton", true, false) as Button
+	var result_campus := hud.result_screen.find_child("CampusButton", true, false) as Button
+	_check(result_levels != null and result_retry != null and result_campus != null, "Der Ergebnisfooter besitzt alle drei Aktionen")
+	if result_levels != null and result_retry != null and result_campus != null:
+		_check(result_retry.get_node_or_null(result_retry.focus_neighbor_top) == result_levels and result_campus.get_node_or_null(result_campus.focus_neighbor_top) == result_levels, "Die GameHUD-Fokussynchronisierung erhält die räumliche Ergebnisnavigation")
 	var failure_title := hud.result_screen.find_child("OutcomeTitle", true, false) as Label
 	_check(failure_title != null and failure_title.text == "You suck", "Niederlage verwendet den verbindlichen Titel exakt")
 	_check(
@@ -240,7 +246,7 @@ func _run() -> void:
 	var pause_stats_scroll := hud.pause_screen.body_scroll()
 	var pause_stat_sections := hud.pause_screen.stat_sections()
 	var pause_stat_rows := hud.pause_screen.stat_rows()
-	_check(pause_stats_grid.columns == 1, "Die Accordion-Abschnitte bleiben in einer klaren vertikalen Reihenfolge")
+	_check(pause_stats_grid.columns == 2, "Die Build-Accordionkarten nutzen breit zwei klare Dossierspalten")
 	var expected_section_ids: Array[StringName] = [
 		&"general",
 		&"treatment:treatment_precision",
@@ -255,8 +261,17 @@ func _run() -> void:
 		actual_section_ids.append(stable_section_id)
 		_check(section_panel.get_meta(&"alveolus_component", &"") == &"stat_accordion_section", "Jede Charakterwertegruppe verwendet die gemeinsame Accordion-Sektion")
 		_check(hud.pause_screen.section_header(stable_section_id) != null, "Jede Charakterwertegruppe besitzt eine fokussierbare Abschnittsüberschrift")
-		_check(hud.pause_screen.section_body(stable_section_id).columns == 2, "Geöffnete Abschnittswerte nutzen bei 1280 × 720 zwei kompakte Spalten")
-	_check(actual_section_ids == expected_section_ids and pause_stats_grid.get_child_count() == expected_section_ids.size(), "Grundwerte, Behandlung, aktive Slots und im Run erworbene Systeme erscheinen als stabile Abschnitte")
+		var expected_row_columns := 2 if stable_section_id == &"general" else 1
+		_check(hud.pause_screen.section_body(stable_section_id).columns == expected_row_columns, "Doctor-Kern und Buildkarten nutzen ihre vorgesehene Wertedichte")
+	_check(actual_section_ids == expected_section_ids and pause_stats_grid.get_child_count() == expected_section_ids.size() - 1, "Doctor-Kern, Behandlung, aktive Slots und im Run erworbene Systeme erscheinen als stabile Dossierabschnitte")
+	var defense_cells_header := hud.pause_screen.section_header(&"ability:run:defense_cells")
+	var regeneration_header := hud.pause_screen.section_header(&"ability:run:regeneration")
+	var defense_cells_group := defense_cells_header.find_child("SectionEyebrow", true, false) as Label if defense_cells_header != null else null
+	var regeneration_group := regeneration_header.find_child("SectionEyebrow", true, false) as Label if regeneration_header != null else null
+	var defense_cells_icon := defense_cells_header.find_child("SectionIcon", true, false) as SimpleIcon if defense_cells_header != null else null
+	var regeneration_icon := regeneration_header.find_child("SectionIcon", true, false) as SimpleIcon if regeneration_header != null else null
+	_check(defense_cells_group != null and defense_cells_group.text == "Im Run" and regeneration_group != null and regeneration_group.text == "Im Run", "Erworbene Systeme erscheinen als Im-Run-Build statt als falscher Aktivslot")
+	_check(defense_cells_icon != null and defense_cells_icon.kind == &"immune" and regeneration_icon != null and regeneration_icon.kind == &"life_regeneration", "Erworbene Systeme besitzen ihre semantischen Buildicons")
 	_check(hud.pause_screen.is_section_expanded(&"general"), "Grundwerte sind beim ersten Öffnen sichtbar")
 	_check(not hud.pause_screen.is_section_expanded(&"treatment:treatment_precision") and not hud.pause_screen.is_section_expanded(&"ability:0:ability_focus_field") and not hud.pause_screen.is_section_expanded(&"ability:1:ability_emergency_support"), "Behandlung und Aktivslots beginnen platzsparend eingeklappt")
 	var expected_stat_rows := 0
@@ -298,8 +313,8 @@ func _run() -> void:
 		else:
 			value_right_edges[value_column_key] = value_rect.end.x
 	_check(
-		pause_stats_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO and pause_stats_scroll.get_v_scroll_bar().visible,
-		"Dicht belegte Charakterwerte bleiben über einen gezielten inneren Scrollbereich vollständig erreichbar (Inhalt %.1f, Fläche %.1f, Modus %d)" % [pause_stats_grid.get_combined_minimum_size().y, pause_stats_scroll.size.y, pause_stats_scroll.vertical_scroll_mode]
+		pause_stats_scroll.vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED and not pause_stats_scroll.get_v_scroll_bar().visible,
+		"Das kompakte Doctor-/Build-Dossier erzeugt im normalen Ausgangszustand keinen unnötigen Scrollbereich (Build %.1f, Fläche %.1f, Modus %d)" % [pause_stats_grid.get_combined_minimum_size().y, pause_stats_scroll.size.y, pause_stats_scroll.vertical_scroll_mode]
 	)
 	hud.return_to_pause_menu()
 	_check(hud.pause_screen.visible and hud.pause_screen.current_mode() == PauseOverlay.Mode.MENU, "Zurück führt in den Menümodus der Pause statt in den Run")

@@ -151,6 +151,7 @@ const TYPE_HUD_ALERT := &"HudAlert"
 const TYPE_PAGE_HEADER := &"PageHeader"
 const TYPE_FORM_CONTROL := &"FormControl"
 const TYPE_VALUE_ROW := &"ValueRow"
+const TYPE_DOSSIER_VALUE_ROW := &"DossierValueRow"
 const TYPE_DAMAGE_TYPE_ROW := &"DamageTypeRow"
 const TYPE_DAMAGE_TYPE_CHIP := &"DamageTypeChip"
 const TYPE_TOOLTIP_CARD := &"TooltipCard"
@@ -276,6 +277,7 @@ static func _configure_variations(theme: Theme) -> void:
 	_register_panel_variation(theme, TYPE_PAGE_HEADER, surface_role_style(SurfaceRole.PAGE_HEADER))
 	_register_panel_variation(theme, TYPE_FORM_CONTROL, surface_role_style(SurfaceRole.FORM_CONTROL, COBALT))
 	_register_panel_variation(theme, TYPE_VALUE_ROW, surface_role_style(SurfaceRole.VALUE_ROW))
+	_register_panel_variation(theme, TYPE_DOSSIER_VALUE_ROW, dossier_value_row_style())
 	_register_panel_variation(theme, TYPE_DAMAGE_TYPE_ROW, surface_role_style(SurfaceRole.VALUE_ROW))
 	_register_panel_variation(theme, TYPE_DAMAGE_TYPE_CHIP, surface_role_style(SurfaceRole.DOCUMENT_INSET))
 	_register_panel_variation(theme, TYPE_TOOLTIP_CARD, surface_role_style(SurfaceRole.TOOLTIP_CARD, TURQUOISE))
@@ -580,6 +582,15 @@ static func surface_role_style(
 	style.corner_detail = 8
 	style.anti_aliasing = true
 	apply_corner_treatment(style, default_corner if corner_treatment < 0 else corner_treatment)
+	return style
+
+static func dossier_value_row_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(PETROL_DEEP, 0.12)
+	style.border_color = Color(SKY_DEEP, 0.24)
+	style.border_width_bottom = 1
+	style.corner_detail = 8
+	style.anti_aliasing = true
 	return style
 
 static func apply_corner_treatment(style: StyleBoxFlat, treatment: int) -> StyleBoxFlat:

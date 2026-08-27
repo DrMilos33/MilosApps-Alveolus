@@ -1,11 +1,13 @@
 extends SceneTree
 
 const OUTPUT_DIR := "res://.codex-temp/visual_restart/screens"
-const EXPECTED_CAPTURE_COUNT := 32
+const FULL_CAPTURE_COUNT := 32
+const STEP_ONE_CAPTURE_COUNT := 4
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
 var capture_suffix := "1280x720"
+var capture_scope := "full"
 var capture_count := 0
 var capture_failed := false
 
@@ -23,6 +25,8 @@ func _parse_capture_arguments() -> void:
 			capture_scale = float(argument.trim_prefix("--capture-scale="))
 		elif argument.begins_with("--capture-suffix="):
 			capture_suffix = argument.trim_prefix("--capture-suffix=")
+		elif argument.begins_with("--capture-scope="):
+			capture_scope = argument.trim_prefix("--capture-scope=")
 
 func _capture_views() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
@@ -42,16 +46,68 @@ func _capture_views() -> void:
 	settings.ui_scale = capture_scale
 	game.hud.configure_ui_settings(settings)
 	await _settle()
-	await _capture_suite(game)
+	if capture_scope == "step1":
+		await _capture_step_one(game)
+	else:
+		await _capture_suite(game)
 
 	game.queue_free()
 	await _settle()
-	if capture_failed or capture_count != EXPECTED_CAPTURE_COUNT:
-		push_error("Visuelle Abnahme unvollständig: %d/%d für %s" % [capture_count, EXPECTED_CAPTURE_COUNT, capture_suffix])
+	var expected_count := STEP_ONE_CAPTURE_COUNT if capture_scope == "step1" else FULL_CAPTURE_COUNT
+	if capture_failed or capture_count != expected_count:
+		push_error("Visuelle Abnahme unvollständig: %d/%d für %s" % [capture_count, expected_count, capture_suffix])
 		quit(1)
 		return
 	print("ALVEOLUS_VISUAL_CAPTURE_OK suffix=%s captures=%d" % [capture_suffix, capture_count])
 	quit(0)
+
+
+func _capture_step_one(game: Node) -> void:
+	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
+	game.meta.research_ranks[&"unlock_piercing_treatment"] = 1
+	game.selected_level = game.levels[1]
+	game._show_preparation()
+	await _settle()
+	game.start_run(game.pending_run_context)
+	await _settle_frames(45)
+	game.hud.show_pause(false, game.stats, game.state)
+	_populate_character_stats_capture(game)
+	game.hud._show_pause_stats()
+	await _settle()
+	if not _verify_pause_accordion(game.hud.pause_screen):
+		return
+	await _capture("pause_stats")
+	game.hud.pause_screen.set_section_expanded(&"general", false)
+	game.hud.pause_screen.set_section_expanded(&"treatment:treatment_precision", true)
+	await _settle()
+	await _capture("pause_stats_treatment")
+	game.hud.hide_pause()
+	game.hud.show_end(game.selected_level, true, "Der Herd ist kontrolliert.", 151.0, 5, 74, 22, true)
+	game.hud.set_result_reward_presentations(game.result_reward_presentations(22))
+	var visual_damage_stats: Array[Dictionary] = [
+		{"id": &"treatment_precision", "label": "Impuls", "damage": 812},
+		{"id": &"ability_defense_burst", "label": "Stoß", "damage": 164},
+	]
+	var visual_talent_stats: Array[Dictionary] = [
+		{"id": &"treatment_damage_training", "label": "Behandlungsgrundlage", "rank": 2, "max_rank": 3},
+	]
+	game.hud.set_result_damage_statistics(visual_damage_stats)
+	game.hud.set_result_talent_statistics(visual_talent_stats, true, true)
+	await _settle()
+	if not _verify_result_rewards(game.hud.result_screen):
+		return
+	if not _verify_result_ability_section(game.hud.result_screen, false):
+		return
+	await _capture("result")
+	game.hud.result_screen.get_ability_section_header().button_pressed = true
+	await _settle()
+	if not _verify_result_ability_section(game.hud.result_screen, true):
+		return
+	game.hud.result_screen.get_scroll_container().ensure_control_visible(
+		game.hud.result_screen.get_ability_section_header()
+	)
+	await _settle()
+	await _capture("result_abilities")
 
 func _capture_suite(game: Node) -> void:
 	game._show_campus()
@@ -265,6 +321,10 @@ func _capture_suite(game: Node) -> void:
 	await _settle()
 	if not _verify_result_ability_section(game.hud.result_screen, true):
 		return
+	game.hud.result_screen.get_scroll_container().ensure_control_visible(
+		game.hud.result_screen.get_ability_section_header()
+	)
+	await _settle()
 	await _capture("result_abilities")
 
 func _populate_character_stats_capture(game: Node) -> void:

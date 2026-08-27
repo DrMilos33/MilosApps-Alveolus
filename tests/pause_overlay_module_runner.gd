@@ -44,7 +44,7 @@ func _test_source_boundaries() -> void:
 	_check(source.contains("stat_sections") and source.contains("section_by_id"), "Pause übernimmt stabile getter-only Sektions-DTOs")
 	_check(source.contains("AlveolusUIComponents.modal_sheet"), "Pause verwendet die zentrale ModalSheet-Konstruktion")
 	_check(source.contains("AlveolusUIComponents.action_button"), "Pause verwendet zentrale Action- und Accordion-Köpfe")
-	_check(source.contains("AlveolusUIComponents.value_row"), "Charakterwerte verwenden zentrale ValueRows")
+	_check(source.contains("AlveolusUIComponents.dossier_value_row"), "Charakterwerte verwenden zentrale DossierValueRows")
 	_check(source.contains("SimpleIcon.new"), "Charakterwerte besitzen semantische HUD-Icons")
 	_check(not source.contains("add_theme_stylebox_override"), "Pause erzeugt keine lokale StyleBox-Kopie")
 	_check(not source.contains("Shader.new") and not source.contains("ShaderMaterial.new"), "Pause erzeugt keine lokalen Shaderressourcen")
@@ -137,11 +137,11 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	_check(overlay.set_mode(PauseOverlay.Mode.STATS, false), "Fassade kann die eingebetteten Charakterwerte öffnen")
 	await _settle()
 	_check(overlay.title_text() == "Charakterwerte", "Statmodus besitzt einen einfachen Titel")
-	_check(doctor_balance != null and not doctor_balance.visible and doctor_meta != null and not doctor_meta.visible, "Charakterwerte übernehmen keinen Pausenmeta-Leerraum")
+	_check(doctor_balance != null and not doctor_balance.visible and doctor_meta != null and doctor_meta.visible and doctor_meta.text == "Doctor Milos · aktueller Run", "Charakterwerte benennen den aktuellen Doctor-Datensatz ohne künstliche Gegenbreite")
 	_check(not overlay.resume_action().visible and overlay.back_action().visible, "Statmodus ersetzt Weiter durch einen festen Rückweg")
-	_check(overlay.stats_grid().columns == 1, "Accordion-Sektionen stehen als eindeutige volle Zeilen untereinander")
-	_check(overlay.stat_sections().size() == 4 and overlay.stats_grid().get_child_count() == 4, "Jede belegte DTO-Sektion besitzt genau einen stabilen Accordion-Container")
-	_check(overlay.stat_rows().size() == view_model.stat_count(), "Jeder DTO-Wert besitzt genau eine wiederverwendbare ValueRow")
+	_check(overlay.stats_grid().columns == 2, "Build-Sektionen nutzen breit zwei lesbare Dossierkarten")
+	_check(overlay.stat_sections().size() == 4 and overlay.stats_grid().get_child_count() == 3, "Der Doctor-Kern steht vollbreit vor genau drei Buildkarten")
+	_check(overlay.stat_rows().size() == view_model.stat_count(), "Jeder DTO-Wert besitzt genau eine wiederverwendbare DossierValueRow")
 	_assert_section_contract(overlay, view_model)
 	_assert_stat_rows(overlay)
 	var defense_row := overlay.section_body(&"general").get_child(3) as PanelContainer
@@ -166,6 +166,7 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	await _settle()
 	_check(treatment_header.button_pressed and overlay.section_body(&"treatment:treatment_precision").is_visible_in_tree(), "Buttonzustand und sichtbarer Sektionsbody bleiben synchron")
 	_check(not overlay.section_body(&"general").visible, "Eingeklappte Grundwerte lassen keinen versteckten Platz stehen")
+	_check(overlay.stats_grid().columns == 1, "Eine geöffnete Buildkarte erhält die volle Dossierbreite statt einer leeren Nachbarspalte")
 	_assert_section_disclosure_state(overlay, &"treatment:treatment_precision", true)
 	_assert_section_disclosure_state(overlay, &"general", false)
 
@@ -174,6 +175,7 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	overlay.set_section_expanded(&"general", true)
 	overlay.set_section_expanded(&"ability:0:ability_focus_field", true)
 	await _settle()
+	_check(overlay.stats_grid().columns == 1, "Bei 200 Prozent stapeln sich Buildkarten ohne horizontales Quetschen")
 	_check(overlay.section_body(&"general").columns == 2, "Bei 200 Prozent nutzen Statwerte weiterhin zwei lesbare Spalten")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Nur der tatsächlich geöffnete lange Inhalt aktiviert Scrollen")
 	_check(overlay.body_scroll().get_v_scroll_bar().visible, "Der notwendige Scrollbereich ist sichtbar erkennbar")
@@ -302,11 +304,17 @@ func _assert_section_contract(overlay: PauseOverlay, view_model: PauseOverlayVie
 		var panel := overlay.stat_sections()[view_model.sections().find(section)]
 		var header := overlay.section_header(section.id())
 		var body := overlay.section_body(section.id())
+		var expected_visual_role: StringName = &"patient_core" if section.id() == &"general" else &"build_card"
+		var expected_surface: StringName = AlveolusVisualTheme.TYPE_SECTION_GROUP if section.id() == &"general" else AlveolusVisualTheme.TYPE_ACTION_CARD
 		_check(panel.get_meta(&"alveolus_component", &"") == &"stat_accordion_section", "%s verwendet den zentralen Accordion-Container" % section.title())
-		_check(panel.theme_type_variation == AlveolusVisualTheme.TYPE_PANEL_INSET, "%s verwendet die semantische Inset-Fläche" % section.title())
+		_check(panel.get_meta(&"alveolus_visual_role", &"") == expected_visual_role, "%s besitzt die richtige Doctor-/Buildrolle" % section.title())
+		_check(panel.theme_type_variation == expected_surface, "%s verwendet die passende semantische Dossierfläche" % section.title())
 		_check(header != null and header.focus_mode == Control.FOCUS_ALL, "%s besitzt einen tastatur- und gamepadfähigen Kopf" % section.title())
 		_check(header.get_meta(&"alveolus_action_role", &"") == AlveolusUIComponents.ACTION_QUIET, "%s verwendet die zentrale Quiet-Buttonrolle" % section.title())
 		_check(not String(header.get_meta(&"alveolus_accessible_name", "")).is_empty(), "%s besitzt einen eindeutigen Accessible Name" % section.title())
+		var section_icon := header.find_child("SectionIcon", true, false) as SimpleIcon
+		var section_title := header.find_child("SectionTitle", true, false) as Label
+		_check(section_icon != null and section_title != null and not section_title.text.is_empty(), "%s besitzt Icon und klare Komponentenidentität" % section.title())
 		var chevron := header.find_child("SectionChevron", true, false) as SimpleIcon
 		_check(chevron != null and chevron.kind in [&"chevron_right", &"chevron_down"] and chevron.custom_minimum_size.x >= 20.0, "%s besitzt ein gut sichtbares zentrales Chevron" % section.title())
 		_check(body != null and body.get_parent() == header.get_parent() and body.get_index() > header.get_index(), "%s ordnet den Inhalt direkt nach seinem Kopf an" % section.title())
@@ -329,8 +337,8 @@ func _assert_stat_rows(overlay: PauseOverlay) -> void:
 	var has_measured_wide_value := false
 	for index in range(overlay.stat_rows().size()):
 		var row := overlay.stat_rows()[index]
-		_check(row.theme_type_variation == AlveolusVisualTheme.TYPE_VALUE_ROW, "Statzeile %d verwendet die zentrale ValueRow-Rolle" % index)
-		_check(row.get_meta(&"alveolus_component", &"") == &"value_row", "Statzeile %d stammt aus der zentralen ValueRow-Komponente" % index)
+		_check(row.theme_type_variation == AlveolusVisualTheme.TYPE_DOSSIER_VALUE_ROW, "Statzeile %d verwendet die ruhige DossierValueRow-Rolle" % index)
+		_check(row.get_meta(&"alveolus_component", &"") == &"dossier_value_row", "Statzeile %d stammt aus der zentralen DossierValueRow-Komponente" % index)
 		var icon := row.find_child("StatIcon", true, false) as SimpleIcon
 		var label := row.find_child("StatLabel", true, false) as Label
 		var value := row.find_child("StatValue", true, false) as Label

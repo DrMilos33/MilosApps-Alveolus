@@ -28,6 +28,8 @@ var _modal_host: VBoxContainer
 var _modal: PanelContainer
 var _body_content: VBoxContainer
 var _action_row: HBoxContainer
+var _outcome_emblem_center: CenterContainer
+var _outcome_title: Label
 var _stats_grid: GridContainer
 var _reward_grid: GridContainer
 var _action_grid: GridContainer
@@ -129,8 +131,6 @@ func get_stats_column_count() -> int:
 
 
 func get_action_column_count() -> int:
-	if _compact_layout and _compact_secondary_grid != null:
-		return _compact_secondary_grid.columns
 	return _action_grid.columns if _action_grid != null else 0
 
 
@@ -211,27 +211,37 @@ func _rebuild_modal() -> void:
 	_body_content = VBoxContainer.new()
 	_body_content.name = "ResultContent"
 	_body_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_body_content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	_body_content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 
-	var heading := HBoxContainer.new()
+	var heading := VBoxContainer.new()
 	heading.name = "OutcomeHeading"
 	heading.alignment = BoxContainer.ALIGNMENT_CENTER
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	heading.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 	_body_content.add_child(heading)
+	_outcome_emblem_center = CenterContainer.new()
+	_outcome_emblem_center.name = "OutcomeEmblemCenter"
+	_outcome_emblem_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	heading.add_child(_outcome_emblem_center)
+	var emblem := AlveolusUIComponents.surface(AlveolusVisualTheme.SurfaceRole.DETAIL_CARD, accent)
+	emblem.name = "OutcomeEmblem"
+	emblem.custom_minimum_size = Vector2(52.0, 52.0)
+	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_outcome_emblem_center.add_child(emblem)
 	var outcome_icon := SimpleIcon.new()
 	outcome_icon.name = "OutcomeIcon"
-	outcome_icon.custom_minimum_size = Vector2(34.0, 34.0)
+	outcome_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 12)
 	outcome_icon.configure(&"check" if _view_model.is_success() else &"remove", accent)
-	heading.add_child(outcome_icon)
-	var title := AlveolusUIComponents.label(_view_model.get_title(), AlveolusVisualTheme.TYPE_TITLE_LABEL)
-	title.name = "OutcomeTitle"
-	title.add_theme_color_override("font_color", accent.lightened(0.12))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
-	heading.add_child(title)
+	emblem.add_child(outcome_icon)
+	_outcome_title = AlveolusUIComponents.label(_view_model.get_title(), AlveolusVisualTheme.TYPE_TITLE_LABEL)
+	_outcome_title.name = "OutcomeTitle"
+	_outcome_title.add_theme_color_override("font_color", accent.lightened(0.12))
+	_outcome_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_outcome_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_outcome_title.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
+	heading.add_child(_outcome_title)
+
+	_build_reward_strip(_body_content)
 
 	var reason_text := _view_model.get_reason().strip_edges()
 	if not reason_text.is_empty():
@@ -254,17 +264,16 @@ func _rebuild_modal() -> void:
 	_stats_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	_stats_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	for stat in _view_model.get_stats():
-		var row := AlveolusUIComponents.value_row(stat.get_label(), stat.get_value(), stat.is_highlighted())
+		var row := _build_result_metric(stat)
 		row.name = "Stat_%s" % String(stat.get_id())
 		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_stats_grid.add_child(row)
 	if _stats_grid.get_child_count() > 0:
 		_body_content.add_child(_stats_grid)
 
-	_build_ability_section(_body_content)
-	_build_reward_strip(_body_content)
 	_add_optional_section(_body_content, &"unlock", "Freigeschaltet", _view_model.get_unlock_text(), &"archive", AlveolusVisualTheme.COBALT)
 	_add_optional_section(_body_content, &"mastery", "Meisterschaft", _view_model.get_mastery_text(), &"check", AlveolusVisualTheme.TURQUOISE)
+	_build_ability_section(_body_content)
 
 	_scroll = ScrollContainer.new()
 	_scroll.name = "ResultBodyScroll"
@@ -300,7 +309,6 @@ func _rebuild_modal() -> void:
 	_retry_button.name = "RetryButton"
 	_retry_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_retry_button.pressed.connect(func() -> void: retry.emit())
-	_action_grid.add_child(_retry_button)
 	_campus_button = AlveolusUIComponents.action_button(
 		_view_model.get_campus_action_text(),
 		AlveolusUIComponents.ACTION_SECONDARY,
@@ -310,14 +318,15 @@ func _rebuild_modal() -> void:
 	_campus_button.name = "CampusButton"
 	_campus_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_campus_button.pressed.connect(func() -> void: campus.emit())
-	_action_grid.add_child(_campus_button)
 	_compact_secondary_grid = GridContainer.new()
 	_compact_secondary_grid.name = "CompactSecondaryActions"
 	_compact_secondary_grid.columns = 2
 	_compact_secondary_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_compact_secondary_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	_compact_secondary_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
-	_compact_secondary_grid.hide()
+	_compact_secondary_grid.add_child(_retry_button)
+	_compact_secondary_grid.add_child(_campus_button)
+	_compact_secondary_grid.show()
 	_action_grid.add_child(_compact_secondary_grid)
 
 	var modal_actions: Array[Control] = [_action_grid]
@@ -339,20 +348,26 @@ func _rebuild_modal() -> void:
 
 
 func _link_action_focus_cycle() -> void:
-	var actions: Array[Button] = [_levels_button, _retry_button, _campus_button]
-	for index in range(actions.size()):
-		var action := actions[index]
-		var previous := actions[(index - 1 + actions.size()) % actions.size()]
-		var next := actions[(index + 1) % actions.size()]
-		action.focus_neighbor_left = action.get_path_to(previous)
-		action.focus_neighbor_right = action.get_path_to(next)
-		action.focus_neighbor_bottom = action.get_path_to(next)
-		action.focus_neighbor_top = (
-			action.get_path_to(_ability_section_header)
-			if _ability_section_header != null
-			else action.get_path_to(previous)
-		)
+	for action in [_levels_button, _retry_button, _campus_button]:
+		action.set_meta(&"alveolus_owns_directional_focus", true)
+	_levels_button.focus_neighbor_left = _levels_button.get_path_to(_campus_button)
+	_levels_button.focus_neighbor_right = _levels_button.get_path_to(_retry_button)
+	_levels_button.focus_neighbor_bottom = _levels_button.get_path_to(_retry_button)
+	_levels_button.focus_neighbor_top = (
+		_levels_button.get_path_to(_ability_section_header)
+		if _ability_section_header != null
+		else _levels_button.get_path_to(_campus_button)
+	)
+	_retry_button.focus_neighbor_left = _retry_button.get_path_to(_levels_button)
+	_retry_button.focus_neighbor_right = _retry_button.get_path_to(_campus_button)
+	_retry_button.focus_neighbor_top = _retry_button.get_path_to(_levels_button)
+	_retry_button.focus_neighbor_bottom = _retry_button.get_path_to(_levels_button)
+	_campus_button.focus_neighbor_left = _campus_button.get_path_to(_retry_button)
+	_campus_button.focus_neighbor_right = _campus_button.get_path_to(_levels_button)
+	_campus_button.focus_neighbor_top = _campus_button.get_path_to(_levels_button)
+	_campus_button.focus_neighbor_bottom = _campus_button.get_path_to(_levels_button)
 	if _ability_section_header != null:
+		_ability_section_header.set_meta(&"alveolus_owns_directional_focus", true)
 		_ability_section_header.focus_neighbor_left = _ability_section_header.get_path_to(_campus_button)
 		_ability_section_header.focus_neighbor_top = _ability_section_header.get_path_to(_campus_button)
 		_ability_section_header.focus_neighbor_right = _ability_section_header.get_path_to(_levels_button)
@@ -367,7 +382,10 @@ func _build_ability_section(parent: VBoxContainer) -> void:
 		_ability_section_expanded = false
 		return
 
-	_ability_section = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_PANEL_INSET)
+	_ability_section = AlveolusUIComponents.surface(
+		AlveolusVisualTheme.SurfaceRole.SECTION_GROUP,
+		AlveolusVisualTheme.TURQUOISE
+	)
 	_ability_section.name = "AbilitySection"
 	_ability_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ability_section.set_meta(&"alveolus_component", &"stat_accordion_section")
@@ -384,6 +402,7 @@ func _build_ability_section(parent: VBoxContainer) -> void:
 	_ability_section_header.name = "AbilitySectionHeader"
 	_ability_section_header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_ability_section_header.toggle_mode = true
+	_ability_section_header.flat = true
 	_ability_section_header.focus_mode = Control.FOCUS_ALL
 	_ability_section_header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ability_section_header.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
@@ -526,6 +545,27 @@ func _add_optional_section(
 	parent.add_child(panel)
 
 
+func _build_result_metric(stat: ResultOverlayViewModel.StatViewModel) -> VBoxContainer:
+	var metric := VBoxContainer.new()
+	metric.alignment = BoxContainer.ALIGNMENT_CENTER
+	metric.add_theme_constant_override("separation", 0)
+	metric.set_meta(&"alveolus_component", &"result_metric")
+	var value := AlveolusUIComponents.label(stat.get_value(), AlveolusVisualTheme.TYPE_SECTION_LABEL)
+	value.name = "Value"
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value.add_theme_color_override(
+		"font_color",
+		AlveolusVisualTheme.TURQUOISE if stat.is_highlighted() else AlveolusVisualTheme.IVORY
+	)
+	metric.add_child(value)
+	var caption := AlveolusUIComponents.label(stat.get_label(), AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	caption.name = "ValueName"
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	metric.add_child(caption)
+	return metric
+
+
 func _build_reward_strip(parent: VBoxContainer) -> void:
 	_reward_grid = null
 	var rewards := _view_model.get_reward_items()
@@ -544,47 +584,70 @@ func _build_reward_strip(parent: VBoxContainer) -> void:
 	parent.add_child(_reward_grid)
 
 
-func _build_reward_item(reward: ResultOverlayViewModel.RewardViewModel) -> VBoxContainer:
-	var column := VBoxContainer.new()
+func _build_reward_item(reward: ResultOverlayViewModel.RewardViewModel) -> PanelContainer:
+	var column := AlveolusUIComponents.surface(
+		AlveolusVisualTheme.SurfaceRole.ACTION_CARD,
+		_accent_color(reward.get_accent_role())
+	)
 	column.name = "Reward_%s" % String(reward.get_id())
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.custom_minimum_size.y = 76.0
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 	column.set_meta(&"reward_id", reward.get_id())
 	column.set_meta(&"alveolus_accessible_name", reward.get_accessible_name())
+	column.set_meta(&"reward_state", &"earned")
+	var stack := VBoxContainer.new()
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	stack.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 	var icon_center := CenterContainer.new()
 	icon_center.name = "IconCenter"
 	icon_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var icon := SimpleIcon.new()
 	icon.name = "RewardIcon"
-	icon.custom_minimum_size = Vector2(30.0, 30.0)
+	icon.custom_minimum_size = Vector2(36.0, 36.0)
 	icon.configure(reward.get_icon_id(), _accent_color(reward.get_accent_role()))
 	icon.set_meta(&"reward_icon_id", reward.get_icon_id())
 	icon_center.add_child(icon)
-	column.add_child(icon_center)
+	stack.add_child(icon_center)
 	var value := AlveolusUIComponents.label(reward.get_value(), AlveolusVisualTheme.TYPE_VALUE_LABEL)
 	# Compatibility target retained for the existing discovery anchor facade.
 	value.name = "Optional_reward_Body" if reward.get_id() == &"research" else "RewardValue"
 	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	value.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(value)
+	stack.add_child(value)
+	column.add_child(AlveolusUIComponents.margin(stack, 8))
 	return column
 
 
-func _build_reward_placeholder(index: int, text_value: String) -> VBoxContainer:
-	var column := VBoxContainer.new()
+func _build_reward_placeholder(index: int, text_value: String) -> PanelContainer:
+	var column := AlveolusUIComponents.surface(
+		AlveolusVisualTheme.SurfaceRole.DOCUMENT_INSET,
+		AlveolusVisualTheme.MUTED
+	)
 	column.name = "RewardPlaceholder%d" % (index + 1)
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.custom_minimum_size.y = 76.0
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.set_meta(&"reward_placeholder", true)
+	column.set_meta(&"reward_state", &"locked")
+	column.set_meta(&"alveolus_accessible_name", "Künftige Belohnung gesperrt: %s" % text_value)
+	var stack := VBoxContainer.new()
+	stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	stack.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	var lock_center := CenterContainer.new()
+	lock_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lock_icon := SimpleIcon.new()
+	lock_icon.name = "PlaceholderLock"
+	lock_icon.custom_minimum_size = Vector2(22.0, 22.0)
+	lock_icon.configure(&"locked", AlveolusVisualTheme.GOLD)
+	lock_center.add_child(lock_icon)
+	stack.add_child(lock_center)
 	var label := AlveolusUIComponents.label(text_value, AlveolusVisualTheme.TYPE_MUTED_LABEL)
 	label.name = "PlaceholderValue"
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_child(label)
+	stack.add_child(label)
+	column.add_child(AlveolusUIComponents.margin(stack, 8))
 	return column
 
 
@@ -617,8 +680,33 @@ func _refresh_responsive_layout() -> void:
 		_modal.custom_minimum_size.y = 0.0
 	if _stats_grid != null:
 		_stats_grid.columns = 1 if _compact_layout else maxi(1, mini(3, _stats_grid.get_child_count()))
+	if _outcome_emblem_center != null:
+		# On the 480 × 270 logical stage the title is the outcome signal; hiding
+		# only the decorative emblem keeps the first earned reward in view.
+		_outcome_emblem_center.visible = not _compact_layout
+	if _outcome_title != null:
+		_outcome_title.add_theme_font_size_override(
+			"font_size",
+			22 if _compact_layout else AlveolusVisualTheme.TEXT_TITLE
+		)
 	if _reward_grid != null:
 		_reward_grid.columns = 2 if _compact_layout else 4
+		for reward_value in _reward_grid.get_children():
+			var reward := reward_value as Control
+			if reward == null:
+				continue
+			reward.custom_minimum_size.y = 64.0 if _compact_layout else 76.0
+			var reward_icon := reward.find_child("RewardIcon", true, false) as SimpleIcon
+			if reward_icon != null:
+				reward_icon.custom_minimum_size = Vector2.ONE * (28.0 if _compact_layout else 36.0)
+			var lock_icon := reward.find_child("PlaceholderLock", true, false) as SimpleIcon
+			if lock_icon != null:
+				lock_icon.custom_minimum_size = Vector2.ONE * (18.0 if _compact_layout else 22.0)
+			var reward_margin := reward.get_child(0) as MarginContainer if reward.get_child_count() > 0 else null
+			if reward_margin != null:
+				var reward_inset := 6 if _compact_layout else 8
+				for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
+					reward_margin.add_theme_constant_override(side, reward_inset)
 	if _apply_action_layout():
 		_refresh_responsive_layout.call_deferred()
 		return
@@ -647,28 +735,10 @@ func _refresh_responsive_layout() -> void:
 func _apply_action_layout() -> bool:
 	if _action_grid == null or _compact_secondary_grid == null:
 		return false
-	var changed := false
-	var secondary_buttons: Array[Button] = [_retry_button, _campus_button]
-	if _compact_layout:
-		changed = changed or _action_grid.columns != 1 or _compact_secondary_grid.columns != 2
-		_action_grid.columns = 1
-		_compact_secondary_grid.columns = 2
-		_compact_secondary_grid.show()
-		for button in secondary_buttons:
-			if button != null and button.get_parent() != _compact_secondary_grid:
-				button.reparent(_compact_secondary_grid, false)
-				changed = true
-	else:
-		changed = changed or _action_grid.columns != 3 or _compact_secondary_grid.visible
-		_action_grid.columns = 3
-		for button in secondary_buttons:
-			if button != null and button.get_parent() != _action_grid:
-				button.reparent(_action_grid, false)
-				changed = true
-		_compact_secondary_grid.hide()
-	if changed:
-		_link_action_focus_cycle()
-	return changed
+	_action_grid.columns = 1
+	_compact_secondary_grid.columns = 2
+	_compact_secondary_grid.show()
+	return false
 
 
 func _restore_initial_scroll() -> void:

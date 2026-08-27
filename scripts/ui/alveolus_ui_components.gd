@@ -424,6 +424,37 @@ static func value_row(name_text: String, value_text: String, highlighted: bool =
 	row_panel.add_child(margin(row, 8))
 	return row_panel
 
+static func dossier_value_row(
+	name_text: String,
+	value_text: String,
+	icon_kind: StringName = &"",
+	accent: Color = AlveolusVisualTheme.TEAL
+) -> PanelContainer:
+	var row_panel := panel(AlveolusVisualTheme.TYPE_DOSSIER_VALUE_ROW)
+	row_panel.set_meta(&"alveolus_component", &"dossier_value_row")
+	var row := HBoxContainer.new()
+	row.name = "DossierValueContent"
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	if icon_kind != &"":
+		var icon := SimpleIcon.new()
+		icon.name = "ValueIcon"
+		icon.custom_minimum_size = Vector2(18.0, 18.0)
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon.configure(icon_kind, accent)
+		row.add_child(icon)
+	var name_label := label(name_text, AlveolusVisualTheme.TYPE_BODY_LABEL)
+	name_label.name = "ValueName"
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	row.add_child(name_label)
+	var value_label := label(value_text, AlveolusVisualTheme.TYPE_VALUE_LABEL)
+	value_label.name = "Value"
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.add_theme_color_override("font_color", accent.lightened(0.16))
+	row.add_child(value_label)
+	row_panel.add_child(margin(row, 8))
+	return row_panel
+
 static func stat_row(name_text: String, value_text: String, highlighted: bool = false) -> PanelContainer:
 	return value_row(name_text, value_text, highlighted)
 

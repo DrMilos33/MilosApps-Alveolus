@@ -4069,10 +4069,10 @@ func _configure_focus_cycle(scope: Control) -> Array[Control]:
 		var next := focusable[(index + 1) % focusable.size()]
 		button.focus_previous = button.get_path_to(previous)
 		button.focus_next = button.get_path_to(next)
-		if _is_talent_tree_node(button):
-			# TalentTreeBranch owns spatial D-pad navigation. Tab/Shift+Tab may
-			# still use the global cycle, but an overlay refresh must never flatten
-			# the drawn prerequisite branches into DOM order.
+		if _is_talent_tree_node(button) or bool(button.get_meta(&"alveolus_owns_directional_focus", false)):
+			# Spatial components own D-pad navigation. Tab/Shift+Tab may still use
+			# the global cycle, but an overlay refresh must never flatten a drawn
+			# tree or a two-tier action stage into DOM order.
 			continue
 		# Directional navigation must stay in the visible top layer instead of
 		# falling through to the dimmed campus that remains underneath it.

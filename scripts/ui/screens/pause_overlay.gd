@@ -27,12 +27,13 @@ enum Mode {
 }
 
 const MENU_MAXIMUM_WIDTH := 620.0
-const STATS_MAXIMUM_WIDTH := 820.0
+const STATS_MAXIMUM_WIDTH := 900.0
 const COMPACT_MENU_BREAKPOINT := 560.0
 # Two compact value columns remain readable down to the 480 x 270 logical
 # viewport used by 960 x 540 at 200 percent. Only genuinely narrow layouts
 # collapse to one column.
 const COMPACT_STATS_BREAKPOINT := 400.0
+const BUILD_GRID_BREAKPOINT := 700.0
 const MODAL_PADDING := 20
 const COMPACT_MODAL_PADDING := 16
 const STAT_LABEL_MINIMUM_WIDTH := 64.0
@@ -66,6 +67,7 @@ var _menu_body: VBoxContainer
 var _menu_actions: GridContainer
 var _menu_danger_row: HBoxContainer
 var _stats_body: VBoxContainer
+var _stats_core_host: VBoxContainer
 var _stats_grid: GridContainer
 var _empty_stats_label: Label
 var _test_body: VBoxContainer
@@ -505,11 +507,17 @@ func _build_stats_body() -> void:
 	_empty_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_stats_body.add_child(_empty_stats_label)
 
+	_stats_core_host = VBoxContainer.new()
+	_stats_core_host.name = "PatientCore"
+	_stats_core_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_stats_core_host.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	_stats_body.add_child(_stats_core_host)
+
 	_stats_grid = GridContainer.new()
-	_stats_grid.name = "StatSections"
-	_stats_grid.columns = 1
+	_stats_grid.name = "BuildSections"
+	_stats_grid.columns = 2
 	_stats_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_stats_grid.add_theme_constant_override("h_separation", 0)
+	_stats_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
 	_stats_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTENT_GAP)
 	_stats_body.add_child(_stats_grid)
 
@@ -711,24 +719,33 @@ func _sync_stat_sections() -> void:
 	_stat_rows.clear()
 	if _view_model == null:
 		_empty_stats_label.show()
+		_stats_core_host.hide()
 		_stats_grid.hide()
 		return
 	_empty_stats_label.visible = not _view_model.has_stats()
+	_stats_core_host.visible = _view_model.has_stats()
 	_stats_grid.visible = _view_model.has_stats()
 	var live_section_ids: Dictionary = {}
+	var build_index := 0
 	for section_index in range(_view_model.section_count()):
 		var section := _view_model.section_at(section_index)
 		var section_id: StringName = section.id()
 		live_section_ids[section_id] = true
+		var target_parent: Container = _stats_core_host if section_id == &"general" else _stats_grid
+		var target_index := 0 if section_id == &"general" else build_index
 		var section_panel := _section_controls.get(section_id) as PanelContainer
 		if section_panel == null:
 			section_panel = _create_stat_section(section)
 			_section_controls[section_id] = section_panel
-			_stats_grid.add_child(section_panel)
+			target_parent.add_child(section_panel)
 			_expanded_sections[section_id] = section_id == &"general"
-		_stats_grid.move_child(section_panel, section_index)
+		elif section_panel.get_parent() != target_parent:
+			section_panel.reparent(target_parent, false)
+		target_parent.move_child(section_panel, target_index)
 		_update_stat_section(section, section_panel)
 		_stat_sections.append(section_panel)
+		if section_id != &"general":
+			build_index += 1
 	for stale_id_value in _section_controls.keys():
 		var stale_id := StringName(String(stale_id_value))
 		if live_section_ids.has(stale_id):
@@ -739,7 +756,9 @@ func _sync_stat_sections() -> void:
 		_section_bodies.erase(stale_id)
 		_expanded_sections.erase(stale_id)
 		if stale_panel != null:
-			_stats_grid.remove_child(stale_panel)
+			var stale_parent := stale_panel.get_parent()
+			if stale_parent != null:
+				stale_parent.remove_child(stale_panel)
 			stale_panel.queue_free()
 	_update_focus_trap()
 	_queue_responsive_layout()
@@ -748,10 +767,18 @@ func _sync_stat_sections() -> void:
 
 func _create_stat_section(section: PauseOverlayViewModel.SectionViewModel) -> PanelContainer:
 	var section_id := section.id()
-	var section_panel := AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_PANEL_INSET)
+	var accent := _accent_color(section.accent_role())
+	var surface_role := (
+		AlveolusVisualTheme.SurfaceRole.SECTION_GROUP
+		if section_id == &"general"
+		else AlveolusVisualTheme.SurfaceRole.ACTION_CARD
+	)
+	var section_panel := AlveolusUIComponents.surface(surface_role, accent)
 	section_panel.name = "StatSection_%s" % _safe_node_suffix(section_id)
 	section_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section_panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	section_panel.set_meta(&"alveolus_component", &"stat_accordion_section")
+	section_panel.set_meta(&"alveolus_visual_role", &"patient_core" if section_id == &"general" else &"build_card")
 	section_panel.set_meta(&"section_id", section_id)
 	var stack := VBoxContainer.new()
 	stack.name = "SectionStack"
@@ -764,6 +791,7 @@ func _create_stat_section(section: PauseOverlayViewModel.SectionViewModel) -> Pa
 	header.name = "SectionHeader"
 	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	header.toggle_mode = true
+	header.flat = true
 	header.focus_mode = Control.FOCUS_ALL
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.custom_minimum_size.y = AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
@@ -781,6 +809,31 @@ func _create_stat_section(section: PauseOverlayViewModel.SectionViewModel) -> Pa
 	header_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	header_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	header_inset.add_child(header_row)
+	var section_icon := SimpleIcon.new()
+	section_icon.name = "SectionIcon"
+	section_icon.custom_minimum_size = Vector2(28.0, 28.0)
+	section_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	section_icon.configure(section.icon_id(), accent)
+	header_row.add_child(section_icon)
+	var identity := VBoxContainer.new()
+	identity.name = "SectionIdentity"
+	identity.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	identity.add_theme_constant_override("separation", 0)
+	identity.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var eyebrow := AlveolusUIComponents.label(section.title(), AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
+	eyebrow.name = "SectionEyebrow"
+	eyebrow.add_theme_color_override("font_color", accent.lightened(0.14))
+	eyebrow.visible = not section.detail_title().is_empty()
+	identity.add_child(eyebrow)
+	var header_label := AlveolusUIComponents.label(
+		section.detail_title() if not section.detail_title().is_empty() else section.title(),
+		AlveolusVisualTheme.TYPE_VALUE_LABEL
+	)
+	header_label.name = "SectionTitle"
+	header_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	header_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	identity.add_child(header_label)
+	header_row.add_child(identity)
 	var chevron := SimpleIcon.new()
 	chevron.name = "SectionChevron"
 	chevron.custom_minimum_size = Vector2.ONE * SECTION_CHEVRON_SIZE
@@ -788,16 +841,6 @@ func _create_stat_section(section: PauseOverlayViewModel.SectionViewModel) -> Pa
 	chevron.configure(&"chevron_right", AlveolusVisualTheme.TURQUOISE)
 	chevron.set_meta(&"alveolus_component", &"accordion_chevron")
 	header_row.add_child(chevron)
-	var header_label := AlveolusUIComponents.label(
-		section.display_title(),
-		AlveolusVisualTheme.TYPE_VALUE_LABEL
-	)
-	header_label.name = "SectionTitle"
-	header_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	header_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	header_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	header_row.add_child(header_label)
 	header.add_child(header_inset)
 	stack.add_child(header)
 	var body := GridContainer.new()
@@ -821,6 +864,9 @@ func _update_stat_section(section: PauseOverlayViewModel.SectionViewModel, _sect
 	if body == null or header == null:
 		return
 	header.set_meta(&"section_id", section_id)
+	var section_icon := header.find_child("SectionIcon", true, false) as SimpleIcon
+	if section_icon != null:
+		section_icon.configure(section.icon_id(), _accent_color(section.accent_role()))
 	_sync_section_rows(section, body)
 	_apply_section_expansion(section_id)
 
@@ -853,28 +899,30 @@ func _sync_section_rows(section: PauseOverlayViewModel.SectionViewModel, body: G
 
 
 func _create_stat_row(stat: PauseOverlayViewModel.StatValueViewModel) -> PanelContainer:
-	var row_panel := AlveolusUIComponents.value_row(stat.label(), stat.formatted_value())
+	var row_panel := AlveolusUIComponents.dossier_value_row(
+		stat.label(),
+		stat.formatted_value(),
+		stat.icon_id(),
+		_accent_color(stat.accent_role())
+	)
 	row_panel.name = "StatRow_%s" % _safe_node_suffix(stat.id())
-	row_panel.custom_minimum_size.y = 36.0
+	row_panel.custom_minimum_size.y = 40.0
 	row_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var inset := row_panel.get_child(0) as MarginContainer
-	var line := inset.get_child(0) as HBoxContainer
-	var marker := SimpleIcon.new()
-	marker.name = "StatIcon"
-	marker.custom_minimum_size = Vector2(18.0, 18.0)
-	marker.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	line.add_child(marker)
-	line.move_child(marker, 0)
-	var caption := line.get_child(1) as Label
-	caption.name = "StatLabel"
-	caption.autowrap_mode = TextServer.AUTOWRAP_OFF
-	caption.custom_minimum_size.x = STAT_LABEL_MINIMUM_WIDTH
-	caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	var value := line.get_child(2) as Label
-	value.name = "StatValue"
-	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	var marker := row_panel.find_child("ValueIcon", true, false) as SimpleIcon
+	if marker != null:
+		marker.name = "StatIcon"
+	var caption := row_panel.find_child("ValueName", true, false) as Label
+	if caption != null:
+		caption.name = "StatLabel"
+		caption.autowrap_mode = TextServer.AUTOWRAP_OFF
+		caption.custom_minimum_size.x = STAT_LABEL_MINIMUM_WIDTH
+		caption.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	var value := row_panel.find_child("Value", true, false) as Label
+	if value != null:
+		value.name = "StatValue"
+		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	return row_panel
 
 
@@ -920,6 +968,7 @@ func _apply_section_expansion(section_id: StringName) -> void:
 		var title := section.display_title() if section != null else "Werte"
 		var chevron := header.find_child("SectionChevron", true, false) as SimpleIcon
 		var title_label := header.find_child("SectionTitle", true, false) as Label
+		var eyebrow_label := header.find_child("SectionEyebrow", true, false) as Label
 		if chevron != null:
 			chevron.configure(
 				&"chevron_down" if expanded else &"chevron_right",
@@ -927,7 +976,14 @@ func _apply_section_expansion(section_id: StringName) -> void:
 			)
 			chevron.set_meta(&"accordion_state", &"expanded" if expanded else &"collapsed")
 		if title_label != null:
-			title_label.text = title
+			title_label.text = (
+				section.detail_title()
+				if section != null and not section.detail_title().is_empty()
+				else section.title() if section != null else "Werte"
+			)
+		if eyebrow_label != null:
+			eyebrow_label.text = section.title() if section != null else ""
+			eyebrow_label.visible = section != null and not section.detail_title().is_empty()
 		header.set_meta(&"accordion_state", &"expanded" if expanded else &"collapsed")
 		header.set_meta(
 			&"alveolus_accessible_name",
@@ -977,7 +1033,8 @@ func _apply_mode(mode: int) -> void:
 			_title_label.text = "Testwerte"
 	_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if menu_visible else HORIZONTAL_ALIGNMENT_LEFT
 	_doctor_balance.visible = menu_visible
-	_doctor_label.visible = menu_visible
+	_doctor_label.visible = mode in [Mode.MENU, Mode.STATS]
+	_doctor_label.text = "Doctor Milos" if menu_visible else "Doctor Milos · aktueller Run"
 	_menu_body.visible = menu_visible
 	_stats_body.visible = mode == Mode.STATS
 	if _test_body != null:
@@ -1038,6 +1095,14 @@ func _queue_responsive_layout() -> void:
 	_update_responsive_layout.call_deferred()
 
 
+func _has_expanded_build_section() -> bool:
+	for section_id_value in _expanded_sections:
+		var section_id := StringName(String(section_id_value))
+		if section_id != &"general" and bool(_expanded_sections[section_id_value]):
+			return true
+	return false
+
+
 func _update_responsive_layout() -> void:
 	if _center == null or _sheet == null or _body_scroll == null:
 		return
@@ -1066,11 +1131,18 @@ func _update_responsive_layout() -> void:
 	var compact_menu := sheet_width < COMPACT_MENU_BREAKPOINT
 	_menu_actions.columns = 2 if compact_menu or _has_test_settings() else 3
 	_set_compact_menu_layout(compact_menu)
-	_stats_grid.columns = 1
-	for body_value in _section_bodies.values():
+	# Resting build cards compare well in two columns. Once one card opens it
+	# becomes the focused dossier and receives the full row, avoiding a tall
+	# half-width card beside an unusable empty column.
+	_stats_grid.columns = 1 if sheet_width < BUILD_GRID_BREAKPOINT or _has_expanded_build_section() else 2
+	for section_id_value in _section_bodies:
+		var section_id := StringName(String(section_id_value))
+		var body_value: Variant = _section_bodies[section_id_value]
 		var section_body := body_value as GridContainer
 		if section_body != null:
-			section_body.columns = 1 if sheet_width < COMPACT_STATS_BREAKPOINT else 2
+			section_body.columns = (
+				1 if section_id != &"general" or sheet_width < COMPACT_STATS_BREAKPOINT else 2
+			)
 	_set_compact_stat_label_width(compact_menu)
 
 	_body_scroll.custom_minimum_size.y = 0.0

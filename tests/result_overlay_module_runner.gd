@@ -69,7 +69,7 @@ func _run() -> void:
 	var outcome_title := overlay.find_child("OutcomeTitle", true, false) as Label
 	_check(outcome_title != null and outcome_title.get_line_count() == 1, "Ergebnistitel nutzt breit eine vollständige Zeile statt Zeichenumbruch")
 	_check(outcome_title != null and outcome_title.size.x >= 180.0, "Ergebnistitel erhält die verfügbare Überschriftenbreite")
-	_check(overlay.get_modal().size.y < host.size.y * 0.9, "Breites Ergebnis bleibt inhaltsgetrieben statt viewportfüllend")
+	_check(overlay.get_modal().size.y < host.size.y * 0.9, "Breites Ergebnis bleibt inhaltsgetrieben statt viewportfüllend (Modal %.1f / Host %.1f)" % [overlay.get_modal().size.y, host.size.y])
 	_check(overlay.get_stats_column_count() == 3, "Drei kompakte Wertezeilen stehen breit nebeneinander")
 	var ability_section := overlay.find_child("AbilitySection", true, false) as PanelContainer
 	var ability_header := overlay.get_ability_section_header()
@@ -84,16 +84,18 @@ func _run() -> void:
 	_check(not overlay.is_ability_section_expanded() and ability_body != null and not ability_body.visible, "Fähigkeitsdetails beginnen standardmäßig eingeklappt")
 	_check(ability_chevron != null and ability_chevron.kind == &"chevron_right" and ability_chevron.get_meta(&"accordion_state", &"") == &"collapsed", "Der eingeklappte Zustand verwendet das semantische Rechts-Chevron")
 	_check(ability_header != null and String(ability_header.get_meta(&"alveolus_accessible_name", "")).contains("eingeklappt"), "Der Accessible Name benennt den eingeklappten Zustand")
-	_check(overlay.get_action_column_count() == 3, "Folgeaktionen stehen breit in drei Spalten")
+	_check(overlay.get_action_column_count() == 1, "Die dominante Fallübersicht steht vollbreit über den Folgeaktionen")
 	var result_actions := overlay.find_child("ResultActions", true, false) as GridContainer
+	var secondary_actions := overlay.find_child("CompactSecondaryActions", true, false) as GridContainer
+	_check(secondary_actions != null and secondary_actions.visible and secondary_actions.columns == 2, "Erneut behandeln und Zum Campus bilden eine ruhige Sekundärzeile")
 	_check(overlay.get_modal().is_ancestor_of(overlay.get_scroll_container()), "Ergebnis besitzt einen internen Body-Scroll innerhalb des ModalSheets")
 	_check(result_actions != null and not overlay.get_scroll_container().is_ancestor_of(result_actions), "Ergebnisaktionen liegen als fester Footer außerhalb des Body-Scrolls")
-	_check(overlay.get_scroll_container().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Breiter kurzer Ergebnisinhalt erzeugt keinen unnötigen Scrollbereich")
+	_check(overlay.get_scroll_container().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Breiter kurzer Ergebnisinhalt erzeugt keinen unnötigen Scrollbereich (Inhalt %.1f / View %.1f)" % [(overlay.find_child("ResultContent", true, false) as Control).get_combined_minimum_size().y, overlay.get_scroll_container().size.y])
 	_check(_optional_section_count(overlay) == 2, "Nur Freischaltung und Meisterschaft bleiben optionale Textsektionen")
 	var reward_strip := overlay.find_child("RewardStrip", true, false) as GridContainer
 	_check(reward_strip != null and overlay.get_reward_column_count() == 4, "Rewardstrip besitzt breit exakt vier Spalten")
 	_check(not overlay.find_children("*", "Label", true, false).any(func(node: Node) -> bool: return (node as Label).text == "Belohnung"), "Ergebnis reserviert keine Überschrift Belohnung")
-	var reward_column := overlay.find_child("Reward_research", true, false) as VBoxContainer
+	var reward_column := overlay.find_child("Reward_research", true, false) as PanelContainer
 	var reward_icon := reward_column.find_child("RewardIcon", true, false) as SimpleIcon if reward_column != null else null
 	var reward_value := overlay.find_child("Optional_reward_Body", true, false) as Label
 	_check(reward_icon != null and reward_icon.kind == &"research" and reward_value != null and reward_value.text == "+22", "Forschungsreward zeigt ausschließlich Datenicon und Wert darunter")
@@ -101,6 +103,8 @@ func _run() -> void:
 	_check(overlay.reward_anchor(&"missing") == null, "Unbekannte Ergebnisbelohnungen erzeugen keinen falschen Hinweisanker")
 	_check(reward_column != null and reward_column.get_meta(&"alveolus_accessible_name", "") == "Forschung +22", "Iconreward transportiert einen redundanten Accessible Name")
 	_check(_reward_placeholder_texts(overlay) == PackedStringArray(["+ irgendwas", "+ maybe nochwas", "+ idk"]), "Drei zusätzliche Rewardspalten besitzen exakt die freigegebene Placeholder-Copy")
+	_check(_reward_placeholder_lock_count(overlay) == 3, "Noch nicht belegte Rewardplätze sind als gesperrte Zukunftsslots lesbar")
+	_assert_result_information_order(overlay)
 	_check(_primary_action_count(overlay) == 1, "Genau eine Folgeaktion ist visuell primär")
 	_check(overlay.get_default_focus_control() == overlay.find_child("LevelsButton", true, false), "Fallübersicht ist die dominante Defaultaktion")
 	overlay.grab_initial_focus()
@@ -116,13 +120,16 @@ func _run() -> void:
 	_check(ability_chevron.kind == &"chevron_down" and ability_chevron.get_meta(&"accordion_state", &"") == &"expanded", "Der ausgeklappte Zustand verwendet das semantische Abwärts-Chevron")
 	_check(String(ability_header.get_meta(&"alveolus_accessible_name", "")).contains("ausgeklappt"), "Der Accessible Name benennt den ausgeklappten Zustand")
 	_assert_ability_detail_order(overlay)
+	ability_header.toggled.emit(false)
+	await _settle()
 
 	_resize_logical_host(host, Vector2i(480, 270))
 	await _settle()
 	_check(overlay.is_compact_layout(), "480 logische Pixel bilden die 200-Prozent-Kompaktansicht ab")
 	_check(overlay.get_stats_column_count() == 1, "Ergebniswerte stapeln kompakt einspaltig")
 	_check(overlay.get_reward_column_count() == 2, "Der Vierer-Rewardstrip bricht kompakt ohne horizontales Scrollen zweispaltig um")
-	_check(overlay.get_action_column_count() == 2, "Sekundäre Ergebnisaktionen sparen kompakt in zwei Spalten Platz für die Begründung")
+	_check(overlay.get_action_column_count() == 1, "Die dominante Fallübersicht bleibt auch kompakt vollbreit")
+	_check(_is_visible_in_scroll(reward_icon, overlay.get_scroll_container()), "Die erste verdiente Belohnung bleibt auf der kompakten Ausgangsansicht sichtbar")
 	_check(overlay.get_modal().size.x <= overlay.size.x + 0.5, "ModalSheet bleibt vollständig in der kompakten Layerbreite")
 	_check(_is_fully_visible(result_actions, overlay), "Der kompakte Aktionsfooter bleibt vollständig im sichtbaren Ergebnislayer")
 	_check(overlay.get_scroll_container().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Nur der überlange kompakte Ergebnisrumpf aktiviert Scrollen")
@@ -253,6 +260,8 @@ func _assert_focus_cycle(overlay: ResultOverlay) -> void:
 		return
 	_check(levels_button.get_node_or_null(levels_button.focus_neighbor_left) == campus_button, "Rückwärtsfokus bleibt in den Ergebnisaktionen")
 	_check(campus_button.get_node_or_null(campus_button.focus_neighbor_right) == levels_button, "Vorwärtsfokus bleibt in den Ergebnisaktionen")
+	_check(retry_button.get_node_or_null(retry_button.focus_neighbor_top) == levels_button and campus_button.get_node_or_null(campus_button.focus_neighbor_top) == levels_button, "Beide Sekundäraktionen führen räumlich nach oben zur vollbreiten Primäraktion")
+	_check(levels_button.get_meta(&"alveolus_owns_directional_focus", false) and retry_button.get_meta(&"alveolus_owns_directional_focus", false) and campus_button.get_meta(&"alveolus_owns_directional_focus", false), "Der zweistufige Footer schützt seine räumliche Navigation vor dem globalen DOM-Zyklus")
 	_check(ability_header != null and levels_button.get_node_or_null(levels_button.focus_neighbor_top) == ability_header, "Vertikalfokus erreicht den Fähigkeitskopf aus dem festen Footer")
 	_check(ability_header != null and ability_header.get_node_or_null(ability_header.focus_neighbor_bottom) == levels_button, "Der Fähigkeitskopf führt per D-Pad zur dominanten Ergebnisaktion zurück")
 
@@ -297,11 +306,39 @@ func _primary_action_count(overlay: ResultOverlay) -> int:
 func _reward_placeholder_texts(overlay: ResultOverlay) -> PackedStringArray:
 	var result := PackedStringArray()
 	for index in range(1, 4):
-		var column := overlay.find_child("RewardPlaceholder%d" % index, true, false) as VBoxContainer
+		var column := overlay.find_child("RewardPlaceholder%d" % index, true, false) as PanelContainer
 		var value := column.find_child("PlaceholderValue", true, false) as Label if column != null else null
 		if value != null:
 			result.append(value.text)
 	return result
+
+
+func _reward_placeholder_lock_count(overlay: ResultOverlay) -> int:
+	var count := 0
+	for index in range(1, 4):
+		var column := overlay.find_child("RewardPlaceholder%d" % index, true, false) as PanelContainer
+		var lock_icon := column.find_child("PlaceholderLock", true, false) as SimpleIcon if column != null else null
+		if column != null \
+				and column.get_meta(&"reward_state", &"") == &"locked" \
+				and lock_icon != null \
+				and lock_icon.kind == &"locked":
+			count += 1
+	return count
+
+
+func _assert_result_information_order(overlay: ResultOverlay) -> void:
+	var content := overlay.find_child("ResultContent", true, false) as VBoxContainer
+	var heading := overlay.find_child("OutcomeHeading", true, false) as Control
+	var rewards := overlay.find_child("RewardStrip", true, false) as Control
+	var reason := overlay.find_child("Reason", true, false) as Control
+	var stats := overlay.find_child("StatsGrid", true, false) as Control
+	var abilities := overlay.find_child("AbilitySection", true, false) as Control
+	_check(content != null and heading != null and rewards != null and stats != null and abilities != null, "Ergebnis besitzt alle Ebenen der Abschlussinszenierung")
+	if content == null or heading == null or rewards == null or stats == null or abilities == null:
+		return
+	_check(heading.get_index() < rewards.get_index(), "Belohnungen folgen unmittelbar auf den Ausgang")
+	_check(reason == null or rewards.get_index() < reason.get_index(), "Die Belohnung steht vor erklärender Abschlusscopy")
+	_check(rewards.get_index() < stats.get_index() and stats.get_index() < abilities.get_index(), "Runbilanz führt von Belohnung über Kennzahlen zu optionalen Details")
 
 
 func _is_visible_in_scroll(control: Control, scroll: ScrollContainer) -> bool:
