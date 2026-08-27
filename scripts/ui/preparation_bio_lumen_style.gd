@@ -128,20 +128,27 @@ static func remove_action(state: StringName) -> StyleBoxFlat:
 	return _with_insets(_signature_base(background, border, width, 11, 4), 14.0, 8.0)
 
 static func inline_remove_action(state: StringName) -> StyleBoxFlat:
-	# Header action: intentionally lighter than a full button. It occupies a
-	# stable reserved slot and communicates interaction through a quiet surface
-	# change instead of a permanent frame.
-	var background := Color.TRANSPARENT
+	# Compact equipment action: a persistent instrument-like capsule instead of
+	# a flat browser link, while remaining secondary to the loadout choices.
+	var background := Color("311a20", 0.82)
+	var border := Color("ef7766", 0.48)
+	var width := 1
 	match state:
 		&"hover":
-			background = Color("ef7766", 0.12)
+			background = Color("4a292d", 0.92)
+			border = Color("ff8b7a", 0.92)
+			width = 2
 		&"pressed":
-			background = Color("ef7766", 0.20)
+			background = Color("27151b", 0.96)
+			border = Color("ef7766", 0.74)
 		&"focus":
-			background = Color("51d6cb", 0.13)
+			background = Color("3c2228", 0.94)
+			border = FOCUS_TURQUOISE
+			width = 2
 		&"disabled":
-			background = Color.TRANSPARENT
-	return _with_insets(_signature_base(background, Color.TRANSPARENT, 0, 7, 3), 4.0, 2.0)
+			background = Color("1d2024", 0.46)
+			border = Color(LOCKED_BORDER, 0.20)
+	return _with_insets(_signature_base(background, border, width, 10, 4), 8.0, 4.0)
 
 static func chip(accent: Color) -> StyleBoxFlat:
 	var style := _signature_base(Color("041d23", 0.72), Color(accent, 0.24), 1, 12, 4)

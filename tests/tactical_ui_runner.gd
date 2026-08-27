@@ -171,6 +171,9 @@ func _run() -> void:
 	_check(hud.preparation_random_traits.get_child_count() == 2, "Die Fallkurzinfo zeigt beide Fallmerkmale als getrennte sichtbare Einträge")
 	_check(hud.preparation_random_traits_header.visible and hud.preparation_random_traits_header.text == "ZUFALLSEREIGNISSE", "Das Merkmalspaar besitzt eine gemeinsame sichtbare Überschrift")
 	_check(hud.preparation_trait_separator.visible and hud.preparation_facts_group.columns == 3, "Ein sichtbarer Separator trennt Fakten und das zweifache Merkmalspaar")
+	var first_trait_rect := (hud.preparation_random_traits.get_child(0) as Control).get_global_rect()
+	var second_trait_rect := (hud.preparation_random_traits.get_child(1) as Control).get_global_rect()
+	_check(absf(first_trait_rect.position.y - second_trait_rect.position.y) <= 1.0 and second_trait_rect.position.x > first_trait_rect.position.x, "Die zwei Zufallsereignisse stehen auf der breiten Fallbühne nebeneinander")
 	for trait_chip in hud.preparation_random_traits.get_children():
 		_check(str((trait_chip as Control).get_meta(&"alveolus_accessible_name", "")).contains("15 Prozent mehr Forschung"), "Jedes sichtbare Fallmerkmal erklärt seinen eigenen Forschungsbonus")
 		_check((trait_chip as Control).focus_mode == Control.FOCUS_ALL, "Jedes sichtbare Fallmerkmal ist für ui_info fokussierbar")
@@ -184,7 +187,9 @@ func _run() -> void:
 	_check(_stylebox_matches(dossier_style, PreparationBioLumenStyle.dossier()), "Fallkurzinfo verwendet die freigegebene Bio-Lumen-Membran")
 	var plan_frame_style := hud.preparation_plan_panel.get_theme_stylebox("panel") as StyleBoxFlat
 	var editor_frame_style := hud.preparation_catalog_panel.get_theme_stylebox("panel") as StyleBoxFlat
-	_check(_stylebox_matches(plan_frame_style, PreparationBioLumenStyle.loadout_rack()), "Einsatzkit verwendet seinen goldakzentuierten Socket-Rahmen")
+	_check(_stylebox_matches(plan_frame_style, PreparationBioLumenStyle.loadout_rack()), "Loadout verwendet seinen goldakzentuierten Socket-Rahmen")
+	var loadout_header := hud.preparation_plan_panel.find_child("LoadoutTitle", true, false) as Label
+	_check(loadout_header != null and loadout_header.text == "LOADOUT", "Der linke Planbereich heißt sichtbar ausschließlich Loadout")
 	_check(_stylebox_matches(editor_frame_style, PreparationBioLumenStyle.instrument_bay()), "Instrumentenfach verwendet seinen eigenen Bio-Lumen-Rahmen")
 	var planning_back := hud.preparation_header_back_button as IconTextButton
 	_check(planning_back != null and planning_back.icon_view != null and planning_back.icon_view.kind == &"back", "Zur Fallauswahl verwendet den lokalen semantischen Zurück-Button")
@@ -247,17 +252,7 @@ func _run() -> void:
 			var description := slot_button.find_child("Description", true, false) as Label
 			_check(is_equal_approx(slot_button.custom_minimum_size.y, expected_height), "Auswahl von %s lässt den festen Planplatz %s unverändert bei %.0f px" % [selected_slot_id, slot_id, expected_height])
 			_check(description != null and not description.text.to_lower().contains("ausgewählt"), "Planplatz %s erklärt sich ohne redundantes ‚Ausgewählt‘" % slot_id)
-		_check(hud.preparation_socket_link.visible and hud.preparation_editor_link_port.visible, "Auswahl von %s verbindet den Socket sichtbar mit dem Instrumentenfach" % selected_slot_id)
-		var selected_slot := hud.preparation_slot_buttons[selected_slot_id] as Control
-		var connector_points := hud.preparation_socket_link.points
-		var connector_start_global := hud.preparation_socket_link.to_global(connector_points[0]) if connector_points.size() == 2 else Vector2.ZERO
-		var connector_finish_global := hud.preparation_socket_link.to_global(connector_points[1]) if connector_points.size() == 2 else Vector2.ZERO
-		_check(
-			connector_points.size() == 2 \
-				and absf(connector_start_global.x - (selected_slot.get_global_rect().end.x - 10.0)) <= 1.0 \
-				and absf(connector_finish_global.x - (hud.preparation_catalog_panel.get_global_rect().position.x + 1.0)) <= 1.0,
-			"Auswahl von %s hält die Leitung ausschließlich im kurzen Spalt zwischen Socket und Instrumentenfach" % selected_slot_id
-		)
+	_check(hud.preparation_workspace_host.find_child("SelectedSocketLink", true, false) == null and hud.preparation_workspace_host.find_child("InstrumentBayPort", true, false) == null, "Die Einsatzplanung markiert den gewählten Slot ohne zusätzliche Pfeil- oder Leitungsdekoration")
 	hud._on_preparation_slot_pressed(LoadoutSlotId.TREATMENT)
 	await process_frame
 	_check(not hud.preparation_editor_browse.visible and hud.preparation_editor_picker.visible, "Der alte Übersichtsmodus bleibt vollständig aus dem Navigationsfluss entfernt")
@@ -349,7 +344,8 @@ func _run() -> void:
 	_check(remove_button != null and remove_button.visible and remove_button.name == "RemoveSelectedSlot", "Ein belegter, entfernbarer Planplatz zeigt die kompakte Entfernen-Aktion")
 	_check(remove_button.theme_type_variation == AlveolusVisualTheme.TYPE_DANGER_BUTTON, "Entfernen verwendet die semantische Danger-Rolle")
 	_check(remove_button.icon_view != null and remove_button.icon_view.kind == &"remove", "Entfernen besitzt ein eindeutiges Entfernen-Icon")
-	_check(is_equal_approx(remove_button.custom_minimum_size.y, 26.0), "Entfernen bleibt als ruhige Headeraktion exakt 26 Designpixel hoch")
+	_check(is_equal_approx(remove_button.custom_minimum_size.y, 44.0) and remove_button.caption.text == "ENTFERNEN", "Entfernen erscheint als kompakte Ausrüstungsaktion mit vollständigem 44-px-Trefferziel statt als flacher Link")
+	_check(remove_button.icon_view.framed and is_equal_approx(remove_button.icon_view.custom_minimum_size.x, 16.0), "Entfernen trägt ein gerahmtes, klar erkennbares Instrumenticon")
 	_check(remove_button.get_parent() != null and remove_button.get_parent().name == &"EditorHeaderAction" and _control_inside(hud.preparation_catalog_panel, remove_button), "Entfernen liegt vollständig in der stabil reservierten Editor-Kopfzone")
 	_check(not hud.preparation_inspector.is_ancestor_of(remove_button), "Der schwebende Tooltip enthält keine Entfernen-Aktion")
 	for component_button in hud.preparation_component_buttons.values():
@@ -433,6 +429,10 @@ func _run() -> void:
 	validation = LoadoutValidator.validate(prepared, module_catalog, {}, 8)
 	hud.refresh_preparation({"trait": ContentCatalog.case_trait_definitions()[&"monster_health_15"], "validation": validation}, module_catalog.values(), prepared)
 	_check(_named_label_text(hud.preparation_slots.get_child(0) as Control, "Title").contains("Wählen") and _named_label_text(hud.preparation_slots.get_child(1) as Control, "Title").contains("Wählen"), "Leere Grundbehandlung verschiebt aktive Slots nicht")
+	_check(hud.preparation_capacity_label.text.contains("0 / 8") and hud.preparation_capacity_label.get_theme_color("font_color").is_equal_approx(Color("abc1c4")), "Ungenutzte globale Kapazität zeigt ihre Null bewusst gedämpft")
+	for empty_slot_value in hud.preparation_slot_buttons.values():
+		var empty_cost := (empty_slot_value as Button).find_child("Cost", true, false) as Label
+		_check(empty_cost != null and empty_cost.text == "0" and empty_cost.get_theme_color("font_color").is_equal_approx(Color("abc1c4")), "Ein leerer Loadout-Socket zeigt seine Nullkapazität grau")
 
 	var intro_view := prep_view.duplicate(true)
 	intro_view["tutorial_locked"] = true
@@ -450,7 +450,6 @@ func _run() -> void:
 		intro_duration_copy += (label_node as Label).text
 	_check(intro_duration_copy.contains("∞") and not intro_duration_copy.contains("Ereignisgesteuert") and not intro_duration_copy.contains("Ohne Zeitlimit"), "Die Einsatzplanung zeigt die unendliche Introzeit ausschließlich als ∞")
 	_check(hud.preparation_lock_panel.visible and not hud.preparation_workspace.visible, "Die Einführung zeigt ausschließlich die volle Plan-Sperrfläche statt bearbeitbarer Planmodule")
-	_check(not hud.preparation_socket_link.visible and not hud.preparation_editor_link_port.visible, "Die Intro-Sperre verbirgt auch die beiden dekorativen Socket-Verbindungen")
 	_check(_control_inside(hud.preparation_workspace_host, hud.preparation_lock_panel) and hud.preparation_lock_panel.get_global_rect().size.is_equal_approx(hud.preparation_workspace_host.get_global_rect().size), "Die Intro-Sperre deckt den gesamten Plan-Arbeitsbereich ab")
 	_check(hud.preparation_lock_panel.z_index == 0, "Die Intro-Sperre bleibt im lokalen Plan-Layer und übermalt keine späteren Bestätigungsdialoge")
 	_check(not hud.preparation_start_button.disabled, "Der festgelegte Einführungsplan kann ohne Planbearbeitung direkt gestartet werden")
