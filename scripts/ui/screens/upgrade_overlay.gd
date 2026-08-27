@@ -12,15 +12,18 @@ signal upgrade_selected(id: StringName)
 signal reroll_requested
 signal cancel_requested
 
-const SINGLE_WIDTH := 440.0
-const SINGLE_EDUCATION_WIDTH := 520.0
-const DOUBLE_WIDTH := 680.0
-const TRIPLE_WIDTH := 940.0
+const SINGLE_WIDTH := 460.0
+const SINGLE_EDUCATION_WIDTH := 540.0
+const DOUBLE_WIDTH := 740.0
+const TRIPLE_WIDTH := 1000.0
 const MINIMUM_CARD_WIDTH := 240.0
-const CARD_HEIGHT := 120.0
+const CARD_HEIGHT := 232.0
+const COMPACT_CARD_HEIGHT := 116.0
 const EXTRA_VALUE_ROW_HEIGHT := 20.0
-const UPGRADE_ICON_SIZE := 34.0
+const UPGRADE_ICON_SIZE := 72.0
+const COMPACT_UPGRADE_ICON_SIZE := 52.0
 const MODAL_PADDING := 20
+const COMPACT_MODAL_PADDING := 12
 const FOCUS_LINE_WIDTH := 2.0
 
 static var _numeric_fragment_pattern: RegEx
@@ -34,6 +37,7 @@ var _safe_area: MarginContainer
 var _center: CenterContainer
 var _sheet: PanelContainer
 var _sheet_stack: VBoxContainer
+var _sheet_inset: MarginContainer
 var _body_scroll: ScrollContainer
 var _scrollbar_inset: MarginContainer
 var _body_stack: VBoxContainer
@@ -291,6 +295,17 @@ func _build() -> void:
 	_sheet = sheet_parts["panel"] as PanelContainer
 	_sheet_stack = sheet_parts["content"] as VBoxContainer
 	_sheet.name = "UpgradeSheet"
+	# Keep the shared ModalSheet ownership/focus contract, but let this reward
+	# stage recede behind the three materially stronger choice surfaces.
+	_sheet.remove_theme_stylebox_override("panel")
+	_sheet.theme_type_variation = AlveolusVisualTheme.TYPE_UPGRADE_STAGE
+	var membrane := _sheet.get_node_or_null("BioLumenSurface") as CanvasItem
+	if membrane != null:
+		membrane.modulate = Color(1.0, 1.0, 1.0, 0.34)
+	for child in _sheet.get_children():
+		if child is MarginContainer:
+			_sheet_inset = child as MarginContainer
+			break
 	var level_up_title := _sheet_stack.get_child(0) as Label
 	if level_up_title != null:
 		level_up_title.name = "LevelUpTitle"
@@ -329,8 +344,6 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	card.name = "Upgrade_%s" % String(option.id())
 	card.theme_type_variation = AlveolusVisualTheme.upgrade_card_variation(option.rarity_role())
 	card.set_meta(&"rarity_role", option.rarity_role())
-	# One display-ready value row fits the compact base card. Every additional
-	# row grows the card uniformly instead of being clipped below the inset.
 	var extra_value_rows := maxi(0, option.value_rows().size() - 1)
 	card.custom_minimum_size = Vector2(0.0, CARD_HEIGHT + extra_value_rows * EXTRA_VALUE_ROW_HEIGHT)
 	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -338,51 +351,42 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	card.scale = Vector2.ONE
 	card.clip_contents = true
 	card.set_meta(&"upgrade_id", option.id())
+	card.set_meta(&"extra_value_rows", extra_value_rows)
 	card.set_meta(&"disable_motion_scale", true)
 	card.pressed.connect(func() -> void: upgrade_selected.emit(option.id()))
 
-	var content := VBoxContainer.new()
-	content.name = "CardCopy"
-	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
-	var inset := AlveolusUIComponents.margin(content, 10)
+	var content_stage := Control.new()
+	content_stage.name = "CardCopy"
+	content_stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var inset := AlveolusUIComponents.margin(content_stage, 14)
 	inset.name = "CardInset"
 	inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(inset)
 
-	var heading := HBoxContainer.new()
-	heading.name = "Heading"
-	heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	heading.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	content.add_child(heading)
-	var icon := SimpleIcon.new()
-	icon.name = "UpgradeIcon"
-	icon.custom_minimum_size = Vector2(UPGRADE_ICON_SIZE, UPGRADE_ICON_SIZE)
-	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	icon.configure(option.icon_id(), _accent_color(option.accent_role()))
-	icon.set_meta(&"upgrade_icon_id", option.icon_id())
-	heading.add_child(icon)
-	var title := AlveolusUIComponents.label(option.title(), AlveolusVisualTheme.TYPE_BODY_LABEL)
-	title.name = "UpgradeTitle"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	if option.compact_title():
-		title.add_theme_font_size_override("font_size", AlveolusVisualTheme.TEXT_CAPTION)
-	heading.add_child(title)
+	var wide_copy := _build_wide_card_copy(option)
+	wide_copy.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	content_stage.add_child(wide_copy)
+	var compact_copy := _build_compact_card_copy(option)
+	compact_copy.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	compact_copy.hide()
+	content_stage.add_child(compact_copy)
+
+	var rarity_marker := _build_rarity_marker(option.rarity_role())
+	rarity_marker.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	rarity_marker.offset_left = 13.0
+	rarity_marker.offset_top = -25.0
+	rarity_marker.offset_right = 65.0
+	rarity_marker.offset_bottom = -9.0
+	card.add_child(rarity_marker)
 	if option.has_effect_badge():
-		heading.add_child(_build_effect_badge(option))
-
-	var effect := _build_effect_copy(option.effect())
-	content.add_child(effect)
-
-	if option.has_value_rows():
-		for value_row in option.value_rows():
-			content.add_child(_build_value_copy(value_row))
-	elif not option.comparison_text().is_empty():
-		var comparison := _build_comparison_copy(option.before_value(), option.after_value())
-		content.add_child(comparison)
+		var effect_marker := _build_effect_badge(option)
+		effect_marker.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		effect_marker.offset_left = -42.0
+		effect_marker.offset_top = 11.0
+		effect_marker.offset_right = -12.0
+		effect_marker.offset_bottom = 41.0
+		card.add_child(effect_marker)
 
 	var pick_index := AlveolusUIComponents.label(option.pick_index_text(), AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
 	pick_index.name = "PickIndex"
@@ -413,24 +417,156 @@ func _build_card(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Butt
 	return card
 
 
-func _build_effect_badge(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> PanelContainer:
+func _build_wide_card_copy(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> VBoxContainer:
+	var content := VBoxContainer.new()
+	content.name = "WideCardCopy"
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+
+	var icon_center := CenterContainer.new()
+	icon_center.name = "UpgradeIconStage"
+	icon_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(icon_center)
+	var icon := _build_component_icon(option, "UpgradeIcon", UPGRADE_ICON_SIZE)
+	icon_center.add_child(icon)
+
+	var title := _build_component_title(option, "UpgradeTitle")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	content.add_child(title)
+	content.add_child(_build_effect_copy(
+		option.effect(),
+		"UpgradeEffect",
+		AlveolusVisualTheme.TEXT_TITLE,
+		HORIZONTAL_ALIGNMENT_CENTER
+	))
+	_add_value_presentation(content, option, "", AlveolusVisualTheme.TEXT_BODY, HORIZONTAL_ALIGNMENT_CENTER)
+	return content
+
+
+func _build_compact_card_copy(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> HBoxContainer:
+	var content := HBoxContainer.new()
+	content.name = "CompactCardCopy"
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
+	var icon_center := CenterContainer.new()
+	icon_center.name = "CompactIconStage"
+	icon_center.custom_minimum_size.x = 64.0
+	icon_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_center.add_child(_build_component_icon(option, "CompactUpgradeIcon", COMPACT_UPGRADE_ICON_SIZE))
+	content.add_child(icon_center)
+
+	var copy_stack := VBoxContainer.new()
+	copy_stack.name = "CompactRewardCopy"
+	copy_stack.alignment = BoxContainer.ALIGNMENT_CENTER
+	copy_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	copy_stack.add_theme_constant_override("separation", 2)
+	copy_stack.add_child(_build_component_title(option, "CompactUpgradeTitle"))
+	copy_stack.add_child(_build_effect_copy(
+		option.effect(),
+		"CompactUpgradeEffect",
+		AlveolusVisualTheme.TEXT_SECTION,
+		HORIZONTAL_ALIGNMENT_LEFT
+	))
+	_add_value_presentation(copy_stack, option, "Compact", AlveolusVisualTheme.TEXT_CAPTION, HORIZONTAL_ALIGNMENT_LEFT)
+	content.add_child(copy_stack)
+	return content
+
+
+func _build_component_icon(
+	option: UpgradeOverlayViewModel.UpgradeOptionViewModel,
+	node_name: String,
+	icon_size: float
+) -> SimpleIcon:
+	var icon := SimpleIcon.new()
+	icon.name = node_name
+	icon.custom_minimum_size = Vector2(icon_size, icon_size)
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon.configure(option.icon_id(), _accent_color(option.accent_role()), true)
+	icon.set_meta(&"upgrade_icon_id", option.icon_id())
+	return icon
+
+
+func _build_component_title(
+	option: UpgradeOverlayViewModel.UpgradeOptionViewModel,
+	node_name: String
+) -> Label:
+	var title := AlveolusUIComponents.label(option.title(), AlveolusVisualTheme.TYPE_BODY_LABEL)
+	title.name = node_name
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if option.compact_title():
+		title.add_theme_font_size_override("font_size", AlveolusVisualTheme.TEXT_CAPTION)
+	return title
+
+
+func _add_value_presentation(
+	content: BoxContainer,
+	option: UpgradeOverlayViewModel.UpgradeOptionViewModel,
+	name_prefix: String,
+	font_size: int,
+	alignment: HorizontalAlignment
+) -> void:
+	if option.has_value_rows():
+		for value_row in option.value_rows():
+			content.add_child(_build_value_copy(value_row, name_prefix, font_size, alignment))
+	elif not option.comparison_text().is_empty():
+		content.add_child(_build_comparison_copy(
+			option.before_value(),
+			option.after_value(),
+			"%sUpgradeComparison" % name_prefix,
+			font_size,
+			alignment
+		))
+
+
+func _build_rarity_marker(rarity_role: StringName) -> HBoxContainer:
+	var marker := HBoxContainer.new()
+	marker.name = "RarityMarker"
+	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.add_theme_constant_override("separation", 2)
+	marker.set_meta(&"rarity_role", rarity_role)
+	marker.set_meta(&"rarity_label", _rarity_label(rarity_role))
+	var count := 1
+	if rarity_role == &"magic":
+		count = 2
+	elif rarity_role == &"rare":
+		count = 3
+	for index in range(count):
+		var diamond := SimpleIcon.new()
+		diamond.name = "RarityDiamond%d" % (index + 1)
+		diamond.custom_minimum_size = Vector2(12.0, 12.0)
+		diamond.configure(&"diamond", AlveolusVisualTheme.upgrade_rarity_color(rarity_role))
+		marker.add_child(diamond)
+	return marker
+
+
+func _build_effect_badge(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> Control:
 	var accent := _accent_color(option.effect_accent_role())
-	var badge := AlveolusUIComponents.icon_badge(option.effect_icon_id(), accent)
+	var badge := Control.new()
 	badge.name = "EffectBadge_%s" % String(option.effect_role())
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	badge.set_meta(&"upgrade_effect_role", option.effect_role())
 	badge.set_meta(&"upgrade_effect_label", option.effect_label())
 	badge.set_meta(&"upgrade_effect_icon_id", option.effect_icon_id())
 	badge.set_meta(&"upgrade_effect_accent", accent)
-	var icon := badge.find_child("BadgeIcon", true, false) as SimpleIcon
-	if icon != null:
-		icon.name = "EffectBadgeIcon"
+	var icon := SimpleIcon.new()
+	icon.name = "EffectBadgeIcon"
+	icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	icon.configure(option.effect_icon_id(), accent)
+	badge.add_child(icon)
 	return badge
 
 
 func _card_accessible_name(option: UpgradeOverlayViewModel.UpgradeOptionViewModel) -> String:
-	var parts := PackedStringArray([option.title(), option.effect()])
+	var parts := PackedStringArray([
+		option.title(),
+		option.effect(),
+		"Seltenheit %s" % _rarity_label(option.rarity_role()),
+	])
 	for row in option.value_rows():
 		var row_prefix := "%s " % row.label() if not row.label().is_empty() else ""
 		if row.before_value().is_empty():
@@ -446,12 +582,18 @@ func _card_accessible_name(option: UpgradeOverlayViewModel.UpgradeOptionViewMode
 ## Value rows arrive fully formatted from the presenter. The overlay only lays
 ## out label, optional previous value and result value; it never derives units
 ## or branches on a content ID.
-func _build_value_copy(row: UpgradeOverlayViewModel.ValueRowViewModel) -> RichTextLabel:
+func _build_value_copy(
+	row: UpgradeOverlayViewModel.ValueRowViewModel,
+	name_prefix: String = "",
+	font_size: int = AlveolusVisualTheme.TEXT_BODY,
+	alignment: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT
+) -> RichTextLabel:
 	var copy := _rich_copy(
-		"UpgradeValue_%s" % String(row.id()),
+		"%sUpgradeValue_%s" % [name_prefix, String(row.id())],
 		AlveolusVisualTheme.heading_font(),
-		AlveolusVisualTheme.TEXT_BODY
+		font_size
 	)
+	copy.horizontal_alignment = alignment
 	if not row.label().is_empty():
 		_append_colored_text(copy, "%s  " % row.label(), AlveolusVisualTheme.IVORY_DEEP)
 	if not row.before_value().is_empty():
@@ -468,8 +610,15 @@ func _build_value_copy(row: UpgradeOverlayViewModel.ValueRowViewModel) -> RichTe
 
 ## Highlights one meaningful delta in the upper effect copy by content, never
 ## by upgrade ID. New upgrades therefore inherit the same visual hierarchy.
-func _build_effect_copy(effect_text: String) -> RichTextLabel:
-	var copy := _rich_copy("UpgradeEffect", AlveolusVisualTheme.body_font(), AlveolusVisualTheme.TEXT_CAPTION)
+func _build_effect_copy(
+	effect_text: String,
+	copy_name: String = "UpgradeEffect",
+	font_size: int = AlveolusVisualTheme.TEXT_TITLE,
+	alignment: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER
+) -> RichTextLabel:
+	var copy := _rich_copy(copy_name, AlveolusVisualTheme.heading_font(), font_size)
+	copy.horizontal_alignment = alignment
+	copy.custom_minimum_size.y = float(font_size + 8)
 	var highlights := PackedStringArray()
 	var highlight := _delta_match(effect_text)
 	if highlight == null:
@@ -489,8 +638,15 @@ func _build_effect_copy(effect_text: String) -> RichTextLabel:
 ## Comparisons consistently keep the current value in the normal body colour,
 ## reduce the arrow to a quiet separator and emphasize only the resulting
 ## value as one meaningful unit (for example "4 Projektile").
-func _build_comparison_copy(before_value: String, after_value: String) -> RichTextLabel:
-	var copy := _rich_copy("UpgradeComparison", AlveolusVisualTheme.heading_font(), AlveolusVisualTheme.TEXT_BODY)
+func _build_comparison_copy(
+	before_value: String,
+	after_value: String,
+	copy_name: String = "UpgradeComparison",
+	font_size: int = AlveolusVisualTheme.TEXT_BODY,
+	alignment: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER
+) -> RichTextLabel:
+	var copy := _rich_copy(copy_name, AlveolusVisualTheme.heading_font(), font_size)
+	copy.horizontal_alignment = alignment
 	if not before_value.is_empty() and not after_value.is_empty():
 		_append_colored_text(copy, before_value, AlveolusVisualTheme.IVORY_DEEP)
 		_append_colored_text(copy, "  →  ", AlveolusVisualTheme.MUTED)
@@ -554,6 +710,15 @@ func _delta_match(effect_text: String) -> RegExMatch:
 		if fragment.begins_with("+") or fragment.begins_with("-") or fragment.begins_with("−"):
 			return candidate
 	return matches[0] as RegExMatch
+
+
+func _rarity_label(rarity_role: StringName) -> String:
+	match rarity_role:
+		&"magic":
+			return "Magic"
+		&"rare":
+			return "Rare"
+	return "Common"
 
 
 func _build_focus_ring() -> Control:
@@ -656,6 +821,7 @@ func _update_responsive_layout() -> void:
 	if _view_model == null or _center == null or _sheet == null:
 		return
 	var compact := size.x < 640.0 or size.y < 400.0
+	_update_card_presentations(compact)
 	var outer_margin := AlveolusVisualTheme.SCREEN_MARGIN_COMPACT if compact else AlveolusVisualTheme.SCREEN_MARGIN
 	for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
 		_safe_area.add_theme_constant_override(side, outer_margin)
@@ -666,10 +832,20 @@ func _update_responsive_layout() -> void:
 	if available.x <= 0.0 or available.y <= 0.0:
 		return
 
+	var stage_padding := COMPACT_MODAL_PADDING if compact else MODAL_PADDING
+	var stage_gap := AlveolusVisualTheme.CONTROL_GAP if compact else AlveolusVisualTheme.CONTENT_GAP
+	if _sheet_inset != null:
+		for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
+			_sheet_inset.add_theme_constant_override(side, stage_padding)
+	_sheet_stack.add_theme_constant_override("separation", stage_gap)
+	_body_stack.add_theme_constant_override("separation", stage_gap)
+	_cards_grid.add_theme_constant_override("h_separation", stage_gap)
+	_cards_grid.add_theme_constant_override("v_separation", stage_gap)
+
 	var desired_width := _desired_width()
 	var sheet_width := minf(desired_width, available.x)
 	_sheet.custom_minimum_size.x = floorf(sheet_width)
-	var usable_width := maxf(0.0, sheet_width - float(MODAL_PADDING * 2))
+	var usable_width := maxf(0.0, sheet_width - float(stage_padding * 2))
 	var column_capacity := maxi(1, floori(
 		(usable_width + float(AlveolusVisualTheme.CONTENT_GAP))
 		/ (MINIMUM_CARD_WIDTH + float(AlveolusVisualTheme.CONTENT_GAP))
@@ -685,10 +861,10 @@ func _update_responsive_layout() -> void:
 	var footer_height := _footer_actions.get_combined_minimum_size().y if _footer_actions.visible else 0.0
 	var gap_count := 1 + (1 if _footer_actions.visible else 0)
 	var chrome_height := (
-		float(MODAL_PADDING * 2)
+		float(stage_padding * 2)
 		+ title_height
 		+ footer_height
-		+ float(AlveolusVisualTheme.CONTENT_GAP * gap_count)
+		+ float(stage_gap * gap_count)
 	)
 	var maximum_body_height := maxf(0.0, available.y - chrome_height)
 	var visible_body_height := minf(body_height, maximum_body_height)
@@ -702,6 +878,23 @@ func _update_responsive_layout() -> void:
 	_scrollbar_inset.add_theme_constant_override("margin_right", scrollbar_inset)
 	if not requires_scroll:
 		_body_scroll.scroll_vertical = 0
+
+
+func _update_card_presentations(compact: bool) -> void:
+	for card in _cards:
+		if card == null:
+			continue
+		var extra_rows := int(card.get_meta(&"extra_value_rows", 0))
+		card.custom_minimum_size.y = (
+			(COMPACT_CARD_HEIGHT if compact else CARD_HEIGHT)
+			+ extra_rows * EXTRA_VALUE_ROW_HEIGHT
+		)
+		var wide_copy := card.find_child("WideCardCopy", true, false) as Control
+		var compact_copy := card.find_child("CompactCardCopy", true, false) as Control
+		if wide_copy != null:
+			wide_copy.visible = not compact
+		if compact_copy != null:
+			compact_copy.visible = compact
 
 
 func _desired_width() -> float:

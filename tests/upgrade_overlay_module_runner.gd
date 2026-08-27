@@ -169,7 +169,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.present(ordinary_single, false), "Erstes Present zeichnet eine normale einzelne Option")
 	await _settle()
 
-	_check(overlay.modal_sheet().theme_type_variation == AlveolusVisualTheme.TYPE_MODAL_SHEET, "Ausbauwahl besitzt die zentrale ModalSheet-Rolle")
+	_check(overlay.modal_sheet().theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_STAGE, "Ausbauwahl verwendet die zurückgenommene zentrale UpgradeStage-Rolle")
 	_check(overlay.modal_sheet().get_meta(&"alveolus_component", &"") == &"modal_sheet", "Ausbauwahl stammt aus der gemeinsamen ModalSheet-Komponente")
 	var level_up_titles := overlay.modal_sheet().find_children("*", "Label", true, false).filter(
 		func(node: Node) -> bool: return (node as Label).text == "Level Up!"
@@ -235,7 +235,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var numeric_comparison := generic_card.find_child("UpgradeComparison", true, false) as RichTextLabel
 	_check(numeric_effect != null and numeric_effect.get_parsed_text() == "Ausbau 2: +3 Schaden.", "RichText-Ausbauwert bewahrt den vollständigen sichtbaren Text")
 	_check(numeric_effect != null and numeric_effect.get_meta(&"semantic_highlights", PackedStringArray()) == PackedStringArray(["+3"]), "Generischer Zahlenparser hebt oben nur das vorzeichenbehaftete Delta hervor")
-	_check(numeric_effect != null and numeric_effect.get_theme_font_size("normal_font_size") == AlveolusVisualTheme.TEXT_CAPTION, "Ausbauwirkung verwendet die kompakte zentrale Caption-Größe")
+	_check(numeric_effect != null and numeric_effect.get_theme_font_size("normal_font_size") == AlveolusVisualTheme.TEXT_TITLE, "Ausbauwirkung bildet den großen zentralen Belohnungsakzent")
 	_check(numeric_comparison != null and numeric_comparison.get_parsed_text().contains("8 Schaden") and numeric_comparison.get_parsed_text().contains("11 Schaden"), "Vorher-nachher-Zeile bleibt vollständig lesbar")
 	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_after", "") == "11 Schaden", "Nur der vollständige rechte Zielwert wird semantisch als Ergebnis hervorgehoben")
 	_check(numeric_comparison != null and numeric_comparison.get_meta(&"semantic_before_role", &"") == &"body", "Linker Ausgangswert bleibt neutraler Fließtext statt Farbakzent")
@@ -270,13 +270,13 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var radius_row := value_card.find_child("UpgradeValue_radius", true, false) as RichTextLabel
 	var rate_row := value_card.find_child("UpgradeValue_rate", true, false) as RichTextLabel
 	var value_focus := value_card.find_child("KeyboardFocus", true, false) as Control
-	var effect_badge := value_card.find_child("EffectBadge_radius", true, false) as PanelContainer
+	var effect_badge := value_card.find_child("EffectBadge_radius", true, false) as Control
 	var effect_badge_icon := effect_badge.find_child("EffectBadgeIcon", true, false) as SimpleIcon if effect_badge != null else null
-	_check(value_icon != null and value_icon.kind == &"neutrophil_orbit" and value_icon.custom_minimum_size == Vector2(34.0, 34.0), "Ausbaukarte rendert das Presenter-Icon deutlich größer ohne lokale ID-Zuordnung")
+	_check(value_icon != null and value_icon.kind == &"neutrophil_orbit" and value_icon.custom_minimum_size == Vector2(72.0, 72.0) and value_icon.framed, "Ausbaukarte inszeniert das datengetriebene Presenter-Icon als großes gerahmtes Medaillon")
 	_check(value_title != null and value_title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Komponentenname verwendet die kleinere zentrale Body-Typografie")
 	_check(effect_badge != null and effect_badge.get_meta(&"upgrade_effect_label", "") == "RADIUS", "Ausbaukarte bewahrt die feste Radiussemantik in Presenter-Metadaten")
 	_check(effect_badge_icon != null and effect_badge_icon.kind == &"target" and effect_badge.get_meta(&"upgrade_effect_accent", Color.TRANSPARENT).is_equal_approx(AlveolusVisualTheme.COBALT), "Effektmarker kombiniert DTO-Icon und semantische Farbe")
-	_check(effect_badge != null and effect_badge.find_children("*", "Label", true, false).is_empty(), "Effektmarker zeigt nur ein Icon und keinen redundanten Badge-Text")
+	_check(effect_badge != null and not effect_badge is PanelContainer and effect_badge.find_children("*", "Label", true, false).is_empty(), "Effektmarker zeigt ein nacktes Icon ohne Badgefläche oder redundanten Text")
 	_check(value_card.theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_COMMON_CARD, "Die Effektbadge verändert den Seltenheitsrahmen nicht")
 	_check(radius_row != null and radius_row.get_parsed_text().replace("  ", " ") == "Radius 4", "Abwehrzellen zeigen die fertige Copy Radius 4")
 	_check(rate_row != null and rate_row.get_parsed_text().contains("Attack Speed") and rate_row.get_parsed_text().contains("1,7/s"), "Attack Speed bleibt als /s-Wert sichtbar")
@@ -286,6 +286,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Radius 4") and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Attack Speed 1,4/s zu 1,7/s"), "Fokusname enthält dieselben darstellungsfertigen Wertfakten")
 	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("In dieser Runde 0 Mal gewählt") and not String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains(" von "), "Fokusname nennt den Rundenzähler ohne verstecktes Maximum")
 	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Effekt RADIUS"), "Der feste Badgebegriff ist auch im Accessible Name enthalten")
+	_check(value_focus != null and String(value_focus.get_meta(&"alveolus_accessible_name", "")).contains("Seltenheit Common"), "Die zusätzliche Raritätsform bleibt ausgeschrieben zugänglich")
 
 	var icon_only_effects := UpgradeOverlayViewModelScript.create([
 		{"id": &"damage_marker", "title": "Impuls", "effect": "+3 Schaden.", "family_id": &"damage", "preview_stat": &"therapy_damage"},
@@ -301,9 +302,9 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	]
 	for index in range(expected_markers.size()):
 		var expected: Array = expected_markers[index]
-		var marker := overlay.cards()[index].find_child("EffectBadge_%s" % String(expected[0]), true, false) as PanelContainer
+		var marker := overlay.cards()[index].find_child("EffectBadge_%s" % String(expected[0]), true, false) as Control
 		var marker_icon := marker.find_child("EffectBadgeIcon", true, false) as SimpleIcon if marker != null else null
-		_check(marker != null and marker.find_children("*", "Label", true, false).is_empty(), "%s rendert genau ein Icon ohne sichtbaren Begriff" % String(expected[0]))
+		_check(marker != null and not marker is PanelContainer and marker.find_children("*", "Label", true, false).is_empty(), "%s rendert genau ein nacktes Icon ohne sichtbaren Begriff" % String(expected[0]))
 		_check(marker_icon != null and marker_icon.kind == expected[1] and marker.get_meta(&"upgrade_effect_accent", Color.TRANSPARENT).is_equal_approx(expected[2]), "%s bewahrt seine feste Glyphe und Farbe" % String(expected[0]))
 		var marker_focus := overlay.cards()[index].find_child("KeyboardFocus", true, false) as Control
 		_check(marker_focus != null and String(marker_focus.get_meta(&"alveolus_accessible_name", "")).contains("Effekt"), "%s bleibt ausgeschrieben zugänglich" % String(expected[0]))
@@ -326,6 +327,9 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.cards()[0].theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_COMMON_CARD, "Common verwendet die zentrale weiße Upgrade-Kartenrolle")
 	_check(overlay.cards()[1].theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_MAGIC_CARD, "Magic verwendet die zentrale kobaltblaue Upgrade-Kartenrolle")
 	_check(overlay.cards()[2].theme_type_variation == AlveolusVisualTheme.TYPE_UPGRADE_RARE_CARD, "Rare verwendet die zentrale goldene Upgrade-Kartenrolle")
+	_check(_rarity_diamond_count(overlay.cards()[0]) == 1, "Common besitzt zusätzlich genau einen Raritätsdiamanten")
+	_check(_rarity_diamond_count(overlay.cards()[1]) == 2, "Magic besitzt zusätzlich genau zwei Raritätsdiamanten")
+	_check(_rarity_diamond_count(overlay.cards()[2]) == 3, "Rare besitzt zusätzlich genau drei Raritätsdiamanten")
 	_assert_rarity_styles(overlay.theme)
 	_check(not overlay.selection_helper().visible and overlay.selection_helper().text.is_empty(), "Normale Drei-Karten-Auswahl benötigt keinen zusätzlichen Auswahlhinweis")
 	_check(overlay.selection_helper().get_index() < overlay.cards_grid().get_index(), "Auswahlhinweis steht direkt vor den Karten in der Leserichtung")
@@ -366,6 +370,12 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	_check(overlay.cards_grid().columns == 1, "Bei 200 Prozent stapeln sich die Ausbaukarten lesbar")
 	_check(overlay.body_scroll().vertical_scroll_mode == ScrollContainer.SCROLL_MODE_AUTO, "Nur der überlange kompakte Inhalt aktiviert Scrollen")
 	_check(overlay.body_scroll().get_v_scroll_bar().visible, "Der notwendige Scrollbereich ist sichtbar erkennbar")
+	var compact_card := overlay.cards()[0]
+	var compact_copy := compact_card.find_child("CompactCardCopy", true, false) as Control
+	var compact_icon := compact_card.find_child("CompactUpgradeIcon", true, false) as SimpleIcon
+	_check(is_equal_approx(compact_card.custom_minimum_size.y, UpgradeOverlay.COMPACT_CARD_HEIGHT), "Kompakte Bühne verwendet die feste vollständige Querkarte")
+	_check(compact_copy != null and compact_copy.visible and compact_icon != null and compact_icon.custom_minimum_size == Vector2(52.0, 52.0), "200 Prozent zeigt die eigenständige Querfassung mit lesbarem Medaillon")
+	_check(overlay.body_scroll().get_global_rect().encloses(compact_card.get_global_rect()), "Die erste kompakte Ausbaukarte ist beim Öffnen vollständig sichtbar")
 	_check(
 		overlay.modal_sheet().size.x <= host.size.x + 0.5 and overlay.modal_sheet().size.y <= host.size.y + 0.5,
 		"Kompaktes Modal bleibt vollständig im logischen Viewport (Modal %s, Viewport %s)" % [overlay.modal_sheet().size, host.size]
@@ -397,16 +407,21 @@ func _assert_card_contract(card: Button, option_id: StringName) -> void:
 	_check(card.get_meta(&"upgrade_id", &"") == option_id, "Ausbaukarte trägt ausschließlich ihre stabile ID")
 	_check(card.focus_mode == Control.FOCUS_NONE, "Mauskarten übernehmen keinen Keyboardfokus")
 	_check(card.scale.is_equal_approx(Vector2.ONE), "Ausbaukarte bleibt ohne Scale-Transform")
-	_check(card.custom_minimum_size.y <= 120.0, "Ausbaukarte bleibt trotz leicht erhöhter Lesefläche kompakt")
+	_check(is_equal_approx(card.custom_minimum_size.y, UpgradeOverlay.CARD_HEIGHT), "Ausbaukarte besitzt die definierte Belohnungsbühne")
 	var title := card.find_child("UpgradeTitle", true, false) as Label
 	var icon := card.find_child("UpgradeIcon", true, false) as SimpleIcon
 	var effect := card.find_child("UpgradeEffect", true, false) as RichTextLabel
 	var comparison := card.find_child("UpgradeComparison", true, false) as RichTextLabel
 	_check(title != null and effect != null and comparison != null, "Karte besitzt Iconzeile, Kurztext und Vorher-nachher-Wert")
-	_check(icon != null and icon.kind != &"" and icon.custom_minimum_size == Vector2(34.0, 34.0), "Karte übernimmt ein sichtbares 34-Pixel-Icon direkt aus dem View-Model")
+	_check(icon != null and icon.kind != &"" and icon.custom_minimum_size == Vector2(72.0, 72.0) and icon.framed, "Karte übernimmt ein sichtbares 72-Pixel-Medaillon direkt aus dem View-Model")
 	_check(title != null and title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Kartenname bleibt mit zentraler Body-Typografie etwas kleiner als der Wertakzent")
 	if effect != null:
 		_check(effect.fit_content and not effect.scroll_active and effect.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Kurze Wirkung wächst in höchstens den verfügbaren Kartenraum statt intern zu scrollen")
+
+
+func _rarity_diamond_count(card: Button) -> int:
+	var marker := card.find_child("RarityMarker", true, false) as Control
+	return marker.find_children("RarityDiamond*", "SimpleIcon", true, false).size() if marker != null else 0
 
 
 func _single_option_rows() -> Array:

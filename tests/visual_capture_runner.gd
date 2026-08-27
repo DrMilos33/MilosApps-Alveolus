@@ -4,6 +4,7 @@ const OUTPUT_DIR := "res://.codex-temp/visual_restart/screens"
 const FULL_CAPTURE_COUNT := 32
 const STEP_ONE_CAPTURE_COUNT := 4
 const STEP_TWO_CAPTURE_COUNT := 3
+const STEP_THREE_CAPTURE_COUNT := 1
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
@@ -51,12 +52,20 @@ func _capture_views() -> void:
 		await _capture_step_one(game)
 	elif capture_scope == "step2":
 		await _capture_step_two(game)
+	elif capture_scope == "step3":
+		await _capture_step_three(game)
 	else:
 		await _capture_suite(game)
 
 	game.queue_free()
 	await _settle()
-	var expected_count := STEP_ONE_CAPTURE_COUNT if capture_scope == "step1" else (STEP_TWO_CAPTURE_COUNT if capture_scope == "step2" else FULL_CAPTURE_COUNT)
+	var expected_count := FULL_CAPTURE_COUNT
+	if capture_scope == "step1":
+		expected_count = STEP_ONE_CAPTURE_COUNT
+	elif capture_scope == "step2":
+		expected_count = STEP_TWO_CAPTURE_COUNT
+	elif capture_scope == "step3":
+		expected_count = STEP_THREE_CAPTURE_COUNT
 	if capture_failed or capture_count != expected_count:
 		push_error("Visuelle Abnahme unvollständig: %d/%d für %s" % [capture_count, expected_count, capture_suffix])
 		quit(1)
@@ -150,6 +159,32 @@ func _capture_step_two(game: Node) -> void:
 	if not _verify_case_journey(game.hud.level_screen):
 		return
 	await _capture("levels")
+
+
+func _capture_step_three(game: Node) -> void:
+	game.meta.highest_unlocked_level = maxi(game.meta.highest_unlocked_level, 1)
+	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
+	game.meta.research_ranks[&"unlock_piercing_treatment"] = 1
+	game.selected_level = game.levels[1]
+	game._show_preparation()
+	await _settle()
+	game.start_run(game.pending_run_context)
+	await _settle_frames(45)
+	var upgrade_by_id: Dictionary = {}
+	for upgrade in ContentCatalog.upgrade_definitions():
+		upgrade_by_id[upgrade.id] = upgrade
+	var visual_upgrades: Array[UpgradeDefinition] = [
+		upgrade_by_id[&"potency"] as UpgradeDefinition,
+		upgrade_by_id[&"rhythm"] as UpgradeDefinition,
+		upgrade_by_id[&"neutrophils"] as UpgradeDefinition,
+	]
+	game.hud.show_upgrade_choices(visual_upgrades, game.stats, true, false)
+	await _settle()
+	if not _verify_level_up_title(game.hud.upgrade_screen):
+		return
+	if not _verify_upgrade_capture(game, visual_upgrades):
+		return
+	await _capture("upgrades")
 
 func _capture_suite(game: Node) -> void:
 	game._show_campus()
@@ -601,12 +636,21 @@ func _verify_upgrade_capture(game: Node, options: Array[UpgradeDefinition]) -> b
 			expected_icon = option.resolved_icon_id(stats.prepared_treatment)
 		var icon := card.find_child("UpgradeIcon", true, false) as SimpleIcon
 		var heading := card.find_child("UpgradeTitle", true, false) as Label
+		var rarity_marker := card.find_child("RarityMarker", true, false) as Control
+		var expected_rarity_markers := 1
+		if option.rarity_role() == &"magic":
+			expected_rarity_markers = 2
+		elif option.rarity_role() == &"rare":
+			expected_rarity_markers = 3
 		valid = valid \
 			and icon != null \
 			and icon.kind == expected_icon \
-			and icon.custom_minimum_size.x >= 32.0 \
+			and icon.custom_minimum_size.x >= 72.0 \
+			and icon.framed \
 			and heading != null \
-			and heading.text == option.resolved_component_name(stats.prepared_treatment, game.hud._upgrade_component_titles())
+			and heading.text == option.resolved_component_name(stats.prepared_treatment, game.hud._upgrade_component_titles()) \
+			and rarity_marker != null \
+			and rarity_marker.find_children("RarityDiamond*", "SimpleIcon", true, false).size() == expected_rarity_markers
 		var visible_copy := ""
 		for node in _descendants(card):
 			if node is RichTextLabel:

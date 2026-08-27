@@ -144,6 +144,7 @@ const TYPE_SECTION_GROUP := &"SectionGroup"
 const TYPE_ACTION_CARD := &"ActionCard"
 const TYPE_DOCUMENT_INSET := &"DocumentInset"
 const TYPE_MODAL_SHEET := &"ModalSheet"
+const TYPE_UPGRADE_STAGE := &"UpgradeStage"
 const TYPE_HUD_VITAL := &"HudVital"
 const TYPE_HUD_OBJECTIVE := &"HudObjective"
 const TYPE_HUD_ABILITY := &"HudAbility"
@@ -270,6 +271,7 @@ static func _configure_variations(theme: Theme) -> void:
 	_register_panel_variation(theme, TYPE_ACTION_CARD, surface_role_style(SurfaceRole.ACTION_CARD))
 	_register_panel_variation(theme, TYPE_DOCUMENT_INSET, surface_role_style(SurfaceRole.DOCUMENT_INSET))
 	_register_panel_variation(theme, TYPE_MODAL_SHEET, surface_role_style(SurfaceRole.MODAL_SHEET))
+	_register_panel_variation(theme, TYPE_UPGRADE_STAGE, upgrade_stage_style())
 	_register_panel_variation(theme, TYPE_HUD_VITAL, surface_role_style(SurfaceRole.HUD_VITAL, TEAL))
 	_register_panel_variation(theme, TYPE_HUD_OBJECTIVE, surface_role_style(SurfaceRole.HUD_OBJECTIVE, COBALT))
 	_register_panel_variation(theme, TYPE_HUD_ABILITY, surface_role_style(SurfaceRole.HUD_ABILITY, TURQUOISE))
@@ -591,6 +593,23 @@ static func dossier_value_row_style() -> StyleBoxFlat:
 	style.border_width_bottom = 1
 	style.corner_detail = 8
 	style.anti_aliasing = true
+	return style
+
+
+## Level-up choices already provide three strongly framed reward surfaces. The
+## surrounding carrier therefore recedes into the darkened playfield instead
+## of reading as a second, browser-like dialog card around them.
+static func upgrade_stage_style() -> StyleBoxFlat:
+	var style := surface_role_style(
+		SurfaceRole.MODAL_SHEET,
+		TURQUOISE,
+		CornerTreatment.CARD_6
+	)
+	style.bg_color = Color(PETROL_DEEP, 0.58)
+	style.border_color = Color(TURQUOISE, 0.24)
+	style.shadow_color = Color.TRANSPARENT
+	style.shadow_size = 0
+	style.shadow_offset = Vector2.ZERO
 	return style
 
 static func apply_corner_treatment(style: StyleBoxFlat, treatment: int) -> StyleBoxFlat:
