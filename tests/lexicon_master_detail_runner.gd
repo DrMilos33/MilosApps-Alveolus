@@ -66,14 +66,14 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.category_bar.columns == 5, "Die fünf kompakten Lexikonreiter stehen am breiten Inhaltsrand in einer Reihe")
 	var surface := lexicon.get_node("Surface") as PanelContainer
 	_check(surface != null and surface.theme_type_variation == AlveolusVisualTheme.TYPE_PAGE_CANVAS, "Die Lexikonbühne verwendet die zentrale PageCanvas-Rolle")
-	_check(lexicon.overview_toolbar.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Suche und Fortschritt verwenden eine gemeinsame semantische Dokumentfläche")
+	_check(lexicon.overview_toolbar.get_meta(&"alveolus_component", &"") == &"lexicon_command_strip", "Suche und Fortschritt verwenden eine spieltypische Codex-Befehlsleiste ohne eigene Vollbreitenfläche")
 	_check(lexicon.list_panel.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Das Eintragsraster verwendet die zentrale Dokumentfläche")
 	_check(lexicon.detail_panel.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Das Detail verwendet die zentrale Aktionskartenfläche")
-	_check(lexicon.category_bar.get_parent() == lexicon.overview_toolbar.get_parent() and lexicon.overview_toolbar.get_parent() == lexicon.content_row.get_parent(), "Kategorien, gemeinsame Suchzeile und Inhaltsstufe besitzen eine klare direkte Reihenfolge")
-	_check(lexicon.category_bar.get_index() < lexicon.overview_toolbar.get_index() and lexicon.overview_toolbar.get_index() < lexicon.content_row.get_index(), "Kategorien stehen direkt über Suche/Fortschritt und Raster")
+	_check(lexicon.list_panel.is_ancestor_of(lexicon.overview_toolbar) and not lexicon.detail_panel.is_ancestor_of(lexicon.overview_toolbar), "Die Codex-Befehle gehören ausschließlich zur Mastergalerie und überspannen nie das Detail")
 	for category_button in lexicon.category_buttons.values():
 		_check((category_button as Button).get_meta(&"alveolus_component", &"") == &"segmented_tab", "Jede Lexikonkategorie verwendet die zentrale Tab-Komponente")
-	_check(lexicon.entry_filter.get_parent() == lexicon.entry_count_label.get_parent() and lexicon.entry_filter.get_parent() == lexicon.toolbar_row, "Suche und Fortschritt teilen genau eine kompakte Zeile")
+	_check(lexicon.entry_filter.get_parent() == lexicon.search_button.get_parent() and lexicon.search_button.get_parent() == lexicon.toolbar_row, "Lupenbefehl und temporärer Sucheditor teilen genau eine kompakte Codex-Zeile")
+	_check(lexicon.entry_progress_badge.get_parent() == lexicon.toolbar_row and lexicon.entry_progress_badge.is_ancestor_of(lexicon.entry_count_label), "Der Entdeckungsfortschritt erscheint als eigener kompakter Codex-Badge")
 	_check(lexicon.entry_filter.custom_minimum_size.y >= 44.0, "Das Suchfeld wahrt die zentrale Mindestzielhöhe")
 	_check(lexicon.entry_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Das Eintragsraster scrollt nur vertikal")
 	_check(lexicon.detail_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Detailbereich scrollt nur vertikal")
@@ -84,9 +84,13 @@ func _test_master_detail_structure(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.selected_entry_id == &"", "Beim Öffnen ist kein Lexikoneintrag automatisch ausgewählt")
 	_check(lexicon.list_panel.visible and lexicon.overview_toolbar.visible and not lexicon.detail_panel.visible, "Das Lexikon öffnet auf der flächenfüllenden Übersicht statt auf einer leeren Detailhälfte")
 	_check(not lexicon.compact_back_button.visible, "Die kompakte Rückkehraktion erscheint erst mit einem geöffneten Detail")
-	_check(lexicon.entry_filter != null and lexicon.entry_filter.placeholder_text.contains("durchsuchen"), "Die Eintragsübersicht besitzt eine klare Suche")
+	_check(lexicon.search_button.visible and not lexicon.entry_filter.visible and not lexicon._search_active, "Das Lexikon öffnet mit einem kleinen Suchbefehl statt einem dauerhaft sichtbaren Webformular")
+	var search_icons: Array[Node] = lexicon.search_button.find_children("*", "SimpleIcon", true, false)
+	var search_icon := search_icons[0] as SimpleIcon if not search_icons.is_empty() else null
+	_check(search_icon != null and search_icon.kind == &"search" and SimpleIcon.supports(search_icon.kind), "Der Suchbefehl besitzt eine eindeutige zentrale Lupenglyphe")
+	_check(lexicon.entry_filter != null and lexicon.entry_filter.placeholder_text.contains("Suchen"), "Der ausdrücklich geöffnete Sucheditor besitzt eine klare Kurzcopy")
 	_check(lexicon.entry_filter.size.x <= LexiconMasterDetail.SEARCH_FIELD_WIDTH + 0.5 and lexicon.entry_filter.size.x < lexicon.toolbar_row.size.x * 0.5, "Die Suche bleibt ein kompaktes Werkzeug statt einer eigenen Vollbreitenzeile")
-	_check(lexicon.entry_count_label.text.contains("entdeckt") and not lexicon.entry_count_label.text.contains("freigeschaltet"), "Die gemeinsame Kopfzeile benennt den Fortschritt als entdeckt")
+	_check(lexicon.entry_count_label.text == "1 / 5" and String(lexicon.entry_progress_badge.get_meta(&"alveolus_accessible_name", "")).contains("entdeckt"), "Der sichtbare Codex-Badge bleibt knapp, sein zugänglicher Name erklärt den Entdeckungsfortschritt")
 	_check(lexicon.find_child("EntryCategory", true, false) == null and lexicon.find_child("EntrySubtitle", true, false) == null, "Detailköpfe reservieren weder Kategoriezeile noch Untertitel")
 	_check(not lexicon.detail_type_sections.visible, "Die leere Detailfläche zeigt keine veralteten Typdaten")
 	_check(MedicalLexiconIllustration.SAFE_MARGIN >= 4.0, "Lexikonillustrationen reservieren einen festen Sicherheitsabstand zum Kachelrand")
@@ -151,11 +155,14 @@ func _test_dense_grid_overview(lexicon: LexiconMasterDetail) -> void:
 	var visible_rows := floori(lexicon.entry_scroll.size.y / float(LexiconMasterDetail.GRID_TILE_HEIGHT + AlveolusVisualTheme.CONTROL_GAP))
 	_check(visible_rows * lexicon.entry_list.columns >= 28, "Bei 1280x720 sind mindestens achtundzwanzig Einträge zugleich ohne Scrollen sichtbar")
 	_check(lexicon.list_panel.visible and not lexicon.detail_panel.visible, "Die dichte Übersicht nutzt vor einer Auswahl die vollständige Inhaltsfläche")
+	lexicon._set_search_active(true, false, false)
+	_check(lexicon.entry_filter.visible and not lexicon.entry_progress_badge.visible and lexicon.search_button.button_pressed, "Der Lupenbefehl öffnet einen klar begrenzten Suchmodus und markiert sich aktiv")
 	_set_filter_text(lexicon, "Attack Speed")
 	await process_frame
 	_check(lexicon.selected_entry_id == &"" and not lexicon.detail_panel.visible, "Die Suche verändert weder Auswahl noch Detailstufe")
-	_check(lexicon.entry_count_label.text.contains("Treffer"), "Ein aktiver Filter ergänzt die Fortschrittszeile um seine Trefferzahl")
-	_set_filter_text(lexicon, "")
+	_check(lexicon.entry_filter.tooltip_text.contains("Treffer"), "Der aktive Sucheditor nennt seine Trefferzahl ohne eine weitere sichtbare Browserzeile")
+	_check(lexicon.cancel_step(), "Cancel schließt den Suchmodus, wenn kein Detail darüber liegt")
+	_check(not lexicon.entry_filter.visible and lexicon.entry_progress_badge.visible and lexicon.entry_filter.text.is_empty(), "Das Schließen der Suche entfernt Filter und stellt den Codex-Badge wieder her")
 	lexicon.select_category(LexiconEntryDefinition.CATEGORY_MONSTERS)
 	await process_frame
 
@@ -223,7 +230,10 @@ func _test_lock_and_selection(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.select_entry(&"pneumococcus"), "Entdecktes Bakterium ist auswählbar")
 	_check(lexicon.detail_panel.visible and lexicon.list_panel.visible and lexicon.overview_toolbar.visible, "Eine bestätigte Kachel öffnet auf breiter Bühne das Detail neben der weiter bedienbaren Galerie")
 	_check(lexicon.entry_list.columns == LexiconMasterDetail.MASTER_DETAIL_GRID_COLUMNS, "Die persistente Mastergalerie verdichtet sich im Detailmodus auf zwei Spalten")
-	_check(lexicon.compact_back_button.visible and lexicon.compact_back_button.size.x <= 140.0 and String(lexicon.compact_back_button.get_meta(&"alveolus_accessible_name", "")).contains("Übersicht"), "Das Detail besitzt eine schmale eindeutige Rückkehraktion im Kopf")
+	_check(lexicon.compact_back_button.visible and lexicon.compact_back_button.size.x <= 72.0 and String(lexicon.compact_back_button.get_meta(&"alveolus_accessible_name", "")).contains("Eintragsübersicht"), "Das Detail besitzt eine kleine zugänglich benannte Icon-Rückkehr im Kopf")
+	var back_icons: Array[Node] = lexicon.compact_back_button.find_children("*", "SimpleIcon", true, false)
+	var back_icon := back_icons[0] as SimpleIcon if not back_icons.is_empty() else null
+	_check(back_icon != null and back_icon.kind == &"back" and (lexicon.compact_back_button as IconTextButton).caption.text.is_empty(), "Die Rückkehr zeigt ausschließlich die spieltypische Pfeilglyphe ohne Browsertext")
 	_check(lexicon.compact_back_button.get_parent() == lexicon.detail_title.get_parent().get_parent(), "Die Rückkehraktion belegt keine eigene Vollbreitenzeile")
 	_check(not lexicon.detail_illustration.locked, "Entdeckte Illustration ist sichtbar")
 	_check(lexicon.detail_stats_grid.get_child_count() == 6, "Sechs kompakte Gegnerwerte bleiben neben der strukturierten Typdarstellung sichtbar")
@@ -320,7 +330,7 @@ func _test_responsive_detail_density(lexicon: LexiconMasterDetail) -> void:
 	_check(lexicon.page_scroll.get_v_scroll_bar().max_value > lexicon.page_scroll.get_v_scroll_bar().page, "Bei 960x540 @ 200 % besitzt die Bühne einen echten vertikalen Scrollbereich")
 	_check(lexicon.category_bar.columns == 3 and lexicon.category_bar.custom_minimum_size.y < 120.0, "Sehr kompakte Kategorien benötigen nur zwei statt drei Reihen")
 	_check(lexicon.entry_list.columns == 2, "Die sehr kompakte Übersicht bleibt als zweispaltiges Kachelraster lesbar")
-	_check(lexicon.list_panel.visible and lexicon.entry_scroll.size.y >= 300.0, "Das kompakte Raster behält unter der gemeinsamen Suchzeile eine nutzbare Scrollfläche")
+	_check(lexicon.list_panel.visible and lexicon.entry_scroll.size.y >= 240.0, "Das kompakte Raster behält unter der integrierten Codex-Befehlszeile eine nutzbare Scrollfläche")
 	_check(lexicon.select_entry(&"pneumococcus", true), "Kompakte Auswahl öffnet weiterhin das Detail")
 	await process_frame
 	await process_frame
@@ -389,7 +399,7 @@ func _test_mouse_and_focus_navigation(lexicon: LexiconMasterDetail) -> void:
 	var first := lexicon.entry_buttons[visible_entries[0].id] as Button
 	var second := lexicon.entry_buttons[visible_entries[1].id] as Button
 	_check(first.focus_neighbor_right == first.get_path_to(second), "Kacheln besitzen explizite horizontale Fokusnavigation")
-	_check(first.focus_neighbor_top == first.get_path_to(lexicon.entry_filter), "Die oberste Kachelreihe führt nach oben zur Suche")
+	_check(first.focus_neighbor_top == first.get_path_to(lexicon.search_button), "Die oberste Kachelreihe führt nach oben zum kompakten Suchbefehl")
 	_check(first.focus_neighbor_left == first.get_path_to(monster_tab), "Linksnavigation führt zur aktiven Kategorie")
 	second.mouse_entered.emit()
 	await process_frame

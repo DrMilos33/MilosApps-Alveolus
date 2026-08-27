@@ -19,7 +19,7 @@ const DRAWN_KINDS: Array[StringName] = [
 	&"defense_training", &"life_regeneration", &"movement_training", &"mobility",
 	&"damage_fire", &"damage_water", &"damage_earth", &"damage_wind",
 	&"fire", &"water", &"earth", &"wind",
-	&"locked", &"question", &"check", &"remove", &"restart", &"diamond", &"circle", &"target",
+	&"locked", &"question", &"check", &"remove", &"restart", &"search", &"diamond", &"circle", &"target",
 ]
 
 static var _missing_warnings: Dictionary = {}
@@ -184,6 +184,9 @@ func _draw() -> void:
 		&"restart":
 			draw_arc(Vector2.ZERO, 17.0, -PI * 0.15, PI * 1.45, 28, accent, 2.8, true)
 			draw_colored_polygon(PackedVector2Array([Vector2(-17, -11), Vector2(-20, 1), Vector2(-8, -2)]), accent)
+		&"search":
+			draw_arc(Vector2(-5, -5), 11.0, 0.0, TAU, 28, accent, 2.8, true)
+			draw_line(Vector2(3, 3), Vector2(17, 17), accent, 3.2, true)
 		_:
 			_draw_missing()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

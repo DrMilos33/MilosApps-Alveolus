@@ -13,7 +13,7 @@ const MASTER_DETAIL_GRID_COLUMNS := 2
 const MASTER_DETAIL_MIN_WIDTH := 340.0
 const MASTER_DETAIL_MAX_WIDTH := 420.0
 const MASTER_DETAIL_WIDTH_RATIO := 0.36
-const SEARCH_FIELD_WIDTH := 280.0
+const SEARCH_FIELD_WIDTH := 240.0
 
 var provider: LexiconViewModelProvider
 var seen_discovery_ids: Variant = []
@@ -27,8 +27,10 @@ var entry_view_models: Dictionary = {}
 
 var page_scroll: ScrollContainer
 var category_bar: GridContainer
-var overview_toolbar: PanelContainer
+var overview_toolbar: Control
 var toolbar_row: HBoxContainer
+var search_button: Button
+var entry_progress_badge: PanelContainer
 var content_row: HBoxContainer
 var list_panel: PanelContainer
 var detail_panel: PanelContainer
@@ -62,6 +64,7 @@ var empty_detail_label: Label
 var _context_detail_sources: Dictionary = {}
 var _detail_stat_grids: Array[GridContainer] = []
 var _detail_type_grids: Array[GridContainer] = []
+var _search_active: bool = false
 
 func _ready() -> void:
 	if provider == null:
@@ -100,6 +103,8 @@ func select_category(category: StringName, _focus_first_entry: bool = false) -> 
 		entry_filter.set_text("")
 	_update_category_states()
 	_rebuild_entry_list()
+	if search_button != null:
+		_set_search_active(false, false, false)
 	# Category changes only reveal the available entries. Selection remains an
 	# explicit player action, so the first row is neither marked nor focused.
 	_show_empty_detail()
@@ -243,48 +248,6 @@ func _build_layout() -> void:
 	category_bar.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	page.add_child(category_bar)
 
-	overview_toolbar = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_DOCUMENT_INSET)
-	overview_toolbar.name = "OverviewToolbar"
-	overview_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	page.add_child(overview_toolbar)
-
-	var toolbar_margin := MarginContainer.new()
-	toolbar_margin.add_theme_constant_override("margin_left", 10)
-	toolbar_margin.add_theme_constant_override("margin_top", 2)
-	toolbar_margin.add_theme_constant_override("margin_right", 10)
-	toolbar_margin.add_theme_constant_override("margin_bottom", 2)
-	overview_toolbar.add_child(toolbar_margin)
-
-	toolbar_row = HBoxContainer.new()
-	toolbar_row.name = "SearchAndProgress"
-	toolbar_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	toolbar_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
-	toolbar_margin.add_child(toolbar_row)
-
-	entry_filter = LineEdit.new()
-	entry_filter.name = "EntryFilter"
-	entry_filter.placeholder_text = "Einträge durchsuchen …"
-	entry_filter.clear_button_enabled = true
-	entry_filter.custom_minimum_size = Vector2(SEARCH_FIELD_WIDTH, 44.0)
-	entry_filter.size_flags_horizontal = Control.SIZE_FILL
-	entry_filter.set_meta(&"alveolus_accessible_name", "Lexikoneinträge durchsuchen")
-	entry_filter.text_changed.connect(_on_entry_filter_changed)
-	toolbar_row.add_child(entry_filter)
-
-	var toolbar_spacer := Control.new()
-	toolbar_spacer.name = "ToolbarSpacer"
-	toolbar_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	toolbar_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	toolbar_row.add_child(toolbar_spacer)
-
-	entry_count_label = AlveolusUIComponents.label("", AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
-	entry_count_label.name = "EntryCount"
-	entry_count_label.custom_minimum_size.x = 150.0
-	entry_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	entry_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	entry_count_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	toolbar_row.add_child(entry_count_label)
-
 	content_row = HBoxContainer.new()
 	content_row.name = "Content"
 	content_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -304,6 +267,13 @@ func _build_layout() -> void:
 	list_margin.add_theme_constant_override("margin_right", 6)
 	list_margin.add_theme_constant_override("margin_bottom", 6)
 	list_panel.add_child(list_margin)
+	var list_stack := VBoxContainer.new()
+	list_stack.name = "ListStack"
+	list_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list_stack.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	list_stack.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	list_margin.add_child(list_stack)
+	_build_overview_toolbar(list_stack)
 
 	entry_scroll = ScrollContainer.new()
 	entry_scroll.name = "EntryScroll"
@@ -311,7 +281,7 @@ func _build_layout() -> void:
 	entry_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	entry_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	entry_scroll.follow_focus = true
-	list_margin.add_child(entry_scroll)
+	list_stack.add_child(entry_scroll)
 
 	entry_safe_margin = MarginContainer.new()
 	entry_safe_margin.name = "ScrollbarSafeInset"
@@ -371,6 +341,128 @@ func _build_layout() -> void:
 	detail_safe_margin.add_child(detail_content)
 	_build_detail_content()
 
+
+func _build_overview_toolbar(parent: Container) -> void:
+	# Search is a deliberate Codex command, not a permanently open web form.
+	# Keeping the command strip inside the master pane also prevents it from
+	# visually spanning unrelated detail content on wide layouts.
+	overview_toolbar = MarginContainer.new()
+	overview_toolbar.name = "OverviewToolbar"
+	overview_toolbar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	overview_toolbar.set_meta(&"alveolus_component", &"lexicon_command_strip")
+	parent.add_child(overview_toolbar)
+
+	toolbar_row = HBoxContainer.new()
+	toolbar_row.name = "SearchAndProgress"
+	toolbar_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	toolbar_row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	overview_toolbar.add_child(toolbar_row)
+
+	search_button = AlveolusUIComponents.action_button(
+		"",
+		AlveolusUIComponents.ACTION_QUIET,
+		&"search",
+		AlveolusVisualTheme.TURQUOISE
+	)
+	search_button.name = "SearchToggle"
+	search_button.toggle_mode = true
+	_configure_icon_command(
+		search_button,
+		&"search",
+		"Lexikon durchsuchen",
+		"Lexikonsuche öffnen"
+	)
+	search_button.pressed.connect(_on_search_button_pressed)
+	toolbar_row.add_child(search_button)
+
+	entry_filter = LineEdit.new()
+	entry_filter.name = "EntryFilter"
+	entry_filter.placeholder_text = "Suchen …"
+	entry_filter.clear_button_enabled = true
+	entry_filter.custom_minimum_size = Vector2(SEARCH_FIELD_WIDTH, 44.0)
+	entry_filter.size_flags_horizontal = Control.SIZE_FILL
+	entry_filter.set_meta(&"alveolus_accessible_name", "Lexikoneinträge durchsuchen")
+	entry_filter.text_changed.connect(_on_entry_filter_changed)
+	entry_filter.hide()
+	toolbar_row.add_child(entry_filter)
+
+	var toolbar_spacer := Control.new()
+	toolbar_spacer.name = "ToolbarSpacer"
+	toolbar_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	toolbar_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toolbar_row.add_child(toolbar_spacer)
+
+	entry_progress_badge = AlveolusUIComponents.badge("0 / 0", AlveolusVisualTheme.TURQUOISE)
+	entry_progress_badge.name = "EntryProgressBadge"
+	entry_progress_badge.size_flags_horizontal = Control.SIZE_SHRINK_END
+	entry_progress_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	entry_progress_badge.custom_minimum_size.y = 36.0
+	entry_progress_badge.set_meta(&"alveolus_component", &"lexicon_progress_badge")
+	toolbar_row.add_child(entry_progress_badge)
+	var badge_labels: Array[Node] = entry_progress_badge.find_children("*", "Label", true, false)
+	entry_count_label = badge_labels[0] as Label if not badge_labels.is_empty() else null
+	if entry_count_label != null:
+		entry_count_label.name = "EntryCount"
+		entry_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		entry_count_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+
+
+func _configure_icon_command(
+	button: Button,
+	icon_kind: StringName,
+	tooltip: String,
+	accessible_name: String
+) -> void:
+	button.custom_minimum_size = Vector2(48.0, 44.0)
+	button.tooltip_text = tooltip
+	button.set_meta(&"alveolus_accessible_name", accessible_name)
+	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	if button is IconTextButton:
+		var icon_button := button as IconTextButton
+		icon_button.content_inset.add_theme_constant_override("margin_left", 11)
+		icon_button.content_inset.add_theme_constant_override("margin_top", 4)
+		icon_button.content_inset.add_theme_constant_override("margin_right", 11)
+		icon_button.content_inset.add_theme_constant_override("margin_bottom", 4)
+		icon_button.content_row.add_theme_constant_override("separation", 0)
+		icon_button.icon_view.custom_minimum_size = Vector2(22.0, 22.0)
+		icon_button.icon_view.configure(icon_kind, icon_button.accent)
+
+
+func _on_search_button_pressed() -> void:
+	_set_search_active(search_button.button_pressed)
+
+
+func _set_search_active(
+	active: bool,
+	clear_filter_when_closing: bool = true,
+	move_focus: bool = true
+) -> void:
+	_search_active = active
+	if search_button != null:
+		search_button.set_pressed_no_signal(active)
+		search_button.tooltip_text = "Suche schließen" if active else "Lexikon durchsuchen"
+		search_button.set_meta(
+			&"alveolus_accessible_name",
+			"Lexikonsuche schließen" if active else "Lexikonsuche öffnen"
+		)
+	if entry_filter != null:
+		entry_filter.visible = active
+		if not active and clear_filter_when_closing and not entry_filter.text.is_empty():
+			entry_filter.set_text("")
+			_on_entry_filter_changed("")
+	if entry_progress_badge != null:
+		entry_progress_badge.visible = not active
+	if not category_buttons.is_empty():
+		_configure_focus_neighbors()
+	if not move_focus:
+		return
+	if active and entry_filter != null:
+		entry_filter.grab_focus.call_deferred()
+	elif search_button != null:
+		search_button.grab_focus.call_deferred()
+
+
 func _build_category_buttons() -> void:
 	category_buttons.clear()
 	for category in LexiconCatalog.CATEGORY_ORDER:
@@ -407,12 +499,18 @@ func _build_detail_content() -> void:
 	heading_copy.add_child(detail_title)
 
 	compact_back_button = AlveolusUIComponents.action_button(
-		"Zur Übersicht",
-		AlveolusUIComponents.ACTION_QUIET,
+		"",
+		AlveolusUIComponents.ACTION_NAVIGATION,
 		&"back",
 		AlveolusVisualTheme.COBALT
 	)
-	compact_back_button.custom_minimum_size = Vector2(136.0, 44.0)
+	compact_back_button.name = "CloseDetail"
+	_configure_icon_command(
+		compact_back_button,
+		&"back",
+		"Zur Eintragsübersicht",
+		"Zur Eintragsübersicht"
+	)
 	compact_back_button.size_flags_horizontal = Control.SIZE_SHRINK_END
 	compact_back_button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	compact_back_button.pressed.connect(_show_compact_list)
@@ -941,8 +1039,12 @@ func _type_indicator_text(indicator: StringName) -> String:
 
 func _configure_focus_neighbors() -> void:
 	var category_count := LexiconCatalog.CATEGORY_ORDER.size()
-	var visible := _visible_definitions()
+	var visible: Array[LexiconEntryDefinition] = []
+	for definition in _visible_definitions():
+		if entry_buttons.has(definition.id):
+			visible.append(definition)
 	var split_detail := compact_detail_visible and not _is_compact()
+	var toolbar_focus := _toolbar_focus_control()
 	for index in range(category_count):
 		var category := LexiconCatalog.CATEGORY_ORDER[index]
 		var button := category_buttons.get(category) as Button
@@ -950,26 +1052,31 @@ func _configure_focus_neighbors() -> void:
 		var next := category_buttons.get(LexiconCatalog.CATEGORY_ORDER[(index + 1) % category_count]) as Button
 		button.focus_neighbor_left = button.get_path_to(previous)
 		button.focus_neighbor_right = button.get_path_to(next)
-		if entry_filter != null:
-			button.focus_neighbor_bottom = button.get_path_to(entry_filter)
+		if toolbar_focus != null:
+			button.focus_neighbor_bottom = button.get_path_to(toolbar_focus)
 
-	if entry_filter != null:
+	for toolbar_control in [search_button, entry_filter]:
+		if toolbar_control == null:
+			continue
 		var selected_category_button := category_buttons.get(selected_category) as Button
 		if selected_category_button != null:
-			entry_filter.focus_neighbor_top = entry_filter.get_path_to(selected_category_button)
+			toolbar_control.focus_neighbor_top = toolbar_control.get_path_to(selected_category_button)
 		if not visible.is_empty():
 			var first := entry_buttons.get(visible[0].id) as Button
-			entry_filter.focus_neighbor_bottom = entry_filter.get_path_to(first)
+			toolbar_control.focus_neighbor_bottom = toolbar_control.get_path_to(first)
 		elif selected_category_button != null:
-			entry_filter.focus_neighbor_bottom = entry_filter.get_path_to(selected_category_button)
+			toolbar_control.focus_neighbor_bottom = toolbar_control.get_path_to(selected_category_button)
+	if search_button != null and entry_filter != null:
+		search_button.focus_neighbor_right = search_button.get_path_to(entry_filter) if _search_active else NodePath()
+		entry_filter.focus_neighbor_left = entry_filter.get_path_to(search_button)
 
 	var columns := maxi(entry_list.columns if entry_list != null else 1, 1)
 	for index in range(visible.size()):
 		var entry_button := entry_buttons.get(visible[index].id) as Button
 		var column := index % columns
 		var category_button := category_buttons.get(selected_category) as Button
-		var top_button: Control = entry_filter
-		var bottom_button: Control = entry_filter
+		var top_button: Control = toolbar_focus
+		var bottom_button: Control = toolbar_focus
 		var left_button: Control = category_button
 		var right_button: Control = category_button
 		if index >= columns:
@@ -992,6 +1099,12 @@ func _configure_focus_neighbors() -> void:
 			return_target = entry_buttons.get(visible[0].id) as Button
 		if return_target != null:
 			compact_back_button.focus_neighbor_left = compact_back_button.get_path_to(return_target)
+
+
+func _toolbar_focus_control() -> Control:
+	if _search_active and entry_filter != null and entry_filter.visible:
+		return entry_filter
+	return search_button
 
 func _update_category_states() -> void:
 	for category in category_buttons:
@@ -1036,9 +1149,18 @@ func _update_entry_count() -> void:
 		if not provider.make_view_model(definition, seen_discovery_ids).locked:
 			unlocked += 1
 	var shown := entry_buttons.size()
-	entry_count_label.text = "%d von %d entdeckt" % [unlocked, total]
+	entry_count_label.text = "%d / %d" % [unlocked, total]
+	var accessible_summary := "%d von %d Einträgen entdeckt" % [unlocked, total]
 	if entry_filter != null and not entry_filter.text.strip_edges().is_empty():
-		entry_count_label.text += " · %d Treffer" % shown
+		accessible_summary += " · %d Treffer" % shown
+		entry_filter.tooltip_text = "%d Treffer" % shown
+		entry_filter.set_meta(&"alveolus_accessible_name", "Lexikoneinträge durchsuchen, %d Treffer" % shown)
+	elif entry_filter != null:
+		entry_filter.tooltip_text = ""
+		entry_filter.set_meta(&"alveolus_accessible_name", "Lexikoneinträge durchsuchen")
+	if entry_progress_badge != null:
+		entry_progress_badge.tooltip_text = accessible_summary
+		entry_progress_badge.set_meta(&"alveolus_accessible_name", accessible_summary)
 
 func _category_accent(category: StringName) -> Color:
 	match category:
@@ -1084,10 +1206,13 @@ func _ensure_standalone_theme() -> void:
 	theme = AlveolusVisualTheme.create_theme()
 
 func cancel_step() -> bool:
-	if not compact_detail_visible:
-		return false
-	_show_compact_list()
-	return true
+	if compact_detail_visible:
+		_show_compact_list()
+		return true
+	if _search_active:
+		_set_search_active(false)
+		return true
+	return false
 
 func _show_compact_list() -> void:
 	compact_detail_visible = false
@@ -1095,8 +1220,10 @@ func _show_compact_list() -> void:
 	var selected_button := entry_buttons.get(selected_entry_id) as Button
 	if selected_button != null:
 		selected_button.grab_focus.call_deferred()
-	elif entry_filter != null:
+	elif _search_active and entry_filter != null:
 		entry_filter.grab_focus.call_deferred()
+	elif search_button != null:
+		search_button.grab_focus.call_deferred()
 
 func _is_compact() -> bool:
 	return size.x < 820.0
