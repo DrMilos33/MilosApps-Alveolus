@@ -47,7 +47,7 @@ func _test_research_catalog_contract() -> void:
 
 	var expected_effects := {
 		&"stability_reserve": [&"max_health", 3.0, 3],
-		&"therapy_precision": [&"damage_multiplier", 0.02, 3],
+		&"therapy_precision": [&"damage_multiplier", 0.05, 3],
 		&"experience_gain": [&"experience_multiplier", 0.05, 3],
 		&"defense_training": [&"defense", 2.0, 3],
 		&"life_regeneration": [&"life_regeneration", 0.25, 3],
@@ -87,8 +87,8 @@ func _test_global_research_is_idempotent() -> void:
 		var stats := PlayerStats.new()
 		stats.configure_prepared_treatment(treatment)
 		stats.apply_meta_progression(ranks)
-		var expected_damage := float(roundi(treatment.base_damage * 1.06))
-		var expected_max_talent_damage := float(roundi(treatment.base_damage * 1.66))
+		var expected_damage := float(roundi(treatment.base_damage * 1.15))
+		var expected_max_talent_damage := float(roundi(treatment.base_damage * 1.75))
 		_near(PlayerStats.BASE_MAX_HEALTH + stats.max_stability_bonus, 59.0, "Lebensforschung gilt global")
 		_near(stats.therapy_damage, expected_damage, "Schadensforschung gilt für jede Grundbehandlung")
 		_near(stats.experience_gain_multiplier, 1.15, "Erfahrungsforschung gilt global")
@@ -119,6 +119,13 @@ func _test_global_research_is_idempotent() -> void:
 	var damage_after_first_apply := default_stats.therapy_damage
 	default_stats.apply_meta_progression(ranks)
 	_near(default_stats.therapy_damage, damage_after_first_apply, "Forschung bleibt auch vor einer expliziten Behandlungskonfiguration idempotent")
+
+	var compatibility_stats := PlayerStats.new()
+	compatibility_stats.configure_prepared_treatment(treatments[&"treatment_precision"])
+	compatibility_stats.apply_prepared_progression({&"therapy_precision": 2}, [&"therapy_precision"])
+	_near(compatibility_stats.therapy_damage, 11.0, "Der kompatible alte Einsatzplanpfad verwendet ebenfalls fünf Prozent je Forschungsrang")
+	compatibility_stats.apply_prepared_progression({&"therapy_precision": 2}, [])
+	_near(compatibility_stats.therapy_damage, 10.0, "Der kompatible alte Einsatzplanpfad entfernt den neuen Forschungsfaktor verlustfrei")
 
 
 func _test_experience_fraction_is_carried() -> void:

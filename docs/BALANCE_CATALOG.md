@@ -147,8 +147,8 @@ Besonderheiten:
   Strahl mit Trefferticks alle 0,25 Sekunden.
 - `Manuelle Zielsteuerung` richtet alle drei Behandlungen zur Maus statt zum
   nächsten Gegner aus.
-- Die Forschung `Stärkere Behandlung` addiert 2 Prozentpunkte Schaden je Rang
-  auf den unveränderten Behandlungsbasiswert. Nach maximal 6 Prozent wird der
+- Die Forschung `Stärkere Behandlung` addiert 5 Prozentpunkte Schaden je Rang
+  auf den unveränderten Behandlungsbasiswert. Nach maximal 15 Prozent wird der
   resultierende Schaden einmal ganzzahlig gerundet.
 
 ## 6. Aktive Fähigkeiten
@@ -182,7 +182,7 @@ als kostenloser Kauf angeboten.
 | Forschung | Ränge | Kosten je Rang | Wirkung je Rang | Maximum |
 |---|---:|---|---|---|
 | Mehr Leben | 3 | 50 / 350 / 800 | +3 maximales Leben | +9 Leben |
-| Stärkere Behandlung | 3 | 63 / 425 / 950 | +2 % Behandlungsschaden | +6 % vor Ganzzahlauflösung |
+| Stärkere Behandlung | 3 | 63 / 425 / 950 | +5 % Behandlungsschaden | +15 % vor Ganzzahlauflösung |
 | Mehr Erfahrung | 3 | 63 / 425 / 950 | +5 % Erfahrung | +15 % |
 | Mehr Verteidigung | 3 | 75 / 450 / 1000 | +2 Verteidigung | +6 |
 | Lebensregeneration | 3 | 75 / 450 / 1000 | +0,25 Leben/s | +0,75 Leben/s |

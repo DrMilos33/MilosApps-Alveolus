@@ -6,6 +6,7 @@ const BASE_DEFENSE := 0.0
 const BASE_LIFE_REGENERATION := 0.0
 const BASE_TREATMENT_DAMAGE := 10.0
 const BASE_MOVEMENT_SPEED := 171.0
+const TREATMENT_RESEARCH_DAMAGE_FRACTION_PER_RANK := 0.05
 
 var therapy_damage: float = BASE_TREATMENT_DAMAGE
 var therapy_cooldown: float = 0.965
@@ -71,7 +72,7 @@ func apply_meta_progression(research_ranks: Dictionary) -> void:
 	var regeneration_rank := int(research_ranks.get(&"life_regeneration", 0))
 	var movement_rank := int(research_ranks.get(&"movement_training", 0))
 	max_stability_bonus = float(stability_rank) * 3.0
-	_treatment_research_damage_fraction = float(precision_rank) * 0.02
+	_treatment_research_damage_fraction = float(precision_rank) * TREATMENT_RESEARCH_DAMAGE_FRACTION_PER_RANK
 	therapy_damage = float(roundi(_treatment_base_damage * (1.0 + _treatment_research_damage_fraction)))
 	experience_gain_multiplier = 1.0 + float(experience_rank) * 0.05
 	defense = BASE_DEFENSE + float(defense_rank) * 2.0
@@ -113,7 +114,7 @@ func apply_prepared_passive(id: StringName, research_ranks: Dictionary, enabled:
 		&"stability_reserve":
 			max_stability_bonus = maxf(0.0, max_stability_bonus + direction * float(rank) * 3.0)
 		&"therapy_precision":
-			var factor := 1.0 + float(rank) * 0.02
+			var factor := 1.0 + float(rank) * TREATMENT_RESEARCH_DAMAGE_FRACTION_PER_RANK
 			therapy_damage = therapy_damage * factor if enabled else therapy_damage / maxf(factor, 0.001)
 		&"sample_logistics":
 			var factor := 1.0 + float(rank) * 0.05

@@ -130,7 +130,7 @@ func _test_presentation_apis() -> void:
 		research_by_id[definition.id] = definition
 	var expected_totals := {
 		&"stability_reserve": "+9 Leben",
-		&"therapy_precision": "+6 % Schaden",
+		&"therapy_precision": "+15 % Schaden",
 		&"experience_gain": "+15 % Erfahrung",
 		&"defense_training": "+6 Verteidigung",
 		&"life_regeneration": "+0,75/s",

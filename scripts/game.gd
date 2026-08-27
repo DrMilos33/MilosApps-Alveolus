@@ -4457,7 +4457,7 @@ func _adjust_passive_build_base(id: StringName, enabled: bool) -> void:
 	var direction_factor := 1.0
 	match id:
 		&"therapy_precision":
-			direction_factor = 1.0 + float(meta.rank(id)) * 0.02
+			direction_factor = 1.0 + float(meta.rank(id)) * PlayerStats.TREATMENT_RESEARCH_DAMAGE_FRACTION_PER_RANK
 			build_state.set_base(RunBuildState.TREATMENT_DAMAGE, build_state.base_value(RunBuildState.TREATMENT_DAMAGE) * direction_factor if enabled else build_state.base_value(RunBuildState.TREATMENT_DAMAGE) / maxf(direction_factor, 0.001))
 		&"sample_logistics":
 			direction_factor = 1.0 + float(meta.rank(id)) * 0.05

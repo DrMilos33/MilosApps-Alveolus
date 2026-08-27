@@ -331,7 +331,7 @@ static func clinic_job_definitions() -> Dictionary:
 static func research_definitions() -> Array[ResearchDefinition]:
 	return [
 		ResearchDefinition.create(&"stability_reserve", "Mehr Leben", "+3 maximales Leben je Rang", PackedInt32Array([50, 350, 800]), &"max_health", 3.0),
-		ResearchDefinition.create(&"therapy_precision", "Stärkere Behandlung", "+2 % Schaden der Behandlungen je Rang", PackedInt32Array([63, 425, 950]), &"damage_multiplier", 0.02),
+		ResearchDefinition.create(&"therapy_precision", "Stärkere Behandlung", "+5 % Schaden der Behandlungen je Rang", PackedInt32Array([63, 425, 950]), &"damage_multiplier", PlayerStats.TREATMENT_RESEARCH_DAMAGE_FRACTION_PER_RANK),
 		ResearchDefinition.create(&"experience_gain", "Mehr Erfahrung", "+5 % Erfahrung je Rang", PackedInt32Array([63, 425, 950]), &"experience_multiplier", 0.05),
 		ResearchDefinition.create(&"defense_training", "Mehr Verteidigung", "+2 Verteidigung je Rang", PackedInt32Array([75, 450, 1000]), &"defense", 2.0),
 		ResearchDefinition.create(&"life_regeneration", "Lebensregeneration", "+0,25 Leben pro Sekunde je Rang", PackedInt32Array([75, 450, 1000]), &"life_regeneration", 0.25),
