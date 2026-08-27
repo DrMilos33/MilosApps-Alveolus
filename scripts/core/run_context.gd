@@ -12,7 +12,6 @@ var visible_trait_ids: Array[StringName] = []
 var visible_trait_id: StringName:
 	get:
 		return visible_trait_ids[0] if not visible_trait_ids.is_empty() else &""
-var hidden_finding_id: StringName = &""
 var loadout_snapshot: PreparedLoadout
 var talent_snapshot: Dictionary = {}
 var mode: Mode = Mode.CAMPAIGN
@@ -25,7 +24,6 @@ static func create(
 	loadout: PreparedLoadout,
 	active_talents: Dictionary = {},
 	trait_id: StringName = &"",
-	finding_id: StringName = &"",
 	trait_ids: Array[StringName] = []
 ) -> RunContext:
 	var context := RunContext.new()
@@ -34,7 +32,6 @@ static func create(
 	context.visible_trait_ids = trait_ids.duplicate()
 	if context.visible_trait_ids.is_empty() and trait_id != &"":
 		context.visible_trait_ids.append(trait_id)
-	context.hidden_finding_id = finding_id
 	context.loadout_snapshot = loadout.duplicate_loadout() if loadout != null else null
 	context.talent_snapshot = active_talents.duplicate(true)
 	return context
@@ -66,7 +63,6 @@ func duplicate_context() -> RunContext:
 		loadout_snapshot,
 		talent_snapshot,
 		visible_trait_id,
-		hidden_finding_id,
 		visible_trait_ids
 	)
 	copy.mode = mode

@@ -112,7 +112,6 @@ func _prepare_game(run_seed: int) -> Node:
 		run_seed,
 		PreparedLoadout.default_loadout(),
 		{},
-		&"",
 		&""
 	)
 	game.start_run(context)

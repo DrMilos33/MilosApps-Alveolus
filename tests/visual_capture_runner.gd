@@ -664,36 +664,6 @@ func _canvas_rect(control: Control) -> Rect2:
 	)
 
 func _capture_transient_dialogs(game: Node) -> void:
-	var findings := ContentCatalog.finding_definitions()
-	var reactions := ContentCatalog.reaction_definitions()
-	var finding_reactions: Array = [reactions[&"group_area"], reactions[&"group_control"], reactions[&"group_safety"]]
-	game.hud.show_finding(findings[&"grouping"], finding_reactions)
-	await _capture("finding")
-	var registrations: Array[Dictionary] = game.hud.finding_screen.context_detail_registrations()
-	if registrations.is_empty():
-		capture_failed = true
-		push_error("Befund besitzt keine Hover-Tooltipquelle für die visuelle Abnahme")
-		return
-	var tooltip_source := registrations[0].get("source") as Control
-	if tooltip_source == null or registrations[0].has("anchor"):
-		capture_failed = true
-		push_error("Befund-Tooltip verwendet nicht ausschließlich das tatsächliche Source-Control")
-		return
-	tooltip_source.mouse_entered.emit()
-	await _settle()
-	var tooltip_card := game.hud.context_detail_controller.card as Control
-	var source_rect := tooltip_source.get_global_rect()
-	var tooltip_rect := tooltip_card.get_global_rect()
-	if not tooltip_card.is_visible_in_tree() \
-		or not _inside_capture_viewport(tooltip_card) \
-		or tooltip_rect.intersects(source_rect) \
-		or game.hud.context_detail_controller.active_source() != tooltip_source:
-		capture_failed = true
-		push_error("Befund-Tooltip bleibt nicht viewportgebunden und frei von seiner tatsächlichen Quelle (Quelle %s, Karte %s)" % [source_rect, tooltip_rect])
-		return
-	await _capture("finding_tooltip")
-	game.hud.close_all_context_details()
-	game.hud.hide_finding()
 	game.hud.show_running_hud()
 	var discoveries := ContentCatalog.discovery_definitions()
 	game.hud.show_discovery(discoveries[&"pneumococcus"], game.hud.root.size * 0.5)

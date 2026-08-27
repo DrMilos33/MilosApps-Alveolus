@@ -254,7 +254,6 @@ func _apply_ability_source(view_model: LexiconEntryViewModel, ability_id: String
 		[&"shield", "Schild", "", 0],
 		[&"knockback", "Rückstoß", "", 0],
 		[&"stun_duration", "Betäubung", "s", 1],
-		[&"finding_progress", "Befundfortschritt", "", 0],
 	]:
 		var parameter_id: StringName = numeric_data[0]
 		var parameter_key := String(parameter_id)

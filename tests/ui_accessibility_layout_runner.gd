@@ -20,12 +20,8 @@ func _run() -> void:
 	var levels := ContentCatalog.level_definitions()
 	var research := ContentCatalog.research_definitions()
 	var loadout_modules := ContentCatalog.loadout_module_definitions()
-	var findings := ContentCatalog.finding_definitions()
-	var reactions := ContentCatalog.reaction_definitions()
 	var discoveries := ContentCatalog.discovery_definitions()
 	var upgrades := ContentCatalog.upgrade_definitions()
-	var finding_reactions: Array = [reactions[&"group_area"], reactions[&"group_control"], reactions[&"group_safety"]]
-	var swappable_passives: Array = []
 	var prepared := PreparedLoadout.default_loadout()
 	var prepared_with_active := PreparedLoadout.create(
 		PreparedLoadout.DEFAULT_TREATMENT_ID,
@@ -115,7 +111,6 @@ func _run() -> void:
 			{"id": "preparation_intro_locked", "overlay": hud.preparation_overlay, "show": show_intro_preparation},
 			{"id": "lexicon", "overlay": hud.lexicon_overlay, "show": func() -> void: hud.show_lexicon(meta)},
 			{"id": "settings", "overlay": hud.settings_overlay, "show": func() -> void: hud.show_settings(false, true)},
-			{"id": "finding", "overlay": hud.finding_overlay, "show": func() -> void: hud.show_finding(findings[&"grouping"], finding_reactions, null, swappable_passives)},
 			{"id": "discovery", "overlay": hud.discovery_tooltip, "show": show_discovery_screen},
 			{"id": "run", "overlay": hud.gameplay_hud, "show": show_run_screen},
 			{"id": "upgrade", "overlay": hud.upgrade_overlay, "show": show_upgrade_screen},
@@ -369,8 +364,6 @@ func _run() -> void:
 					for stat_child in lexicon.detail_stats_grid.get_children():
 						var stat_panel := stat_child as Control
 						_check(stat_panel != null and stat_panel.get_global_rect().end.x <= detail_bar.get_global_rect().position.x - 4.0, "%s hält Statistikwerte vor der Scrollbar" % context)
-			if screen["id"] == "finding":
-				_check(_inside_viewport(hud.finding_panel, canvas_size), "%s hält das Befundfenster vollständig im Viewport" % context)
 			if screen["id"] == "upgrade":
 				_check(_inside_viewport(hud.upgrade_panel, canvas_size), "%s hält den Ausbau-Dialog vollständig im Viewport" % context)
 				_check(_has_scroll_ancestor(hud.upgrade_cards), "%s hält alle Ausbauoptionen scrollbar erreichbar" % context)
@@ -428,8 +421,6 @@ func _run() -> void:
 					)
 				_check(pause_screen.is_section_expanded(&"general") and pause_screen.section_body(&"general").is_visible_in_tree(), "%s öffnet Grundwerte standardmäßig" % context)
 				_check(not pause_screen.is_section_expanded(&"treatment:treatment_precision") and not pause_screen.section_body(&"treatment:treatment_precision").visible, "%s reserviert für die geschlossene Behandlung keinen Body-Leerraum" % context)
-			if screen["id"] == "finding" and viewport_size == Vector2i(1280, 720):
-				await _check_finding_tooltip_placement(hud, canvas_size, context)
 			if screen["id"] == "abort":
 				_check(_inside_viewport(hud.abort_panel, canvas_size), "%s hält die Abbruchbestätigung vollständig im Viewport" % context)
 			if screen["id"] == "intro_skip":
@@ -558,7 +549,6 @@ func _run() -> void:
 		hud.set_run_stats_visibility(true)
 		hud.show_running_hud()
 		hud.update_shield(24.0, 40.0)
-		hud.update_finding_progress(8, 30)
 		hud.configure_active_abilities([
 			{"title": "Fokusfeld", "cooldown_remaining": 0.0, "cooldown_total": 12.0, "ready": true},
 			{"title": "Notfallhilfe", "cooldown_remaining": 4.0, "cooldown_total": 20.0, "ready": false},
@@ -573,14 +563,11 @@ func _run() -> void:
 				and run_hud.defeat_research_reward_panel().get_global_rect().end.x <= run_hud.timer_panel().get_global_rect().position.x + 0.5,
 			"%s hält den Forschungsgewinn links vom freistehenden Timer" % compact_context
 		)
-		_check(_rects_separate(run_hud.analysis_panel(), hud.finding_progress_panel), "%s ordnet Probe und Befund ohne Überlagerung" % compact_context)
-		_check(_rects_separate(hud.finding_progress_panel, run_hud.ability_panel()), "%s reserviert getrennte Befund- und Fähigkeitsreihen" % compact_context)
 		hud.show_alert("BELASTUNGSSCHUB", AlveolusVisualTheme.CORAL, 2.0)
 		await _settle()
 		_check(run_hud.run_stats_strip().visible and _rects_separate(run_hud.run_stats_strip(), run_hud.analysis_panel()), "%s hält die zweireihige Grundwertanzeige unter dem Timer trotz Alarm lesbar" % compact_context)
 		_check(_rects_separate(run_hud.timer_panel(), run_hud.pause_action()), "%s trennt freistehende Rundendauer und Pauseaktion" % compact_context)
 		_check(_rects_separate(hud.alert_label, run_hud.run_stats_strip()), "%s trennt Alarm und Kampfwerte" % compact_context)
-		_check(_rects_separate(hud.alert_label, hud.finding_progress_panel), "%s trennt Alarm und untere Befundreihe" % compact_context)
 
 	hud.queue_free()
 	await process_frame
@@ -596,49 +583,6 @@ func _character_stats_fixture() -> PlayerStats:
 	stats.defense = 6.0
 	stats.life_regeneration_per_second = 1.5
 	return stats
-
-
-func _check_finding_tooltip_placement(hud: GameHUD, viewport_size: Vector2i, context: String) -> void:
-	var registrations := hud.finding_screen.context_detail_registrations()
-	_check(not registrations.is_empty(), "%s besitzt mindestens eine stabile Befund-Tooltipquelle" % context)
-	if registrations.is_empty():
-		return
-	var source_registrations: Array = [registrations[0]]
-	if registrations.size() > 1:
-		source_registrations.append(registrations[registrations.size() - 1])
-	for registration_value in source_registrations:
-		var registration := registration_value as Dictionary
-		var source := registration.get("source") as Control
-		_check(source != null and source.is_visible_in_tree(), "%s bindet den Befund-Tooltip an eine sichtbare Quelle" % context)
-		if source == null or not source.is_visible_in_tree():
-			continue
-		source.mouse_entered.emit()
-		await _settle()
-		var card := hud.context_detail_controller.card
-		var source_rect := source.get_global_rect()
-		var card_rect := card.get_global_rect()
-		var transform := source.get_global_transform_with_canvas()
-		var source_scale := maxf(transform.x.length(), transform.y.length())
-		var scaled_gap := ContextDetailController.SOURCE_GAP * source_scale
-		var scaled_margin := ContextDetailController.VIEWPORT_MARGIN * source_scale
-		_check(card.is_visible_in_tree() and _inside_viewport(card, viewport_size), "%s hält den Befund-Tooltip vollständig im Viewport" % context)
-		_check(not card_rect.intersects(source_rect), "%s überdeckt seine tatsächliche Befundquelle nicht" % context)
-		var bounds := Rect2(
-			Vector2(scaled_margin, scaled_margin),
-			Vector2(viewport_size) - Vector2(scaled_margin, scaled_margin) * 2.0
-		)
-		var candidates := [
-			Vector2(source_rect.end.x + scaled_gap, source_rect.position.y - card_rect.size.y - scaled_gap),
-			Vector2(source_rect.position.x - card_rect.size.x - scaled_gap, source_rect.position.y - card_rect.size.y - scaled_gap),
-			Vector2(source_rect.end.x + scaled_gap, source_rect.end.y + scaled_gap),
-			Vector2(source_rect.position.x - card_rect.size.x - scaled_gap, source_rect.end.y + scaled_gap),
-		]
-		for candidate in candidates:
-			if bounds.encloses(Rect2(candidate, card_rect.size)):
-				_check(card_rect.position.distance_to(candidate) <= 1.5, "%s verwendet die erste vollständig passende globale AUTO-Position" % context)
-				break
-	hud.close_all_context_details()
-	await _settle()
 
 
 func _semantic_controls(root_node: Node, component_id: StringName) -> Array[Control]:

@@ -108,7 +108,6 @@ func _test_catalog_contract() -> void:
 	}
 	for id in expected_roles:
 		_equal((traits[id] as CaseTraitDefinition).semantic_role, expected_roles[id], "Fallmerkmal %s liefert die zentrale semantische Rolle" % String(id))
-	_equal(ContentCatalog.finding_definitions().size(), 2, "Nur Gruppenbildung und verdeckte Nester bleiben aktiv")
 
 
 func _test_run_context_trait_contract() -> void:
@@ -117,8 +116,7 @@ func _test_run_context_trait_contract() -> void:
 		17,
 		PreparedLoadout.default_loadout(),
 		{},
-		&"monster_speed_15",
-		&"hidden_nests"
+		&"monster_speed_15"
 	)
 	_equal(legacy.visible_trait_ids, [&"monster_speed_15"], "Der singuläre Erstellungsparameter wird in den kanonischen Array-Vertrag übernommen")
 	_equal(legacy.visible_trait_id, &"monster_speed_15", "Der kompatible Lesealias liefert das erste Merkmal")
@@ -130,7 +128,6 @@ func _test_run_context_trait_contract() -> void:
 		PreparedLoadout.default_loadout(),
 		{},
 		&"ignored_legacy_trait",
-		&"group_formation",
 		traits
 	)
 	traits.clear()
@@ -140,7 +137,6 @@ func _test_run_context_trait_contract() -> void:
 	plural.visible_trait_ids.clear()
 	_equal(duplicate.visible_trait_ids, [&"monster_health_15", &"double_boss"], "Duplizieren für Neustarts bewahrt einen unabhängigen Merkmals-Snapshot")
 	_equal(duplicate.visible_trait_id, &"monster_health_15", "Der singuläre Alias bleibt nach dem Neustart kompatibel")
-	_equal(duplicate.hidden_finding_id, &"group_formation", "Duplizieren bewahrt weiterhin den verdeckten Befund")
 
 
 func _test_resistance_compilation_and_damage_resolution() -> void:
@@ -193,8 +189,7 @@ func _test_runtime_config_and_double_boss() -> void:
 		0xCA5E2026,
 		PreparedLoadout.default_loadout(),
 		{},
-		&"double_boss",
-		&""
+		&"double_boss"
 	)
 	game.start_run(context)
 	game.set_physics_process(false)

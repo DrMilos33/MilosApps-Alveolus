@@ -93,7 +93,6 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 		RUN_SEED,
 		PreparedLoadout.default_loadout(),
 		{},
-		&"",
 		&""
 	)
 	game.start_run(context)
@@ -190,7 +189,7 @@ func _apply_command_trace(game: Node, frame: int) -> void:
 func _resolve_deterministic_choices(game: Node) -> void:
 	# Choose option one as the fixed player decision whenever a sample triggers
 	# a level-up. Discoveries are pre-marked, and this RunContext has no hidden
-	# finding, so no other modal state should enter the trace.
+	# event, so no other modal state should enter the trace.
 	var safety := 0
 	while game.flow_state == GameFlowState.State.LEVEL_UP and safety < 8:
 		safety += 1

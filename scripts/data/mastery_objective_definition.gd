@@ -32,7 +32,6 @@ static func definitions() -> Array[MasteryObjectiveDefinition]:
 	return [
 		create(&"intro_complete", &"intro", "Grundlagen abgeschlossen", "Das Intro regulär abschließen.", &"victory", 0.0, 0),
 		create(&"fall_1_first_victory", &"early_localized_focus", "Erster Erfolg", "Fall 1 gewinnen.", &"victory", 0.0, 0),
-		create(&"fall_1_early_finding", &"early_localized_focus", "Früher Befund", "Den Befund vor dem Boss abschließen und gewinnen.", &"finding_before_boss", 0.0, 0),
 		create(&"fall_1_healthy_win", &"early_localized_focus", "Stabiler Abschluss", "Mit mindestens 50 % Leben gewinnen.", &"final_stability_ratio", 0.5, 0),
 		create(&"fall_2_first_victory", &"localized_focus", "Erster Erfolg", "Fall 2 gewinnen.", &"victory"),
 		# Stable ID retained while the Reserve feature is dormant. The mastery stays

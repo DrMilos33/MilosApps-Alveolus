@@ -1,6 +1,6 @@
 # ALVEOLUS – aktueller Werte- und Ausbaukatalog
 
-**Stand:** 26. August 2026
+**Stand:** 27. August 2026
 **Geprüfte Codebasis:** lokaler Arbeitsbaum `codex/alveolus-local-main`
 **Zweck:** Verbindliche Ist-Aufnahme für die nächste Balanceiteration.
 
@@ -24,6 +24,9 @@ im Kampf ist dagegen vollständig enthalten.
   sichtbaren Talentknoten in drei Bäumen; neun Knoten sind belegbar und 17
   ausdrückliche Platzhalter.
 - Ein Run enthält 35 Ausbaudefinitionen; endlose Familien besitzen kein Rangmaximum.
+- Befunde, Reaktionen und Befundfortschritt sind vollständig entfernt. Nach dem
+  ersten Sieg bestimmen ausschließlich zwei sichtbare Fallmerkmale und die
+  geskripteten Fallereignisse die Fallabweichungen.
 - Alle Hauptfälle haben kein Zeitlimit. Der Boss erscheint nach 300 Sekunden.
 - Die harte Hauptarena misst **8.640 × 4.860 Weltpunkte**. Spawnraten und
   Gegnerabstände bleiben von dieser dichteren Spielfläche unberührt.
@@ -54,11 +57,12 @@ IDs oder Save-Kompatibilität sie noch erfordern.
 
 Forschung erhöht diese Basis auf höchstens 59 Leben, 6 Verteidigungsrating
 (effektiv 5,6 % Minderung), 0,75 Leben/s Regeneration, 1,15-fache Erfahrung
-und ganzzahligen Galopp 196. Behandlungen erhalten bis zu 6 Prozent zusätzlichen
-Basisschaden. Das Talent `Behandlungsgrundlage` addiert bis zu weitere 60
-Prozent des unveränderten Behandlungsausgangswerts; Forschung und Talent werden
-vor genau einer Ganzzahlauflösung zusammengeführt. Run-Schadenskarten addieren
-erst danach ihre absoluten Werte.
+und ganzzahligen Galopp 196. `Stärkere Behandlung` liefert bis zu 15 Prozent
+zusätzlichen Behandlungsschaden. Das Talent `Behandlungsgrundlage` erhöht zuvor
+den unveränderten Ausgangswert um bis zu 60 Prozent; danach werden absolute
+Run-Schadensupgrades addiert und schließlich der Forschungsfaktor angewandt:
+`(Basis × (1 + 0,20 × Talentrang) + Run-Schaden) × (1 + 0,05 × Forschungsrang)`.
+Erst dieses Ergebnis wird genau einmal ganzzahlig aufgelöst.
 
 ### Resistenzen
 
@@ -147,9 +151,11 @@ Besonderheiten:
   Strahl mit Trefferticks alle 0,25 Sekunden.
 - `Manuelle Zielsteuerung` richtet alle drei Behandlungen zur Maus statt zum
   nächsten Gegner aus.
-- Die Forschung `Stärkere Behandlung` addiert 5 Prozentpunkte Schaden je Rang
-  auf den unveränderten Behandlungsbasiswert. Nach maximal 15 Prozent wird der
-  resultierende Schaden einmal ganzzahlig gerundet.
+- Die Forschung `Stärkere Behandlung` multipliziert den aktuellen Schaden nach
+  allen absoluten Run-Schadensupgrades mit `1 + 0,05 × Rang`. Behandlungstalente
+  verändern zuvor den Basisschaden; erst der vollständige Wert wird einmal
+  ganzzahlig gerundet. Schadenskarten behalten ihren ausgeschriebenen absoluten
+  Wert.
 
 ## 6. Aktive Fähigkeiten
 
@@ -160,7 +166,7 @@ Besonderheiten:
 | Fokusfeld | sichtbar gesperrt | Zielkreis | 16 s | Radiusstufe 6, 7 s, Behandlungsschaden ×1,25 | keiner |
 | Notfallhilfe | sichtbar gesperrt | selbst | 28 s | +14 Leben, +8 Schild | keiner |
 | Schildfeld | sichtbar gesperrt | Zielkreis | 20 s | Radiusstufe 6, 6 s, Gegnertempo und -schaden ×0,65 | keiner |
-| Erfahrungszug | sichtbar gesperrt | Zielkreis | 18 s | Radiusstufe 8, +6 Befundfortschritt | keiner |
+| Erfahrungszug | sichtbar gesperrt | Zielkreis | 18 s | Radiusstufe 8, zieht Erfahrung im Zielgebiet an | keiner |
 
 Nur Ausbauten für tatsächlich ausgerüstete aktive Fähigkeiten gelangen in den
 Run-Pool. Für die vier gesperrten Fähigkeiten existieren derzeit keine
@@ -182,7 +188,7 @@ als kostenloser Kauf angeboten.
 | Forschung | Ränge | Kosten je Rang | Wirkung je Rang | Maximum |
 |---|---:|---|---|---|
 | Mehr Leben | 3 | 50 / 350 / 800 | +3 maximales Leben | +9 Leben |
-| Stärkere Behandlung | 3 | 63 / 425 / 950 | +5 % Behandlungsschaden | +15 % vor Ganzzahlauflösung |
+| Stärkere Behandlung | 3 | 63 / 425 / 950 | +5 % Behandlungsschaden | +15 % nach absoluten Run-Upgrades, vor Ganzzahlauflösung |
 | Mehr Erfahrung | 3 | 63 / 425 / 950 | +5 % Erfahrung | +15 % |
 | Mehr Verteidigung | 3 | 75 / 450 / 1000 | +2 Verteidigung | +6 |
 | Lebensregeneration | 3 | 75 / 450 / 1000 | +0,25 Leben/s | +0,75 Leben/s |
@@ -193,9 +199,11 @@ als kostenloser Kauf angeboten.
 | Fetter lazer | 1 | 0 nach Abschluss von Fall 1 | aktive Fähigkeit freischalten | freigeschaltet |
 
 Der reguläre kaufbare Vollausbau kostet insgesamt **9.481 Forschungspunkte**. Ein neuer
-Spielstand startet mit 0 Forschung. Introabschluss oder Überspringen vergeben einmalig
-exakt 30 Forschung und keinen Talentpunkt. Der Introboss erhöht diesen Sondergrant
-nicht; 30 entspricht genau dem Kaufpreis von Stoß. Der erste
+Spielstand startet mit 0 Forschung. Introabschluss und Überspringen teilen sich
+einen einmaligen Grant von exakt 30 Forschung; ein Talentpunkt entsteht dabei
+nicht. Intro-Niederlagen geben immer 0. Sobald eine der beiden Belohnungsrouten
+den Grant verbraucht hat, geben auch spätere Introsiege und erneute Skips 0. Der
+Introboss erhöht diesen Sondergrant nicht; 30 entspricht genau dem Kaufpreis von Stoß. Der erste
 Talentpunkt wird mit dem Abschluss von Fall 2 verdient. Forschungs- und
 Talentreset erstatten beziehungsweise befreien alle investierten Punkte. Die
 Einführung verwendet ihre feste Lehrkonfiguration.
@@ -365,12 +373,9 @@ Attack-Speed-Ausbaupfade reserviert.
 | Bakterienkern | 900 | 73 | 6 | 4 alle 1,05 s in Fall 2 | 40 % Feuer, 60 % Luft | 20 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 | Infektionsherd | 2.200 | 79 | 9 | 2 × 4 alle 1,6 s | 40 % Feuer, 60 % Luft | 30 | Boss | Feuer +15 (+12,5 %), Luft +25 (+18,8 %), Wasser −15 |
 
-Der kleine Herd ist ein **mobiles** Nebenziel. Beim Befund `Verdeckte Nester`
-erscheint er mit 180 Leben auf einem der katalogisierten Spawnringe, bewegt
-sich mit seinem fallskalierten Tempo auf Doctor Milos zu und setzt nach 20
-Sekunden vier Bakterien an seiner aktuellen Position frei, falls er lebt.
-Der geskriptete mobile Eventherd in Fall 1 bildet die einzige Ausnahme: Er
-besitzt 135 Leben, verwendet ganzzahliges Basistempo 66, feuert alle 1,39 Sekunden und seine
+Der kleine Herd ist ein **mobiles** Nebenziel. Der geskriptete mobile Eventherd
+in Fall 1 besitzt 135 Leben, verwendet ganzzahliges Basistempo 66, feuert alle
+1,39 Sekunden und seine
 normalen Projektile besitzen 1,95-fache Geschwindigkeit sowie 1,5-fache
 Querbreite und Trefferfläche. Ein Treffer mit Stoß unterbindet seinen Beschuss
 zehn Sekunden lang; Bewegung und sonstiger Status laufen unverändert
@@ -479,14 +484,15 @@ eine Auswahl aus drei gültigen Ausbauten für `treatment_precision` aus; nach d
 Auswahl wartet der einfache Altboss erneut in einer Linksklick-Pause. Er besitzt
 effektiv 198 Leben und sein einzelnes normales Projektil verursacht effektiv 3
 Schaden. Der erste Sieg kehrt direkt zum Campus zurück und vergibt exakt 30
-Forschung; der Intro-Skip vergibt ebenfalls exakt 30. Beide vergeben keinen
-Talentpunkt.
+Forschung; alternativ vergibt der erste Intro-Skip denselben einmaligen Grant.
+Intro-Niederlagen und nach dessen Verbrauch auch spätere Introsiege sowie
+erneute Skips geben 0. Ein Talentpunkt wird dabei nie vergeben.
 
 Alle positiven Run-Forschungseinnahmen werden zentral mit 3,75 und danach mit
 dem zusätzlichen Run-Faktor 1,50 multipliziert; der effektive gemeinsame Faktor
-ist damit 5,625. Die separate Introgrundbelohnung beträgt exakt 30 und verwendet
-weder Run- noch Bossmultiplikator. Kosten und Rückerstattungen bleiben
-unverändert. Zusätzlich gilt am Rundenende der Bossmultiplikator
+ist damit 5,625. Die separate einmalige Introgrundbelohnung beträgt exakt 30 und
+verwendet weder Run- noch Bossmultiplikator; nach ihrem Verbrauch beträgt sie 0.
+Kosten und Rückerstattungen bleiben unverändert. Zusätzlich gilt am Rundenende der Bossmultiplikator
 `1 + 0,25 × besiegte Bosse`. Danach erhöht jedes aktive Fallmerkmal die
 Run-Forschung additiv um 15 Prozentpunkte, also bei den regulären zwei Merkmalen
 mit dem gemeinsamen Faktor `1 + 0,15 × 2 = 1,30`; gerundet wird über die
@@ -494,13 +500,13 @@ vollständige Berechnung genau einmal am Ende.
 
 ### Variationsregel
 
-- Ein Fall ohne früheren Sieg startet ohne Merkmale und ohne Befund.
+- Ein Fall ohne früheren Sieg startet ohne Merkmale.
 - Der erste Sieg selbst enthält daher noch keine Zufallsparameter.
-- Ab dem nächsten Versuch werden genau zwei verschiedene Merkmale und ein Befund
-  deterministisch aus dem gespeicherten Fallseed gewählt. Die alte erste
-  Merkmalsziehung bleibt unverändert, danach folgt die bisherige Befundziehung;
-  erst anschließend wird das zweite Merkmal aus den verbleibenden gültigen
-  Merkmalen gezogen.
+- Ab dem nächsten Versuch werden genau zwei verschiedene sichtbare Merkmale
+  deterministisch aus dem gespeicherten Fallseed gewählt. Zwischen der alten
+  ersten und der zweiten Merkmalsziehung wird weiterhin genau ein interner
+  Zwei-Wege-RNG-Draw konsumiert; er erzeugt keinen sichtbaren oder mechanischen
+  Inhalt und bewahrt ausschließlich die deterministische Seedfolge.
 - Beide Merkmalswirkungen werden im Run jeweils genau einmal angewandt und geben
   je 15 Prozentpunkte additive Run-Forschung.
 - Nur ein Sieg rotiert diesen Seed. Niederlage, Abbruch und Neustart behalten
@@ -519,22 +525,18 @@ vollständige Berechnung genau einmal am Ende.
 | Hohe Keimlast | +10 % Spawnrate |
 | Lerngewinn | +10 % Erfahrung |
 
-### Befunde und Reaktionen
-
-| Befund | Grundwirkung | Reaktion 1 | Reaktion 2 | Reaktion 3 |
-|---|---|---|---|---|
-| Gruppenbildung | +18 Prozentpunkte Bakteriengruppen | +20 % Schaden gegen Gruppen | Gruppen-Kontrolle ×1,30 | −25 % Gruppenschaden |
-| Verdeckte Nester | Beim Aufdecken 2 kleine Herde; nach 20 s je 4 Bakterien | +25 % Schaden gegen Herde | Reichweite ×1,20 und +1 Treffer | Herde geben +4 Erfahrung |
-
 ## 14. Level und Erfahrung
 
 - Ein Run beginnt auf Level 0 mit einem Ziel von 5 Erfahrung.
 - Nach einem Levelaufstieg lautet das nächste Ziel
   `round(6 + Level^1,35 × 3,2)`.
 - Die ersten Ziele sind dadurch 5, 9, 14, 20, 27 und 34 Erfahrung.
-- Bakterium, Gruppe, kleiner Herd und Boss geben unskaliert 1, 4, 8 und 30
-  Erfahrung. Forschung multipliziert den Gewinn und führt Bruchteile über mehrere
-  Aufnahmen verlustfrei fort.
+- Die Gegnerwerte aus Abschnitt 12 sind unskalierte Erfahrung. Jeder
+  Monstergewinn wird zunächst global mit 1,20 und danach mit Forschungs- sowie
+  Fallmerkmalsfaktoren multipliziert. Der ganzzahlige Anteil wird sofort
+  gutgeschrieben; der Rest wird innerhalb des Runs deterministisch bis zu einer
+  späteren Aufnahme mitgeführt. Fünf einzelne 1-EXP-Gegner ergeben deshalb ohne
+  weitere Faktoren exakt 6 EXP.
 - Ein regulärer Aufstieg pausiert die Runde, zeigt drei Ausbauten und setzt die
   Simulation erst nach der Auswahl fort.
 

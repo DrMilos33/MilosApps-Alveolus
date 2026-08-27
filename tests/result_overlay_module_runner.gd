@@ -321,7 +321,7 @@ func _is_fully_visible(control: Control, viewport_control: Control) -> bool:
 func _stats_fixture() -> Array[ResultOverlayViewModel.StatViewModel]:
 	var result: Array[ResultOverlayViewModel.StatViewModel] = []
 	result.append(ResultOverlayViewModel.StatViewModel.new(&"time", "Zeit", "2:31"))
-	result.append(ResultOverlayViewModel.StatViewModel.new(&"analysis", "Befundstufe", "5", true))
+	result.append(ResultOverlayViewModel.StatViewModel.new(&"analysis", "Erfahrungslevel", "5", true))
 	result.append(ResultOverlayViewModel.StatViewModel.new(&"defeats", "Bakterien", "74"))
 	return result
 

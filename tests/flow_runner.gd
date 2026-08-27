@@ -50,6 +50,7 @@ func _run_flow() -> void:
 	_check(game.flow_state == GameFlowState.State.PREPARATION, "Intro-Überspringen kann ohne Freischaltung verworfen werden")
 	game._on_preparation_start_requested(game.pending_preparation_loadout.to_dict())
 	_check(game.flow_state == GameFlowState.State.RUNNING, "Die Einsatzplanung startet einen laufenden Run")
+	_check(is_equal_approx(game.state.analysis_gain_multiplier, RunState.MONSTER_EXPERIENCE_MULTIPLIER), "Monster-EXP besitzt im echten Run den deterministischen globalen Faktor 1,20")
 	_check(game.hud.run_prompt != null and game.hud.run_prompt.message_label().text == "Beobachte den ersten Erreger.", "Der laufende Introfall startet mit dem containerlosen Beobachtungsprompt")
 	_check(game.meta.ui_settings.show_discovery_info, "Hinweise sind für neue und migrierte Profile standardmäßig aktiviert")
 	game.meta.ui_settings.show_discovery_info = false
@@ -86,6 +87,7 @@ func _run_flow() -> void:
 	_check(game.meta.highest_unlocked_level == 1, "Intro-Sieg schaltet exakt Fall 1 frei")
 	_check(game.meta.get_level_record(&"intro").victories == 1, "Sieg wird im Levelrekord erfasst")
 	var first_reward: int = game.meta.research_points
+	_check(first_reward == MetaProgressionState.INTRO_RESEARCH_REWARD, "Der erste Introabschluss vergibt exakt 30 Forschung")
 
 	game._show_level_select()
 	game._on_level_selected(&"intro")
@@ -94,7 +96,7 @@ func _run_flow() -> void:
 	game.state.mark_boss_defeated()
 	await process_frame
 	var replay_reward: int = game.meta.research_points - first_reward
-	_check(replay_reward > 0 and replay_reward < first_reward, "Intro-Wiederholung vergibt die reduzierte Belohnung")
+	_check(replay_reward == 0, "Intro-Wiederholung vergibt keinerlei weitere Forschung")
 	_check(game.meta.highest_unlocked_level == 1, "Intro-Wiederholung überspringt keine Freischaltung")
 
 	game.queue_free()

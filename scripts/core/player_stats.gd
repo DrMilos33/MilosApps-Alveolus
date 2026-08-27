@@ -7,6 +7,7 @@ const BASE_LIFE_REGENERATION := 0.0
 const BASE_TREATMENT_DAMAGE := 10.0
 const BASE_MOVEMENT_SPEED := 171.0
 const TREATMENT_RESEARCH_DAMAGE_FRACTION_PER_RANK := 0.05
+const TREATMENT_RESEARCH_MODIFIER_SOURCE := &"research_therapy_precision"
 
 var therapy_damage: float = BASE_TREATMENT_DAMAGE
 var therapy_cooldown: float = 0.965
@@ -30,7 +31,6 @@ var pickup_range: float = 180.0
 var upgrade_levels: Dictionary = {}
 var upgrade_family_counts: Dictionary = {}
 var ability_cooldown_multiplier: float = 1.0
-var finding_progress_multiplier: float = 1.0
 var support_effect_multiplier: float = 1.0
 var overheal_shield_cap: float = 0.0
 var prepared_passive_ids: Array[StringName] = []
@@ -78,14 +78,39 @@ func apply_meta_progression(research_ranks: Dictionary) -> void:
 	defense = BASE_DEFENSE + float(defense_rank) * 2.0
 	life_regeneration_per_second = BASE_LIFE_REGENERATION + float(regeneration_rank) * 0.25
 	movement_speed = float(roundi(BASE_MOVEMENT_SPEED * (1.0 + float(movement_rank) * 0.03)))
+	if run_build_state != null:
+		configure_treatment_damage_build(run_build_state.base_value(RunBuildState.TREATMENT_DAMAGE, _treatment_base_damage))
+		refresh_resolved_run_build()
 
 
 func treatment_damage_with_base_bonus(additional_base_fraction: float) -> float:
 	return float(roundi(
-		_treatment_base_damage * (
-			1.0 + _treatment_research_damage_fraction + maxf(additional_base_fraction, 0.0)
-		)
+		treatment_base_damage_with_bonus(additional_base_fraction) * (1.0 + _treatment_research_damage_fraction)
 	))
+
+
+func treatment_base_damage_with_bonus(additional_base_fraction: float) -> float:
+	return _treatment_base_damage * (1.0 + maxf(additional_base_fraction, 0.0))
+
+
+func treatment_research_damage_fraction() -> float:
+	return _treatment_research_damage_fraction
+
+
+## Research is a permanent multiplier on the current treatment damage. Keeping
+## it in the shared build makes absolute run upgrades resolve before it.
+func configure_treatment_damage_build(base_damage: float) -> void:
+	if run_build_state == null:
+		return
+	run_build_state.set_base(RunBuildState.TREATMENT_DAMAGE, base_damage)
+	run_build_state.remove_source(TREATMENT_RESEARCH_MODIFIER_SOURCE)
+	if _treatment_research_damage_fraction > 0.0:
+		run_build_state.add_modifier_dictionary(TREATMENT_RESEARCH_MODIFIER_SOURCE, 0, {
+			"stat_id": RunBuildState.TREATMENT_DAMAGE,
+			"operation": &"multiply",
+			"value": 1.0 + _treatment_research_damage_fraction,
+			"required_tags": PackedStringArray(["treatment"]),
+		})
 
 func apply_prepared_progression(research_ranks: Dictionary, passive_ids: Array[StringName]) -> void:
 	# Rebuilding a prepared plan must be reversible. This is also used by tests,
@@ -114,13 +139,11 @@ func apply_prepared_passive(id: StringName, research_ranks: Dictionary, enabled:
 		&"stability_reserve":
 			max_stability_bonus = maxf(0.0, max_stability_bonus + direction * float(rank) * 3.0)
 		&"therapy_precision":
-			var factor := 1.0 + float(rank) * TREATMENT_RESEARCH_DAMAGE_FRACTION_PER_RANK
-			therapy_damage = therapy_damage * factor if enabled else therapy_damage / maxf(factor, 0.001)
+			# This stable legacy loadout ID no longer gates global research.
+			pass
 		&"sample_logistics":
 			var factor := 1.0 + float(rank) * 0.05
 			pickup_range = pickup_range * factor if enabled else pickup_range / maxf(factor, 0.001)
-		&"quick_test":
-			finding_progress_multiplier = 1.20 if enabled else 1.0
 		&"reserve_buffer":
 			overheal_shield_cap = 12.0 if enabled else 0.0
 		&"defense_readiness":
@@ -305,7 +328,7 @@ func _ensure_run_build() -> RunBuildState:
 func _sync_build_bases_from_fields() -> void:
 	if run_build_state == null:
 		return
-	run_build_state.set_base(RunBuildState.TREATMENT_DAMAGE, therapy_damage)
+	configure_treatment_damage_build(_treatment_base_damage)
 	run_build_state.set_base(RunBuildState.TREATMENT_INTERVAL, therapy_cooldown)
 	run_build_state.set_base(RunBuildState.TREATMENT_RANGE, therapy_range)
 	run_build_state.set_base(RunBuildState.TREATMENT_TARGETS, float(therapy_targets))
@@ -316,7 +339,6 @@ func _sync_build_bases_from_fields() -> void:
 	run_build_state.set_base(RunBuildState.DEFENSE_CELL_PROJECTILES, 2.0)
 	run_build_state.set_base(RunBuildState.DEFENSE_CELL_HIT_INTERVAL, 0.2)
 	run_build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, ability_cooldown_multiplier)
-	run_build_state.set_base(RunBuildState.FINDING_PROGRESS, finding_progress_multiplier)
 	run_build_state.set_base(RunBuildState.SUPPORT_EFFECT, support_effect_multiplier)
 	run_build_state.set_base(RunBuildState.PICKUP_RANGE, pickup_range)
 	run_build_state.set_base(RunBuildState.MOVEMENT_SPEED, movement_speed)
@@ -424,7 +446,7 @@ func stat_sections(
 	var treatment_id := prepared_treatment.id if prepared_treatment != null else &"treatment_precision"
 	var treatment_title := prepared_treatment.display_name if prepared_treatment != null else "Behandlung"
 	var treatment_rows: Array[Dictionary] = [
-		_stat_row(&"damage", "Schaden", _number(resolved_treatment_damage)),
+		_stat_row(&"damage", "Schaden", _number(resolved_treatment_damage), _treatment_damage_detail(treatment_tags)),
 		_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(resolved_treatment_interval)),
 		_stat_row(&"targets", "Ziele", str(resolved_treatment_targets)),
 		_stat_row(&"range_stage", "Reichweite", str(CombatDistanceScale.stage_from_world(resolved_treatment_range))),
@@ -465,6 +487,21 @@ func stat_sections(
 			_stat_row(&"attack_speed", "Attack Speed", CombatRateScale.formatted_per_second(support_interval())),
 		]))
 	return sections
+
+
+func _treatment_damage_detail(treatment_tags: PackedStringArray) -> String:
+	var base_damage := _treatment_base_damage
+	var upgrade_damage := 0.0
+	if run_build_state != null:
+		base_damage = run_build_state.base_value(RunBuildState.TREATMENT_DAMAGE, _treatment_base_damage)
+		for modifier in run_build_state.modifiers_for(RunBuildState.TREATMENT_DAMAGE, treatment_tags):
+			if modifier.operation == ModifierDefinition.Operation.ADD:
+				upgrade_damage += modifier.value
+	return "Basisschaden: %s\nSchaden durch Upgrades: +%s\n%% erhöht: +%d %%" % [
+		_number(base_damage),
+		_number(upgrade_damage),
+		roundi(_treatment_research_damage_fraction * 100.0),
+	]
 
 
 func _append_damage_type_rows(rows: Array[Dictionary], profile: DamageProfile) -> void:

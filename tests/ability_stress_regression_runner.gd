@@ -157,7 +157,7 @@ func _simulate_quality(quality: CosmeticBudgetController.Quality) -> Dictionary:
 	game.meta.register_level_result(game.selected_level, true, 1.0, 1, 1)
 	var active_ids: Array[StringName] = [&"ability_defense_burst", &"ability_treatment_line"]
 	var loadout := PreparedLoadout.create(&"treatment_precision", active_ids)
-	var context := RunContext.create(game.selected_level.id, RUN_SEED, loadout, {}, &"", &"")
+	var context := RunContext.create(game.selected_level.id, RUN_SEED, loadout)
 	game.start_run(context)
 	game.set_physics_process(false)
 	game.stress_test = true

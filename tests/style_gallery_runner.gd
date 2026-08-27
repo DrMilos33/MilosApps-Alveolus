@@ -254,7 +254,7 @@ func _run() -> void:
 	var second_primary := AlveolusUIComponents.action_button("Weiter", AlveolusUIComponents.ACTION_PRIMARY, &"", AlveolusVisualTheme.COBALT)
 	var planning_start := AlveolusUIComponents.planning_start_button()
 	var navigation_action := AlveolusUIComponents.action_button("Zurück", AlveolusUIComponents.ACTION_NAVIGATION, &"back")
-	var segmented := AlveolusUIComponents.segmented_tab("Befunde", true)
+	var segmented := AlveolusUIComponents.segmented_tab("Ereignisse", true)
 	var toggle := AlveolusUIComponents.toggle_row("Charakterwerte im Run", true)
 	var option_parts := AlveolusUIComponents.option_row("UI-Größe", ["75 %", "90 %", "100 %", "200 %"], 2)
 	var slider_parts := AlveolusUIComponents.slider_row("Menülautstärke", 0.0, 100.0, 65.0)

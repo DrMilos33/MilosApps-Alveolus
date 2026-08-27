@@ -34,7 +34,6 @@ const ABILITY_WIDTH := &"ability_width"
 const ABILITY_ENEMY_SPEED := &"ability_enemy_speed"
 const ABILITY_CONTACT := &"ability_contact"
 const MARKED_DAMAGE := &"marked_damage"
-const FINDING_PROGRESS := &"finding_progress"
 const SUPPORT_EFFECT := &"support_effect"
 const PICKUP_RANGE := &"pickup_range"
 const MOVEMENT_SPEED := &"movement_speed"
@@ -69,7 +68,6 @@ static func from_treatment(definition: TreatmentDefinition) -> RunBuildState:
 		DEFENSE_CELL_PROJECTILES: 2.0,
 		DEFENSE_CELL_HIT_INTERVAL: 0.2,
 		ACTIVE_COOLDOWN: 1.0,
-		FINDING_PROGRESS: 1.0,
 		SUPPORT_EFFECT: 1.0,
 	})
 
@@ -294,7 +292,8 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 	var before_text := _formatted_number(before, definition.preview_decimals)
 	var after_text := _formatted_number(after, definition.preview_decimals)
 	var delta := after - before
-	var effect_text := "%s%s %s" % [_sign(delta), _formatted_effect_number(absf(delta), definition.preview_decimals), label]
+	var effect_delta := _absolute_additive_preview_delta(definition, delta)
+	var effect_text := "%s%s %s" % [_sign(effect_delta), _formatted_effect_number(absf(effect_delta), definition.preview_decimals), label]
 	var formatted_before := "%s %s" % [before_text, comparison_label]
 	var formatted_after := "%s %s" % [after_text, comparison_label]
 	match definition.preview_style:
@@ -340,6 +339,20 @@ func _format_upgrade_preview(definition: UpgradeDefinition, before: float, after
 		formatted_after,
 		definition.resolved_icon_id()
 	)
+
+
+func _absolute_additive_preview_delta(definition: UpgradeDefinition, resolved_delta: float) -> float:
+	if definition == null or definition.preview_stat not in [TREATMENT_DAMAGE, ABILITY_DAMAGE, DEFENSE_CELL_DAMAGE]:
+		return resolved_delta
+	var additive := 0.0
+	var found := false
+	for data in definition.modifiers:
+		if StringName(str(data.get("stat_id", ""))) != definition.preview_stat \
+			or StringName(str(data.get("operation", "add"))) != &"add":
+			continue
+		additive += float(data.get("value", 0.0))
+		found = true
+	return additive if found else resolved_delta
 
 
 func _format_attack_speed_preview(

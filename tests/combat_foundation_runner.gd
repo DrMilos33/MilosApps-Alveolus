@@ -92,13 +92,13 @@ func _test_build_state() -> void:
 	var preview := ModifierDefinition.create(&"preview", RunBuildState.TREATMENT_INTERVAL, ModifierDefinition.Operation.MULTIPLY, 0.8)
 	_assert_near(build.value_with(preview, treatment.base_interval), treatment.base_interval * 0.8, "Preview uses the same resolver without mutating state")
 	_assert_true(not build.has_modifier(&"preview"), "Preview modifier is not retained")
-	var reaction_modifier := ModifierDefinition.from_dict(
+	var mapped_modifier := ModifierDefinition.from_dict(
 		{"stat_id": &"ability_cooldown", "operation": &"multiply", "value": 0.9},
-		&"reaction_accel",
-		&"reaction"
+		&"mapped_accel",
+		&"test_source"
 	)
-	_assert_equal(reaction_modifier.operation, ModifierDefinition.Operation.MULTIPLY, "Reaction dictionaries map into the shared modifier model")
-	_assert_equal(reaction_modifier.source_id, &"reaction", "Mapped modifiers preserve their removable source")
+	_assert_equal(mapped_modifier.operation, ModifierDefinition.Operation.MULTIPLY, "Modifier dictionaries map into the shared modifier model")
+	_assert_equal(mapped_modifier.source_id, &"test_source", "Mapped modifiers preserve their removable source")
 
 func _test_runtime() -> void:
 	var ability: AbilityDefinition = AbilityDefinition.catalog()[&"ability_focus_field"]
@@ -111,7 +111,7 @@ func _test_runtime() -> void:
 	runtime.reduce(2.0)
 	_assert_near(runtime.cooldown_remaining, 3.0, "Cooldown can be reduced by talents")
 	runtime.scale_remaining(0.5)
-	_assert_near(runtime.cooldown_remaining, 1.5, "Finding readiness can halve remaining cooldown")
+	_assert_near(runtime.cooldown_remaining, 1.5, "Cooldown scaling can halve remaining time")
 	runtime.reset()
 	_assert_true(runtime.is_ready(), "Cooldown reset makes ability ready")
 
@@ -143,7 +143,7 @@ func _test_abilities() -> void:
 	avatar.position = Vector2(480.0, 0.0)
 	get_root().add_child(avatar)
 	var state := FakeRunState.new()
-	var build := RunBuildState.new({RunBuildState.ACTIVE_COOLDOWN: 1.0, RunBuildState.SUPPORT_EFFECT: 1.0, RunBuildState.FINDING_PROGRESS: 1.0})
+	var build := RunBuildState.new({RunBuildState.ACTIVE_COOLDOWN: 1.0, RunBuildState.SUPPORT_EFFECT: 1.0})
 	var controller := AbilityController.new()
 	get_root().add_child(controller)
 	controller.configure(build, topology, avatar, _provide_enemies, _provide_pickups, state)
@@ -189,12 +189,9 @@ func _test_abilities() -> void:
 	sample.position = Vector2(-460.0, 0.0)
 	get_root().add_child(sample)
 	pickups = [sample]
-	var finding_events: Array[float] = []
-	controller.finding_progress_requested.connect(func(amount: float) -> void: finding_events.append(amount))
 	controller.equip(AbilityController.SLOT_Q, abilities[&"ability_sample_pull"])
 	controller.use_slot(AbilityController.SLOT_Q, Vector2(-470.0, 0.0))
 	_assert_true(sample.guided_to_target, "Sample pull guides floor samples to the player")
-	_assert_equal(finding_events, [6.0], "Sample pull reports deterministic finding progress")
 
 	close_enemy.health = 200.0
 	close_enemy.position = Vector2(-470.0, 0.0)
@@ -279,7 +276,7 @@ func _test_treatments() -> void:
 func _test_enemy_status_contract() -> void:
 	var enemy := InfectionEnemy.new()
 	enemy.set_status_modifier(&"field", 0.65, 0.7)
-	enemy.set_status_modifier(&"finding", 0.8, 1.0)
+	enemy.set_status_modifier(&"secondary", 0.8, 1.0)
 	_assert_near(enemy.status_speed_multiplier(), 0.52, "Enemy status sources combine multiplicatively")
 	_assert_near(enemy.status_contact_multiplier(), 0.7, "Contact and movement modifiers remain independent")
 	enemy.clear_status_modifier(&"field")

@@ -245,6 +245,9 @@ func _test_case_one_event_target_profile() -> void:
 			game.discovery_manager.mark_seen(discovery_id)
 	game.discovery_manager.seen_ids.erase(GameScript.FALL_ONE_EVENT_HINT_ID)
 	game.meta.seen_discovery_ids.erase(GameScript.FALL_ONE_EVENT_HINT_ID)
+	# The runtime fixture must not inherit the developer's real Fall-1 record.
+	# This hint is intentionally scoped to the first attempt only.
+	game.meta.level_records.erase(GameScript.FALL_ONE_ID)
 	game.selected_level = _level_by_id(game.levels, &"early_localized_focus")
 	_true(game.selected_level != null and game.selected_level.order == 1, "Eventherdtest verwendet Fall 1")
 	game.start_run()

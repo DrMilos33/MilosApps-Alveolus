@@ -135,13 +135,11 @@ func _test_run_context_traits_and_reward_contract() -> void:
 	var context := state.create_run_context(
 		&"localized_focus",
 		&"",
-		&"hidden_nests",
 		traits
 	)
 	traits.clear()
 	_equal(context.visible_trait_ids, [&"monster_resistance_20", &"double_boss"], "Meta erstellt den kanonischen unabhängigen Merkmals-Snapshot")
 	_equal(context.visible_trait_id, &"monster_resistance_20", "Meta bewahrt den kompatiblen singulären Lesealias")
-	_equal(context.hidden_finding_id, &"hidden_nests", "Der bestehende Befundparameter bleibt positionskompatibel")
 
 	var base_win := MetaProgressionState.calculate_run_reward(true, 0.0, 0, 0)
 	var base_loss := MetaProgressionState.calculate_run_reward(false, 0.0, 0, 0)

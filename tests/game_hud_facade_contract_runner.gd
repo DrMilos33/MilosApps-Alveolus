@@ -61,9 +61,6 @@ const BASELINE_SIGNALS := {
 	"research_tab_changed": "tab:StringName",
 	"talent_toggle_requested": "id:StringName",
 	"talent_reset_requested": "",
-	"finding_reaction_selected": "id:StringName",
-	"finding_reserve_swap_requested": "incoming_id:StringName,outgoing_id:StringName",
-	"finding_confirmed": "reaction_id:StringName,incoming_id:StringName,outgoing_id:StringName",
 }
 
 const BASELINE_METHODS := {
@@ -95,8 +92,6 @@ const BASELINE_METHODS := {
 	"clear_active_abilities": "->void",
 	"update_active_ability": "slot_index:int,title:String,remaining:float,total:float,ready:bool->void",
 	"set_ability_targeting": "slot_index:int,targeting:bool->void",
-	"update_finding_progress": "current:int,target:int,revealed:bool=false->void",
-	"hide_finding_progress": "->void",
 	"update_timer": "elapsed:float,boss_spawn_seconds:float,deadline_seconds:float,boss_active:bool->void",
 	"update_intro_timer": "lesson:int,phase:StringName,boss_active:bool->void",
 	"show_boss": "maximum:float,phase_count:int->void",
@@ -113,9 +108,6 @@ const BASELINE_METHODS := {
 	"show_restart_confirmation": "->void",
 	"hide_restart_confirmation": "->void",
 	"hide_intro_skip_confirmation": "->void",
-	"show_finding": "definition:Variant,reactions:Array,reserve:Variant=null,swappable_passives:Array=[]->void",
-	"hide_finding": "->void",
-	"set_finding_swap_validation": "valid:bool,message:String=\"\"->void",
 	"show_end_mastery": "new_objectives:Array,earned_points:int,total_points:int->void",
 	"show_discovery": "definition:DiscoveryDefinition,gameplay_target:Variant,gameplay_override:String=\"\"->void",
 	"hide_discovery": "->void",
@@ -141,8 +133,8 @@ func _run() -> void:
 		_finish(0, 0)
 		return
 	var source := file.get_as_text()
-	_check(BASELINE_SIGNALS.size() == 44, "Checkpoint snapshot contains all 44 baseline signals")
-	_check(BASELINE_METHODS.size() == 57, "Checkpoint snapshot contains all 57 facade methods")
+	_check(BASELINE_SIGNALS.size() == 41, "Checkpoint snapshot contains all 41 retained baseline signals")
+	_check(BASELINE_METHODS.size() == 52, "Checkpoint snapshot contains all 52 retained facade methods")
 	_check(source.contains("class_name GameHUD"), "Facade keeps the GameHUD class identity")
 
 	var contract := _extract_contract(source)

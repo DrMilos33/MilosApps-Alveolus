@@ -90,6 +90,19 @@ func _test_treatment_preview_application() -> void:
 	_assert_near(build.value(RunBuildState.TREATMENT_PROJECTILES, 0.0, precision.tags), 6.0, "Impuls reaches one base plus five additional projectiles")
 	_assert_true(not projectiles.show_cap and is_equal_approx(projectiles.repeat_weight_decay, 0.60), "Projectile cap stays hidden while repeat offers become rarer")
 
+	var piercing: TreatmentDefinition = TreatmentDefinition.catalog()[&"treatment_pierce"]
+	var researched_piercing_stats := PlayerStats.new()
+	researched_piercing_stats.configure_prepared_treatment(piercing)
+	researched_piercing_stats.apply_meta_progression({&"therapy_precision": 3})
+	var researched_piercing_build := RunBuildState.from_treatment(piercing)
+	researched_piercing_stats.bind_run_build(researched_piercing_build, piercing, [])
+	var piercing_common := _find(definitions, &"pierce_damage_common")
+	preview = researched_piercing_stats.preview_upgrade(piercing_common)
+	_assert_equal(preview.effect_text, "+3 Schaden", "Rank-3-Forschung lässt den Common-Kartenwert absolut")
+	_assert_equal(preview.before_after_text, "10 Schaden  >  14 Schaden", "Vorschau löst (9 + 3) × 1,15 erst am Ende zu 14 auf")
+	_assert_true(researched_piercing_stats.apply_upgrade(piercing_common), "Common-Ausbau gilt unter permanenter Forschung")
+	_assert_near(researched_piercing_stats.therapy_damage, 14.0, "Gameplay entspricht der nicht vorgerundeten Forschungsformel")
+
 	var spread: TreatmentDefinition = TreatmentDefinition.catalog()[&"treatment_spread"]
 	var spread_stats := PlayerStats.new()
 	spread_stats.configure_prepared_treatment(spread)

@@ -18,12 +18,14 @@ func _run() -> void:
 
 	game.persistence_enabled = false
 	game.meta.reset_defaults()
+	game.meta.research_ranks[&"therapy_precision"] = 1
 	game.discovery_manager.configure(game.discovery_definitions, {})
 	game._on_story_finished()
 	game._show_level_select()
 	game._on_level_selected(&"intro")
 	game.start_run()
 
+	_check(game.stats.therapy_damage == 11.0, "Permanente Behandlungsforschung gilt auch bei einer wiederholten Einführung")
 	_check(game.state.analysis_target == 3, "Intro starts with an explicit analysis target of three")
 	_check(game.intro_phase == &"await_primary_materialization", "Intro waits for the first enemy to materialize")
 	_check(game.intro_prompt_snapshot().text == "Beobachte den ersten Erreger.", "Run start publishes the observation prompt")
@@ -102,6 +104,13 @@ func _run() -> void:
 	_check(is_equal_approx(settings.ui_scale, 1.0) and settings.glyph_mode == UISettingsState.GLYPH_KEYBOARD, "Runtime normalizes legacy scale/glyph saves to 100 percent keyboard mode")
 
 	var intro_boss: InfectionEnemy = game.active_boss
+	game._on_boss_phase_changed(1, intro_boss)
+	_check(
+		not game.discovery_manager.has_seen(&"boss_phases")
+		and game.discovery_manager.active.is_empty()
+		and game.discovery_manager.queue.is_empty(),
+		"Intro-Bossphasen erzeugen keinen optionalen Hinweis"
+	)
 	game.run_session.step_fixed(InfectionEnemy.SPAWN_TOTAL_SECONDS)
 	intro_boss.take_damage(intro_boss.health, &"therapy")
 	_check(game.flow_state == GameFlowState.State.DISCOVERY_PAUSE and game.hud.end_overlay.visible, "Der erste Introabschluss zeigt den normalen Rundenergebnis-Screen mit pausierendem Hinweis")
@@ -118,7 +127,7 @@ func _run() -> void:
 		"Intro-Hinweis löst die fertige Endscreen-Geometrie des Forschungssymbols statt der Bildschirmecke auf"
 	)
 	var expected_intro_reward := MetaProgressionState.intro_research_reward(1)
-	_check(game.meta.research_points == expected_intro_reward, "Intro-Ergebnis vergibt Basisforschung plus Bossmultiplikator: %d (aktuell %d)" % [expected_intro_reward, game.meta.research_points])
+	_check(game.meta.research_points == expected_intro_reward, "Der erste Introabschluss vergibt exakt %d Forschung (aktuell %d)" % [expected_intro_reward, game.meta.research_points])
 	_check(game.meta.talent_points_earned() == 0, "Intro-Ergebnis vergibt noch keinen Talentpunkt")
 
 	var seen_except_treatment := {}

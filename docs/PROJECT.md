@@ -1,6 +1,6 @@
 # ALVEOLUS – Projektstand
 
-Letzte inhaltliche Aktualisierung: 26. August 2026
+Letzte inhaltliche Aktualisierung: 27. August 2026
 
 Dieses Dokument ist die einzige veränderliche Quelle für Produktstatus,
 Prioritäten, bekannte Grenzen und dauerhafte Entscheidungen. Technische
@@ -19,7 +19,7 @@ entsteht durch:
 
 - einen begrenzten Behandlungsplan vor jedem Fall;
 - zwei bewusst eingesetzte aktive Fähigkeiten;
-- Fallmerkmale, Befunde und Reaktionen während des Runs;
+- zwei seed-stabile Fallmerkmale pro wiederholtem Einsatz nach dem ersten Sieg;
 - zehn Forschungsfelder für intrinsische Werte und Freischaltungen, darunter
   die nach Fall 1 kostenlose manuelle Lazer-Freischaltung;
 - zufällige Run-Ausbaustufen, die mit dem vorbereiteten Plan interagieren.
@@ -80,7 +80,7 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 ## Danach
 
 1. Spieltestfehler und UX-Reibung priorisiert beheben.
-2. Grundbehandlungen, Fähigkeiten, Befunde und Talente spielerisch balancieren.
+2. Grundbehandlungen, Fähigkeiten, Fallereignisse und Talente spielerisch balancieren.
 3. Fälle stärker voneinander unterscheiden und die Abgrenzung zum
    Survivors-Grundmuster ausbauen.
 4. Story, Texte, Audio und visuelle Details auf einen konsistenten
@@ -253,6 +253,10 @@ Die Entwicklung bleibt lokal. Die GitHub-Pages-Version ist ein eingefrorener
 | D-139 | Präzisiert D-056/D-059 und ersetzt die Icon-Text-Klausel aus D-137: Die gemeinsame containerlose Run-Leseband liegt bei 52–120 logischen Pixeln und zeigt ihre Hauptcopy mit 24 Pixeln. Mechanische Level-up-Marker für Schaden, Breite und Radius rendern ausschließlich ihr datengetriebenes Icon in der semantischen Farbe; der ausgeschriebene Begriff bleibt nur im zugänglichen Presentertext. Beim ersten tatsächlich materialisierten Fall-1-Eventmonster vor dem ersten Fallsieg erscheint einmalig der optionale Hinweis `Manche Monster sind anfällig gegen bestimmte Fähigkeiten. Probiere Stoß aus.` am Eventziel. Die additiven Save-v7-Schalter `Boss-Pfeile anzeigen` und `Eventmonster-Pfeile anzeigen` sind standardmäßig aktiv und steuern die beiden Offscreen-Randpfeile unabhängig voneinander. |
 | D-140 | Ersetzt D-131 ausschließlich für die reguläre Fall-1-Wellenzufuhr: Anfangs- und Endrate sinken relativ um zehn Prozent. Die Intervalle steigen dafür von `1,16125 → 0,28289474` auf `1,29027778 → 0,31432749` Sekunden; Form, Rampenzeit, Wellenlogik und Gruppenchance bleiben unverändert. Startgegner, Eventherde, Boss und Bossverstärkungen sind geskriptete Ausnahmen und werden nicht reduziert. |
 | D-141 | Ersetzt D-090 ausschließlich für `Stärkere Behandlung`: Jeder der drei Forschungsränge addiert fünf statt zwei Prozentpunkte auf den unveränderten Basisschaden aller Behandlungen. Rang 3 liefert damit insgesamt 15 Prozent vor der weiterhin einmaligen Ganzzahlauflösung. Stabile ID, Kosten und additive Kombination mit Behandlungstalenten bleiben unverändert. |
+| D-142 | Ersetzt D-039/D-070/D-071 und die Befundklauseln aus D-036/D-052/D-061/D-104/D-116/D-137 vollständig: Befunde, Reaktionen und ihr Fortschritt sind aus Produktkatalog, RunContext, HUD, Lexikon, Meisterschaft und Laufzeit entfernt. Fallereignisse und exakt zwei sichtbare Fallmerkmale nach dem ersten Fallsieg bilden die einzigen zufälligen beziehungsweise geskripteten Fallabweichungen. Zur deterministischen Kompatibilität verbraucht die Fallziehung zwischen erstem und zweitem Merkmal weiterhin genau einen internen Zwei-Wege-RNG-Draw, ohne daraus sichtbaren oder spielmechanischen Inhalt zu erzeugen. |
+| D-143 | Präzisiert D-119/D-131 für wiederholte Introläufe: Introabschluss oder Intro-Skip vergeben kontoübergreifend genau einmal exakt 30 Forschung. Jeder spätere Introsieg, jede spätere Intro-Niederlage und jeder erneute Skip geben 0. Bossphasen des Introgegners bleiben Laufzeitmechanik, erzeugen aber niemals einen optionalen Hinweis. |
+| D-144 | Ersetzt D-141 hinsichtlich Berechnungsreihenfolge und Darstellung: `Stärkere Behandlung` liefert weiterhin fünf Prozentpunkte je Rang, multipliziert aber den jeweils aktuellen Behandlungsschaden nach sämtlichen absoluten Run-Schadensupgrades; erst das Ergebnis wird einmal ganzzahlig gerundet. Behandlungstalente verändern zuvor den Basisschaden. Eine Schadenskarte behält ihren ausgeschriebenen absoluten Wert. Das Pausenmenü zerlegt den aktuellen Behandlungsschaden im Hoverdetail in Basisschaden, absoluten Schaden durch Upgrades und prozentuale Erhöhung. |
+| D-145 | Jeder von einem Monster stammende EXP-Gewinn wird global mit 1,20 multipliziert. `RunState` führt dabei Bruchteile deterministisch über Drops hinweg weiter und vergibt nur ganze Erfahrungspunkte; dadurch nähert sich jede größere Gegnergruppe exakt dem 20-Prozent-Mehrwert an, ohne zufällige 100-zu-120-Schwankung. Forschung und Fallmodifikatoren multiplizieren denselben kontinuierlichen Wert vor dieser zentralen Ganzzahlauflösung. |
 
 Neue Entscheidungen erhalten eine neue ID. Bestehende Entscheidungen werden
 nicht still umgedeutet; eine ersetzende Entscheidung verweist auf die alte ID.

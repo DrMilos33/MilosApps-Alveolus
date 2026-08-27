@@ -152,7 +152,6 @@ func _test_command_pipeline_and_geometry() -> void:
 	var build := RunBuildState.new({
 		RunBuildState.ACTIVE_COOLDOWN: 1.0,
 		RunBuildState.SUPPORT_EFFECT: 1.0,
-		RunBuildState.FINDING_PROGRESS: 1.0,
 	})
 	var controller := AbilityController.new()
 	get_root().add_child(controller)

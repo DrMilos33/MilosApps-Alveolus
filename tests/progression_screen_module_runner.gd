@@ -79,7 +79,7 @@ func _run() -> void:
 	_check(explicit_provider.is_valid(), "Forschung stellt denselben Inhalt für ui_info bereit")
 	_check(tooltip_provider == explicit_provider, "Hover und ui_info verwenden exakt denselben Provider")
 	_check(tooltip_provider.call() == explicit_provider.call(), "Hover und ui_info liefern inhaltsgleiche Payloads")
-	_check(screen.info_payload_for(available_research).get("title", "") == "Schnellauswertung", "Informationspayload bleibt quellenspezifisch")
+	_check(screen.info_payload_for(available_research).get("title", "") == "Mehr Erfahrung", "Informationspayload bleibt quellenspezifisch")
 	var active_research_payload := screen.info_payload_for(active_research)
 	_check(String(active_research_payload.get("body", "")).contains("Gesamt: +9 Leben"), "Tooltip ergänzt den vorberechneten Gesamtwert mit dem exakten Präfix")
 	_check(fixture.research_items()[0].total_effect_text() == "+9 Leben", "ViewModel transportiert Gesamtwirkung darstellungsfertig und ohne UI-Berechnung")
@@ -195,7 +195,7 @@ func _run() -> void:
 	_check(screen.tooltip_provider_for(screen.research_action(&"research_available")) == research_provider_before, "Forschungsquelle bewahrt ihren stabilen Provider")
 	_check(screen.tooltip_provider_for(screen.talent_action(&"manual_treatment_aim")) == talent_provider_before, "Talentquelle bewahrt ihren stabilen Provider")
 	var updated_research_payload := screen.info_payload_for(screen.research_action(&"research_available"))
-	_check(String(updated_research_payload.get("body", "")).contains("+25 %") and String(updated_research_payload.get("meta", "")) == "3 Forschung", "Stabiler Forschungsprovider liefert die neuen Rangfakten")
+	_check(String(updated_research_payload.get("body", "")).contains("+5 %") and String(updated_research_payload.get("meta", "")) == "3 Forschung", "Stabiler Forschungsprovider liefert die neuen Rangfakten")
 	var updated_talent_payload := screen.info_payload_for(screen.talent_action(&"manual_treatment_aim"))
 	_check(String(updated_talent_payload.get("body", "")).contains("+3") and String(updated_talent_payload.get("meta", "")) == "3 P", "Stabiler Talentprovider liefert die neuen Rangfakten")
 	_check(_state_icon_kind(screen.talent_action(&"manual_treatment_aim")) == &"check", "In-place-Talentupdate aktualisiert den sichtbaren Zustand")
@@ -237,7 +237,7 @@ func _run() -> void:
 func _fixture(revision: int, tab: StringName, research_balance: String, talent_balance: String) -> Variant:
 	var research: Array = [
 		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben"),
-		_research_item(&"research_available", "Schnellauswertung", "Rang 0/2", "2 Forschung", ProgressionViewModelScript.ItemState.AVAILABLE, true, "+0 % Befundfortschritt"),
+		_research_item(&"research_available", "Mehr Erfahrung", "Rang 0/3", "2 Forschung", ProgressionViewModelScript.ItemState.AVAILABLE, true, "+0 % Erfahrung"),
 		_research_item(&"research_locked", "Fetter lazer", "Rang 0/1", "Nach Fall 1", ProgressionViewModelScript.ItemState.LOCKED, false, "Gesperrt", &"question"),
 		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit"),
 	]
@@ -257,14 +257,14 @@ func _rank_change_fixture(revision: int, tab: StringName) -> Variant:
 		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben"),
 		ProgressionViewModelScript.ResearchItemViewModel.create(
 			&"research_available",
-			"Schnellauswertung",
-			"Rang 1/2",
+			"Mehr Erfahrung",
+			"Rang 1/3",
 			"3 Forschung",
 			&"research",
 			ProgressionViewModelScript.ItemState.AVAILABLE,
 			true,
-			_info("Schnellauswertung", "+25 % Befundfortschritt.", "3 Forschung", &"research", AlveolusVisualTheme.GOLD),
-			"+25 % Befundfortschritt"
+			_info("Mehr Erfahrung", "+5 % Erfahrung.", "3 Forschung", &"research", AlveolusVisualTheme.GOLD),
+			"+5 % Erfahrung"
 		),
 		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+0 Analyse"),
 		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit"),

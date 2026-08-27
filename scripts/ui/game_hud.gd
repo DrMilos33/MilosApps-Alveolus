@@ -49,9 +49,6 @@ signal research_tab_changed(tab: StringName)
 signal talent_toggle_requested(id: StringName)
 signal talent_rank_remove_requested(id: StringName)
 signal talent_reset_requested
-signal finding_reaction_selected(id: StringName)
-signal finding_reserve_swap_requested(incoming_id: StringName, outgoing_id: StringName)
-signal finding_confirmed(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName)
 signal context_detail_opened(source: Control, explicit: bool)
 signal context_detail_closed
 signal run_prompt_confirmed
@@ -165,9 +162,6 @@ var ability_key_labels: Array[Label] = []
 var ability_key_icons: Array[TextureRect] = []
 var ability_cooldown_labels: Array[Label] = []
 var ability_cooldown_bars: Array[ProgressBar] = []
-var finding_progress_panel: Control
-var finding_progress_bar: ProgressBar
-var finding_progress_label: Label
 var run_stats_enabled: bool = false
 var current_player_stats: PlayerStats
 var current_run_state: RunState
@@ -449,34 +443,6 @@ var end_unlock: Label
 var end_mastery_panel: Control
 var end_mastery_label: Label
 var navigation_focus_active: bool = false
-var finding_overlay: Control
-var finding_screen: FindingOverlay
-var finding_view_revision: int = 0
-var finding_id: StringName = &""
-var finding_title_text: String = ""
-var finding_medical_copy: String = ""
-var finding_gameplay_copy: String = ""
-var finding_reaction_models: Array[FindingOverlayViewModel.ReactionViewModel] = []
-var finding_reserve_model: FindingOverlayViewModel.ReserveSwapViewModel
-var finding_validation_text: String = ""
-var finding_context_sources: Array[Control] = []
-var finding_title: Label
-var finding_medical_text: Label
-var finding_gameplay_text: Label
-var finding_copy_grid: GridContainer
-var finding_panel: PanelContainer
-var finding_reaction_cards: GridContainer
-var finding_reserve_row: Control
-var finding_confirm_button: Button
-var finding_swap_toggle: CheckButton
-var finding_outgoing_option: OptionButton
-var finding_reserve_label: Label
-var finding_validation_label: Label
-var finding_reaction_group: ButtonGroup
-var current_finding_reaction: StringName = &""
-var current_finding_reserve: StringName = &""
-var current_finding_outgoing_ids: Array[StringName] = []
-var finding_swap_valid: bool = true
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -513,7 +479,6 @@ func _ready() -> void:
 	abort_overlay = _build_abort_overlay()
 	intro_skip_overlay = _build_intro_skip_overlay()
 	restart_overlay = _build_restart_overlay()
-	finding_overlay = _build_finding_overlay()
 	end_overlay = _build_end_overlay()
 	upgrade_target_preview = UpgradeTargetPreview.new()
 	for overlay in _all_overlays():
@@ -578,7 +543,7 @@ func _build_gameplay_hud() -> Control:
 	root.add_child(layer)
 
 	# Stable combat chrome is owned exclusively by the immutable RunHUD module.
-	# Only genuinely transient alert/finding layers remain in this compatibility
+	# Only genuinely transient alert layers remain in this compatibility
 	# facade, so hidden duplicate surfaces cannot consume nodes or materials.
 	_install_run_hud_overlay(layer)
 
@@ -600,37 +565,6 @@ func _build_gameplay_hud() -> Control:
 	alert_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	alert_margin.add_child(alert_label)
 	alert_panel.hide()
-
-	finding_progress_panel = Control.new()
-	finding_progress_panel.name = "FindingProgress"
-	finding_progress_panel.set_anchor(SIDE_LEFT, 0.5)
-	finding_progress_panel.set_anchor(SIDE_RIGHT, 0.5)
-	finding_progress_panel.set_anchor(SIDE_TOP, 1.0)
-	finding_progress_panel.set_anchor(SIDE_BOTTOM, 1.0)
-	finding_progress_panel.offset_left = -132.0
-	finding_progress_panel.offset_right = 132.0
-	finding_progress_panel.offset_top = -40.0
-	finding_progress_panel.offset_bottom = -10.0
-	finding_progress_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(finding_progress_panel)
-	var finding_margin := _margin(9, 4, 9, 4)
-	finding_progress_panel.add_child(finding_margin)
-	var finding_row := HBoxContainer.new()
-	finding_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	finding_row.add_theme_constant_override("separation", 8)
-	finding_margin.add_child(finding_row)
-	finding_progress_label = AlveolusUIComponents.label("BEFUND · 0 / 30", AlveolusVisualTheme.TYPE_HUD_MUTED_LABEL)
-	finding_progress_label.add_theme_color_override("font_color", COLOR_GOLD)
-	finding_progress_label.custom_minimum_size.x = 122.0
-	finding_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	finding_row.add_child(finding_progress_label)
-	finding_progress_bar = AlveolusUIComponents.progress(0.0, 30.0, false)
-	finding_progress_bar.custom_minimum_size.y = 5.0
-	finding_progress_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	finding_progress_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	AlveolusUIComponents.apply_progress_accent(finding_progress_bar, COLOR_GOLD)
-	finding_row.add_child(finding_progress_bar)
-	finding_progress_panel.hide()
 
 	return layer
 
@@ -1357,25 +1291,6 @@ func _apply_ui_scale() -> void:
 		analysis_sample_panel.offset_bottom = -76.0 if logical_width < 900.0 else -8.0
 		level_label.offset_top = -99.0 if logical_width < 900.0 else -31.0
 		level_label.offset_bottom = -77.0 if logical_width < 900.0 else -9.0
-	if finding_progress_panel != null:
-		if logical_width < 600.0:
-			# Share one compact row with the left-aligned sample badge. This frees a
-			# complete critical-HUD row above it on 960×540 at 200 %.
-			finding_progress_panel.offset_left = -logical_width * 0.5 + 202.0
-			finding_progress_panel.offset_right = logical_width * 0.5 - 16.0
-			finding_progress_panel.offset_top = -100.0
-			finding_progress_panel.offset_bottom = -72.0
-		elif logical_width < 900.0:
-			var finding_half_width := minf(132.0, logical_width * 0.25)
-			finding_progress_panel.offset_left = -finding_half_width
-			finding_progress_panel.offset_right = finding_half_width
-			finding_progress_panel.offset_top = -136.0
-			finding_progress_panel.offset_bottom = -104.0
-		else:
-			finding_progress_panel.offset_left = -178.0
-			finding_progress_panel.offset_right = 178.0
-			finding_progress_panel.offset_top = -60.0
-			finding_progress_panel.offset_bottom = -12.0
 	if run_hud_screen == null and boss_panel != null and logical_width < 740.0:
 		# Boss information shares the shield row on the right and temporarily
 		# replaces optional run stats. Transient alerts receive the following row.
@@ -1746,9 +1661,8 @@ func _build_preparation() -> Control:
 	preparation_reserve_button.pressed.connect(_begin_reserve_selection)
 	preparation_reserve_button.hide()
 	plan_box.add_child(preparation_reserve_button)
-	# Compatibility field for the view model. The finding hint is already stated
-	# in the case dossier; repeating it below the slots caused overflow and noise.
-	preparation_synergy_label = _label("Der genaue Befund entsteht während der Behandlung.", 14, COLOR_MUTED)
+	# Compatibility field for older preparation presenters; hidden in production.
+	preparation_synergy_label = _label("Vorbereitete Komponenten erscheinen häufiger bei Ausbauten.", 14, COLOR_MUTED)
 	preparation_synergy_label.hide()
 	plan_box.add_child(preparation_synergy_label)
 
@@ -2120,20 +2034,6 @@ func _apply_restart_confirmation() -> void:
 		false
 	))
 	restart_panel = restart_confirmation.modal_sheet()
-
-func _build_finding_overlay() -> Control:
-	finding_screen = FindingOverlay.new()
-	finding_screen.reaction_selected.connect(func(id: StringName) -> void:
-		current_finding_reaction = id
-		finding_reaction_selected.emit(id)
-	)
-	finding_screen.swap_toggled.connect(func(_enabled: bool) -> void: _emit_finding_swap_preview_from_screen())
-	finding_screen.outgoing_selected.connect(func(_id: StringName) -> void: _emit_finding_swap_preview_from_screen())
-	finding_screen.confirm.connect(func(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName) -> void:
-		finding_confirmed.emit(reaction_id, incoming_id, outgoing_id)
-	)
-	return finding_screen
-
 
 func _build_end_overlay() -> Control:
 	result_screen = ResultOverlay.new()
@@ -2969,8 +2869,7 @@ func refresh_preparation(view_model: Variant, catalog: Array = [], loadout: Vari
 	preparation_lock_panel.visible = preparation_locked
 	if root != null:
 		_apply_page_shell_layout(root.size.x)
-	var finding_hint := String(_view_value(view_model, &"finding_hint", "Der genaue Befund entsteht in der Runde."))
-	var default_plan_note := "%s Vorbereitete Komponenten erscheinen häufiger bei Ausbauten." % finding_hint
+	var default_plan_note := "Vorbereitete Komponenten erscheinen häufiger bei Ausbauten."
 	preparation_synergy_label.text = String(_view_value(view_model, &"synergy_summary", default_plan_note))
 	var valid := bool(_view_value(validation_data, &"valid", _view_value(source_loadout, &"valid", _view_value(view_model, &"valid", false))))
 	var default_validation := "" if valid else "Plan ist noch nicht gültig."
@@ -3153,7 +3052,6 @@ func show_running_hud() -> void:
 	alert_time = 0.0
 	boss_announcement_time = 0.0
 	alert_panel.hide()
-	finding_progress_panel.hide()
 	set_process(false)
 	boss_hud_active = false
 	run_hud_vitals["boss_visible"] = false
@@ -3504,17 +3402,6 @@ func _ability_glyph(slot_index: int) -> String:
 func _on_ability_slot_pressed(slot_index: int) -> void:
 	ability_slot_requested.emit(slot_index)
 
-func update_finding_progress(current: int, target: int, revealed: bool = false) -> void:
-	finding_progress_panel.show()
-	finding_progress_bar.max_value = maxi(target, 1)
-	finding_progress_bar.value = target if revealed else clampi(current, 0, target)
-	finding_progress_label.text = "BEFUND · AUFGEDECKT" if revealed else "BEFUND · %d / %d" % [current, target]
-	finding_progress_label.modulate = COLOR_TEAL if revealed else COLOR_GOLD
-	AlveolusUIComponents.apply_progress_accent(finding_progress_bar, COLOR_TEAL if revealed else COLOR_GOLD)
-
-func hide_finding_progress() -> void:
-	finding_progress_panel.hide()
-
 func update_timer(elapsed: float, boss_spawn_seconds: float, deadline_seconds: float, boss_active: bool) -> void:
 	# The permanent top-right readout is elapsed round time. Boss state keeps
 	# its own dedicated bar and must not repurpose the clock into a countdown.
@@ -3827,138 +3714,6 @@ func hide_restart_confirmation() -> void:
 func hide_intro_skip_confirmation() -> void:
 	intro_skip_confirmation.dismiss()
 
-# `definition` and reactions are intentionally duck-typed so data resources
-# can evolve without turning this view into a second source of game rules.
-func show_finding(definition: Variant, reactions: Array, reserve: Variant = null, swappable_passives: Array = []) -> void:
-	_hide_all()
-	gameplay_hud.show()
-	current_finding_reaction = &""
-	current_finding_reserve = StringName(reserve) if reserve is String or reserve is StringName else StringName(_view_value(reserve, &"id", &""))
-	finding_id = StringName(_view_value(definition, &"id", &"finding"))
-	finding_title_text = String(_view_value(definition, &"title", "Neuer Befund"))
-	finding_medical_copy = String(_view_value(definition, &"medical_text", _view_value(definition, &"description", "")))
-	finding_gameplay_copy = String(_view_value(definition, &"gameplay_text", _view_value(definition, &"effect", "")))
-	finding_reaction_models.clear()
-	for index in range(reactions.size()):
-		var reaction: Variant = reactions[index]
-		var reaction_id := StringName(_view_value(reaction, &"id", &""))
-		var title := String(_view_value(reaction, &"title", "Reaktion"))
-		var effect := String(_view_value(reaction, &"description", _view_value(reaction, &"effect", "")))
-		var accent := COLOR_TEAL if index % 2 == 0 else COLOR_GOLD
-		var info := FindingOverlayViewModel.InfoViewModel.new("", effect, "", &"ability", accent)
-		finding_reaction_models.append(FindingOverlayViewModel.ReactionViewModel.new(
-			reaction_id,
-			title,
-			effect,
-			&"ability",
-			accent,
-			true,
-			info
-		))
-	current_finding_outgoing_ids.clear()
-	var outgoing_models: Array[FindingOverlayViewModel.OutgoingOptionViewModel] = []
-	for passive in swappable_passives:
-		var passive_id := StringName(passive) if passive is String or passive is StringName else StringName(_view_value(passive, &"id", &""))
-		var passive_title := String(_view_value(passive, &"title", String(passive_id)))
-		current_finding_outgoing_ids.append(passive_id)
-		outgoing_models.append(FindingOverlayViewModel.OutgoingOptionViewModel.new(passive_id, passive_title))
-	var reserve_title := String(_view_value(reserve, &"title", String(current_finding_reserve)))
-	# Reserve remains save-compatible but dormant in the current product UI.
-	finding_reserve_model = FindingOverlayViewModel.ReserveSwapViewModel.new(
-		false,
-		current_finding_reserve,
-		reserve_title,
-		false,
-		false,
-		outgoing_models,
-		current_finding_outgoing_ids[0] if not current_finding_outgoing_ids.is_empty() else &""
-	)
-	finding_swap_valid = true
-	finding_validation_text = ""
-	_apply_finding_screen_model(false)
-	_prepare_optional_navigation_focus.call_deferred(finding_overlay, finding_screen.get_default_focus_control())
-
-
-func hide_finding() -> void:
-	if finding_screen != null:
-		finding_screen.dismiss()
-
-
-func set_finding_swap_validation(valid: bool, message: String = "") -> void:
-	finding_swap_valid = valid
-	finding_validation_text = message
-	if finding_screen != null:
-		current_finding_reaction = finding_screen.selected_reaction_id()
-	_apply_finding_screen_model(false)
-
-
-func _apply_finding_screen_model(request_focus: bool) -> void:
-	if finding_screen == null:
-		return
-	finding_view_revision += 1
-	var model := FindingOverlayViewModel.new(
-		finding_view_revision,
-		finding_id,
-		finding_title_text,
-		finding_medical_copy,
-		finding_gameplay_copy,
-		finding_reaction_models,
-		current_finding_reaction,
-		finding_reserve_model,
-		finding_swap_valid,
-		finding_validation_text
-	)
-	finding_screen.present(model, request_focus)
-	_register_finding_context_sources()
-	_map_finding_compatibility_controls()
-
-
-func _register_finding_context_sources() -> void:
-	if context_detail_controller == null or finding_screen == null:
-		return
-	for source in finding_context_sources:
-		if is_instance_valid(source):
-			context_detail_controller.unregister_source(source)
-	finding_context_sources.clear()
-	for registration in finding_screen.context_detail_registrations():
-		var source := registration.get("source") as Control
-		var provider: Callable = registration.get("provider", Callable())
-		if source == null or not provider.is_valid():
-			continue
-		register_context_detail(
-			source,
-			provider,
-			bool(registration.get("hover_enabled", true)),
-			registration.get("anchor") as Control,
-			int(registration.get("placement", ContextDetailController.Placement.AUTO))
-		)
-		finding_context_sources.append(source)
-
-
-func _map_finding_compatibility_controls() -> void:
-	if finding_screen == null:
-		return
-	finding_overlay = finding_screen
-	finding_panel = finding_screen.modal_sheet()
-	finding_title = finding_screen.find_child("FindingTitle", true, false) as Label
-	finding_copy_grid = finding_screen.copy_grid()
-	finding_reaction_cards = finding_screen.reaction_grid()
-	finding_confirm_button = finding_screen.confirm_action()
-	finding_swap_toggle = finding_screen.swap_action()
-	finding_outgoing_option = finding_screen.outgoing_action()
-	finding_validation_label = finding_screen.validation_label()
-	finding_reserve_row = finding_screen.reserve_panel()
-
-
-func _emit_finding_swap_preview_from_screen() -> void:
-	if finding_screen == null:
-		return
-	var enabled := finding_screen.is_swap_enabled()
-	var incoming := current_finding_reserve if enabled else &""
-	var outgoing := finding_screen.selected_outgoing_id() if enabled else &""
-	finding_reserve_swap_requested.emit(incoming, outgoing)
-
-
 func show_end_mastery(new_objectives: Array, earned_points: int, total_points: int) -> void:
 	if new_objectives.is_empty() and earned_points <= 0:
 		result_mastery_text = ""
@@ -3997,7 +3752,6 @@ func show_end(level: LevelDefinition, success: bool, reason: String, elapsed: fl
 	_hide_all()
 	gameplay_hud.show()
 	ability_panel.hide()
-	finding_progress_panel.hide()
 	result_success = success
 	result_title_text = "Herd kontrolliert" if success else "You suck"
 	result_reason_text = reason if success else ""
@@ -4034,7 +3788,6 @@ func show_practice_end(scenario_title: String, success: bool, reason: String, el
 	_hide_all()
 	gameplay_hud.show()
 	ability_panel.hide()
-	finding_progress_panel.hide()
 	result_success = success
 	result_title_text = "Test abgeschlossen" if success else "Test beendet"
 	result_reason_text = reason
@@ -4188,7 +3941,7 @@ func _show_intro_upgrade_preview(target_type: StringName) -> void:
 	upgrade_target_preview.present(target_type, target)
 
 func _all_overlays() -> Array[Control]:
-	return [campus_overlay, practice_overlay, research_overlay, level_overlay, lexicon_overlay, story_overlay, settings_overlay, preparation_overlay, upgrade_overlay, pause_overlay, pause_stats_overlay, abort_overlay, intro_skip_overlay, restart_overlay, finding_overlay, end_overlay]
+	return [campus_overlay, practice_overlay, research_overlay, level_overlay, lexicon_overlay, story_overlay, settings_overlay, preparation_overlay, upgrade_overlay, pause_overlay, pause_stats_overlay, abort_overlay, intro_skip_overlay, restart_overlay, end_overlay]
 
 func _hide_all() -> void:
 	navigation_focus_active = false
@@ -5496,38 +5249,6 @@ func complete_preparation_change(slot_id: StringName) -> void:
 	planning_snapshot.begin_component_pick(next_slot, _preparation_component_at(next_slot))
 	preparation_selecting_reserve = false
 	preparation_replacement_slots.clear()
-
-func _on_finding_reaction(id: StringName) -> void:
-	current_finding_reaction = id
-	AlveolusUIComponents.set_button_disabled(finding_confirm_button, not finding_swap_valid)
-	finding_reaction_selected.emit(id)
-
-func _on_finding_swap_toggled(enabled: bool) -> void:
-	finding_outgoing_option.disabled = not enabled
-	if not enabled:
-		set_finding_swap_validation(true)
-	_emit_finding_swap_preview()
-
-func _on_finding_outgoing_selected(_index: int) -> void:
-	_emit_finding_swap_preview()
-
-func _emit_finding_swap_preview() -> void:
-	var outgoing := _selected_finding_outgoing() if finding_swap_toggle.button_pressed else &""
-	var incoming := current_finding_reserve if finding_swap_toggle.button_pressed else &""
-	finding_reserve_swap_requested.emit(incoming, outgoing)
-
-func _confirm_finding() -> void:
-	if current_finding_reaction == &"":
-		return
-	var incoming := current_finding_reserve if finding_swap_toggle.button_pressed else &""
-	var outgoing := _selected_finding_outgoing() if finding_swap_toggle.button_pressed else &""
-	finding_confirmed.emit(current_finding_reaction, incoming, outgoing)
-
-func _selected_finding_outgoing() -> StringName:
-	var selected := finding_outgoing_option.selected
-	if selected < 0 or selected >= current_finding_outgoing_ids.size():
-		return &""
-	return current_finding_outgoing_ids[selected]
 
 func _component_kind_text(kind: Variant) -> String:
 	var text := str(kind).to_upper()

@@ -7,7 +7,7 @@ var failures := 0
 func _init() -> void:
 	_test_integer_and_attack_speed_contract()
 	_test_research_and_intro_rewards()
-	_test_boss_and_finding_contract()
+	_test_boss_contract()
 	_test_damage_statistics()
 	_finish()
 
@@ -106,7 +106,7 @@ func _test_research_and_intro_rewards() -> void:
 	_equal(mastery[&"fall_3_first_victory"].level_id, &"severe_pneumonia", "Erhaltene schwere Meisterschaft folgt dem Order-6-Anker")
 
 
-func _test_boss_and_finding_contract() -> void:
+func _test_boss_contract() -> void:
 	var levels := ContentCatalog.level_definitions()
 	_equal(levels.size(), 7, "Bossvertrag umfasst Intro plus sechs Hauptfälle")
 	var intro := _level_by_id(levels, &"intro")
@@ -159,8 +159,6 @@ func _test_boss_and_finding_contract() -> void:
 	_near(case_four.boss_wave_length, 180.0, "Fall 4 behält die etablierte Rautenlänge")
 	_true(not case_five.boss_ranged_enabled and case_five.boss_phase_minions == PackedInt32Array([5, 6]), "Fall 5 verwendet den neuen stationären Nahkampf-Bossvertrag")
 	_true(not case_six.boss_ranged_enabled and case_six.boss_phase_minions == PackedInt32Array([6, 8]), "Fall 6 bewahrt den schweren Standardboss")
-	_equal(ContentCatalog.finding_definitions().keys().size(), 2, "Nur zwei verständliche Befunde bleiben aktiv")
-	_true(ContentCatalog.finding_definitions().has(&"grouping") and ContentCatalog.finding_definitions().has(&"hidden_nests"), "Gruppenbildung und verdeckte Nester bleiben erhalten")
 	_true(ContentCatalog.validate_combat_profiles().is_empty(), "Neue Bossdefinitionen besitzen gültige Schadenstyp- und Resistenzprofile")
 
 

@@ -3,8 +3,8 @@
 ALVEOLUS ist ein spielbarer taktischer 2D-Action- und Idle-Prototyp in Godot.
 Als Arzt planst du einen Einsatz und kontrollierst in stilisierten
 Lungenmodellen bakterielle Infektionen. Vor jedem Fall wählst du eine
-Grundbehandlung, zwei aktive Fähigkeiten, zwei Passivmodule und eine Reserve;
-im Run reagierst du zusätzlich auf Proben, Ausbaustufen und einen Befund.
+Grundbehandlung und bis zu zwei aktive Fähigkeiten; im Run reagierst du
+zusätzlich auf Proben, Ausbaustufen und wechselnde Fallmerkmale.
 
 Der aktuelle Entwicklungsstand, die nächsten Schritte und die dauerhaften
 Produktentscheidungen stehen in [`docs/PROJECT.md`](docs/PROJECT.md).

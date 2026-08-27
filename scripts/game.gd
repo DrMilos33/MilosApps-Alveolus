@@ -94,8 +94,6 @@ var loadout_modules: Dictionary
 var treatment_definitions: Dictionary
 var ability_definitions: Dictionary
 var case_traits: Dictionary
-var finding_definitions: Dictionary
-var reaction_definitions: Dictionary
 var practice_scenarios: Array[PracticeScenarioDefinition] = []
 var practice_boss_profiles: Array[PracticeBossProfile] = []
 var selected_practice_scenario_id: StringName = &""
@@ -179,20 +177,13 @@ var active_loadout: PreparedLoadout
 var build_state: RunBuildState
 var treatment_controller: TreatmentController
 var ability_controller: AbilityController
-var finding_controller: FindingController
 var standard_wave_director := StandardWaveDirector.new()
 var mastery_tracker := MasteryTracker.new()
 var pending_preparation_loadout: PreparedLoadout
 var pending_loadout_draft: LoadoutDraft
 var pending_replacement_component: StringName = &""
 var ui_router := UIScreenRouter.new()
-var active_reaction: ReactionDefinition
-var pending_finding_definition: FindingDefinition
-var hidden_nest_timers: Dictionary = {}
-var pressure_surge_timer: float = 25.0
-var pressure_surge_remaining: float = 0.0
-var reaction_boost_timer: float = 0.0
-var reaction_boost_source: StringName = &""
+var case_pressure_release_timers: Dictionary = {}
 var last_ability_slot: int = -1
 var last_ability_time: float = -1000.0
 var emergency_talent_used: bool = false
@@ -310,8 +301,6 @@ func _ready() -> void:
 	ability_definitions = AbilityDefinition.catalog()
 	defense_cell_damage_profile = DamageProfile.single(&"defense_cell_damage", &"water")
 	case_traits = ContentCatalog.case_trait_definitions()
-	finding_definitions = ContentCatalog.finding_definitions()
-	reaction_definitions = ContentCatalog.reaction_definitions()
 	test_tools_available = OS.is_debug_build()
 	if test_tools_available:
 		practice_scenarios = PracticeScenarioDefinition.catalog(levels)
@@ -414,13 +403,8 @@ func _ready() -> void:
 	ability_controller.cooldown_changed.connect(_on_ability_cooldown_changed)
 	ability_controller.feedback_requested.connect(_on_ability_feedback_requested)
 	ability_controller.shield_changed.connect(_on_ability_shield_changed)
-	ability_controller.finding_progress_requested.connect(_on_ability_finding_progress)
 	simulation_root.add_child(ability_controller)
 	ability_controller.set_physics_process(false)
-	finding_controller = FindingController.new()
-	finding_controller.progress_changed.connect(_on_finding_progress_changed)
-	finding_controller.finding_revealed.connect(_on_finding_revealed)
-	finding_controller.reaction_applied.connect(_on_finding_reaction_applied)
 
 	hud = GameHUD.new()
 	add_child(hud)
@@ -461,8 +445,6 @@ func _ready() -> void:
 	hud.talent_toggle_requested.connect(_on_talent_toggle_requested)
 	hud.talent_rank_remove_requested.connect(_on_talent_rank_remove_requested)
 	hud.talent_reset_requested.connect(_on_talent_reset_requested)
-	hud.finding_confirmed.connect(_on_finding_confirmed)
-	hud.finding_reserve_swap_requested.connect(_on_finding_reserve_swap_requested)
 	hud.discovery_dismissed.connect(_on_discovery_dismissed)
 	hud.hints_disabled.connect(_on_hints_disabled)
 	hud.intro_skip_requested.connect(_on_intro_skip_requested)
@@ -711,8 +693,6 @@ func _unhandled_input(event: InputEvent) -> void:
 					_resume_manual_pause()
 			GameFlowState.State.LEVEL_UP:
 				get_viewport().set_input_as_handled()
-			GameFlowState.State.FINDING_PAUSE:
-				get_viewport().set_input_as_handled()
 			GameFlowState.State.ABORT_CONFIRMATION:
 				get_viewport().set_input_as_handled()
 				_on_abort_cancelled()
@@ -743,7 +723,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_on_restart_cancelled()
 			GameFlowState.State.PRACTICE, GameFlowState.State.RESEARCH, GameFlowState.State.LEVEL_SELECT, GameFlowState.State.LEXICON, GameFlowState.State.SETTINGS, GameFlowState.State.PREPARATION, GameFlowState.State.STORY:
 				_on_back_requested()
-			GameFlowState.State.LEVEL_UP, GameFlowState.State.FINDING_PAUSE:
+			GameFlowState.State.LEVEL_UP:
 				# These decisions are mandatory. Consume Back without closing their modal.
 				pass
 			_:
@@ -1428,13 +1408,13 @@ func _create_case_context(level: LevelDefinition) -> RunContext:
 		return null
 	var seed := meta.get_or_create_case_seed(level.id)
 	if not meta.has_completed_level(level.id):
-		return meta.create_run_context(level.id, &"", &"")
+		return meta.create_run_context(level.id)
 	var case_rng := RandomNumberGenerator.new()
 	case_rng.seed = seed
 	var first_trait := _deterministic_case_trait_choice(level.visible_trait_ids, level.id, case_rng)
-	# Preserve the established seed contract: the hidden finding remains the
-	# second draw. The additional visible trait is drawn only afterwards.
-	var hidden_finding := _deterministic_case_choice(level.hidden_finding_ids, case_rng)
+	# Preserve existing case-seed outcomes after retiring the old middle draw.
+	# Its two-way RNG step stays consumed before selecting the second trait.
+	case_rng.randi_range(0, 1)
 	var remaining_traits: Array[StringName] = []
 	for trait_id in level.visible_trait_ids:
 		if trait_id != first_trait:
@@ -1448,18 +1428,8 @@ func _create_case_context(level: LevelDefinition) -> RunContext:
 	return meta.create_run_context(
 		level.id,
 		first_trait,
-		hidden_finding,
 		selected_traits
 	)
-
-func _deterministic_case_choice(ids: Array[StringName], case_rng: RandomNumberGenerator) -> StringName:
-	var valid: Array[StringName] = []
-	for id in ids:
-		if id != &"":
-			valid.append(id)
-	if valid.is_empty():
-		return &""
-	return valid[case_rng.randi_range(0, valid.size() - 1)]
 
 
 func _deterministic_case_trait_choice(
@@ -1502,9 +1472,8 @@ func _refresh_preparation() -> void:
 		"traits": case_trait_values,
 		"trait": case_trait_values[0] if not case_trait_values.is_empty() else null,
 		"trait_title": "Lokaler Testlauf" if practice_mode else "Kein Fallmerkmal",
-		"trait_effect": "Keine Fallmerkmale, Befunde oder Belohnungen." if practice_mode else "Kein besonderer Einfluss.",
+		"trait_effect": "Keine Fallmerkmale oder Belohnungen." if practice_mode else "Kein besonderer Einfluss.",
 		"validation": validation,
-		"finding_hint": "Befunde sind im Testlauf deaktiviert." if practice_mode else _preparation_finding_hint(),
 		"unlocked_ids": available_ids if practice_mode else meta.unlocked_module_ids(loadout_modules, research_definitions),
 		"available_ids": available_ids,
 		"availability_reasons": {} if practice_mode else _preparation_availability_reasons(),
@@ -1518,9 +1487,6 @@ func _refresh_preparation() -> void:
 		"guidance_step": &"active_1" if pending_preparation_guidance_active else &"",
 	}
 	hud.show_preparation(view_model, _practice_loadout_catalog() if practice_mode else loadout_modules.values(), pending_preparation_loadout)
-
-func _preparation_finding_hint() -> String:
-	return "Der genaue Befund entsteht während der Behandlung."
 
 func _preparation_availability_reasons() -> Dictionary:
 	var reasons: Dictionary = {}
@@ -1738,9 +1704,10 @@ func start_run(run_context: RunContext = null) -> void:
 		treatment = treatment_definitions.get(&"treatment_precision")
 	if treatment != null:
 		stats.configure_prepared_treatment(treatment)
-	if not selected_level.is_tutorial and treatment != null:
+	if treatment != null:
 		# Forschung ist dauerhafte Charakterprogression. Sie wirkt unabhängig von
-		# der Einsatzplanung; Passivmodule sind im aktuellen Ausbau deaktiviert.
+		# Einsatzplanung und Wiederholung der Einführung; Passivmodule sind im
+		# aktuellen Ausbau deaktiviert.
 		stats.apply_meta_progression(meta.research_ranks)
 	if completion_smoke:
 		stats.therapy_damage = 250.0
@@ -1820,13 +1787,7 @@ func start_run(run_context: RunContext = null) -> void:
 	_set_intro_prompt("", &"normal", false, "")
 	discovery_spawn_reservations.clear()
 	discovery_manager.clear_pending()
-	active_reaction = null
-	pending_finding_definition = null
-	hidden_nest_timers.clear()
-	pressure_surge_timer = 25.0
-	pressure_surge_remaining = 0.0
-	reaction_boost_timer = 0.0
-	reaction_boost_source = &""
+	case_pressure_release_timers.clear()
 	last_ability_slot = -1
 	last_ability_time = -1000.0
 	emergency_talent_used = false
@@ -1846,7 +1807,11 @@ func start_run(run_context: RunContext = null) -> void:
 	)
 	if selected_level.is_tutorial:
 		state.set_analysis_target(INTRO_ANALYSIS_TARGET)
-	state.set_analysis_gain_multiplier(stats.experience_gain_multiplier * config.experience_gain_multiplier)
+	state.set_analysis_gain_multiplier(
+		RunState.MONSTER_EXPERIENCE_MULTIPLIER
+		* stats.experience_gain_multiplier
+		* config.experience_gain_multiplier
+	)
 	if run_session != null:
 		run_session.reset()
 		run_session.start(active_run_context)
@@ -1866,7 +1831,6 @@ func start_run(run_context: RunContext = null) -> void:
 		treatment_controller.enabled = false
 		ability_controller.clear()
 		hud.configure_active_abilities([])
-		hud.hide_finding_progress()
 		hud.update_round_time(0.0)
 		_set_intro_prompt("Beobachte den ersten Erreger.", &"normal", false, "")
 		intro_primary_enemy = _spawn_enemy(&"pneumococcus", _spawn_position_around_avatar(470.0, _enemy_body_radius(&"pneumococcus")), 0.55)
@@ -2200,9 +2164,11 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 		return
 	var talent_context := active_run_context
 	var damage_rank := talent_context.talent_rank(&"treatment_damage_training") if talent_context != null else 0
-	var treatment_base_damage := stats.therapy_damage
-	if damage_rank > 0:
-		treatment_base_damage = stats.treatment_damage_with_base_bonus(
+	var treatment_base_damage := treatment.base_damage
+	if completion_smoke:
+		treatment_base_damage = stats.therapy_damage
+	elif damage_rank > 0:
+		treatment_base_damage = stats.treatment_base_damage_with_bonus(
 			TalentDefinition.magnitude_for(&"treatment_damage_training", 0.20) * float(damage_rank)
 		)
 	build_state.set_base(RunBuildState.TREATMENT_DAMAGE, treatment_base_damage)
@@ -2211,7 +2177,6 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 	build_state.set_base(RunBuildState.TREATMENT_TARGETS, stats.therapy_targets)
 	build_state.set_base(RunBuildState.PICKUP_RANGE, stats.pickup_range)
 	build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, stats.ability_cooldown_multiplier)
-	build_state.set_base(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier)
 	build_state.set_base(RunBuildState.SUPPORT_EFFECT, stats.support_effect_multiplier)
 	build_state.set_base(RunBuildState.MOVEMENT_SPEED, stats.movement_speed)
 	var equipped_abilities: Array[AbilityDefinition] = []
@@ -2227,10 +2192,9 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 		treatment_controller.enabled = false
 		ability_controller.clear()
 		return
-	# bind_run_build synchronizes the legacy field surface once. Reapply the
-	# talent-resolved run baseline afterwards so later additive cards remain
-	# absolute and are never multiplied by this percentage talent.
-	build_state.set_base(RunBuildState.TREATMENT_DAMAGE, treatment_base_damage)
+	# Research remains a permanent multiplier on the live damage after absolute
+	# run upgrades; the treatment talent belongs to the unscaled base.
+	stats.configure_treatment_damage_build(treatment_base_damage)
 	var spread_shotgun_rank := talent_context.talent_rank(&"spread_shotgun") if talent_context != null else 0
 	var persistence_rank := talent_context.talent_rank(&"piercing_persistence") if talent_context != null else 0
 	var manual_rank := talent_context.talent_rank(&"manual_treatment_aim") if talent_context != null else 0
@@ -2261,12 +2225,6 @@ func _configure_tactical_run(treatment: TreatmentDefinition) -> void:
 		if ability != null and ability_controller.equip(slot, ability):
 			ability_views.append(_ability_hud_view(ability))
 	hud.configure_active_abilities(ability_views)
-	finding_controller.clear()
-	var finding: FindingDefinition = finding_definitions.get(active_run_context.hidden_finding_id) if active_run_context != null else null
-	if finding != null:
-		finding_controller.configure(finding, maxi(1, selected_level.finding_progress_target))
-	else:
-		hud.hide_finding_progress()
 
 func _ability_hud_view(definition: AbilityDefinition) -> Dictionary:
 	if definition == null:
@@ -2363,14 +2321,6 @@ func _spawn_step(delta: float) -> void:
 	if not wave_due or capacity_blocked:
 		return
 	var progress := config.regular_spawn_progress(state.elapsed)
-	var finding := _active_finding()
-	var interval_factor := 1.0
-	if finding != null and finding.behavior == FindingDefinition.Behavior.ACCELERATION and progress >= 0.5:
-		var late_factor := inverse_lerp(0.5, 1.0, progress)
-		interval_factor = lerpf(1.0, 1.0 - finding.magnitude, late_factor)
-	var cluster_bonus := 0.0
-	if finding != null and finding.behavior == FindingDefinition.Behavior.GROUPING:
-		cluster_bonus = finding.magnitude
 	# Practice recipes author their own fixed population mix and intentionally
 	# disable discoveries, so their 50 % group contract cannot depend on a
 	# campaign discovery flag.
@@ -2380,8 +2330,8 @@ func _spawn_step(delta: float) -> void:
 		progress,
 		weight_cap - ambient_melee_weight,
 		clusters_enabled,
-		cluster_bonus,
-		interval_factor
+		0.0,
+		1.0
 	)
 	if opened_count <= 0:
 		return
@@ -2942,13 +2892,8 @@ func _apply_treatment_hit(enemy: InfectionEnemy, base_damage: float, source: Str
 func _resolved_treatment_damage(base_damage: float, enemy: InfectionEnemy) -> float:
 	if enemy == null or enemy.definition == null:
 		return base_damage
-	var result := base_damage
-	if build_state != null and enemy.definition.id == &"bacterial_cluster":
-		result *= build_state.value(&"group_area_effect", 1.0)
-	if build_state != null and enemy.definition.id == &"minor_focus":
-		result *= build_state.value(&"nest_damage", 1.0)
 	var profile := stats.prepared_treatment.damage_profile if stats != null and stats.prepared_treatment != null else null
-	return CombatDamageResolver.resolve_against_enemy(result, profile, enemy)
+	return CombatDamageResolver.resolve_against_enemy(base_damage, profile, enemy)
 
 func _on_projectile_discovery_ready(projectile: TherapyProjectile) -> void:
 	if selected_level != null and selected_level.is_tutorial:
@@ -3164,7 +3109,6 @@ func _spawn_enemy(
 	)
 	if test_tools_available:
 		enemy.set_incoming_player_damage_multiplier(run_test_settings.outgoing_damage_multiplier())
-	_apply_group_control_to_enemy(enemy)
 	enemy.global_position = bounded_position
 	enemy.reset_physics_interpolation()
 	enemy.set_physics_process(false)
@@ -3216,8 +3160,6 @@ func _apply_enemy_spawn_metadata(enemy: InfectionEnemy, request: EnemySpawnReque
 	enemy.configure_static_stun(bool(request.metadata.get("static_stun_enabled", false)))
 	if bool(request.metadata.get("case_pressure_target", false)):
 		_register_case_pressure_target(enemy, StringName(request.metadata.get("pressure_behavior", &"stationary_fan")))
-	if request.source_id == &"hidden_nest":
-		hidden_nest_timers[enemy] = maxf(0.1, float(request.metadata.get("release_after_seconds", 20.0)))
 	if bool(request.metadata.get("ranged_shooter", false)) and enemy_attack_director != null and enemy_world != null:
 		var handle := enemy_world.handle_for(enemy)
 		if EntityHandle.is_valid(handle):
@@ -3526,7 +3468,10 @@ func _on_boss_phase_changed(phase: int, enemy: InfectionEnemy) -> void:
 	if phase > boss_aggregate_phase:
 		boss_aggregate_phase = phase
 		hud.show_boss_phase(boss_aggregate_phase)
-	if not _is_practice_test() and discovery_manager.request(&"boss_phases", enemy):
+	if not _is_practice_test() \
+		and selected_level != null \
+		and not selected_level.is_tutorial \
+		and discovery_manager.request(&"boss_phases", enemy):
 		_try_present_next_discovery()
 
 func _on_enemy_materialized(enemy: InfectionEnemy) -> void:
@@ -3779,15 +3724,7 @@ func _apply_enemy_defeated(enemy: InfectionEnemy, analysis_value: int, was_boss:
 		var discovery_id := enemy.definition.discovery_id
 		discovery_manager.mark_seen(discovery_id)
 	if enemy.definition != null and enemy.definition.id == &"minor_focus":
-		hidden_nest_timers.erase(enemy)
-		if build_state != null:
-			var extra_samples := maxi(0, roundi(build_state.value(&"nest_samples", 0.0)))
-			analysis_value += extra_samples
-			if extra_samples > 0:
-				for slot in range(2):
-					var runtime := ability_controller.runtime(slot)
-					if runtime != null:
-						runtime.reduce(1.0)
+		case_pressure_release_timers.erase(enemy)
 	var spawned_pickup := _spawn_analysis_pickup(analysis_value, death_position, false)
 	if selected_level.is_tutorial:
 		if intro_role in [INTRO_ROLE_PRIMARY, INTRO_ROLE_FOLLOWUP] and spawned_pickup != null:
@@ -3924,8 +3861,6 @@ func _apply_pickup_collected(value: int, pickup: AnalysisPickup) -> void:
 			state.add_analysis(value)
 	elif state != null:
 		state.add_analysis(value)
-		if finding_controller != null and finding_controller.definition != null and not finding_controller.revealed:
-			finding_controller.add_progress(value, build_state.value(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier) if build_state != null else stats.finding_progress_multiplier)
 
 func _on_projectile_finished(projectile: TherapyProjectile) -> void:
 	var handle := projectile_world.handle_for(projectile) if projectile_world != null and is_instance_valid(projectile) else EntityHandle.INVALID
@@ -4107,7 +4042,7 @@ func _update_case_pressure_target_indicator(offscreen_boss_visible: bool) -> voi
 			&"finale":
 				countdown_text = "FEUERT"
 			&"ambient":
-				var release_remaining := float(hidden_nest_timers.get(enemy, -1.0))
+				var release_remaining := float(case_pressure_release_timers.get(enemy, -1.0))
 				countdown_text = "%d s" % ceili(release_remaining) if release_remaining > 0.0 else "ZIEL"
 			_:
 				countdown_text = "ZIEL"
@@ -4216,12 +4151,6 @@ func _apply_incoming_damage(amount: float, incoming_profile: DamageProfile, sour
 		return
 	if build_state != null and source_enemy != null and source_enemy.definition != null and source_enemy.definition.id == &"bacterial_cluster":
 		amount *= build_state.value(&"group_contact", 1.0)
-	if pressure_surge_remaining > 0.0:
-		var finding := _active_finding()
-		if finding != null and finding.behavior == FindingDefinition.Behavior.PRESSURE_SURGES:
-			amount *= 1.0 + finding.magnitude
-		if build_state != null:
-			amount *= build_state.value(&"surge_contact", 1.0)
 	amount = CombatDamageResolver.resolve(amount, incoming_profile, stats.resistances if stats != null else null, stats.defense if stats != null else 0.0)
 	if ability_controller != null:
 		amount = ability_controller.absorb_pressure(amount)
@@ -4276,208 +4205,11 @@ func _on_ability_shield_changed(current: float, maximum: float) -> void:
 	if ability_feedback_world != null:
 		ability_feedback_world.update_shield(current, maximum)
 
-func _on_ability_finding_progress(amount: float) -> void:
-	if finding_controller != null and finding_controller.definition != null:
-		finding_controller.add_progress(maxi(1, roundi(amount)))
-
-func _on_finding_progress_changed(current: int, target: int) -> void:
-	hud.update_finding_progress(current, target, current >= target)
-
-func _on_finding_revealed(definition: FindingDefinition) -> void:
-	if definition == null or state == null:
-		return
-	mastery_tracker.record_finding_revealed(state.elapsed)
-	if definition.behavior == FindingDefinition.Behavior.HIDDEN_NESTS:
-		_spawn_hidden_nests(maxi(1, roundi(definition.magnitude)))
-	if flow_state == GameFlowState.State.LEVEL_UP:
-		pending_finding_definition = definition
-		return
-	_present_finding(definition)
-
-func _present_finding(definition: FindingDefinition) -> void:
-	if definition == null or finding_controller.resolved:
-		return
-	pending_finding_definition = null
-	_set_flow(GameFlowState.State.FINDING_PAUSE)
-	ui_router.open_modal(&"finding", null, get_viewport().gui_get_focus_owner())
-	var reactions := _reactions_for_finding(definition)
-	var reserve: Variant = loadout_modules.get(active_loadout.reserve_id) if active_loadout != null and active_loadout.reserve_id != &"" else null
-	var swappable: Array = []
-	if active_loadout != null:
-		for id in active_loadout.passive_ids:
-			if loadout_modules.has(id):
-				swappable.append(loadout_modules[id])
-	hud.show_finding(definition, reactions, reserve, swappable)
-
-func _reactions_for_finding(definition: FindingDefinition) -> Array:
-	var result: Array = []
-	for id in definition.reaction_ids:
-		if reaction_definitions.has(id):
-			result.append(reaction_definitions[id])
-	return result
-
-func _on_finding_confirmed(reaction_id: StringName, incoming_id: StringName, outgoing_id: StringName) -> void:
-	if flow_state != GameFlowState.State.FINDING_PAUSE or not reaction_definitions.has(reaction_id):
-		return
-	var reaction: ReactionDefinition = reaction_definitions[reaction_id]
-	if finding_controller.definition == null or reaction.finding_id != finding_controller.definition.id:
-		return
-	if incoming_id != &"" or outgoing_id != &"":
-		if active_loadout == null or incoming_id != active_loadout.reserve_id:
-			return
-		var validation := LoadoutValidator.validate_reserve_swap(
-			active_loadout,
-			outgoing_id,
-			loadout_modules,
-			meta.unlocked_module_ids(loadout_modules, research_definitions),
-			meta.preparation_capacity()
-		)
-		if not validation.valid:
-			hud.set_finding_swap_validation(false, validation.first_error())
-			return
-		_apply_reserve_swap(outgoing_id)
-	if not finding_controller.resolve(reaction):
-		return
-	hud.hide_finding()
-	hud.hide_finding_progress()
-	hud.show_running_hud()
-	_show_active_boss_hud()
-	ui_router.close_modal(get_viewport().gui_get_focus_owner())
-	_set_flow(GameFlowState.State.RUNNING)
-
-func _on_finding_reserve_swap_requested(incoming_id: StringName, outgoing_id: StringName) -> void:
-	if flow_state != GameFlowState.State.FINDING_PAUSE:
-		return
-	if incoming_id == &"" and outgoing_id == &"":
-		hud.set_finding_swap_validation(true, "Kein Reservewechsel gewählt.")
-		return
-	if active_loadout == null or incoming_id != active_loadout.reserve_id:
-		hud.set_finding_swap_validation(false, "Reserveauswahl ist nicht mehr gültig.")
-		return
-	var validation := LoadoutValidator.validate_reserve_swap(
-		active_loadout,
-		outgoing_id,
-		loadout_modules,
-		meta.unlocked_module_ids(loadout_modules, research_definitions),
-		meta.preparation_capacity()
-	)
-	hud.set_finding_swap_validation(validation.valid, "Reservewechsel ist gültig." if validation.valid else validation.first_error())
-
-func _apply_reserve_swap(outgoing_id: StringName) -> void:
-	var incoming_id := active_loadout.reserve_id
-	var before_bonus := stats.max_stability_bonus
-	stats.apply_prepared_passive(outgoing_id, meta.research_ranks, false)
-	stats.apply_prepared_passive(incoming_id, meta.research_ranks, true)
-	active_loadout = LoadoutValidator.apply_reserve_swap(active_loadout, outgoing_id)
-	state.adjust_max_stability(stats.max_stability_bonus - before_bonus)
-	reroll_available = active_loadout.passive_ids.has(&"second_opinion")
-	_sync_passive_swap_to_build(incoming_id, outgoing_id)
-	mastery_tracker.record_reserve_swap()
-	hud.update_run_stats(stats, state)
-
-func _on_finding_reaction_applied(definition: ReactionDefinition) -> void:
-	if definition == null or build_state == null:
-		return
-	active_reaction = definition
-	build_state.remove_source(definition.id)
-	for index in range(definition.modifiers.size()):
-		var modifier_data: Dictionary = definition.modifiers[index]
-		# One-shot shield reactions are applied below. Registering them in the
-		# shared build as well would silently strengthen every later shield skill.
-		if StringName(str(modifier_data.get("stat_id", ""))) == RunBuildState.ABILITY_SHIELD:
-			continue
-		build_state.add_modifier(ModifierDefinition.from_dict(
-			modifier_data,
-			StringName("%s_%d" % [String(definition.id), index]),
-			definition.id
-		))
-	if definition.id == &"surge_buffer":
-		ability_controller.grant_shield(12.0)
-	if definition.id == &"group_control":
-		for enemy in enemies:
-			_apply_group_control_to_enemy(enemy)
-	stats.call("_sync_fields_from_build")
-	hud.update_run_stats(stats, state)
-
-func _apply_group_control_to_enemy(enemy: InfectionEnemy) -> void:
-	if enemy == null or enemy.definition == null or enemy.definition.id != &"bacterial_cluster" or build_state == null:
-		return
-	var strength := build_state.value(&"group_control", 1.0)
-	if strength > 1.001:
-		enemy.set_status_modifier(&"finding_group_control", 1.0 / strength, 1.0)
-	else:
-		enemy.clear_status_modifier(&"finding_group_control")
-
-func _apply_immediate_reaction_boost(definition: ReactionDefinition) -> void:
-	reaction_boost_source = StringName("immediate_%s" % String(definition.id))
-	build_state.remove_source(reaction_boost_source)
-	var bonus_fraction := TalentDefinition.IMMEDIATE_MEASURE_BONUS_FRACTION
-	for index in range(definition.modifiers.size()):
-		var data: Dictionary = definition.modifiers[index].duplicate(true)
-		var stat_id := StringName(str(data.get("stat_id", "")))
-		var value := float(data.get("value", 0.0))
-		var operation := StringName(str(data.get("operation", "add")))
-		if stat_id == RunBuildState.ABILITY_SHIELD:
-			# The normal one-shot grant already happened. Add its exact 50 % bonus
-			# immediately instead of turning it into a hidden future ability buff.
-			var bonus_shield := maxf(0.0, value * bonus_fraction)
-			ability_controller.grant_shield_capped(bonus_shield, value + bonus_shield)
-			continue
-		if operation == &"multiply":
-			# Modifiers multiply with each other. Compute the quotient needed to
-			# make the combined delta exactly 150 %, rather than multiplying a
-			# second approximate delta (1.30 * 1.15 would incorrectly be 1.495).
-			var boosted_total := 1.0 + (value - 1.0) * (1.0 + bonus_fraction)
-			data["value"] = boosted_total / value if not is_zero_approx(value) else boosted_total
-		elif operation == &"add":
-			data["value"] = value * bonus_fraction
-		else:
-			continue
-		build_state.add_modifier(ModifierDefinition.from_dict(
-			data,
-			StringName("%s_%d" % [String(reaction_boost_source), index]),
-			reaction_boost_source
-		))
-	reaction_boost_timer = TalentDefinition.magnitude_for(&"immediate_measure", TalentDefinition.IMMEDIATE_MEASURE_DURATION_SECONDS)
-	if definition.id == &"group_control":
-		for enemy in enemies:
-			_apply_group_control_to_enemy(enemy)
-
-func _sync_passive_swap_to_build(incoming_id: StringName, outgoing_id: StringName) -> void:
-	if build_state == null:
-		return
-	_adjust_passive_build_base(outgoing_id, false)
-	_adjust_passive_build_base(incoming_id, true)
-	build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, stats.ability_cooldown_multiplier)
-	build_state.set_base(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier)
-	build_state.set_base(RunBuildState.SUPPORT_EFFECT, stats.support_effect_multiplier)
-	stats.call("_sync_fields_from_build")
-
-func _adjust_passive_build_base(id: StringName, enabled: bool) -> void:
-	var direction_factor := 1.0
-	match id:
-		&"therapy_precision":
-			direction_factor = 1.0 + float(meta.rank(id)) * PlayerStats.TREATMENT_RESEARCH_DAMAGE_FRACTION_PER_RANK
-			build_state.set_base(RunBuildState.TREATMENT_DAMAGE, build_state.base_value(RunBuildState.TREATMENT_DAMAGE) * direction_factor if enabled else build_state.base_value(RunBuildState.TREATMENT_DAMAGE) / maxf(direction_factor, 0.001))
-		&"sample_logistics":
-			direction_factor = 1.0 + float(meta.rank(id)) * 0.05
-			build_state.set_base(RunBuildState.PICKUP_RANGE, build_state.base_value(RunBuildState.PICKUP_RANGE) * direction_factor if enabled else build_state.base_value(RunBuildState.PICKUP_RANGE) / maxf(direction_factor, 0.001))
-		&"quick_test":
-			build_state.set_base(RunBuildState.FINDING_PROGRESS, stats.finding_progress_multiplier)
-		&"deployment_routine":
-			build_state.set_base(RunBuildState.ACTIVE_COOLDOWN, stats.ability_cooldown_multiplier)
-
 func _sync_legacy_upgrade_to_build(definition: UpgradeDefinition) -> void:
 	if build_state == null or definition == null or not definition.modifiers.is_empty():
 		return
 	if definition.effect == &"pickup_range":
 		build_state.set_base(RunBuildState.PICKUP_RANGE, stats.pickup_range)
-
-func _active_finding() -> FindingDefinition:
-	if active_run_context == null:
-		return null
-	return finding_definitions.get(active_run_context.hidden_finding_id)
-
 
 func _case_pressure_step(delta: float) -> void:
 	if case_pressure_director == null or selected_level == null or state == null:
@@ -4636,7 +4368,7 @@ func _register_case_pressure_target(enemy: InfectionEnemy, behavior: StringName)
 	if behavior == &"radial_fuse":
 		enemy.set_event_fuse_progress(1.0)
 	if behavior == &"ambient_focus":
-		hidden_nest_timers[enemy] = CASE_PRESSURE_TARGET_ACTIVE_SECONDS
+		case_pressure_release_timers[enemy] = CASE_PRESSURE_TARGET_ACTIVE_SECONDS
 
 
 func _step_case_pressure_targets(delta: float) -> void:
@@ -4806,7 +4538,7 @@ func _flush_case_pressure_target_expirations() -> void:
 		if enemy_world != null:
 			enemy_world.release(handle, false)
 			_combat_query_dirty = true
-		hidden_nest_timers.erase(enemy)
+			case_pressure_release_timers.erase(enemy)
 		enemies.erase(enemy)
 		_store_enemy(enemy)
 	case_pressure_target_expirations.clear()
@@ -4920,53 +4652,18 @@ func _case_pressure_gate_lane_coordinates(lane_start: float, lane_end: float, sa
 
 
 func _case_mechanics_step(delta: float) -> void:
-	var finding := _active_finding()
-	if finding != null and finding.behavior == FindingDefinition.Behavior.PRESSURE_SURGES:
-		if pressure_surge_remaining > 0.0:
-			pressure_surge_remaining = maxf(0.0, pressure_surge_remaining - delta)
-		else:
-			pressure_surge_timer -= delta
-			if pressure_surge_timer <= 0.0:
-				pressure_surge_timer += 25.0
-				pressure_surge_remaining = 4.0
-				hud.show_alert("BELASTUNGSSCHUB · 4 SEKUNDEN", Color("ef7766"), 2.2)
-	if reaction_boost_timer > 0.0:
-		reaction_boost_timer = maxf(0.0, reaction_boost_timer - delta)
-		if reaction_boost_timer <= 0.0 and build_state != null:
-			build_state.remove_source(reaction_boost_source)
-			stats.call("_sync_fields_from_build")
-			hud.update_run_stats(stats, state)
-			for enemy in enemies:
-				_apply_group_control_to_enemy(enemy)
-	for nest in hidden_nest_timers.keys():
+	for nest in case_pressure_release_timers.keys():
 		if not is_instance_valid(nest) or nest.is_queued_for_deletion():
-			hidden_nest_timers.erase(nest)
+			case_pressure_release_timers.erase(nest)
 			continue
-		var remaining := float(hidden_nest_timers[nest]) - delta
+		var remaining := float(case_pressure_release_timers[nest]) - delta
 		if remaining > 0.0:
-			hidden_nest_timers[nest] = remaining
+			case_pressure_release_timers[nest] = remaining
 			continue
 		for index in range(4):
 			var angle := TAU * float(index) / 4.0 + rng.randf_range(-0.18, 0.18)
 			_spawn_enemy(&"pneumococcus", topology.wrap_position(nest.global_position + Vector2.from_angle(angle) * 84.0))
-		hidden_nest_timers.erase(nest)
-
-func _spawn_hidden_nests(count: int) -> void:
-	for index in range(count):
-		var spawn_position := _spawn_position_around_avatar(390.0 + float(index) * 85.0, _enemy_body_radius(&"minor_focus"))
-		var request := EnemySpawnRequest.create(
-			&"minor_focus",
-			spawn_position,
-			&"infection_focus",
-			1.0,
-			config.enemy_speed_multiplier,
-			config.contact_damage_multiplier,
-			PackedInt32Array(),
-			EnemySpawnRequest.Priority.REGULAR,
-			&"hidden_nest"
-		)
-		request.metadata["release_after_seconds"] = 20.0
-		_spawn_enemy(&"minor_focus", spawn_position, 1.0, false, true, request)
+		case_pressure_release_timers.erase(nest)
 
 func _on_analysis_changed(current: int, target: int, level: int) -> void:
 	analysis_changed.emit(current, target, level)
@@ -4976,14 +4673,15 @@ func _on_analysis_changed(current: int, target: int, level: int) -> void:
 func _refresh_defeat_research_preview() -> void:
 	if hud == null or meta == null or state == null or selected_level == null:
 		return
-	var repeated_intro := selected_level.is_tutorial and meta.has_completed_level(selected_level.id)
-	var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
+	if selected_level.is_tutorial:
+		hud.update_defeat_research_reward(0)
+		return
 	var reward := MetaProgressionState.calculate_run_reward(
 		false,
 		state.elapsed,
 		state.level,
 		defeats + case_pressure_reward_defeat_points,
-		multiplier,
+		config.reward_multiplier,
 		state.bosses_defeated,
 		_active_case_trait_count()
 	)
@@ -5165,9 +4863,6 @@ func _on_upgrade_chosen(definition: UpgradeDefinition) -> void:
 		state.trigger_event_boss()
 		_save_meta()
 		return
-	if pending_finding_definition != null:
-		_present_finding(pending_finding_definition)
-		return
 	if _is_practice_test():
 		return
 	if definition.effect == &"immune_level":
@@ -5206,27 +4901,26 @@ func _on_run_finished(success: bool, reason: String) -> void:
 	var first_intro_completion := success and selected_level.is_tutorial and not meta.has_completed_level(selected_level.id)
 	var reward := 0
 	var unlocked_new := false
-	if first_intro_completion:
-		unlocked_new = meta.register_level_result(selected_level, true, state.elapsed, state.level, defeats)
-		var research_before_intro_reward := meta.research_points
-		meta.grant_intro_completion_rewards(state.bosses_defeated)
-		reward = meta.research_points - research_before_intro_reward
+	if selected_level.is_tutorial:
+		unlocked_new = meta.register_level_result(selected_level, success, state.elapsed, state.level, defeats)
+		if success:
+			var research_before_intro_reward := meta.research_points
+			meta.grant_intro_completion_rewards(state.bosses_defeated)
+			reward = meta.research_points - research_before_intro_reward
 	else:
-		var repeated_intro := selected_level.is_tutorial and meta.has_completed_level(selected_level.id)
-		var multiplier := config.reward_multiplier * (0.25 if repeated_intro else 1.0)
 		reward = meta.award_run(
 			success,
 			state.elapsed,
 			state.level,
 			defeats + case_pressure_reward_defeat_points,
-			multiplier,
+			config.reward_multiplier,
 			state.bosses_defeated,
 			_active_case_trait_count()
 		)
 		unlocked_new = meta.register_level_result(selected_level, success, state.elapsed, state.level, defeats)
 	# Der sichtbare Fallzustand bleibt bei Niederlage und Abbruch unverändert.
 	# Nur ein erfolgreicher Abschluss erzeugt die nächste deterministische
-	# Merkmals-/Befundkombination. Der allererste Sieg selbst hat keine Parameter.
+	# Fallmerkmalskombination. Der allererste Sieg selbst hat keine Parameter.
 	if success and not selected_level.is_tutorial:
 		meta.advance_case_seed(selected_level.id)
 	var new_mastery_ids := meta.apply_mastery_candidates(mastery_tracker.completed_candidates(success))
@@ -6206,8 +5900,6 @@ func _cleanup_run_nodes() -> void:
 		discovery_manager.clear_pending()
 	if hud != null:
 		hud.hide_discovery()
-		hud.hide_finding()
-		hud.hide_finding_progress()
 		hud.clear_active_abilities()
 		hud.set_boss_direction_indicator(false, Vector2.ZERO)
 		hud.set_target_focus_direction_indicator(false, Vector2.ZERO, "")
@@ -6288,9 +5980,7 @@ func _cleanup_run_nodes() -> void:
 	active_run_context = null
 	active_loadout = null
 	build_state = null
-	active_reaction = null
-	pending_finding_definition = null
-	hidden_nest_timers.clear()
+	case_pressure_release_timers.clear()
 
 func _sanitize_meta() -> void:
 	for definition in research_definitions:

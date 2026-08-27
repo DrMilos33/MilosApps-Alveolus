@@ -88,14 +88,14 @@ func _test_global_research_is_idempotent() -> void:
 		stats.configure_prepared_treatment(treatment)
 		stats.apply_meta_progression(ranks)
 		var expected_damage := float(roundi(treatment.base_damage * 1.15))
-		var expected_max_talent_damage := float(roundi(treatment.base_damage * 1.75))
+		var expected_max_talent_damage := float(roundi(treatment.base_damage * 1.60 * 1.15))
 		_near(PlayerStats.BASE_MAX_HEALTH + stats.max_stability_bonus, 59.0, "Lebensforschung gilt global")
 		_near(stats.therapy_damage, expected_damage, "Schadensforschung gilt für jede Grundbehandlung")
 		_near(stats.experience_gain_multiplier, 1.15, "Erfahrungsforschung gilt global")
 		_near(stats.defense, 6.0, "Defensivforschung gilt global")
 		_near(stats.life_regeneration_per_second, 0.75, "Regenerationsforschung gilt global")
 		_near(stats.movement_speed, 186.0, "Galoppforschung gilt global und bleibt ganzzahlig")
-		_near(stats.treatment_damage_with_base_bonus(0.60), expected_max_talent_damage, "Forschung und drei Talentstufen addieren ihre Basisprozente vor genau einer Ganzzahlauflösung")
+		_near(stats.treatment_damage_with_base_bonus(0.60), expected_max_talent_damage, "Permanente Forschung multipliziert auch den erhöhten Talentbasiswert vor genau einer Ganzzahlauflösung")
 
 		stats.apply_meta_progression(ranks)
 		_near(stats.therapy_damage, expected_damage, "Wiederholtes Anwenden vervielfacht den Grundschaden nicht")
@@ -123,12 +123,20 @@ func _test_global_research_is_idempotent() -> void:
 	var compatibility_stats := PlayerStats.new()
 	compatibility_stats.configure_prepared_treatment(treatments[&"treatment_precision"])
 	compatibility_stats.apply_prepared_progression({&"therapy_precision": 2}, [&"therapy_precision"])
-	_near(compatibility_stats.therapy_damage, 11.0, "Der kompatible alte Einsatzplanpfad verwendet ebenfalls fünf Prozent je Forschungsrang")
+	_near(compatibility_stats.therapy_damage, 10.0, "Der alte Einsatzplanpfad kann globale Forschung nicht mehr ein- oder ausschalten")
 	compatibility_stats.apply_prepared_progression({&"therapy_precision": 2}, [])
-	_near(compatibility_stats.therapy_damage, 10.0, "Der kompatible alte Einsatzplanpfad entfernt den neuen Forschungsfaktor verlustfrei")
+	_near(compatibility_stats.therapy_damage, 10.0, "Das Entfernen der inerten Alt-ID verändert Behandlungsschaden nicht")
 
 
 func _test_experience_fraction_is_carried() -> void:
+	var monster_state := RunState.new()
+	monster_state.active = true
+	monster_state.analysis_target = 1000
+	monster_state.set_analysis_gain_multiplier(RunState.MONSTER_EXPERIENCE_MULTIPLIER)
+	for _index in range(5):
+		monster_state.add_analysis(1)
+	_equal(monster_state.analysis, 6, "Fünf einzelne Monster-EXP ergeben deterministisch exakt zwanzig Prozent mehr")
+	_near(monster_state.analysis_gain_carry, 0.0, "Der globale Monsterbonus hinterlässt nach fünf Punkten keinen Rest")
 	var stats := PlayerStats.new()
 	stats.apply_meta_progression({&"experience_gain": 3})
 	var state := RunState.new()

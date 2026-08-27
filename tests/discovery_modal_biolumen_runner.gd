@@ -42,7 +42,7 @@ func _run() -> void:
 		&"test",
 		"Schnelltest",
 		"Der Schnelltest ordnet eine Probe medizinisch ein.",
-		"Der Befundfortschritt steigt sofort.",
+		"Der Ereignisfortschritt steigt sofort.",
 		&"target",
 		0,
 		&"mechanic"

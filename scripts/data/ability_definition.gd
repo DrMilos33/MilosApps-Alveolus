@@ -97,8 +97,8 @@ static func catalog() -> Dictionary:
 		),
 		&"ability_sample_pull": create(
 			&"ability_sample_pull", "Erfahrungszug", TargetMode.CURSOR_AREA, 18.0, &"sample_pull",
-			{"radius": 240.0, "finding_progress": 6.0}, 70,
+			{"radius": 240.0}, 70,
 			PackedStringArray(["active", "sample", "diagnosis"]),
-			"Zieht Erfahrung im Zielgebiet an und beschleunigt den Befund."
+			"Zieht Erfahrung im Zielgebiet an."
 		),
 	}

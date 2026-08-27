@@ -3,10 +3,8 @@ extends RefCounted
 
 var level_id: StringName = &""
 var expected_boss_time: float = -1.0
-var finding_revealed_at: float = -1.0
 var boss_spawned_at: float = -1.0
 var boss_defeated_at: float = -1.0
-var reserve_was_swapped: bool = false
 var ability_uses: Dictionary = {0: 0, 1: 0}
 var minimum_stability_ratio: float = 1.0
 var final_stability_ratio: float = 1.0
@@ -15,18 +13,12 @@ var stability_observed: bool = false
 func begin_run(case_level_id: StringName, boss_time: float = -1.0) -> void:
 	level_id = case_level_id
 	expected_boss_time = boss_time
-	finding_revealed_at = -1.0
 	boss_spawned_at = -1.0
 	boss_defeated_at = -1.0
-	reserve_was_swapped = false
 	ability_uses = {0: 0, 1: 0}
 	minimum_stability_ratio = 1.0
 	final_stability_ratio = 1.0
 	stability_observed = false
-
-func record_finding_revealed(elapsed: float) -> void:
-	if finding_revealed_at < 0.0:
-		finding_revealed_at = maxf(0.0, elapsed)
 
 func record_boss_spawned(elapsed: float) -> void:
 	if boss_spawned_at < 0.0:
@@ -35,9 +27,6 @@ func record_boss_spawned(elapsed: float) -> void:
 func record_boss_defeated(elapsed: float) -> void:
 	if boss_defeated_at < 0.0:
 		boss_defeated_at = maxf(0.0, elapsed)
-
-func record_reserve_swap() -> void:
-	reserve_was_swapped = true
 
 func record_ability_used(slot: int) -> void:
 	if slot < 0 or slot > 1:
@@ -66,13 +55,8 @@ func _condition_met(definition: MasteryObjectiveDefinition) -> bool:
 	match definition.condition:
 		&"victory":
 			return true
-		&"finding_before_boss":
-			var comparison_time := boss_spawned_at if boss_spawned_at >= 0.0 else expected_boss_time
-			return finding_revealed_at >= 0.0 and comparison_time >= 0.0 and finding_revealed_at <= comparison_time
 		&"final_stability_ratio":
 			return stability_observed and final_stability_ratio >= definition.threshold
-		&"reserve_swap":
-			return reserve_was_swapped
 		&"ability_uses_each":
 			return int(ability_uses.get(0, 0)) >= int(definition.threshold) and int(ability_uses.get(1, 0)) >= int(definition.threshold)
 		&"boss_defeat_window":

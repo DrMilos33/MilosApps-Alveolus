@@ -50,9 +50,9 @@ content definitions do not depend on scene nodes.
   bodies materialize per fixed tick, pending intent state is bounded to 64 and
   the 145-weight gameplay cap freezes the gate without debt. The six campaign
   cases and the spawn/obstacle practice tests use this path. Tutorial enemies,
-  boss-only practice, bosses, phase reinforcements, pressure targets and finding
-  spawns remain event-authored exceptions. Boss start and run end cancel all
-  pending standard-wave state before handles can be reused.
+  boss-only practice, bosses, phase reinforcements, pressure targets and other
+  scripted event spawns remain event-authored exceptions. Boss start and run end
+  cancel all pending standard-wave state before handles can be reused.
   Every standard-wave intent captures `RunConfig.regular_enemy_health_scale()`,
   which resolves to the authored case baseline for the entire run. Generic
   spawns and boss adds use the same baseline; explicit request and boss health
@@ -211,6 +211,14 @@ None of these effects depends on an equipped
 passive module. `RunBuildState.MOVEMENT_SPEED` is the common research/run-build
 surface; `TherapyAvatar` reads its resolved fixed-step value from `PlayerStats`.
 
+Every monster EXP pickup enters `RunState.add_analysis()` with its authored
+integer amount. `Game` composes the gain multiplier as the global 1.20 monster
+factor times research and the active case-trait factor. `RunState` awards the
+integer portion and carries the fractional remainder into later pickups in the
+same run; reset clears that carry. Five authored one-EXP pickups therefore
+produce exactly six EXP before further multipliers, without order-dependent
+rounding loss.
+
 Run upgrades are grouped by the resolved `<component>:<family>` key. Damage,
 attack speed and movement families contain weighted Common, Magic and Rare
 definitions, but `UpgradePoolBuilder` may offer at most one rarity of a family
@@ -243,9 +251,14 @@ not rendered inside the marker. Effect role, rarity role, title and focus state
 remain independent presentation signals.
 
 Talent combat effects are compiled once when the run build is configured.
-`PlayerStats.treatment_damage_with_base_bonus()` combines research percentage
-and the linear 20-percent-per-rank treatment talent against the immutable
-authored treatment base, then rounds exactly once before additive run cards.
+The linear 20-percent-per-rank treatment talent first changes the immutable
+authored treatment base. `RunBuildState` then adds every absolute treatment
+damage card and applies the tagged research factor
+`1 + 0.05 * therapy_precision_rank` to that current subtotal. The resolved
+treatment damage is rounded exactly once at the end; card copy keeps its
+authored absolute value. The pause stat DTO exposes the same live value plus a
+three-part detail containing base damage, additive upgrade damage and the
+research percentage.
 The Stoß damage talent contributes a tagged `ABILITY_DAMAGE +20` source; only
 then may its talent-gated +6/+10/+14 family enter the pool. Impulse projectiles
 carry raw shot damage into a Game-owned hit callback. That boundary resolves
@@ -563,10 +576,13 @@ income uses the central 3.75 gain factor and an additional run-only 1.50 factor;
 purchases and refunds do not. Run rewards apply
 `1 + 0.25 * bosses_defeated` and then
 `1 + 0.15 * case_trait_count`; the trait contribution is additive across the
-active traits and the complete reward is rounded exactly once. The one-time
-intro grant is exactly 30 for completion or skip and deliberately bypasses both
-run factors and both conditional multipliers, so it equals the canonical Stoß unlock cost
-without creating surplus research. Practice runs bypass this reward path.
+active traits and the complete reward is rounded exactly once. An intro loss
+always awards zero. Completion and skip share one persisted intro grant of
+exactly 30; after either route consumes it, every later intro victory or skip
+also awards zero. The grant deliberately
+bypasses both run factors and both conditional multipliers, so it equals the
+canonical Stoß unlock cost without creating surplus research. Practice runs
+bypass this reward path.
 
 `UISettingsState.show_discovery_info` is an additive Save-v7 setting with a
 default of `true` when the key or the complete settings object is absent;
@@ -620,8 +636,8 @@ visible runtime.
 Practice tests are a debug-build-only runtime surface, not campaign content.
 `PracticeScenarioDefinition` and `PracticeBossProfile` live outside
 `ContentCatalog.level_definitions()` and are carried through an explicit
-`RunContext.Mode.PRACTICE_TEST`. Practice results bypass discoveries, findings,
-mastery, rewards, records and every meta-save mutation. The separate
+`RunContext.Mode.PRACTICE_TEST`. Practice results bypass discoveries, mastery,
+rewards, records and every meta-save mutation. The separate
 `user://alveolus_test_tools.cfg` owns immunity, outgoing-damage and movement
 test values; it is never serialized through `UISettingsState` or
 `MetaProgressionState` and its UI is absent outside debug builds.
@@ -649,14 +665,15 @@ Product cases use `total_seconds <= 0` to mean no run deadline and schedule
 their boss at 300 seconds. Their standard spawn ramp uses the same 300-second
 horizon and 125-percent authored intervals, producing roughly four thirds of
 the previous total over five minutes at free capacity. The player baseline is
-50 life. A case with no prior completion starts without a trait or finding.
-Every subsequent attempt snapshots exactly two distinct visible traits and one
-hidden finding from the saved case seed. The first trait consumes the legacy
-first draw, the finding consumes the unchanged second draw, and only then is the
-second trait drawn from the remaining valid trait definitions. This preserves
-old first-trait/finding pairs while extending the contract. The seed advances
-only after a successful non-intro result, so failure and cancellation cannot
-silently reroll the case.
+50 life. A case with no prior completion starts without a trait. Every
+subsequent attempt snapshots exactly two distinct visible traits from the saved
+case seed. The first trait consumes the legacy first draw, one internal two-way
+compatibility draw is consumed without producing visible or mechanical content,
+and only then is the second trait drawn from the remaining valid definitions.
+Findings, reactions and finding progress have no active catalog, `RunContext`,
+HUD, Lexicon, mastery or runtime surface. Scripted case events and the two
+traits are the only case variations. The seed advances only after a successful
+non-intro result, so failure and cancellation cannot silently reroll the case.
 
 `RunContext.visible_trait_ids` is the canonical defensive-copy plural snapshot.
 Construction still accepts the legacy singular input and promotes it when no

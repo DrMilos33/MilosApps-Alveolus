@@ -39,10 +39,10 @@ func _run() -> void:
 		provider_calls[0] += 1
 		return {
 			"title": "Schnelltest",
-			"body": "Ein kompakter Befundhinweis." if not long_copy[0] else "Ein längerer Befundhinweis nutzt mehrere sinnvoll umgebrochene Zeilen und vergrößert die Karte nur um seinen tatsächlichen Inhalt.",
+			"body": "Ein kompakter Ereignishinweis." if not long_copy[0] else "Ein längerer Ereignishinweis nutzt mehrere sinnvoll umgebrochene Zeilen und vergrößert die Karte nur um seinen tatsächlichen Inhalt.",
 			"meta": "Passiv · 1 K",
 			"accent": AlveolusVisualTheme.COBALT,
-			"icon_kind": &"finding_progress",
+			"icon_kind": &"boss_phases",
 		}
 	controller.sync_sources(&"progression", [{
 		"id": &"research:quick_test",
@@ -64,7 +64,7 @@ func _run() -> void:
 	_check(controller.is_open() and not controller.is_explicit(), "Mouseover öffnet die Hoverkarte")
 	_check(provider_calls[0] == 1, "Der Provider wird beim Öffnen frisch ausgewertet")
 	var hover_copy := [controller.title_label.text, controller.body_label.text, controller.meta_label.text]
-	_check(hover_copy == ["Schnelltest", "Ein kompakter Befundhinweis.", "Passiv · 1 K"], "Hover übernimmt Titel, Body und Meta vollständig")
+	_check(hover_copy == ["Schnelltest", "Ein kompakter Ereignishinweis.", "Passiv · 1 K"], "Hover übernimmt Titel, Body und Meta vollständig")
 	_check(_inside_viewport(controller.card, Vector2(480.0, 320.0)), "Die Hoverkarte bleibt vollständig im Viewport: %s" % controller.card.get_global_rect())
 	_check(not controller.card.get_global_rect().intersects(source.get_global_rect()), "Die Hoverkarte überdeckt ihren Auslöser nicht")
 	_check(controller.card.get_global_rect().end.x <= source.get_global_rect().position.x - 5.5, "AUTO fällt am rechten Rand diagonal nach links oberhalb zurück")
@@ -90,7 +90,7 @@ func _run() -> void:
 	_check(controller.is_open() and controller.active_source() == source, "Stable-ID-Sync bewahrt die geöffnete Quellinstanz")
 	_check(opened_events[0] == 1 and closed_events[0] == 0, "Provider-Update erzeugt keinen Close/Open-Zyklus")
 	_check(provider_calls[0] == 2, "Stable-ID-Sync wertet ausschließlich die aktive Quelle neu aus")
-	_check(controller.body_label.text.contains("längerer Befundhinweis"), "Offener Tooltip übernimmt aktualisierte Rangdaten in-place")
+	_check(controller.body_label.text.contains("längerer Ereignishinweis"), "Offener Tooltip übernimmt aktualisierte Rangdaten in-place")
 	_check(controller.card.size.y > short_height, "In-place-Refresh misst die neue Inhaltshöhe erneut")
 	hover_copy = [controller.title_label.text, controller.body_label.text, controller.meta_label.text]
 
@@ -132,7 +132,7 @@ func _run() -> void:
 	preferred_source.size = Vector2(62.0, 48.0)
 	host.add_child(preferred_source)
 	controller.register_source(preferred_source, func() -> Dictionary:
-		return {"title": "Befund", "body": "+2 Monsterherden", "accent": AlveolusVisualTheme.CORAL}
+		return {"title": "Ereignis", "body": "+2 Monsterherden", "accent": AlveolusVisualTheme.CORAL}
 	)
 	preferred_source.mouse_entered.emit()
 	await _settle()
@@ -265,7 +265,7 @@ func _run() -> void:
 	replacement.size = Vector2(62.0, 48.0)
 	host.add_child(replacement)
 	controller.register_source(replacement, func() -> Dictionary:
-		return {"title": "Schnelltest II", "body": "+25 % Befund", "accent": AlveolusVisualTheme.COBALT}
+		return {"title": "Schnelltest II", "body": "+25 % Erfahrung", "accent": AlveolusVisualTheme.COBALT}
 	)
 	await _settle()
 	controller.close_all()

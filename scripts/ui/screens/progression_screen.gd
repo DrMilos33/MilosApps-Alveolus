@@ -34,8 +34,7 @@ const TALENT_SYMBOLS_BY_ID := {
 }
 const TALENT_SYMBOL_FALLBACKS: Array[StringName] = [
 	&"plan", &"components", &"reserve", &"target",
-	&"preanalysis", &"quick_test", &"second_opinion", &"reaction",
-	&"clock", &"deployment_routine", &"finding_progress", &"ability_emergency_support",
+	&"clock", &"deployment_routine", &"ability_emergency_support",
 	&"sample_logistics", &"therapy_precision", &"ability_defense_burst", &"treatment_pierce",
 ]
 

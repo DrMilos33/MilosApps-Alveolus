@@ -8,13 +8,13 @@ const DRAWN_KINDS: Array[StringName] = [
 	&"passive_research", &"antibiotic", &"automatic_therapy", &"treatment", &"immune",
 	&"neutrophil_orbit", &"support", &"supportive_oxygenation", &"practice", &"research", &"research_reward",
 	&"archive", &"levels", &"settings", &"stability_reserve", &"patient_stability", &"therapy_precision", &"treatment_precision", &"preanalysis",
-	&"second_opinion", &"analysis", &"analysis_pickup", &"sample", &"sample_logistics",
-	&"reaction", &"finding", &"finding_progress", &"plan", &"components", &"ability",
+	&"analysis", &"analysis_pickup", &"sample", &"sample_logistics",
+	&"plan", &"components", &"ability",
 	&"passive", &"reserve", &"treatment_spread", &"treatment_pierce",
 	&"ability_focus_field", &"ability_emergency_support", &"ability_defense_burst",
 	&"ability_treatment_line", &"ability_protection_field", &"ability_sample_pull",
 	&"unlock_spread_treatment", &"unlock_piercing_treatment", &"unlock_defense_burst",
-	&"unlock_treatment_line", &"unlock_protection_field", &"unlock_sample_pull", &"quick_test",
+	&"unlock_treatment_line", &"unlock_protection_field", &"unlock_sample_pull",
 	&"reserve_buffer", &"defense_readiness", &"deployment_routine", &"experience_gain",
 	&"defense_training", &"life_regeneration", &"movement_training", &"mobility",
 	&"damage_fire", &"damage_water", &"damage_earth", &"damage_wind",
@@ -124,12 +124,6 @@ func _draw() -> void:
 			_draw_cross(Vector2.ZERO, 0.58)
 		&"movement_training", &"mobility":
 			_draw_movement_training()
-		&"preanalysis", &"finding":
-			_draw_finding(false)
-		&"finding_progress":
-			_draw_finding(true)
-		&"second_opinion", &"reaction":
-			_draw_reaction()
 		&"plan":
 			_draw_plan()
 		&"components":
@@ -160,9 +154,6 @@ func _draw() -> void:
 		&"ability_sample_pull", &"unlock_sample_pull":
 			_draw_sample_vial()
 			_draw_inward_arrows()
-		&"quick_test":
-			_draw_finding(true)
-			_draw_spark(Vector2(15, -15), 3.5)
 		&"reserve_buffer":
 			_draw_shield()
 			_draw_spark(Vector2(15, -14), 3.5)
@@ -310,21 +301,6 @@ func _draw_inward_arrows() -> void:
 		draw_line(start, end, accent, 2.0, true)
 		draw_line(end, end + Vector2(4.0 * direction, -4), accent, 2.0, true)
 		draw_line(end, end + Vector2(4.0 * direction, 4), accent, 2.0, true)
-
-func _draw_finding(show_progress: bool) -> void:
-	draw_arc(Vector2(-4, -4), 11.0, 0.0, TAU, 24, accent, 2.8, true)
-	draw_circle(Vector2(-4, -4), 3.2, Color(accent, 0.55))
-	draw_line(Vector2(4, 4), Vector2(17, 17), accent, 3.5, true)
-	if show_progress:
-		draw_arc(Vector2(-4, -4), 17.0, -PI * 0.5, PI * 0.80, 18, Color(accent, 0.68), 2.2, true)
-
-func _draw_reaction() -> void:
-	draw_line(Vector2(-19, 0), Vector2(-4, 0), accent, 3.0, true)
-	draw_circle(Vector2(-4, 0), 3.5, accent)
-	draw_line(Vector2(-1, -2), Vector2(14, -15), accent, 3.0, true)
-	draw_line(Vector2(-1, 2), Vector2(14, 15), accent, 3.0, true)
-	draw_colored_polygon(PackedVector2Array([Vector2(12, -19), Vector2(21, -14), Vector2(12, -9)]), accent)
-	draw_colored_polygon(PackedVector2Array([Vector2(12, 9), Vector2(21, 14), Vector2(12, 19)]), Color(accent, 0.55))
 
 func _draw_plan() -> void:
 	draw_rect(Rect2(-15, -18, 30, 36), Color(accent, 0.12), true)

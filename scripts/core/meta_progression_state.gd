@@ -486,7 +486,6 @@ func advance_case_seed(level_id: StringName) -> int:
 func create_run_context(
 	level_id: StringName,
 	visible_trait_id: StringName = &"",
-	hidden_finding_id: StringName = &"",
 	visible_trait_ids: Array[StringName] = []
 ) -> RunContext:
 	return RunContext.create(
@@ -495,7 +494,6 @@ func create_run_context(
 		get_prepared_loadout(level_id),
 		talent_ranks,
 		visible_trait_id,
-		hidden_finding_id,
 		visible_trait_ids
 	)
 

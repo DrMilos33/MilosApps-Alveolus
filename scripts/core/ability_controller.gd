@@ -9,7 +9,6 @@ signal feedback_requested(result: AbilityExecutionResult)
 signal cooldown_changed(slot: int, remaining: float, total: float)
 signal effect_spawned(effect_id: StringName, center: Vector2, radius: float, duration: float)
 signal shield_changed(current: float, maximum: float)
-signal finding_progress_requested(amount: float)
 
 const SLOT_Q := 0
 const SLOT_E := 1
@@ -298,14 +297,10 @@ func _execute_effect(command: AbilityCommand, definition: AbilityDefinition, tar
 		&"sample_pull":
 			var pull_radius := build.value(RunBuildState.ABILITY_RADIUS, float(values.get("radius", 230.0)), definition.tags)
 			var pull_result := _pull_samples(target, pull_radius)
-			var finding_multiplier := build.value(RunBuildState.FINDING_PROGRESS, 1.0, definition.tags)
-			var finding_progress := float(values.get("finding_progress", 6.0)) * finding_multiplier
-			finding_progress_requested.emit(finding_progress)
 			result.radius = pull_radius
 			result.duration = 0.52
 			result.affected_handles = pull_result.handles
 			result.visual_points = pull_result.points
-			result.values = {"finding_progress": finding_progress}
 	return result
 
 func _spawn_zone(effect_id: StringName, center: Vector2, values: Dictionary, tags: PackedStringArray) -> int:
@@ -475,15 +470,6 @@ func _enemy_radius(enemy: Object) -> float:
 		return float(enemy.definition.radius)
 	return 0.0
 
-func _enemy_definition_id(enemy: Object) -> StringName:
-	if enemy == null:
-		return &""
-	var definition_value: Variant = enemy.get("definition")
-	if definition_value == null or not definition_value is Object:
-		return &""
-	var id_value: Variant = (definition_value as Object).get("id")
-	return StringName(str(id_value)) if id_value != null else &""
-
 func _apply_damage_and_displacement(
 	enemy: Object,
 	center: Vector2,
@@ -495,10 +481,7 @@ func _apply_damage_and_displacement(
 ) -> void:
 	if source == &"ability_defense_burst" and enemy.has_method("apply_defense_burst_shooting_lock"):
 		enemy.apply_defense_burst_shooting_lock()
-	var resolved_amount := amount
-	if _enemy_definition_id(enemy) == &"bacterial_cluster":
-		resolved_amount *= build.value(&"group_area_effect", 1.0)
-	resolved_amount = CombatDamageResolver.resolve_against_enemy(resolved_amount, damage_profile, enemy)
+	var resolved_amount := CombatDamageResolver.resolve_against_enemy(amount, damage_profile, enemy)
 	if resolved_amount > 0.0:
 		enemy.take_damage(resolved_amount, source)
 	if knockback > 0.0:

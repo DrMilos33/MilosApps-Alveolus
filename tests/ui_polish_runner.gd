@@ -121,22 +121,6 @@ func _run() -> void:
 	_check(available_talent.get_meta(&"item_state", &"") == &"available" and bool(available_talent.get_meta(&"item_interactive", false)), "Nach aktiver Wurzel sind die vier Behandlungszweige ohne kuenstliche Zwischenstufe verfuegbar")
 	_check(not hud.talent_buttons.has(&"piercing_return"), "Die reservierte Revision-3-ID piercing_return erscheint nicht mehr im aktiven Talentbaum")
 
-	var finding_reactions: Array = [
-		{"id": &"observe", "title": "Weiter beobachten", "description": "Befundfortschritt erhöhen."},
-		{"id": &"stabilize", "title": "Stabilisieren", "description": "Kurzzeitig Leben schützen."},
-		{"id": &"treat", "title": "Gezielt behandeln", "description": "Behandlung verstärken."},
-	]
-	hud.show_finding({
-		"title": "Lokaler Herd",
-		"medical_text": "Ein lokaler Entzündungsherd belastet das umliegende Gewebe.",
-		"gameplay_text": "+2 Bakteriengruppen",
-	}, finding_reactions)
-	await process_frame
-	await process_frame
-	_assert_compact_modal(hud.finding_panel, 432.0, "Befund")
-	_check(hud.finding_copy_grid.columns == 1 and hud.finding_copy_grid.get_meta(&"alveolus_component", &"") == &"finding_effect_line", "Befund zeigt nur eine kompakte mechanische Effektzeile")
-	var finding_effect := hud.finding_copy_grid.get_child(0) as Label
-	_check(finding_effect != null and finding_effect.text == "+2 Bakteriengruppen" and hud.finding_copy_grid.find_children("*", "PanelContainer", true, false).is_empty(), "Befund verzichtet auf medizinische und spielerische Erklärungskacheln")
 	hud.show_end(levels[2], false, "Das Leben ist auf null gefallen.", 95.0, 2, 8, 20, false)
 	hud.set_result_reward_presentations([
 		RewardPresentation.research(20),
@@ -448,14 +432,14 @@ func _test_icon_assets() -> void:
 		_assert_normalized_texture(immune, "Abwehrzelle")
 
 	var icon := SimpleIcon.new()
-	icon.configure(&"finding", AlveolusVisualTheme.COBALT)
+	icon.configure(&"plan", AlveolusVisualTheme.COBALT)
 	_check(not icon.framed, "SimpleIcon rendert standardmäßig nur die Glyph")
 	icon.set_framed(true)
 	_check(icon.framed, "SimpleIcon kann den Kompatibilitätsrahmen explizit aktivieren")
 	icon.free()
 
 	var required_ids: Array[StringName] = [
-		&"analysis_pickup", &"reaction", &"finding", &"finding_progress", &"plan", &"components",
+		&"analysis_pickup", &"plan", &"components",
 		&"ability", &"passive", &"reserve", &"antibiotic", &"immune", &"support",
 		&"practice", &"research", &"levels", &"lexicon", &"settings",
 	]

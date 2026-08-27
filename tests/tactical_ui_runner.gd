@@ -40,7 +40,7 @@ func _run() -> void:
 		{"id": &"focus", "title": "Fokusfeld", "description": "Stärkt einen Bereich", "kind": 1, "capacity_cost": 2, "selected": true, "visual_id": &"ability_focus_field"},
 		{"id": &"emergency", "title": "Notfallhilfe", "description": "+14 Leben", "kind": 1, "capacity_cost": 2, "selected": true, "visual_id": &"ability_emergency_support"},
 		{"id": &"steady", "title": "Ruhige Hand", "description": "+2 % Schaden", "kind": 2, "capacity_cost": 1},
-		{"id": &"rapid_test", "title": "Schnelltest", "description": "+20 % Befund", "kind": 2, "capacity_cost": 1},
+		{"id": &"guard_test", "title": "Schutzroutine", "description": "+2 % Abwehr", "kind": 2, "capacity_cost": 1},
 		{"id": &"shield", "title": "Schildfeld", "description": "Reduziert Schaden im Zielgebiet", "kind": 1, "capacity_cost": 2, "visual_id": &"ability_protection_field"},
 		# Dense fixture for the approved two-by-two picker. These IDs exist only in
 		# this UI test and deliberately do not add production loadout content.
@@ -656,30 +656,6 @@ func _run() -> void:
 	_check(ability_detail_meta.contains("Abklingzeit: 16 s") and ability_detail_meta.contains("Radius: 6") and not ability_detail_meta.contains("165") and not ability_detail_meta.to_lower().contains("px"), "Fähigkeitsdetails ergänzen ausschließlich strukturierte Fakten und zentrale Radiusstufen")
 	run_ability_button.mouse_exited.emit()
 	await process_frame
-	hud.update_finding_progress(18, 30)
-	_check(hud.finding_progress_label.text == "BEFUND · 18 / 30", "Befundleiste zeigt exakten Fortschritt")
-	_check(hud.finding_progress_panel.size.y <= 30.5 and hud.finding_progress_bar.custom_minimum_size.y <= 5.0, "Befundfortschritt bleibt als dezente, niedrige HUD-Zeile sichtbar")
-
-	var confirmed: Array = []
-	hud.finding_confirmed.connect(func(reaction_id: StringName, incoming: StringName, outgoing: StringName) -> void: confirmed.append([reaction_id, incoming, outgoing]))
-	hud.show_finding(
-		{"title": "Gruppenbildung", "medical_text": "Mehrere Erreger sammeln sich.", "gameplay_text": "Bakteriengruppen treten häufiger auf."},
-		[
-			{"id": &"area", "title": "Flächenwirkung", "effect": "Gruppen schneller kontrollieren"},
-			{"id": &"control", "title": "Kontrolle", "effect": "Tempo senken"},
-			{"id": &"protect", "title": "Patientenschild", "effect": "Gegnerschaden senken"}
-		],
-		null,
-		[]
-	)
-	_check(hud.finding_screen.reaction_grid().get_child_count() == 3, "Befund bietet drei Reaktionen")
-	_check(hud.finding_screen.reserve_panel() == null and hud.finding_screen.swap_action() == null, "Der Befund baut keine Reservebedienung, solange das System ruht")
-	var area_reaction := hud.finding_screen.reaction_action(&"area")
-	_check(area_reaction != null and hud.finding_screen.confirm_action().disabled, "Die neue Befundaktion beginnt ohne versteckte Vorauswahl")
-	area_reaction.pressed.emit()
-	_check(hud.finding_screen.selected_reaction_id() == &"area" and not hud.finding_screen.confirm_action().disabled, "Die Reaktionswahl aktiviert genau die ausdrückliche Befundbestätigung")
-	hud.finding_screen.confirm_action().pressed.emit()
-	_check(confirmed == [[&"area", &"", &""]], "Befund meldet die Reaktion ohne versteckten Reservetausch")
 
 	var level := ContentCatalog.level_definitions()[1]
 	hud.show_end(level, true, "Kontrolliert", 120.0, 4, 50, 20, false)
@@ -698,9 +674,6 @@ func _run() -> void:
 		_check(hud.preparation_plan_panel.visible and hud.preparation_catalog_panel.visible, "Plan und Editor bleiben bei %s ohne Zwischenscreen erreichbar" % viewport_size)
 		_check(_inside_viewport(hud.preparation_start_button, viewport_size), "Startbutton bleibt bei %s im Bild" % viewport_size)
 		_check(_inside_viewport(hud.preparation_catalog, viewport_size), "Komponentenkatalog bleibt bei %s im Bild" % viewport_size)
-		hud.show_finding({"title": "Test", "gameplay_text": "Schaden"}, [{"id": &"a", "title": "A"}, {"id": &"b", "title": "B"}, {"id": &"c", "title": "C"}, {"id": &"d", "title": "D"}])
-		await process_frame
-		_check(_inside_viewport(hud.finding_confirm_button, viewport_size), "Befundaktion bleibt bei %s im Bild" % viewport_size)
 
 	hud.queue_free()
 	sound_service.queue_free()

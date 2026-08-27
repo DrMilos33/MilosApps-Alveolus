@@ -71,6 +71,7 @@ func _test_immutable_section_view_model() -> PauseOverlayViewModel:
 	_check(view_model.stat_at(3).formatted_value() == "10", "Verteidigung transportiert den absoluten Ratingwert sichtbar")
 	_check(view_model.stat_at(3).detail_text() == "Effektive Schadensminderung: 18,4 %", "Effektive Verteidigung bleibt ausschließlich als Hoverdetail erhalten")
 	_check(view_model.stat_at(6).icon_id() == &"damage_fire" and view_model.stat_at(6).accent_role() == &"coral", "Typresistenzen verwenden semantische Icon- und Farbrollen")
+	_check(view_model.stat_at(10).detail_text() == "Basisschaden: 10\nSchaden durch Upgrades: +31\n% erhöht: +5 %", "Behandlungsschaden transportiert seine drei live aufgelösten Mouseover-Bestandteile")
 
 	(source_sections[0] as Dictionary)["title"] = "Fremde Mutation"
 	var source_rows := (source_sections[0] as Dictionary)["rows"] as Array
@@ -367,7 +368,7 @@ func _stat_sections(life_value: String = "80 / 90", include_second_ability: bool
 			"id": &"treatment:treatment_precision",
 			"title": "Impuls",
 			"rows": [
-				{"id": &"damage", "label": "Schaden", "value": "16"},
+				{"id": &"damage", "label": "Schaden", "value": "43", "detail_text": "Basisschaden: 10\nSchaden durch Upgrades: +31\n% erhöht: +5 %"},
 				{"id": &"interval", "label": "Intervall", "value": "0,82 s"},
 				{"id": &"targets", "label": "Ziele", "value": "1"},
 				{"id": &"range_stage", "label": "Reichweite", "value": "5"},

@@ -186,7 +186,7 @@ func _test_screen_contract(view_model: RunHUDViewModel) -> void:
 	_check(hud.analysis_value_label().text == "Lv 3 · 7/12" and hud.analysis_bar().value == 7.0, "Proben und Analyse bleiben als kompakte Zielanzeige sichtbar")
 	_check(hud.stability_panel().size.y <= 30.0 and hud.stability_panel().size.x >= 360.0 and hud.stability_panel().find_child("StabilityIcon", true, false) == null, "Leben nutzt einen niedrigen, breiten und zentrierten Balken ohne redundantes Vital-Icon")
 	_check(hud.stability_panel().get_meta(&"alveolus_component", &"") == &"transparent_hud_vital" and is_zero_approx(hud.stability_panel().self_modulate.a), "Leben schwebt ohne Kartenfläche über dem Run")
-	_check(hud.analysis_panel().size.y <= 30.0 and is_zero_approx(hud.analysis_panel().self_modulate.a), "Befund und Level bleiben ohne Kachel als dezente Zielzeile kompakt")
+	_check(hud.analysis_panel().size.y <= 30.0 and is_zero_approx(hud.analysis_panel().self_modulate.a), "Erfahrung und Level bleiben ohne Kachel als dezente Zielzeile kompakt")
 	_check(hud.timer_panel().size.x <= 82.0 and hud.timer_panel().global_position.x > 640.0 and is_zero_approx(hud.timer_panel().self_modulate.a), "Rundendauer sitzt freistehend oben rechts")
 	_check(
 		is_zero_approx(hud.defeat_research_reward_panel().self_modulate.a)

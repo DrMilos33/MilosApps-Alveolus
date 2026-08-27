@@ -1,6 +1,8 @@
 class_name RunState
 extends RefCounted
 
+const MONSTER_EXPERIENCE_MULTIPLIER := 1.20
+
 signal stability_changed(current: float, maximum: float)
 signal analysis_changed(current: int, target: int, level: int)
 signal level_up_requested(level: int)

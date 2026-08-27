@@ -30,7 +30,7 @@ func _test_categories_and_terms() -> void:
 	var required_terms := [
 		&"patient_stability", &"analysis", &"level", &"effect", &"treatment_speed", &"interval",
 		&"range", &"targets", &"projectiles", &"penetration", &"immune_path", &"support_path",
-		&"shield", &"finding", &"finding_progress", &"case_trait", &"basic_treatment",
+		&"shield", &"case_trait", &"basic_treatment",
 		&"active_ability", &"passive_module", &"reserve", &"capacity", &"research",
 		&"talent_points", &"mastery", &"enemy_damage", &"defense", &"life_regeneration",
 		&"movement_speed", &"experience_gain", &"resistance", &"fire_damage", &"water_damage", &"earth_damage", &"wind_damage",

@@ -29,7 +29,7 @@ func _run() -> void:
 	_test_case_trait_reward_bonus()
 	_test_preparation_and_determinism(game)
 	_test_quick_restart_contract(game)
-	await _test_run_abilities_finding_and_mastery(game)
+	await _test_run_abilities_and_mastery(game)
 	await _test_pause_abort_and_intro_regression(game)
 	_test_save_v7_roundtrip(game)
 
@@ -105,7 +105,7 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	_check(bool((game.hud.preparation_slot_buttons[LoadoutSlotId.TREATMENT] as Button).get_meta(&"selected_slot", false)), "Der zuerst bediente Behandlungsplatz ist sichtbar ausgewählt")
 	var first_seed: int = game.pending_run_context.seed
 	_check(first_seed != 0, "Der vorbereitete Fall besitzt einen stabilen Seed")
-	_check(game.pending_run_context.visible_trait_ids.is_empty() and game.pending_run_context.hidden_finding_id == &"", "Der erste Versuch vor einem Abschluss besitzt keine Fallmerkmale und keinen Zufallsbefund")
+	_check(game.pending_run_context.visible_trait_ids.is_empty(), "Der erste Versuch vor einem Abschluss besitzt keine Fallmerkmale")
 	_check(game.pending_loadout_draft.validate().valid, "Das Default-Loadout ist gegen den aktuellen Testkatalog gültig")
 
 	game._on_back_requested()
@@ -126,16 +126,13 @@ func _test_preparation_and_determinism(game: Node) -> void:
 	_check(game.hud.preparation_level_facts != null and game.hud.preparation_boss_fact != null, "Nur der konkrete abgeschlossene Fall enthüllt Dauer und Bossspawn")
 	first_seed = game.pending_run_context.seed
 	var first_traits: Array[StringName] = game.pending_run_context.visible_trait_ids.duplicate()
-	var first_finding: StringName = game.pending_run_context.hidden_finding_id
 	_check(first_traits.size() == 2 and first_traits[0] != first_traits[1], "Nach dem ersten Fallsieg erscheinen genau zwei unterschiedliche sichtbare Fallmerkmale")
 	_check(first_traits.all(func(trait_id: StringName) -> bool: return game.case_traits.has(trait_id)), "Beide sichtbaren Fallmerkmale stammen aus dem Katalog")
-	_check(first_finding != &"" and game.finding_definitions.has(first_finding), "Nach einem Abschluss stammt der verborgene Befund aus dem Katalog")
 	game.meta.register_level_result(level, false, 90.0, 2, 12)
 	game._on_back_requested()
 	game._on_level_selected(&"localized_focus")
 	_check(game.pending_run_context.seed == first_seed, "Niederlage und erneutes Öffnen bewahren den Fall-Seed")
 	_check(game.pending_run_context.visible_trait_ids == first_traits, "Niederlage und erneutes Öffnen bewahren dasselbe geordnete Merkmalspaar")
-	_check(game.pending_run_context.hidden_finding_id == first_finding, "Befund ist für denselben Seed deterministisch")
 
 	var loadout: PreparedLoadout = game.pending_preparation_loadout.duplicate_loadout()
 	game._on_preparation_slot_component_requested(LoadoutSlotId.ACTIVE_1, &"ability_defense_burst")
@@ -228,7 +225,7 @@ func _test_quick_restart_contract(game: Node) -> void:
 	game.current_upgrade_options = saved_options
 	game._set_flow(GameFlowState.State.RUNNING)
 
-func _test_run_abilities_finding_and_mastery(game: Node) -> void:
+func _test_run_abilities_and_mastery(game: Node) -> void:
 	var ability_buttons: Array[Button] = game.hud.run_hud_screen.ability_buttons()
 	_check(ability_buttons.size() == 2 and not ability_buttons[0].disabled and not ability_buttons[1].disabled, "Das RunHUDOverlay exponiert beide belegten Fähigkeiten als aktive UI-Aktionen")
 	ability_buttons[0].pressed.emit()
@@ -292,25 +289,6 @@ func _test_run_abilities_finding_and_mastery(game: Node) -> void:
 	_check(is_equal_approx(q_runtime.cooldown_remaining, q_before_pause), "Aktive Cooldowns frieren in manueller Pause ein")
 	game._unhandled_input(pause_event)
 	_check(game.flow_state == GameFlowState.State.RUNNING and not paused, "Escape setzt die manuelle Pause fort")
-
-	var target: int = game.finding_controller.target
-	_check(target > 0, "Der Hauptfall besitzt eine Befundschwelle")
-	game.finding_controller.add_progress(target)
-	_check(game.flow_state == GameFlowState.State.FINDING_PAUSE and paused, "Voller Befundfortschritt öffnet eine echte Befundpause")
-	_check(game.finding_controller.revealed and not game.finding_controller.resolved, "Der Befund wartet auf eine Reaktionswahl")
-	var finding: FindingDefinition = game.finding_controller.definition
-	var reaction_id: StringName = finding.reaction_ids[0]
-	var passive_ids_before_finding: Array[StringName] = game.active_loadout.passive_ids.duplicate()
-	_check(game.hud.finding_screen.reserve_panel() == null and game.hud.finding_screen.swap_action() == null, "Der Befund baut die ruhende Reservebedienung nicht auf")
-	var reaction_action: Button = game.hud.finding_screen.reaction_action(reaction_id)
-	_check(reaction_action != null and game.hud.finding_screen.confirm_action().disabled, "Der Befund wartet auf eine ausdrückliche Reaktionswahl")
-	reaction_action.pressed.emit()
-	_check(game.hud.finding_screen.selected_reaction_id() == reaction_id and not game.hud.finding_screen.confirm_action().disabled, "Die gewählte Reaktion aktiviert die neue Bestätigungsaktion")
-	game.hud.finding_screen.confirm_action().pressed.emit()
-	_check(game.flow_state == GameFlowState.State.RUNNING and not paused, "Reaktionswahl setzt den Run fort")
-	_check(game.finding_controller.resolved and game.active_reaction.id == reaction_id, "Die gewählte Befundreaktion wird exakt angewendet")
-	_check(game.active_loadout.passive_ids == passive_ids_before_finding and game.active_loadout.reserve_id == &"", "Eine Befundreaktion verändert den reservefreien Plan nicht versteckt")
-	_check(not game.mastery_tracker.reserve_was_swapped, "Der ruhende Reservepfad erzeugt keinen versteckten Trackerzustand")
 
 	var points_before: int = game.meta.talent_points_earned()
 	for _boss_index in range(game.state.boss_count_target):
@@ -389,7 +367,6 @@ func _run_context_snapshot(context: RunContext) -> Dictionary:
 		"level_id": context.level_id,
 		"seed": context.seed,
 		"visible_trait_ids": context.visible_trait_ids.duplicate(),
-		"hidden_finding_id": context.hidden_finding_id,
 		"loadout": context.loadout_snapshot.to_dict() if context.loadout_snapshot != null else {},
 		"talents": context.talent_snapshot.duplicate(true),
 	}

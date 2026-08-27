@@ -198,7 +198,7 @@ static func _illustration_id(id: StringName) -> StringName:
 static func _gameplay_related_ids(id: StringName) -> Array[StringName]:
 	match id:
 		&"analysis_pickup":
-			return [&"analysis", &"level", &"finding"]
+			return [&"analysis", &"level"]
 		&"patient_stability":
 			return [&"patient_stability", &"enemy_damage", &"defense", &"life_regeneration"]
 		&"automatic_therapy":

@@ -51,8 +51,6 @@ const DEFAULT_SPAWN_CADENCE_DELAY := 0.30
 @export_multiline var victory_text: String
 @export_multiline var failure_text: String
 @export var visible_trait_ids: Array[StringName] = []
-@export var hidden_finding_ids: Array[StringName] = []
-@export var finding_progress_target: int = 0
 @export var case_pressure_targets_stationary: bool = false
 @export var case_pressure_target_health_multiplier: float = 1.0
 ## Optional authored pressure schedule. Runtime configuration receives its own
@@ -109,13 +107,9 @@ static func create(
 	return definition
 
 func configure_case_variation(
-	traits: Array[StringName],
-	findings: Array[StringName],
-	finding_target: int
+	traits: Array[StringName]
 ) -> LevelDefinition:
 	visible_trait_ids = traits.duplicate()
-	hidden_finding_ids = findings.duplicate()
-	finding_progress_target = maxi(0, finding_target)
 	return self
 
 

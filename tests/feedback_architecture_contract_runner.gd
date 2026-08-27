@@ -91,6 +91,30 @@ func _test_reward_preview() -> void:
 func _test_stat_sections_and_headings() -> void:
 	var treatment: TreatmentDefinition = TreatmentDefinition.catalog()[&"treatment_precision"]
 	var abilities := AbilityDefinition.catalog()
+	var researched_stats := PlayerStats.new()
+	researched_stats.configure_prepared_treatment(treatment)
+	researched_stats.apply_meta_progression({&"therapy_precision": 1})
+	var researched_build := RunBuildState.from_treatment(treatment)
+	researched_stats.bind_run_build(researched_build, treatment)
+	for index in range(31):
+		_true(researched_build.add_modifier_dictionary(&"damage_breakdown_fixture", index, {
+			"stat_id": RunBuildState.TREATMENT_DAMAGE,
+			"operation": &"add",
+			"value": 1.0,
+			"required_tags": PackedStringArray(["treatment"]),
+		}), "Absoluter Schadenspunkt %d wird übernommen" % (index + 1))
+	researched_stats.refresh_resolved_run_build()
+	_equal(researched_stats.therapy_damage, 43.0, "Stärkere Behandlung multipliziert Basis plus 31 Run-Schaden und rundet einmal")
+	var researched_sections := researched_stats.stat_sections()
+	_equal(_section_value(researched_sections, &"treatment:treatment_precision", &"damage"), "43", "Pausenwert entspricht dem live aufgelösten Behandlungsschaden")
+	_equal(
+		_section_detail(researched_sections, &"treatment:treatment_precision", &"damage"),
+		"Basisschaden: 10\nSchaden durch Upgrades: +31\n% erhöht: +5 %",
+		"Mouseover zerlegt den Impulsschaden in Basis, absolute Upgrades und permanente Forschung"
+	)
+	var researched_preview := researched_stats.preview_upgrade(_upgrade(&"precision_refinement"))
+	_equal(researched_preview.effect_text, "+3 Schaden", "Forschung verändert nicht den sichtbaren absoluten Kartenwert")
+	_equal(researched_preview.before_after_text, "43 Schaden  >  46 Schaden", "Upgradevorschau zeigt trotzdem den korrekt neu aufgelösten Gesamtwert")
 	var prepared: Array[AbilityDefinition] = [abilities[&"ability_defense_burst"], abilities[&"ability_treatment_line"]]
 	var stats := PlayerStats.new()
 	stats.configure_prepared_treatment(treatment)
@@ -182,6 +206,16 @@ func _section_value(sections: Array[StatSectionViewModel], section_id: StringNam
 		for row in section.rows():
 			if StringName(row.get("id", &"")) == row_id:
 				return String(row.get("value", ""))
+	return ""
+
+
+func _section_detail(sections: Array[StatSectionViewModel], section_id: StringName, row_id: StringName) -> String:
+	for section in sections:
+		if section == null or section.id() != section_id:
+			continue
+		for row in section.rows():
+			if StringName(row.get("id", &"")) == row_id:
+				return String(row.get("detail_text", ""))
 	return ""
 
 
