@@ -203,9 +203,23 @@ func _run() -> void:
 						hud.preparation_catalog_panel.size.x > hud.preparation_plan_panel.size.x + 0.5,
 						"%s gibt dem Komponenten-Editor auf dem Desktop mehr Breite als dem Plan" % context
 					)
+					_check(hud.preparation_socket_link.visible and hud.preparation_editor_link_port.visible, "%s verbindet den gewählten Desktop-Socket mit dem Instrumentenfach" % context)
+					var link_points := hud.preparation_socket_link.points
+					var selected_socket := hud.preparation_slot_buttons.get(hud.planning_snapshot.selected_slot_id, null) as Control
+					var link_start_global := hud.preparation_socket_link.to_global(link_points[0]) if link_points.size() == 2 else Vector2.ZERO
+					var link_finish_global := hud.preparation_socket_link.to_global(link_points[1]) if link_points.size() == 2 else Vector2.ZERO
+					_check(
+						selected_socket != null and link_points.size() == 2 \
+							and absf(link_start_global.x - (selected_socket.get_global_rect().end.x - 10.0)) <= 1.0 \
+							and absf(link_finish_global.x - (hud.preparation_catalog_panel.get_global_rect().position.x + 1.0)) <= 1.0,
+						"%s verankert die Leitung nach dem Größenwechsel ausschließlich zwischen Socket und Instrumentenfach" % context
+					)
+				else:
+					_check(not hud.preparation_socket_link.visible and not hud.preparation_editor_link_port.visible, "%s ersetzt die Leitung im gestapelten Kompaktmodus durch die Identität im Editorkopf" % context)
+				_check(hud.preparation_editor_slot_icon != null and hud.preparation_editor_slot_icon.is_visible_in_tree(), "%s hält die gewählte Socket-Identität im Instrumentenkopf sichtbar" % context)
 				_check(
 					_controls_inside(hud.preparation_plan_panel, hud.preparation_slot_buttons.values()),
-					"%s enthält alle fünf Planplätze vollständig in der Plankarte" % context
+					"%s enthält alle drei Planplätze vollständig im Einsatzkit" % context
 				)
 				for slot_value in hud.preparation_slot_buttons.values():
 					var slot := slot_value as Button
@@ -256,7 +270,8 @@ func _run() -> void:
 				)
 			if screen["id"] == "preparation_picker":
 				_check(hud.planning_snapshot.selected_slot_id == LoadoutSlotId.ACTIVE_1 and bool((hud.preparation_slot_buttons[LoadoutSlotId.ACTIVE_1] as Button).get_meta(&"selected_slot", false)), "%s markiert den explizit gewählten Aktivplatz sichtbar" % context)
-				_check(hud.preparation_catalog.columns == 2, "%s bewahrt das dichte Zweispaltenraster bis 960x540 bei 200 %%" % context)
+				var expected_catalog_columns := 2 if hud.root.size.x >= 760.0 else 1
+				_check(hud.preparation_catalog.columns == expected_catalog_columns, "%s wechselt das Instrumentenfach responsiv auf %d Spalten" % [context, expected_catalog_columns])
 				var visible_remove_actions := _visible_controls_named(hud.preparation_overlay, &"RemoveSelectedSlot")
 				_check(visible_remove_actions.size() == 1, "%s zeigt genau eine Entfernen-Aktion" % context)
 				if visible_remove_actions.size() == 1:
@@ -334,6 +349,7 @@ func _run() -> void:
 						)
 			if screen["id"] == "preparation_intro_locked":
 				_check(not hud.preparation_workspace.visible, "%s verbirgt den scheinbar editierbaren Plan vollständig" % context)
+				_check(not hud.preparation_socket_link.visible and not hud.preparation_editor_link_port.visible, "%s verbirgt die dekorative Socket-Verbindung hinter dem Intro-Lock" % context)
 				_check(hud.preparation_lock_panel.is_visible_in_tree() and _controls_inside(hud.preparation_workspace_host, [hud.preparation_lock_panel]), "%s zeigt eine vollständig enthaltene Padlock-Fläche" % context)
 				_check(hud.preparation_start_button.is_visible_in_tree() and _inside_viewport(hud.preparation_start_button, canvas_size) and not hud.preparation_start_button.disabled and not hud.preparation_remove_button.visible, "%s lässt nur den sichtbaren vorbereiteten Start statt Planmutationen zu" % context)
 			if screen["id"] == "settings":

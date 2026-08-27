@@ -5,6 +5,7 @@ const FULL_CAPTURE_COUNT := 32
 const STEP_ONE_CAPTURE_COUNT := 4
 const STEP_TWO_CAPTURE_COUNT := 3
 const STEP_THREE_CAPTURE_COUNT := 1
+const STEP_FOUR_CAPTURE_COUNT := 3
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
@@ -54,6 +55,8 @@ func _capture_views() -> void:
 		await _capture_step_two(game)
 	elif capture_scope == "step3":
 		await _capture_step_three(game)
+	elif capture_scope == "step4":
+		await _capture_step_four(game)
 	else:
 		await _capture_suite(game)
 
@@ -66,6 +69,8 @@ func _capture_views() -> void:
 		expected_count = STEP_TWO_CAPTURE_COUNT
 	elif capture_scope == "step3":
 		expected_count = STEP_THREE_CAPTURE_COUNT
+	elif capture_scope == "step4":
+		expected_count = STEP_FOUR_CAPTURE_COUNT
 	if capture_failed or capture_count != expected_count:
 		push_error("Visuelle Abnahme unvollständig: %d/%d für %s" % [capture_count, expected_count, capture_suffix])
 		quit(1)
@@ -120,6 +125,37 @@ func _capture_step_one(game: Node) -> void:
 	)
 	await _settle()
 	await _capture("result_abilities")
+
+
+func _capture_step_four(game: Node) -> void:
+	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
+	game.meta.research_ranks[&"unlock_piercing_treatment"] = 1
+	game.meta.research_ranks[&"unlock_defense_burst"] = 1
+	game.selected_level = game.levels[1]
+	game._show_preparation()
+	await _settle()
+	if not _verify_direct_preparation_state(game):
+		return
+	await _capture("preparation_step4")
+	game.hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
+	await _settle()
+	if game.hud.planning_snapshot.selected_slot_id != LoadoutSlotId.ACTIVE_1:
+		capture_failed = true
+		push_error("Step-4-Capture öffnet Aktiv 1 nicht als Instrumentenziel")
+		return
+	await _capture("preparation_active_step4")
+	# Reopen the next planning view like the product flow does after leaving the
+	# previous screen. This exercises the initial compact lock-scroll contract
+	# instead of carrying the active-picker scroll position into the intro.
+	game.hud.preparation_overlay.hide()
+	game.selected_level = game.levels[0]
+	game._show_preparation()
+	await _settle()
+	if game.hud.preparation_workspace.visible or not game.hud.preparation_lock_panel.is_visible_in_tree():
+		capture_failed = true
+		push_error("Step-4-Capture zeigt den festgelegten Introplan nicht als Lockfläche")
+		return
+	await _capture("preparation_intro_locked_step4")
 
 
 func _capture_step_two(game: Node) -> void:

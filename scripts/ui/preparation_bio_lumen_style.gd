@@ -22,6 +22,20 @@ static func frame(accent: Color = Color("5ac5c1")) -> StyleBoxFlat:
 	style.shadow_offset = Vector2(0.0, 1.0)
 	return style
 
+static func loadout_rack() -> StyleBoxFlat:
+	var style := _signature_base(Color("082c31"), Color(MOCKUP_GOLD, 0.46), 1, 17, 5)
+	style.shadow_color = Color(AlveolusVisualTheme.PETROL_DEEP, 0.38)
+	style.shadow_size = 3
+	style.shadow_offset = Vector2(0.0, 1.0)
+	return style
+
+static func instrument_bay() -> StyleBoxFlat:
+	var style := _signature_base(FRAME_FLAT_FALLBACK, Color("5ac5c1", 0.52), 1, 17, 5)
+	style.shadow_color = Color(AlveolusVisualTheme.PETROL_DEEP, 0.30)
+	style.shadow_size = 2
+	style.shadow_offset = Vector2(0.0, 1.0)
+	return style
+
 static func dossier() -> StyleBoxFlat:
 	var style := _signature_base(FRAME_FLAT_FALLBACK, Color("5ac5c1", 0.38), 1, 17, 5)
 	style.shadow_size = 0
@@ -45,6 +59,7 @@ static func slot(state: StringName, selected: bool = false) -> StyleBoxFlat:
 			border = Color(LOCKED_BORDER, 0.22)
 	if selected and state not in [&"focus", &"disabled"]:
 		border = MOCKUP_GOLD
+		width = 2
 	var style := _with_insets(_signature_base(background, border, width, 15, 5), 14.0, 8.0)
 	return style
 
@@ -131,6 +146,16 @@ static func inline_remove_action(state: StringName) -> StyleBoxFlat:
 static func chip(accent: Color) -> StyleBoxFlat:
 	var style := _signature_base(Color("041d23", 0.72), Color(accent, 0.24), 1, 12, 4)
 	return _with_insets(style, 8.0, 5.0)
+
+static func capacity_chip(available: bool, quiet: bool = false) -> StyleBoxFlat:
+	var background := Color("061c22", 0.88)
+	var border := Color(MOCKUP_GOLD, 0.54)
+	if quiet:
+		border = Color(LOCKED_BORDER, 0.28)
+	elif not available:
+		background = Color("061b20", 0.58)
+		border = Color(LOCKED_BORDER, 0.22)
+	return _with_insets(_signature_base(background, border, 1, 10, 4), 8.0, 4.0)
 
 static func primary(state: StringName) -> StyleBoxFlat:
 	var border := Color("5ce0d4")

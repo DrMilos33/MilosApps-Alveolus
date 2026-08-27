@@ -184,8 +184,8 @@ func _run() -> void:
 	_check(_stylebox_matches(dossier_style, PreparationBioLumenStyle.dossier()), "Fallkurzinfo verwendet die freigegebene Bio-Lumen-Membran")
 	var plan_frame_style := hud.preparation_plan_panel.get_theme_stylebox("panel") as StyleBoxFlat
 	var editor_frame_style := hud.preparation_catalog_panel.get_theme_stylebox("panel") as StyleBoxFlat
-	_check(_stylebox_matches(plan_frame_style, PreparationBioLumenStyle.frame()), "Plankarte verwendet den Bio-Lumen-Rahmen")
-	_check(_stylebox_matches(editor_frame_style, PreparationBioLumenStyle.frame()), "Behandlungskatalog verwendet den Bio-Lumen-Rahmen")
+	_check(_stylebox_matches(plan_frame_style, PreparationBioLumenStyle.loadout_rack()), "Einsatzkit verwendet seinen goldakzentuierten Socket-Rahmen")
+	_check(_stylebox_matches(editor_frame_style, PreparationBioLumenStyle.instrument_bay()), "Instrumentenfach verwendet seinen eigenen Bio-Lumen-Rahmen")
 	var planning_back := hud.preparation_header_back_button as IconTextButton
 	_check(planning_back != null and planning_back.icon_view != null and planning_back.icon_view.kind == &"back", "Zur Fallauswahl verwendet den lokalen semantischen Zurück-Button")
 	_check(planning_back.get_node_or_null("MembraneFill") is PreparationBioLumenSurfaceFill, "Zur Fallauswahl besitzt die lokale Bio-Lumen-Membran")
@@ -217,6 +217,12 @@ func _run() -> void:
 		var normal_style := slot_button.get_theme_stylebox("normal") as StyleBoxFlat
 		_check(_stylebox_matches(normal_style, PreparationBioLumenStyle.slot(&"normal", slot_selected)), "Planplatz %s verwendet seinen Bio-Lumen-Normalzustand" % slot_id)
 		_check(_structured_slot_card(slot_button), "Planplatz %s enthält Icon, Titel, Beschreibung und Kosten" % slot_id)
+		var slot_role := slot_button.find_child("Role", true, false) as Label
+		var slot_icon := slot_button.find_child("Icon", true, false) as SimpleIcon
+		var slot_cost_badge := slot_button.find_child("CostBadge", true, false) as PanelContainer
+		_check(slot_role != null and slot_role.text == hud._loadout_slot_caption(slot_id).to_upper(), "Planplatz %s benennt seine feste Socket-Rolle unabhängig vom Inhalt" % slot_id)
+		_check(slot_icon != null and slot_icon.framed and is_equal_approx(slot_icon.custom_minimum_size.x, 44.0), "Planplatz %s inszeniert sein Komponentenicon als 44-px-Medaillon" % slot_id)
+		_check(slot_cost_badge != null and slot_cost_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Planplatz %s lässt Klicks durch den Kapazitätschip zum Socket gelangen" % slot_id)
 		var slot_cost := slot_button.find_child("Cost", true, false) as Label
 		_check(slot_cost != null and not slot_cost.text.contains("K"), "Planplatz %s zeigt Kapazitätskosten als nackte Zahl" % slot_id)
 		_check(slot_button.find_child("SelectedRail", true, false) == null, "Planplatz %s verwendet keinen separaten Auswahlbalken" % slot_id)
@@ -237,10 +243,21 @@ func _run() -> void:
 		for slot_id_value in hud.preparation_slot_buttons:
 			var slot_id := StringName(slot_id_value)
 			var slot_button := hud.preparation_slot_buttons[slot_id] as Button
-			var expected_height := 72.0 if slot_id == selected_slot_id else 58.0
+			var expected_height := 82.0
 			var description := slot_button.find_child("Description", true, false) as Label
-			_check(is_equal_approx(slot_button.custom_minimum_size.y, expected_height), "Auswahl von %s setzt nur Planplatz %s auf %.0f px" % [selected_slot_id, slot_id, expected_height])
+			_check(is_equal_approx(slot_button.custom_minimum_size.y, expected_height), "Auswahl von %s lässt den festen Planplatz %s unverändert bei %.0f px" % [selected_slot_id, slot_id, expected_height])
 			_check(description != null and not description.text.to_lower().contains("ausgewählt"), "Planplatz %s erklärt sich ohne redundantes ‚Ausgewählt‘" % slot_id)
+		_check(hud.preparation_socket_link.visible and hud.preparation_editor_link_port.visible, "Auswahl von %s verbindet den Socket sichtbar mit dem Instrumentenfach" % selected_slot_id)
+		var selected_slot := hud.preparation_slot_buttons[selected_slot_id] as Control
+		var connector_points := hud.preparation_socket_link.points
+		var connector_start_global := hud.preparation_socket_link.to_global(connector_points[0]) if connector_points.size() == 2 else Vector2.ZERO
+		var connector_finish_global := hud.preparation_socket_link.to_global(connector_points[1]) if connector_points.size() == 2 else Vector2.ZERO
+		_check(
+			connector_points.size() == 2 \
+				and absf(connector_start_global.x - (selected_slot.get_global_rect().end.x - 10.0)) <= 1.0 \
+				and absf(connector_finish_global.x - (hud.preparation_catalog_panel.get_global_rect().position.x + 1.0)) <= 1.0,
+			"Auswahl von %s hält die Leitung ausschließlich im kurzen Spalt zwischen Socket und Instrumentenfach" % selected_slot_id
+		)
 	hud._on_preparation_slot_pressed(LoadoutSlotId.TREATMENT)
 	await process_frame
 	_check(not hud.preparation_editor_browse.visible and hud.preparation_editor_picker.visible, "Der alte Übersichtsmodus bleibt vollständig aus dem Navigationsfluss entfernt")
@@ -277,7 +294,7 @@ func _run() -> void:
 	_check(direct_slot_events.is_empty() and hud.current_preparation_slots[LoadoutSlotId.ACTIVE_1] == &"focus", "Ein Klick auf einen belegten Planplatz verändert ihn niemals still")
 	_check(hud.preparation_catalog.columns == 2, "Der breite Komponentenpicker verwendet ein kompaktes Zweispaltenraster")
 	_check(bool((hud.preparation_slot_buttons[LoadoutSlotId.ACTIVE_1] as Button).get_meta(&"selected_slot", false)), "Der geklickte Aktivplatz übernimmt die dauerhafte Auswahl")
-	_check(is_equal_approx(active_one_slot.custom_minimum_size.y, 72.0) and is_equal_approx(treatment_slot.custom_minimum_size.y, 58.0), "Der explizit gewählte Aktivplatz wächst, während die vorige Auswahl wieder kompakt wird")
+	_check(is_equal_approx(active_one_slot.custom_minimum_size.y, 82.0) and is_equal_approx(treatment_slot.custom_minimum_size.y, 82.0), "Der explizit gewählte Aktivplatz bleibt wie alle Sockets geometrisch stabil")
 	var current_focus_candidate := hud.preparation_component_buttons.get(&"focus", null) as Button
 	_check(
 		current_focus_candidate != null \
@@ -295,7 +312,8 @@ func _run() -> void:
 	)
 	hud._on_preparation_slot_pressed(LoadoutSlotId.ACTIVE_1)
 	await process_frame
-	_check(hud.preparation_editor_hint.text.contains("Aktuell: Fokusfeld"), "Der feste Editorkopf nennt Zielslot und aktuellen Inhalt")
+	_check(hud.preparation_editor_title.text.contains("AKTIV 1") and hud.preparation_editor_hint.text.contains("Fokusfeld eingesetzt"), "Der Instrumentenkopf nennt Zielsocket und aktuellen Inhalt")
+	_check(hud.preparation_editor_slot_icon != null and hud.preparation_editor_slot_icon.framed, "Der Instrumentenkopf wiederholt die gewählte Socket-Identität als Medaillon")
 	var picker_focus := get_root().gui_get_focus_owner()
 	_check(picker_focus == null or not hud.preparation_catalog.is_ancestor_of(picker_focus), "Ein Mausklick markiert keinen Kandidaten ungefragt")
 	var keyboard_accept := InputEventKey.new()
@@ -310,8 +328,13 @@ func _run() -> void:
 	_check(hud.preparation_component_buttons.has(&"shield") and not hud.preparation_component_buttons.has(&"steady"), "Der Katalog zeigt im Aktivplatz nur kompatible Komponenten")
 	for component_button in hud.preparation_component_buttons.values():
 		var candidate := component_button as Button
-		_check(is_equal_approx(candidate.custom_minimum_size.y, 56.0), "Komponentenkarten reservieren exakt 56 px")
-		_check(is_equal_approx(candidate.size.y, 56.0), "Gerenderte Komponentenkarten bleiben exakt 56 px hoch")
+		_check(is_equal_approx(candidate.custom_minimum_size.y, 88.0), "Instrumentkacheln reservieren exakt 88 px")
+		_check(is_equal_approx(candidate.size.y, 88.0), "Gerenderte Instrumentkacheln bleiben exakt 88 px hoch")
+		var instrument_icon := candidate.find_child("StateIcon", true, false) as SimpleIcon
+		var cost_badge := candidate.find_child("CostBadge", true, false) as PanelContainer
+		_check(instrument_icon != null and instrument_icon.framed and is_equal_approx(instrument_icon.custom_minimum_size.x, 46.0), "Instrumentkachel %s trägt ein dominantes 46-px-Medaillon" % candidate.name)
+		_check(cost_badge != null and _control_inside(candidate, cost_badge), "Instrumentkachel %s fasst ihre nackte Kapazitätszahl als Spielchip" % candidate.name)
+		_check(cost_badge != null and cost_badge.mouse_filter == Control.MOUSE_FILTER_IGNORE, "Instrumentkachel %s lässt Klicks durch den Kapazitätschip zur direkten Umrüstung gelangen" % candidate.name)
 		_check(candidate.find_child("ChoiceRail", true, false) == null, "Komponentenkarte %s verwendet keinen separaten Auswahlbalken" % candidate.name)
 		if bool(candidate.get_meta(&"catalog_available", false)):
 			var candidate_description := candidate.find_child("Description", true, false) as Label
@@ -427,6 +450,7 @@ func _run() -> void:
 		intro_duration_copy += (label_node as Label).text
 	_check(intro_duration_copy.contains("∞") and not intro_duration_copy.contains("Ereignisgesteuert") and not intro_duration_copy.contains("Ohne Zeitlimit"), "Die Einsatzplanung zeigt die unendliche Introzeit ausschließlich als ∞")
 	_check(hud.preparation_lock_panel.visible and not hud.preparation_workspace.visible, "Die Einführung zeigt ausschließlich die volle Plan-Sperrfläche statt bearbeitbarer Planmodule")
+	_check(not hud.preparation_socket_link.visible and not hud.preparation_editor_link_port.visible, "Die Intro-Sperre verbirgt auch die beiden dekorativen Socket-Verbindungen")
 	_check(_control_inside(hud.preparation_workspace_host, hud.preparation_lock_panel) and hud.preparation_lock_panel.get_global_rect().size.is_equal_approx(hud.preparation_workspace_host.get_global_rect().size), "Die Intro-Sperre deckt den gesamten Plan-Arbeitsbereich ab")
 	_check(hud.preparation_lock_panel.z_index == 0, "Die Intro-Sperre bleibt im lokalen Plan-Layer und übermalt keine späteren Bestätigungsdialoge")
 	_check(not hud.preparation_start_button.disabled, "Der festgelegte Einführungsplan kann ohne Planbearbeitung direkt gestartet werden")

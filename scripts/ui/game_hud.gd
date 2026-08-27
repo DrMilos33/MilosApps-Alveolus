@@ -68,6 +68,8 @@ const END_PANEL_SIZE := Vector2(660.0, 300.0)
 const END_FAILURE_PANEL_SIZE := Vector2(660.0, 258.0)
 const END_MASTERY_PANEL_SIZE := Vector2(660.0, 370.0)
 const PREPARATION_PANEL_HEIGHT := 412.0
+const PREPARATION_SLOT_HEIGHT := 82.0
+const PREPARATION_CANDIDATE_HEIGHT := 88.0
 const ABORT_PANEL_SIZE := Vector2(470.0, 182.0)
 const INTRO_SKIP_PANEL_SIZE := Vector2(470.0, 194.0)
 
@@ -318,6 +320,8 @@ var preparation_lock_title: Label
 var preparation_lock_copy: Label
 var preparation_plan_panel: Panel
 var preparation_catalog_panel: Panel
+var preparation_socket_link: Line2D
+var preparation_editor_link_port: Panel
 var preparation_slots: GridContainer
 var preparation_slot_buttons: Dictionary = {}
 var preparation_slot_icons: Dictionary = {}
@@ -331,6 +335,7 @@ var preparation_reserve_button: Button
 var preparation_catalog: GridContainer
 var preparation_catalog_scroll: ScrollContainer
 var preparation_editor_stack: VBoxContainer
+var preparation_editor_slot_icon: SimpleIcon
 var preparation_editor_title: Label
 var preparation_editor_count: Label
 var preparation_editor_hint: Label
@@ -1599,7 +1604,7 @@ func _build_preparation() -> Control:
 	preparation_workspace.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preparation_workspace.add_theme_constant_override("h_separation", 14)
 	preparation_workspace.add_theme_constant_override("v_separation", 14)
-	preparation_workspace.resized.connect(_update_preparation_workspace_ratio)
+	preparation_workspace.resized.connect(_on_preparation_workspace_resized)
 	preparation_workspace_host.add_child(preparation_workspace)
 
 	preparation_plan_panel = Panel.new()
@@ -1608,8 +1613,12 @@ func _build_preparation() -> Control:
 	preparation_plan_panel.size_flags_stretch_ratio = 0.88
 	preparation_plan_panel.custom_minimum_size = Vector2(0.0, PREPARATION_PANEL_HEIGHT)
 	preparation_plan_panel.clip_contents = true
-	preparation_plan_panel.add_theme_stylebox_override("panel", PreparationBioLumenStyle.frame())
-	PreparationBioLumenSurfaceFill.attach_static(preparation_plan_panel)
+	preparation_plan_panel.add_theme_stylebox_override("panel", PreparationBioLumenStyle.loadout_rack())
+	PreparationBioLumenSurfaceFill.attach_static(
+		preparation_plan_panel,
+		Color("123f40"),
+		Color("061f26")
+	)
 	preparation_workspace.add_child(preparation_plan_panel)
 	var plan_margin := _margin(14, 14, 14, 14)
 	preparation_plan_panel.add_child(plan_margin)
@@ -1619,7 +1628,7 @@ func _build_preparation() -> Control:
 	var plan_header := HBoxContainer.new()
 	plan_header.add_theme_constant_override("separation", 10)
 	plan_box.add_child(plan_header)
-	var plan_title := _label("DEIN PLAN", 14, COLOR_TEXT)
+	var plan_title := _label("EINSATZKIT", 14, COLOR_TEXT)
 	plan_title.add_theme_font_override("font", AlveolusVisualTheme.body_font())
 	plan_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	plan_header.add_child(plan_title)
@@ -1672,9 +1681,31 @@ func _build_preparation() -> Control:
 	preparation_catalog_panel.clip_contents = true
 	preparation_catalog_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preparation_catalog_panel.size_flags_stretch_ratio = 1.12
-	preparation_catalog_panel.add_theme_stylebox_override("panel", PreparationBioLumenStyle.frame())
+	preparation_catalog_panel.add_theme_stylebox_override("panel", PreparationBioLumenStyle.instrument_bay())
 	PreparationBioLumenSurfaceFill.attach_static(preparation_catalog_panel)
 	preparation_workspace.add_child(preparation_catalog_panel)
+	preparation_socket_link = Line2D.new()
+	preparation_socket_link.name = "SelectedSocketLink"
+	preparation_socket_link.width = 3.0
+	preparation_socket_link.default_color = Color(AlveolusVisualTheme.GOLD, 0.92)
+	preparation_socket_link.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	preparation_socket_link.end_cap_mode = Line2D.LINE_CAP_ROUND
+	preparation_socket_link.antialiased = true
+	preparation_socket_link.z_index = 8
+	preparation_socket_link.hide()
+	preparation_workspace_host.add_child(preparation_socket_link)
+	preparation_editor_link_port = Panel.new()
+	preparation_editor_link_port.name = "InstrumentBayPort"
+	preparation_editor_link_port.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preparation_editor_link_port.custom_minimum_size = Vector2(8.0, 28.0)
+	preparation_editor_link_port.size = Vector2(8.0, 28.0)
+	preparation_editor_link_port.z_index = 9
+	preparation_editor_link_port.add_theme_stylebox_override(
+		"panel",
+		_panel_style(Color("061f26"), COLOR_GOLD, 2, 4)
+	)
+	preparation_editor_link_port.hide()
+	preparation_workspace_host.add_child(preparation_editor_link_port)
 	var editor_margin := _margin(14, 14, 14, 14)
 	preparation_catalog_panel.add_child(editor_margin)
 	preparation_editor_stack = VBoxContainer.new()
@@ -1688,7 +1719,13 @@ func _build_preparation() -> Control:
 	preparation_editor_back_button.pressed.connect(_cancel_preparation_editor)
 	preparation_editor_back_button.hide()
 	editor_header.add_child(preparation_editor_back_button)
-	preparation_editor_title = _label("PLANPLATZ WÄHLEN", 14, COLOR_TEXT)
+	preparation_editor_slot_icon = SimpleIcon.new()
+	preparation_editor_slot_icon.name = "SelectedSocketIcon"
+	preparation_editor_slot_icon.custom_minimum_size = Vector2(34.0, 34.0)
+	preparation_editor_slot_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	preparation_editor_slot_icon.configure(&"treatment", COLOR_GOLD, true)
+	editor_header.add_child(preparation_editor_slot_icon)
+	preparation_editor_title = _label("INSTRUMENTE · BEHANDLUNG", 15, COLOR_TEXT)
 	preparation_editor_title.add_theme_font_override("font", AlveolusVisualTheme.body_font())
 	preparation_editor_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preparation_editor_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -4215,35 +4252,42 @@ func _build_preparation_slot_card(slot_id: StringName) -> Button:
 	var button := Button.new()
 	button.name = "Slot_%s" % String(slot_id)
 	button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTION_CARD
-	button.custom_minimum_size = Vector2(0.0, 58.0)
+	button.custom_minimum_size = Vector2(0.0, PREPARATION_SLOT_HEIGHT)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.clip_contents = true
 	button.text = ""
+	button.resized.connect(_update_preparation_slot_link)
 	_apply_preparation_slot_style(button, false)
 	PreparationBioLumenSurfaceFill.attach(button)
 
-	var margin := _margin(11, 7, 10, 7)
+	var margin := _margin(12, 8, 10, 8)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(margin)
 	var row := HBoxContainer.new()
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", 9)
+	row.add_theme_constant_override("separation", 10)
 	margin.add_child(row)
 	var icon := SimpleIcon.new()
 	icon.name = "Icon"
-	icon.custom_minimum_size = Vector2(24.0, 24.0)
+	icon.custom_minimum_size = Vector2(44.0, 44.0)
 	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	icon.configure(&"plus", Color("51d6cb"))
+	icon.configure(&"plus", Color("51d6cb"), true)
 	row.add_child(icon)
 	preparation_slot_icons[slot_id] = icon
 	var copy := VBoxContainer.new()
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	copy.add_theme_constant_override("separation", 1)
+	copy.alignment = BoxContainer.ALIGNMENT_CENTER
+	copy.add_theme_constant_override("separation", 0)
 	row.add_child(copy)
-	var title := _label(_loadout_slot_caption(slot_id), 14, Color("edf5ef"))
+	var role := _label(_loadout_slot_caption(slot_id).to_upper(), 12, Color("7fd4cf"))
+	role.name = "Role"
+	role.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
+	role.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	copy.add_child(role)
+	var title := _label("Wählen", 16, Color("edf5ef"))
 	title.name = "Title"
-	title.add_theme_font_override("font", AlveolusVisualTheme.body_font())
+	title.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	copy.add_child(title)
 	preparation_slot_titles[slot_id] = title
@@ -4255,20 +4299,27 @@ func _build_preparation_slot_card(slot_id: StringName) -> Button:
 	preparation_slot_descriptions[slot_id] = description
 	var right := VBoxContainer.new()
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	right.custom_minimum_size.x = 40.0
+	right.custom_minimum_size.x = 44.0
 	right.alignment = BoxContainer.ALIGNMENT_CENTER
-	right.add_theme_constant_override("separation", 4)
+	right.add_theme_constant_override("separation", 5)
 	row.add_child(right)
-	var cost := _label("0", 14, Color("f0bc57"))
+	var cost_badge := PanelContainer.new()
+	cost_badge.name = "CostBadge"
+	cost_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_badge.custom_minimum_size = Vector2(38.0, 26.0)
+	cost_badge.add_theme_stylebox_override("panel", PreparationBioLumenStyle.capacity_chip(true))
+	right.add_child(cost_badge)
+	var cost := _label("0", 15, Color("f0bc57"))
 	cost.name = "Cost"
-	cost.add_theme_font_override("font", AlveolusVisualTheme.body_font())
-	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	right.add_child(cost)
+	cost.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
+	cost.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cost.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cost_badge.add_child(cost)
 	preparation_slot_costs[slot_id] = cost
 	var dot := Panel.new()
 	dot.name = "StatusDot"
-	dot.custom_minimum_size = Vector2(5.0, 5.0)
-	dot.size_flags_horizontal = Control.SIZE_SHRINK_END
+	dot.custom_minimum_size = Vector2(6.0, 6.0)
+	dot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	dot.add_theme_stylebox_override("panel", _panel_style(Color("51d6cb"), Color.TRANSPARENT, 0, 3))
 	right.add_child(dot)
 	preparation_slot_status_dots[slot_id] = dot
@@ -4342,29 +4393,28 @@ func _refresh_preparation_slot_content(slot_id: StringName, component_id: String
 	var icon := preparation_slot_icons.get(slot_id, null) as SimpleIcon
 	if title_label == null or description_label == null or cost_label == null or icon == null:
 		return
-	var caption := _loadout_slot_caption(slot_id)
 	if bool(current_preparation_locked_slots.get(slot_id, current_preparation_locked_slots.get(String(slot_id), false))):
 		var reason := String(current_preparation_slot_lock_reasons.get(slot_id, current_preparation_slot_lock_reasons.get(String(slot_id), "Gesperrt")))
-		title_label.text = "%s · Gesperrt" % caption
+		title_label.text = "Gesperrt"
 		description_label.text = reason
 		cost_label.text = ""
-		icon.configure(&"locked", COLOR_MUTED)
+		icon.configure(&"locked", COLOR_MUTED, true)
 		return
 	if component_id == &"":
-		title_label.text = "%s · Wählen" % caption
+		title_label.text = "Wählen"
 		description_label.text = "Freier Platz"
 		cost_label.text = "0"
-		icon.configure(&"plus", Color("51d6cb"))
+		icon.configure(&"plus", Color("51d6cb"), true)
 		return
 	var component_title := String(_view_value(entry, &"title", String(component_id)))
 	var cost := int(_view_value(entry, &"capacity_cost", _view_value(entry, &"cost", 0)))
 	var visual_id := StringName(_view_value(entry, &"visual_id", component_id))
 	var kind_value: Variant = _view_value(entry, &"kind", LoadoutSlotId.expected_kind(slot_id))
 	var icon_kind := visual_id if SimpleIcon.supports(visual_id) else _component_icon_kind(kind_value)
-	title_label.text = "%s · %s" % [caption, component_title]
+	title_label.text = component_title
 	description_label.text = _preparation_slot_short_description(component_id, entry)
 	cost_label.text = "%d" % cost
-	icon.configure(icon_kind, Color("51d6cb"))
+	icon.configure(icon_kind, Color("51d6cb"), true)
 
 func _preparation_slot_short_description(component_id: StringName, entry: Variant) -> String:
 	match component_id:
@@ -4385,15 +4435,24 @@ func _refresh_preparation_slot_styles() -> void:
 		var membrane := button.get_node_or_null("MembraneFill") as PreparationBioLumenSurfaceFill
 		if membrane != null:
 			membrane.set_selected(selected)
-		# Height is the persistent selected-target cue for every editable plan slot.
-		# Hover and focus remain geometry-neutral.
-		var expanded_selection := selected \
-			and planning_snapshot.mode == PlanningSnapshot.Mode.COMPONENT_PICK \
-			and not preparation_locked
-		button.custom_minimum_size.y = 72.0 if expanded_selection else 58.0
+		# A socket never changes geometry. The gold frame, medallion and bridge are
+		# the persistent target cue; hover and focus remain independent.
+		button.custom_minimum_size.y = PREPARATION_SLOT_HEIGHT
 		_apply_preparation_slot_style(button, selected)
 		var component_id := _preparation_component_at(slot_id)
 		_refresh_preparation_slot_content(slot_id, component_id, current_preparation_catalog_by_id.get(component_id, null))
+		var locked := bool(current_preparation_locked_slots.get(slot_id, current_preparation_locked_slots.get(String(slot_id), false)))
+		var icon := preparation_slot_icons.get(slot_id, null) as SimpleIcon
+		if selected and not locked and icon != null:
+			icon.configure(icon.kind, COLOR_GOLD, true)
+		var dot := preparation_slot_status_dots.get(slot_id, null) as Panel
+		if dot != null:
+			dot.custom_minimum_size = Vector2.ONE * (10.0 if selected else 6.0)
+			dot.add_theme_stylebox_override(
+				"panel",
+				_panel_style(COLOR_GOLD if selected else Color("51d6cb"), Color.TRANSPARENT, 0, 5)
+			)
+	_update_preparation_slot_link.call_deferred()
 
 func _show_preparation_slot_preview(slot_id: StringName, source: Control = null, from_hover: bool = false) -> void:
 	if not from_hover:
@@ -4603,7 +4662,7 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	var button := Button.new()
 	button.name = "Component_%s" % String(id)
 	button.theme_type_variation = AlveolusVisualTheme.TYPE_SELECTION_CARD
-	button.custom_minimum_size = Vector2(0.0, 56.0)
+	button.custom_minimum_size = Vector2(0.0, PREPARATION_CANDIDATE_HEIGHT)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.clip_contents = true
 	# Locked and already assigned rows remain focusable so keyboard/gamepad users
@@ -4630,22 +4689,22 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	register_context_detail(button, _preparation_component_context_payload.bind(id), false)
 	preparation_catalog.add_child(button)
 	preparation_component_buttons[id] = button
-	var margin := _margin(10, 6, 10, 6)
+	var margin := _margin(12, 9, 10, 9)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(margin)
 	var heading := HBoxContainer.new()
 	heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	heading.add_theme_constant_override("separation", 7)
+	heading.add_theme_constant_override("separation", 10)
 	margin.add_child(heading)
 	var row_icon := SimpleIcon.new()
 	row_icon.name = "StateIcon"
-	row_icon.custom_minimum_size = Vector2(26.0, 26.0)
+	row_icon.custom_minimum_size = Vector2(46.0, 46.0)
 	var visual_id := StringName(_view_value(row.get("entry", null), &"visual_id", id))
 	var icon_kind := visual_id if SimpleIcon.supports(visual_id) else _component_icon_kind(kind_value)
 	if locked:
 		icon_kind = &"locked"
 	var muted_content := COLOR_MUTED.darkened(0.24)
-	row_icon.configure(icon_kind, muted_content if locked else (COLOR_MUTED if assigned or current else Color("51d6cb")))
+	row_icon.configure(icon_kind, muted_content if locked else (COLOR_MUTED if assigned or current else Color("51d6cb")), true)
 	heading.add_child(row_icon)
 	var title_stack := VBoxContainer.new()
 	title_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4654,18 +4713,20 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	title_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title_stack.add_theme_constant_override("separation", 0)
 	heading.add_child(title_stack)
-	var title_label := _label(title, 14, muted_content if locked else (COLOR_MUTED if assigned or current else Color("edf5ef")))
+	var title_label := _label(title, 15, muted_content if locked else (COLOR_MUTED if assigned or current else Color("edf5ef")))
 	title_label.name = "Title"
-	title_label.add_theme_font_override("font", AlveolusVisualTheme.body_font())
+	title_label.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_stack.add_child(title_label)
 	var state_text := ""
 	if locked:
 		state_text = lock_reason
+	elif current:
+		state_text = "EINGESETZT"
 	elif assigned:
-		state_text = "In %s" % selected_slot
-	var state_label := _label(state_text, 12, Color("708a8c") if locked else Color("a8c9c6"))
+		state_text = "IN %s" % selected_slot.to_upper()
+	var state_label := _label(state_text, 12, Color("708a8c") if locked else Color("87b9b6"))
 	state_label.name = "State"
 	state_label.add_theme_font_override("font", AlveolusVisualTheme.body_font())
 	state_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -4673,14 +4734,19 @@ func _add_preparation_catalog_row(row: Dictionary) -> void:
 	state_label.visible = not state_text.is_empty()
 	title_stack.add_child(state_label)
 	var cost_text := "0" if planning_snapshot.mode == PlanningSnapshot.Mode.RESERVE_PICK else "%d" % cost
-	var cost_label := _label(cost_text, 14, Color("8aa2a1") if current else (muted_content if not available else Color("f0bc57")))
+	var cost_badge := PanelContainer.new()
+	cost_badge.name = "CostBadge"
+	cost_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cost_badge.custom_minimum_size = Vector2(42.0, 30.0)
+	cost_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cost_badge.add_theme_stylebox_override("panel", PreparationBioLumenStyle.capacity_chip(available, current or assigned))
+	heading.add_child(cost_badge)
+	var cost_label := _label(cost_text, 15, Color("8aa2a1") if current else (muted_content if not available else Color("f0bc57")))
 	cost_label.name = "Cost"
-	cost_label.custom_minimum_size.x = 40.0
-	cost_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	cost_label.add_theme_font_override("font", AlveolusVisualTheme.body_font())
-	cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	cost_label.add_theme_font_override("font", AlveolusVisualTheme.heading_font())
+	cost_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cost_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	heading.add_child(cost_label)
+	cost_badge.add_child(cost_label)
 func _on_preparation_component(id: StringName, is_passive: bool) -> void:
 	if preparation_locked:
 		return
@@ -4811,13 +4877,14 @@ func _apply_preparation_editor_state(tutorial_locked: bool = false) -> void:
 			var current_id := _preparation_component_at(planning_snapshot.selected_slot_id)
 			var current_entry: Variant = current_preparation_catalog_by_id.get(current_id, null)
 			var current_title := String(_view_value(current_entry, &"title", "Leer")) if current_id != &"" else "Leer"
-			preparation_editor_hint.text = "Für die Einführung festgelegt" if tutorial_locked else "Aktuell: %s · Aktivieren setzt direkt ein" % current_title
+			preparation_editor_hint.text = "Für die Einführung festgelegt" if tutorial_locked else "%s eingesetzt · Auswahl rüstet direkt um" % current_title
 		PlanningSnapshot.Mode.RESERVE_PICK:
 			preparation_editor_title.text = "RESERVE"
 			preparation_editor_hint.text = "Passiv wählen · ohne Plankapazität"
 		PlanningSnapshot.Mode.REPLACE_CONFIRM:
 			preparation_editor_title.text = "%s ERSETZEN" % _loadout_slot_caption(planning_snapshot.selected_slot_id).to_upper()
 			preparation_editor_hint.text = "Bisher und neu direkt vergleichen."
+	_refresh_preparation_editor_socket_icon()
 	var modal_edit := mode == PlanningSnapshot.Mode.REPLACE_CONFIRM
 	for slot_id in preparation_slot_buttons:
 		var slot_button: Button = preparation_slot_buttons[slot_id]
@@ -4847,6 +4914,21 @@ func _apply_preparation_editor_state(tutorial_locked: bool = false) -> void:
 	_apply_preparation_guidance_state()
 	_configure_focus_cycle.call_deferred(preparation_overlay)
 	_configure_preparation_catalog_focus.call_deferred()
+	_update_preparation_slot_link.call_deferred()
+
+
+func _refresh_preparation_editor_socket_icon() -> void:
+	if preparation_editor_slot_icon == null:
+		return
+	var slot_id := planning_snapshot.selected_slot_id
+	var component_id := _preparation_component_at(slot_id)
+	var entry: Variant = current_preparation_catalog_by_id.get(component_id, null)
+	var kind_value: Variant = _view_value(entry, &"kind", LoadoutSlotId.expected_kind(slot_id))
+	var visual_id := StringName(_view_value(entry, &"visual_id", component_id))
+	var icon_kind := visual_id if visual_id != &"" and SimpleIcon.supports(visual_id) else _component_icon_kind(kind_value)
+	if component_id == &"" and slot_id != LoadoutSlotId.TREATMENT:
+		icon_kind = &"ability"
+	preparation_editor_slot_icon.configure(icon_kind, COLOR_GOLD, true)
 
 
 func _apply_preparation_guidance_state() -> void:
@@ -4922,10 +5004,10 @@ func _apply_preparation_layout() -> void:
 	# Compact planning has one scroll authority: the outer document viewport.
 	# Let the dense two-column catalog expose its full content height instead of
 	# nesting a second vertical scroll area inside the editor.
-	var catalog_columns := 2 if logical_width >= 480.0 else 1
+	var catalog_columns := 2 if logical_width >= 760.0 else 1
 	preparation_catalog.columns = catalog_columns
 	var catalog_rows := ceili(float(preparation_catalog.get_child_count()) / float(catalog_columns))
-	var catalog_content_height := float(catalog_rows * 56 + maxi(0, catalog_rows - 1) * 8)
+	var catalog_content_height := float(catalog_rows) * PREPARATION_CANDIDATE_HEIGHT + float(maxi(0, catalog_rows - 1) * 8)
 	if preparation_catalog_scroll != null:
 		preparation_catalog_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if compact else ScrollContainer.SCROLL_MODE_AUTO
 		preparation_catalog_scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN if compact else Control.SIZE_EXPAND_FILL
@@ -4958,7 +5040,42 @@ func _apply_preparation_layout() -> void:
 	preparation_editor_back_button.hide()
 	_layout_preparation_tooltip.call_deferred()
 	_update_preparation_workspace_ratio.call_deferred()
+	_update_preparation_slot_link.call_deferred()
 	_configure_preparation_catalog_focus.call_deferred()
+
+
+func _on_preparation_workspace_resized() -> void:
+	_update_preparation_workspace_ratio()
+	_update_preparation_slot_link.call_deferred()
+
+
+func _update_preparation_slot_link() -> void:
+	if preparation_socket_link == null or preparation_editor_link_port == null or preparation_workspace_host == null:
+		return
+	if preparation_locked or preparation_workspace.columns != 2 or planning_snapshot.selected_slot_id == &"":
+		preparation_socket_link.hide()
+		preparation_editor_link_port.hide()
+		return
+	var slot := preparation_slot_buttons.get(planning_snapshot.selected_slot_id, null) as Control
+	if slot == null or not slot.is_visible_in_tree() or not preparation_catalog_panel.is_visible_in_tree():
+		preparation_socket_link.hide()
+		preparation_editor_link_port.hide()
+		return
+	var slot_rect := slot.get_global_rect()
+	var editor_rect := preparation_catalog_panel.get_global_rect()
+	var global_start := Vector2(slot_rect.end.x - 10.0, slot_rect.get_center().y)
+	var global_finish := Vector2(editor_rect.position.x + 1.0, global_start.y)
+	var host_inverse := preparation_workspace_host.get_global_transform().affine_inverse()
+	var start := host_inverse * global_start
+	var finish := host_inverse * global_finish
+	if finish.x <= start.x:
+		preparation_socket_link.hide()
+		preparation_editor_link_port.hide()
+		return
+	preparation_socket_link.points = PackedVector2Array([start, finish])
+	preparation_editor_link_port.position = finish - Vector2(4.0, 14.0)
+	preparation_socket_link.show()
+	preparation_editor_link_port.show()
 
 func _update_preparation_workspace_ratio() -> void:
 	if preparation_workspace == null or preparation_plan_panel == null or preparation_catalog_panel == null:
