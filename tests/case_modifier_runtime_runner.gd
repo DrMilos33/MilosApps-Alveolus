@@ -41,7 +41,7 @@ func _test_catalog_contract() -> void:
 	]
 	var expected_intervals: Array[Vector2] = [
 		Vector2(1.10, 0.55),
-		Vector2(1.16125, 0.28289474),
+		Vector2(1.29027778, 0.31432749),
 		Vector2(1.03375, 0.23375),
 		Vector2(0.9075, 0.200),
 		Vector2(0.780, 0.165),
@@ -57,8 +57,8 @@ func _test_catalog_contract() -> void:
 			_near(levels[order].boss_spawn_seconds, 300.0, "Order %d ruft den Boss nach fünf Minuten" % order)
 			_near(levels[order].spawn_ramp_seconds, 300.0, "Order %d verteilt die Standardwelle über fünf Minuten" % order)
 	var first_case_config := RunConfig.from_level(levels[1])
-	_near(first_case_config.regular_spawn_interval(0.0), 1.16125, "Fall 1 bewahrt seine anfängliche Spawnrate")
-	_near(0.26875 / first_case_config.regular_spawn_interval(1.0), 0.95, "Fall 1 endet bei etwa 95 Prozent seiner bisherigen Spawnrate")
+	_near(1.16125 / first_case_config.regular_spawn_interval(0.0), 0.90, "Fall 1 startet mit exakt 90 Prozent seiner bisherigen Standardzufuhr")
+	_near(0.28289474 / first_case_config.regular_spawn_interval(1.0), 0.90, "Fall 1 endet mit exakt 90 Prozent seiner bisherigen Standardzufuhr")
 
 	var enemies := ContentCatalog.enemy_definitions()
 	_near((enemies[&"pneumococcus"] as EnemyDefinition).speed, 94.0, "Bakterium verwendet die erneut um zehn Prozent erhöhte ganzzahlige Basisgeschwindigkeit")

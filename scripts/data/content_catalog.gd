@@ -30,7 +30,7 @@ static func level_definitions() -> Array[LevelDefinition]:
 		).configure_runtime(0, 0, 0.0, false).configure_case_variation([], [], 0).configure_boss(&"intro_focus", true).configure_case_pressure(CasePressurePlan.default_for_case_order(0)),
 		LevelDefinition.create(
 			&"early_localized_focus", 1, "Früher Verlauf", "Fall 01 · beginnender Pneumokokkenherd", false,
-			-1.0, 300.0, 50.0, 1.16125, 0.28289474, 1.05, 1.525, 1.04, 1.15, 0.06, 0.23,
+			-1.0, 300.0, 50.0, 1.29027778, 0.31432749, 1.05, 1.525, 1.04, 1.15, 0.06, 0.23,
 			0.75, PackedInt32Array([2]), 0.85,
 			"Ein früher lokaler Infektionsherd bildet den ersten regulären Patientenfall.",
 			"Der frühe Verlauf wurde kontrolliert.",

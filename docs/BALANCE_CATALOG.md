@@ -436,7 +436,7 @@ Spawn bis zum Boss auf dem festen Fallgrundwert. Es gibt keine Ablaufzeit.
 
 | Fall | Titel | Standardintervall | Leben | Tempo | Schaden | Gruppen | Bossleben | Phasenadds | Forschung |
 |---:|---|---|---|---:|---:|---|---:|---|---:|
-| 1 | Früher Verlauf | 1,16125 → 0,28289 s | 1,05 | 1,04 | 1,15 | 6 → 23 % | 0,75 | 2 / – | 0,85 |
+| 1 | Früher Verlauf | 1,29028 → 0,31433 s | 1,05 | 1,04 | 1,15 | 6 → 23 % | 0,75 | 2 / – | 0,85 |
 | 2 | lol - name fehlt | 1,03375 → 0,23375 s | 1,15 | 1,08 | 1,25 | 10 → 28 % | 1,00 | 3 / – | 1,00 |
 | 3 | Fortschreitender Verlauf | 0,9075 → 0,200 s | 1,25 | 1,12 | 1,35 | 14 → 33 % | 0,60 | 3 / 3 | 1,175 |
 | 4 | Die Ausbreitung | 0,780 → 0,165 s | 1,35 | 1,16 | 1,45 | 18 → 38 % | 0,75 | 4 / 4 | 1,35 |
@@ -454,7 +454,7 @@ aber weder Gegner, EXP noch Levelprogression.
 
 | Fall | Körper im ersten Timeout-Paket | Körper im späten Timeout-Paket (ca.) |
 |---:|---:|---:|
-| 1 | 4 | 22 |
+| 1 | 3 | 17 |
 | 2 | 4 | 26 |
 | 3 | 5 | 31 |
 | 4 | 6 | 37 |
