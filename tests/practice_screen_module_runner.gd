@@ -33,10 +33,19 @@ func _run() -> void:
 	var scenario_card := screen.find_child("ScenarioSelectionCard", true, false) as PanelContainer
 	var event_card := screen.find_child("EventScenarioSelectionCard", true, false) as PanelContainer
 	var boss_card := screen.find_child("BossProfileSelectionCard", true, false) as PanelContainer
-	_check(scenario_card != null and scenario_card.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Testauswahl verwendet die zentrale ActionCard")
-	_check(event_card != null and event_card.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Eventauswahl verwendet dieselbe zentrale ActionCard wie die Bossauswahl")
-	_check(boss_card != null and boss_card.theme_type_variation == AlveolusVisualTheme.TYPE_ACTION_CARD, "Bossauswahl verwendet die zentrale ActionCard")
+	_check(scenario_card != null and scenario_card.theme_type_variation == AlveolusVisualTheme.TYPE_OPEN_GROUP and scenario_card.get_meta(&"alveolus_component", &"") == &"open_group", "Testauswahl verwendet den zentralen offenen Kartenträger")
+	_check(event_card != null and event_card.theme_type_variation == AlveolusVisualTheme.TYPE_OPEN_GROUP and event_card.get_meta(&"alveolus_component", &"") == &"open_group", "Eventauswahl verwendet denselben zentralen offenen Kartenträger wie die Bossauswahl")
+	_check(boss_card != null and boss_card.theme_type_variation == AlveolusVisualTheme.TYPE_OPEN_GROUP and boss_card.get_meta(&"alveolus_component", &"") == &"open_group", "Bossauswahl verwendet den zentralen offenen Kartenträger")
 	_check(screen.back_action().theme_type_variation == AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON, "Rückkehr verwendet die zentrale Navigation")
+	var back_action := screen.back_action() as IconTextButton
+	_check(
+		back_action != null \
+			and back_action.get_meta(&"alveolus_component", &"") == &"page_navigation_action" \
+			and back_action.caption.text == "Campus" \
+			and back_action.get_meta(&"alveolus_accessible_name", "") == "Zum Campus" \
+			and back_action.tooltip_text.is_empty(),
+		"Breite Praxisnavigation zeigt das kurze Ziel und bewahrt den vollständigen zugänglichen Namen"
+	)
 
 	var scenarios := _scenario_offers()
 	var profiles := _boss_profile_offers()
@@ -181,6 +190,9 @@ func _run() -> void:
 	_check(screen.layout_columns() == 1, "Kompakte Praxis stapelt Testkarten")
 	_check(screen.event_layout_columns() == 1, "Kompakte Praxis stapelt Eventprofile")
 	_check(screen.boss_layout_columns() == 1, "Kompakte Praxis stapelt Bossprofile")
+	_check(back_action.caption.text.is_empty(), "Kompakte Praxisnavigation zeigt ausschließlich die Zurück-Glyphe")
+	_check(back_action.get_meta(&"alveolus_accessible_name", "") == "Zum Campus" and back_action.tooltip_text == "Zum Campus", "Kompakte Praxisnavigation behält vollständigen zugänglichen Namen und Tooltip")
+	_check(back_action.get_combined_minimum_size().x >= AlveolusVisualTheme.TOUCH_TARGET_MINIMUM and back_action.get_combined_minimum_size().y >= AlveolusVisualTheme.TOUCH_TARGET_MINIMUM, "Kompakte Praxisnavigation behält ein mindestens 44 px großes Ziel")
 	_check(screen.back_action().focus_mode == Control.FOCUS_ALL, "Navigation bleibt per Tastatur und Gamepad fokussierbar")
 	_check(screen.scenario_action(&"spawn_test").focus_mode == Control.FOCUS_ALL, "Testauswahl bleibt per Tastatur und Gamepad fokussierbar")
 

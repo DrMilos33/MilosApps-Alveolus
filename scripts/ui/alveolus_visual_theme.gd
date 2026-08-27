@@ -106,6 +106,7 @@ enum SurfaceRole {
 	VALUE_ROW,
 	TOOLTIP_CARD,
 	DETAIL_CARD,
+	OPEN_GROUP,
 }
 
 enum CornerTreatment {
@@ -157,6 +158,7 @@ const TYPE_DAMAGE_TYPE_ROW := &"DamageTypeRow"
 const TYPE_DAMAGE_TYPE_CHIP := &"DamageTypeChip"
 const TYPE_TOOLTIP_CARD := &"TooltipCard"
 const TYPE_DETAIL_CARD := &"DetailCard"
+const TYPE_OPEN_GROUP := &"OpenGroup"
 const TYPE_SEGMENTED_TAB := &"SegmentedTab"
 const TYPE_SELECTED_SEGMENTED_TAB := &"SelectedSegmentedTab"
 const TYPE_TOGGLE_ROW := &"ToggleRow"
@@ -284,6 +286,7 @@ static func _configure_variations(theme: Theme) -> void:
 	_register_panel_variation(theme, TYPE_DAMAGE_TYPE_CHIP, surface_role_style(SurfaceRole.DOCUMENT_INSET))
 	_register_panel_variation(theme, TYPE_TOOLTIP_CARD, surface_role_style(SurfaceRole.TOOLTIP_CARD, TURQUOISE))
 	_register_panel_variation(theme, TYPE_DETAIL_CARD, surface_role_style(SurfaceRole.DETAIL_CARD, COBALT))
+	_register_panel_variation(theme, TYPE_OPEN_GROUP, surface_role_style(SurfaceRole.OPEN_GROUP))
 
 	# Compatibility aliases retain their public names while following the new
 	# semantic surface hierarchy.
@@ -570,6 +573,11 @@ static func surface_role_style(
 			style.shadow_offset = Vector2(0.0, 3.0)
 			border_width = 1
 			default_corner = CornerTreatment.CARD_6
+		SurfaceRole.OPEN_GROUP:
+			# Structural carrier for collections whose children already paint their
+			# own cards. It contributes neither another frame nor another surface.
+			style.bg_color = Color.TRANSPARENT
+			style.border_color = Color.TRANSPARENT
 		_:
 			style.bg_color = Color.TRANSPARENT
 			style.border_color = Color.TRANSPARENT

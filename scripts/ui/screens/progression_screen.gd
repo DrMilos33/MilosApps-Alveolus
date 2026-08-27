@@ -279,9 +279,9 @@ func registered_info_source_count() -> int:
 
 
 func _build() -> void:
-	_back_button = AlveolusUIComponents.action_button(
+	_back_button = AlveolusUIComponents.page_navigation_action(
+		"Campus",
 		"Zum Campus",
-		AlveolusUIComponents.ACTION_NAVIGATION,
 		&"back",
 		AlveolusVisualTheme.TEAL
 	)
@@ -1153,6 +1153,7 @@ func _update_responsive_layout() -> void:
 	var requested_talent_columns := 3 if logical_width >= 1080.0 else (2 if logical_width >= 760.0 else 1)
 	_talent_grid.columns = mini(requested_talent_columns, maxi(1, _branch_order.size()))
 	var compact := logical_width < 620.0
+	AlveolusUIComponents.refresh_page_navigation_action(_back_button, compact)
 	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, compact)
 	_tab_row.columns = 2 if compact else 3
 	_balance_label.visible = not compact

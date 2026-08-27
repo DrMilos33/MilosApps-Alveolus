@@ -226,9 +226,9 @@ func _build_interface() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	oversampling_with_scale = CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED
 
-	_back_button = AlveolusUIComponents.action_button(
+	_back_button = AlveolusUIComponents.page_navigation_action(
 		"Zurück",
-		AlveolusUIComponents.ACTION_NAVIGATION,
+		"Zurück",
 		&"back",
 		AlveolusVisualTheme.TEAL
 	)
@@ -1087,10 +1087,7 @@ func _refresh_responsive_layout() -> void:
 	if logical_width <= 1.0 and get_viewport() != null:
 		logical_width = get_viewport().get_visible_rect().size.x
 	_compact_layout = logical_width < COMPACT_WIDTH
-	if _back_button is IconTextButton:
-		(_back_button as IconTextButton).set_caption("" if _compact_layout else "Zurück", true)
-		_back_button.set_meta(&"alveolus_accessible_name", "Zurück")
-		_back_button.tooltip_text = "Zurück" if _compact_layout else ""
+	AlveolusUIComponents.refresh_page_navigation_action(_back_button, _compact_layout)
 	AlveolusUIComponents.refresh_page_shell_layout(_shell, _compact_layout)
 	if _upper_grid != null:
 		_upper_grid.columns = 1 if _compact_layout else 2

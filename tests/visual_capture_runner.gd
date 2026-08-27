@@ -6,6 +6,7 @@ const STEP_ONE_CAPTURE_COUNT := 4
 const STEP_TWO_CAPTURE_COUNT := 3
 const STEP_THREE_CAPTURE_COUNT := 1
 const STEP_FOUR_CAPTURE_COUNT := 3
+const STEP_FIVE_CAPTURE_COUNT := 6
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
@@ -57,6 +58,8 @@ func _capture_views() -> void:
 		await _capture_step_three(game)
 	elif capture_scope == "step4":
 		await _capture_step_four(game)
+	elif capture_scope == "step5":
+		await _capture_step_five(game)
 	else:
 		await _capture_suite(game)
 
@@ -71,6 +74,8 @@ func _capture_views() -> void:
 		expected_count = STEP_THREE_CAPTURE_COUNT
 	elif capture_scope == "step4":
 		expected_count = STEP_FOUR_CAPTURE_COUNT
+	elif capture_scope == "step5":
+		expected_count = STEP_FIVE_CAPTURE_COUNT
 	if capture_failed or capture_count != expected_count:
 		push_error("Visuelle Abnahme unvollständig: %d/%d für %s" % [capture_count, expected_count, capture_suffix])
 		quit(1)
@@ -156,6 +161,64 @@ func _capture_step_four(game: Node) -> void:
 		push_error("Step-4-Capture zeigt den festgelegten Introplan nicht als Lockfläche")
 		return
 	await _capture("preparation_intro_locked_step4")
+
+
+func _capture_step_five(game: Node) -> void:
+	# One representative state per affected page keeps the shared navigation and
+	# container slice reviewable at both native and compact 200 % UI scale.
+	game.meta.highest_unlocked_level = 2
+	for index in range(game.levels.size()):
+		var record = game.meta.get_level_record(game.levels[index].id)
+		record.victories = 1 if index <= 1 else 0
+	game.meta.research_points = 46
+	game.meta.research_ranks[&"stability_reserve"] = 3
+	game.meta.research_ranks[&"therapy_precision"] = 1
+	game.meta.research_ranks[&"defense_training"] = 2
+	game.meta.research_ranks[&"movement_training"] = 1
+	game._show_research()
+	await _settle()
+	if not _verify_research_capture(game) \
+		or not _verify_step_five_page_chrome(game.hud, game.hud.research_overlay, "research", "Campus", "Zum Campus"):
+		return
+	await _capture("research_step5")
+
+	game._show_level_select()
+	await _settle()
+	if not _verify_case_journey(game.hud.level_screen) \
+		or not _verify_step_five_page_chrome(game.hud, game.hud.level_overlay, "cases", "Campus", "Zum Campus"):
+		return
+	await _capture("cases_step5")
+
+	game._show_practice()
+	await _settle()
+	if not _verify_step_five_page_chrome(game.hud, game.hud.practice_overlay, "practice", "Campus", "Zum Campus") \
+		or not _verify_step_five_practice_groups(game.hud.practice_screen):
+		return
+	await _capture("practice_step5")
+
+	game.hud.show_settings(true, true)
+	await _settle()
+	if not _verify_step_five_page_chrome(game.hud, game.hud.settings_overlay, "settings", "Zurück", "Zurück"):
+		return
+	await _capture("settings_step5")
+
+	for discovery_id in game.discovery_definitions:
+		game.discovery_manager.mark_seen(discovery_id)
+	game._show_lexicon()
+	await _settle()
+	if not _verify_step_five_page_chrome(game.hud, game.hud.lexicon_overlay, "lexicon", "Campus", "Zum Campus"):
+		return
+	await _capture("lexicon_step5")
+
+	game.meta.research_ranks[&"unlock_spread_treatment"] = 1
+	game.meta.research_ranks[&"unlock_piercing_treatment"] = 1
+	game.selected_level = game.levels[1]
+	game._show_preparation()
+	await _settle()
+	if not _verify_direct_preparation_state(game) \
+		or not _verify_step_five_page_chrome(game.hud, game.hud.preparation_overlay, "preparation", "Fälle", "Zur Fallauswahl"):
+		return
+	await _capture("preparation_step5")
 
 
 func _capture_step_two(game: Node) -> void:
@@ -824,6 +887,66 @@ func _verify_direct_preparation_state(game: Node) -> bool:
 	capture_failed = true
 	push_error("Einsatzplanung öffnet nicht direkt mit sichtbar markierter Behandlungsauswahl")
 	return false
+
+
+func _verify_step_five_page_chrome(
+	hud: GameHUD,
+	overlay: Control,
+	screen_id: String,
+	wide_caption: String,
+	accessible_name: String
+) -> bool:
+	if not _verify_document_page(hud, overlay, screen_id):
+		return false
+	var page_parts := _document_page_parts(hud, overlay)
+	var header := page_parts.get("header") as Control
+	var action := _find_semantic_component(header, &"page_navigation_action") as Button
+	var compact := hud.root != null and hud.root.size.x < 620.0
+	var visible_caption := action.text if action != null else ""
+	if action is IconTextButton and (action as IconTextButton).caption != null:
+		visible_caption = (action as IconTextButton).caption.text
+	var expected_caption := "" if compact else wide_caption
+	var expected_tooltip := accessible_name if compact else ""
+	var viewport_rect := Rect2(Vector2.ZERO, Vector2(capture_size))
+	var valid := action != null \
+		and action.is_visible_in_tree() \
+		and viewport_rect.encloses(_canvas_rect(action)) \
+		and visible_caption == expected_caption \
+		and String(action.get_meta(&"alveolus_accessible_name", "")) == accessible_name \
+		and action.tooltip_text == expected_tooltip \
+		and action.get_combined_minimum_size().y >= AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	if valid:
+		return true
+	capture_failed = true
+	push_error("Step-5-Seite %s verletzt den gemeinsamen Rückkehrvertrag (kompakt=%s, sichtbar=%s/%s, zugänglich=%s/%s, Tooltip=%s/%s)" % [
+		screen_id,
+		compact,
+		visible_caption,
+		expected_caption,
+		String(action.get_meta(&"alveolus_accessible_name", "")) if action != null else "<fehlt>",
+		accessible_name,
+		action.tooltip_text if action != null else "<fehlt>",
+		expected_tooltip,
+	])
+	return false
+
+
+func _verify_step_five_practice_groups(screen: PracticeScreen) -> bool:
+	var valid := screen != null
+	for group_name in ["ScenarioSelectionCard", "EventScenarioSelectionCard", "BossProfileSelectionCard"]:
+		var group: PanelContainer = null
+		if screen != null:
+			group = screen.find_child(group_name, true, false) as PanelContainer
+		valid = valid \
+			and group != null \
+			and group.theme_type_variation == AlveolusVisualTheme.TYPE_OPEN_GROUP \
+			and group.get_meta(&"alveolus_component", &"") == &"open_group"
+	if valid:
+		return true
+	capture_failed = true
+	push_error("Step-5-Praxis gruppiert bereits gerahmte Testkarten nicht ausschließlich in transparenten OPEN_GROUP-Trägern")
+	return false
+
 
 func _verify_document_page(hud: GameHUD, overlay: Control, screen_id: String) -> bool:
 	var page_parts := _document_page_parts(hud, overlay)

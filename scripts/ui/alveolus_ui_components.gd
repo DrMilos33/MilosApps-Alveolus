@@ -38,6 +38,43 @@ static func action_button(
 ) -> Button:
 	return _build_action_button(text_value, _variation_for_role(role), icon_kind, accent, role)
 
+
+## Compact page-level return command. The short visible destination keeps the
+## header readable as a game surface; the full route remains available to
+## assistive input and appears as a tooltip in the glyph-only compact state.
+static func page_navigation_action(
+	visible_text: String,
+	accessible_name: String,
+	icon_kind: StringName = &"back",
+	accent: Color = AlveolusVisualTheme.MUTED
+) -> Button:
+	var control := action_button(visible_text, ACTION_NAVIGATION, icon_kind, accent)
+	control.size_flags_horizontal = Control.SIZE_SHRINK_END
+	control.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	control.set_meta(&"alveolus_component", &"page_navigation_action")
+	control.set_meta(&"page_navigation_caption", visible_text)
+	control.set_meta(&"page_navigation_accessible_name", accessible_name)
+	refresh_page_navigation_action(control, false)
+	return control
+
+
+static func refresh_page_navigation_action(control: Button, compact: bool) -> void:
+	if control == null:
+		return
+	var caption := str(control.get_meta(&"page_navigation_caption", control.text))
+	var accessible_name := str(control.get_meta(&"page_navigation_accessible_name", caption))
+	if control is IconTextButton:
+		(control as IconTextButton).set_caption("" if compact else caption, true)
+	else:
+		control.text = "" if compact else caption
+	control.custom_minimum_size.y = maxf(
+		control.custom_minimum_size.y,
+		AlveolusVisualTheme.TOUCH_TARGET_MINIMUM
+	)
+	control.set_meta(&"alveolus_accessible_name", accessible_name)
+	control.tooltip_text = accessible_name if compact else ""
+	control.set_meta(&"preferred_inline_width", control.get_combined_minimum_size().x)
+
 ## Explicit exception to the global teal-to-teal primary action. This is the
 ## only component API allowed to create the approved planning teal-to-warm-gold
 ## membrane.
@@ -152,6 +189,14 @@ static func panel(variation: StringName = AlveolusVisualTheme.TYPE_SECTION_GROUP
 static func surface(role: int, accent: Color = AlveolusVisualTheme.TEAL) -> PanelContainer:
 	var control := PanelContainer.new()
 	apply_surface_role(control, role, accent)
+	return control
+
+
+## Borderless structural group for a collection of already-painted child
+## cards. This preserves a stable PanelContainer API without frame-in-frame UI.
+static func open_group() -> PanelContainer:
+	var control := surface(AlveolusVisualTheme.SurfaceRole.OPEN_GROUP)
+	control.set_meta(&"alveolus_component", &"open_group")
 	return control
 
 ## Applies a semantic Bio-Lumen surface to an existing Panel/PanelContainer.
@@ -987,6 +1032,8 @@ static func _variation_for_surface_role(role: int) -> StringName:
 			return AlveolusVisualTheme.TYPE_TOOLTIP_CARD
 		AlveolusVisualTheme.SurfaceRole.DETAIL_CARD:
 			return AlveolusVisualTheme.TYPE_DETAIL_CARD
+		AlveolusVisualTheme.SurfaceRole.OPEN_GROUP:
+			return AlveolusVisualTheme.TYPE_OPEN_GROUP
 	return AlveolusVisualTheme.TYPE_SECTION_GROUP
 
 static func _surface_role_for_variation(variation: StringName) -> int:
@@ -1019,6 +1066,8 @@ static func _surface_role_for_variation(variation: StringName) -> int:
 			return AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD
 		AlveolusVisualTheme.TYPE_DETAIL_CARD:
 			return AlveolusVisualTheme.SurfaceRole.DETAIL_CARD
+		AlveolusVisualTheme.TYPE_OPEN_GROUP:
+			return AlveolusVisualTheme.SurfaceRole.OPEN_GROUP
 	return -1
 
 static func _default_accent_for_surface_role(role: int) -> Color:

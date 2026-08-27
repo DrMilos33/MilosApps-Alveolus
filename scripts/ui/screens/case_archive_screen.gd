@@ -114,9 +114,9 @@ func _build_interface() -> void:
 	_replay_button.name = "ReplayStoryButton"
 	_replay_button.pressed.connect(func() -> void: replay_story.emit())
 
-	_back_button = AlveolusUIComponents.action_button(
+	_back_button = AlveolusUIComponents.page_navigation_action(
+		"Campus",
 		"Zum Campus",
-		AlveolusUIComponents.ACTION_NAVIGATION,
 		&"back",
 		AlveolusVisualTheme.TEAL
 	)
@@ -388,10 +388,7 @@ func _refresh_responsive_layout() -> void:
 	)
 	if _replay_button is IconTextButton:
 		(_replay_button as IconTextButton).set_caption("Prolog", compact)
-	if _back_button is IconTextButton:
-		(_back_button as IconTextButton).set_caption("Campus" if compact else "Zum Campus", compact)
-	_back_button.set_meta(&"alveolus_accessible_name", "Zum Campus")
-	_back_button.tooltip_text = "Zum Campus" if compact else ""
+	AlveolusUIComponents.refresh_page_navigation_action(_back_button, compact)
 	_refresh_board_geometry.call_deferred()
 
 

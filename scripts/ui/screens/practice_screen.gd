@@ -200,9 +200,9 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func _build() -> void:
-	_back_button = AlveolusUIComponents.action_button(
+	_back_button = AlveolusUIComponents.page_navigation_action(
+		"Campus",
 		"Zum Campus",
-		AlveolusUIComponents.ACTION_NAVIGATION,
 		&"back",
 		AlveolusVisualTheme.TEAL
 	)
@@ -269,7 +269,7 @@ func _build_test_content() -> void:
 
 
 func _build_scenario_card() -> void:
-	_scenario_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
+	_scenario_card = AlveolusUIComponents.open_group()
 	_scenario_card.name = "ScenarioSelectionCard"
 	_scenario_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var content := VBoxContainer.new()
@@ -286,12 +286,12 @@ func _build_scenario_card() -> void:
 	_scenario_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
 	_scenario_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTENT_GAP)
 	content.add_child(_scenario_grid)
-	_scenario_card.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	_scenario_card.add_child(content)
 	_tests_content.add_child(_scenario_card)
 
 
 func _build_event_card() -> void:
-	_event_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
+	_event_card = AlveolusUIComponents.open_group()
 	_event_card.name = "EventScenarioSelectionCard"
 	_event_card.visible = false
 	_event_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -309,12 +309,12 @@ func _build_event_card() -> void:
 	_event_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
 	_event_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	content.add_child(_event_grid)
-	_event_card.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	_event_card.add_child(content)
 	_tests_content.add_child(_event_card)
 
 
 func _build_boss_card() -> void:
-	_boss_card = AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)
+	_boss_card = AlveolusUIComponents.open_group()
 	_boss_card.name = "BossProfileSelectionCard"
 	_boss_card.visible = false
 	_boss_card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -332,7 +332,7 @@ func _build_boss_card() -> void:
 	_boss_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTENT_GAP)
 	_boss_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
 	content.add_child(_boss_grid)
-	_boss_card.add_child(AlveolusUIComponents.margin(content, AlveolusVisualTheme.CARD_PADDING))
+	_boss_card.add_child(content)
 	_tests_content.add_child(_boss_card)
 
 
@@ -525,7 +525,9 @@ func _update_responsive_layout() -> void:
 	var logical_width := size.x
 	if logical_width <= 0.0 and get_viewport() != null:
 		logical_width = get_viewport_rect().size.x
-	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, logical_width < TWO_COLUMN_MINIMUM)
+	var compact := logical_width < TWO_COLUMN_MINIMUM
+	AlveolusUIComponents.refresh_page_navigation_action(_back_button, compact)
+	AlveolusUIComponents.refresh_page_shell_layout(_page_shell, compact)
 	if logical_width >= FOUR_COLUMN_MINIMUM:
 		_scenario_grid.columns = 4
 	elif logical_width >= TWO_COLUMN_MINIMUM:

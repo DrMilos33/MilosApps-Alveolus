@@ -60,6 +60,9 @@ Alle Werte liegen in `AlveolusVisualTheme`:
 - Normaler Außenabstand: 24 Pixel; kompakt: 16 Pixel.
 - Kopfzeile: 76 Pixel; kompakt: 60 Pixel. Danach folgen 20 beziehungsweise 12 Pixel Leerraum, bevor der erste Inhaltsblock beginnt.
 - Der Kopf enthält genau einen Seitentitel. Zwischen Medaillon und Titel liegen 16 Pixel; Obertitel oder wiederholte Kontextzeilen werden nicht verwendet.
+- Seitenweite Rückkehraktionen verwenden die gemeinsame Seitenkopf- und Containerlogik. Auf breiten Bühnen nennen sie nur das kurze Ziel wie `Campus` oder `Fälle`; kompakt bleibt ausschließlich die Zurückglyphe sichtbar. Der zugängliche Name enthält in beiden Zuständen die vollständige Aktion wie `Zum Campus` oder `Zur Fallauswahl`, und die kompakte Glyphe wiederholt sie im Tooltip.
+- Pro semantischer Hierarchieebene wird höchstens eine Fläche bemalt. Umschließen rein strukturelle Gruppen bereits gerahmte Karten, verwenden sie `OPEN_GROUP` ohne eigenen Hintergrund oder Rahmen; Abstand und Anordnung liegen im offenen Inhaltslayout statt in einer weiteren Karte.
+- Die gemeinsame Seiten- und Containerkonstruktion ändert keine Seiteninhalte, Navigationsziele, Abläufe, Auswahl- oder Fokusverträge.
 - `ui_cancel` schließt immer nur die oberste tatsächliche Ebene: Bestätigung → Auswahl → Detail → Seite → Campus/Run. Ein Pflichtdialog kann nicht in den Hintergrund durchgereicht werden.
 - Jede Scrollfläche mit interaktiven Inhalten folgt dem Tastatur-/Gamepadfokus. Ein sichtbarer Fokus darf nie außerhalb des aktuellen Viewports stehen; Maus und Touch behalten denselben Scrollbereich.
 - Beim Öffnen oder Neuaufbauen einer Ansicht bleibt sichtbarer Fokus zunächst aus. Erst eine bewusste Richtungs-, Weiter- oder Zurücknavigation per Tastatur beziehungsweise Gamepad aktiviert den vorbereiteten Fokuspfad; ein Mausklick entfernt nichttextlichen Fokus wieder. Goldene Hinweisrahmen markieren ein Ziel semantisch und dürfen weder Fokus vortäuschen noch `grab_focus()` auslösen.

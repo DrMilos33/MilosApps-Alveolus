@@ -794,7 +794,7 @@ func _build_level_select() -> Control:
 	return level_screen
 
 func _build_lexicon() -> Control:
-	var page := _page("Lexikon", "Zum Campus")
+	var page := _page("Lexikon", "Campus", "Zum Campus")
 	var overlay: Control = page["overlay"]
 	var body: VBoxContainer = page["body"]
 	lexicon_master_detail = LexiconMasterDetail.new()
@@ -1364,6 +1364,8 @@ func _apply_page_shell_layout(logical_width: float) -> void:
 		var header := shell.get("header") as HBoxContainer
 		var header_back := shell.get("header_back") as Control
 		var actions := shell.get("actions") as HBoxContainer
+		var page_back := shell.get("back") as Button
+		AlveolusUIComponents.refresh_page_navigation_action(page_back, compact)
 		var visible_action_count := 0
 		var inline_action_width := 0.0
 		if actions != null:
@@ -1448,7 +1450,7 @@ func _play_ui_sound(cue: StringName) -> void:
 		get_tree().call_group(&"alveolus_ui_sound_service", &"play", cue)
 
 func _build_preparation() -> Control:
-	var page := _page("Einsatzplanung", "Zur Fallauswahl")
+	var page := _page("Einsatzplanung", "Fälle", "Zur Fallauswahl")
 	var overlay: Control = page["overlay"]
 	overlay.oversampling_with_scale = CanvasItem.OVERSAMPLING_WITH_SCALE_ENABLED
 	# This trial owns a darker canvas than the shared dossier pages. Keeping the
@@ -5560,7 +5562,7 @@ func _variant_array(source: Variant) -> Array:
 func _on_upgrade_pressed(definition: UpgradeDefinition) -> void:
 	upgrade_chosen.emit(definition)
 
-func _page(title: String, back_text: String) -> Dictionary:
+func _page(title: String, back_text: String, back_accessible_name: String = "") -> Dictionary:
 	var overlay := _overlay_base(AlveolusVisualTheme.PETROL_DEEP)
 	overlay.set_meta(&"surface_role", AlveolusVisualTheme.SurfaceRole.PAGE_CANVAS)
 	var bio_backdrop := BioLumenBackdrop.new()
@@ -5619,7 +5621,13 @@ func _page(title: String, back_text: String) -> Dictionary:
 	actions.alignment = BoxContainer.ALIGNMENT_END
 	actions.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	header.add_child(actions)
-	var back := _nav_button(back_text, &"back", COLOR_MUTED)
+	var resolved_back_name := back_accessible_name if not back_accessible_name.is_empty() else back_text
+	var back := AlveolusUIComponents.page_navigation_action(
+		back_text,
+		resolved_back_name,
+		&"back",
+		COLOR_MUTED
+	)
 	back.pressed.connect(func() -> void: back_requested.emit())
 	actions.add_child(back)
 	var body := VBoxContainer.new()
@@ -5639,19 +5647,12 @@ func _page(title: String, back_text: String) -> Dictionary:
 		"header_back": header_back,
 		"medallion": medallion,
 		"title": title_label,
+		"back": back,
 	})
 	return {"overlay": overlay, "body": body, "actions": actions, "back": back, "header": header}
 
 func _nav_button(text: String, kind: StringName, accent: Color) -> Button:
-	var button := AlveolusUIComponents.action_button(
-		text,
-		AlveolusUIComponents.ACTION_NAVIGATION,
-		kind,
-		accent
-	)
-	button.custom_minimum_size.x = maxf(button.custom_minimum_size.x, 146.0)
-	button.custom_minimum_size.y = maxf(button.custom_minimum_size.y, AlveolusVisualTheme.TOUCH_TARGET_MINIMUM)
-	button.set_meta(&"preferred_inline_width", button.custom_minimum_size.x)
+	var button := AlveolusUIComponents.page_navigation_action(text, text, kind, accent)
 	UISoundService.set_sound_role(button, UISoundService.BACK if kind in [&"back", &"return"] else UISoundService.OPEN)
 	return button
 

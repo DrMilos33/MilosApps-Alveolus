@@ -68,6 +68,7 @@ func _run() -> void:
 		AlveolusVisualTheme.TYPE_VALUE_ROW,
 		AlveolusVisualTheme.TYPE_TOOLTIP_CARD,
 		AlveolusVisualTheme.TYPE_DETAIL_CARD,
+		AlveolusVisualTheme.TYPE_OPEN_GROUP,
 	]:
 		_check(visual_theme.get_type_variation_base(surface_type) == &"PanelContainer", "%s ist eine semantische SurfaceRole" % surface_type)
 	for surface_role in [
@@ -85,6 +86,7 @@ func _run() -> void:
 		AlveolusVisualTheme.SurfaceRole.VALUE_ROW,
 		AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD,
 		AlveolusVisualTheme.SurfaceRole.DETAIL_CARD,
+		AlveolusVisualTheme.SurfaceRole.OPEN_GROUP,
 	]:
 		var role_style := AlveolusVisualTheme.surface_role_style(surface_role)
 		_check(not _is_accidental_black(role_style.bg_color), "SurfaceRole %s besitzt einen absichtlichen Petrol-Fallback statt Schwarz" % surface_role)
@@ -213,6 +215,7 @@ func _run() -> void:
 	var value_row_style := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.VALUE_ROW)
 	var tooltip_style := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.TOOLTIP_CARD, AlveolusVisualTheme.TURQUOISE)
 	var detail_style := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.DETAIL_CARD, AlveolusVisualTheme.COBALT)
+	var open_group_style := AlveolusVisualTheme.surface_role_style(AlveolusVisualTheme.SurfaceRole.OPEN_GROUP)
 	_check(page_canvas.bg_color.is_equal_approx(AlveolusVisualTheme.PETROL_DEEP) and _contrast_ratio(page_canvas.bg_color, AlveolusVisualTheme.IVORY) >= 7.0, "PageCanvas ist die dunkle Petrol-Dossierfläche")
 	_check(section_group.bg_color.a <= 0.12 and section_group.shadow_size == 0, "SectionGroup bleibt zurückhaltend transparent und flach")
 	_check(_all_corner_radii(section_group, 0), "Große SectionGroup besitzt standardmäßig keinen Cut")
@@ -224,6 +227,15 @@ func _run() -> void:
 	_check(value_row_style.shadow_size == 0 and value_row_style.bg_color.a < 0.80, "ValueRow ordnet Werte ohne unnötige Erhöhung")
 	_check(tooltip_style.shadow_size > 0 and _all_corner_radii(tooltip_style, 4), "TooltipCard ist kompakt, kontrastreich und leicht abgehoben")
 	_check(detail_style.shadow_size > 0 and _all_corner_radii(detail_style, 6), "DetailCard trennt explizite Information semantisch vom Hover-Tooltip")
+	_check(open_group_style.bg_color.a == 0.0 and open_group_style.border_color.a == 0.0, "OpenGroup bleibt als struktureller Kartenträger vollständig transparent")
+	_check(
+		open_group_style.border_width_left == 0 \
+			and open_group_style.border_width_top == 0 \
+			and open_group_style.border_width_right == 0 \
+			and open_group_style.border_width_bottom == 0 \
+			and open_group_style.shadow_size == 0,
+		"OpenGroup erzeugt weder Rahmen noch Schatten"
+	)
 	for treatment_data in [
 		[AlveolusVisualTheme.CornerTreatment.NONE, 0],
 		[AlveolusVisualTheme.CornerTreatment.CONTROL_4, 4],
@@ -253,7 +265,8 @@ func _run() -> void:
 	var primary_action := AlveolusUIComponents.action_button("Behandlung starten", AlveolusUIComponents.ACTION_PRIMARY)
 	var second_primary := AlveolusUIComponents.action_button("Weiter", AlveolusUIComponents.ACTION_PRIMARY, &"", AlveolusVisualTheme.COBALT)
 	var planning_start := AlveolusUIComponents.planning_start_button()
-	var navigation_action := AlveolusUIComponents.action_button("Zurück", AlveolusUIComponents.ACTION_NAVIGATION, &"back")
+	var navigation_action := AlveolusUIComponents.page_navigation_action("Campus", "Zum Campus", &"back")
+	var open_group := AlveolusUIComponents.open_group()
 	var segmented := AlveolusUIComponents.segmented_tab("Ereignisse", true)
 	var toggle := AlveolusUIComponents.toggle_row("Charakterwerte im Run", true)
 	var option_parts := AlveolusUIComponents.option_row("UI-Größe", ["75 %", "90 %", "100 %", "200 %"], 2)
@@ -296,6 +309,14 @@ func _run() -> void:
 	var planning_right: Color = planning_material.get_shader_parameter(&"right_color") if planning_material != null else Color.TRANSPARENT
 	_check(not _is_accidental_black(planning_left) and not _is_accidental_black(planning_right), "PlanningStart behält Türkis und Warmgold auch im Webmaterial")
 	_check(navigation_action.theme_type_variation == AlveolusVisualTheme.TYPE_NAVIGATION_BUTTON and navigation_action.get_meta(&"ui_sound_cue") == &"back", "Navigation bündelt Variante und Zurück-Soundcue")
+	_check(
+		navigation_action.get_meta(&"alveolus_component", &"") == &"page_navigation_action" \
+			and navigation_action is IconTextButton \
+			and (navigation_action as IconTextButton).caption.text == "Campus" \
+			and navigation_action.get_meta(&"alveolus_accessible_name", "") == "Zum Campus" \
+			and navigation_action.tooltip_text.is_empty(),
+		"Seitennavigation zeigt breit nur das kurze Ziel und bewahrt den vollständigen zugänglichen Namen"
+	)
 	for state in [&"normal", &"hover", &"pressed", &"hover_pressed", &"focus", &"disabled"]:
 		var visual_state: StringName = &"hover" if state == &"hover_pressed" else state
 		var navigation_factory := AlveolusVisualTheme.navigation_button_style(visual_state)
@@ -331,6 +352,34 @@ func _run() -> void:
 	)
 	navigation_action.mouse_exited.emit()
 	navigation_action.focus_exited.emit()
+	AlveolusUIComponents.refresh_page_navigation_action(navigation_action, true)
+	_check(
+		(navigation_action as IconTextButton).caption.text.is_empty() \
+			and navigation_action.get_meta(&"alveolus_accessible_name", "") == "Zum Campus" \
+			and navigation_action.tooltip_text == "Zum Campus",
+		"Kompakte Seitennavigation zeigt ausschließlich die Glyphe und erklärt das vollständige Ziel zugänglich"
+	)
+	_check(
+		navigation_action.get_combined_minimum_size().x >= AlveolusVisualTheme.TOUCH_TARGET_MINIMUM \
+			and navigation_action.get_combined_minimum_size().y >= AlveolusVisualTheme.TOUCH_TARGET_MINIMUM,
+		"Kompakte Seitennavigation behält ein mindestens 44 px großes Ziel"
+	)
+	AlveolusUIComponents.refresh_page_navigation_action(navigation_action, false)
+	var open_group_component_style := open_group.get_theme_stylebox("panel") as StyleBoxFlat
+	_check(
+		open_group.theme_type_variation == AlveolusVisualTheme.TYPE_OPEN_GROUP \
+			and open_group.get_meta(&"alveolus_component", &"") == &"open_group" \
+			and int(open_group.get_meta(&"alveolus_surface_role", -1)) == AlveolusVisualTheme.SurfaceRole.OPEN_GROUP,
+		"OpenGroup stammt aus der zentralen Komponente und transportiert seine SurfaceRole"
+	)
+	_check(
+		open_group_component_style != null \
+			and open_group_component_style.bg_color.a == 0.0 \
+			and open_group_component_style.border_width_left == 0 \
+			and open_group_component_style.shadow_size == 0 \
+			and open_group.get_node_or_null("BioLumenSurface") == null,
+		"Die zentrale OpenGroup-Komponente malt weder Fläche, Rahmen noch Membran"
+	)
 	AlveolusUIComponents.set_button_disabled(primary_action, true)
 	var disabled_top: Color = bio_material.get_shader_parameter(&"top_color") if bio_material != null else Color.TRANSPARENT
 	_check(primary_action.disabled and _hue_distance(disabled_top.h, AlveolusVisualTheme.MUTED.h) <= 0.08, "Programmatisches Disabled synchronisiert den Shader ereignisgesteuert")
@@ -437,6 +486,7 @@ func _run() -> void:
 	choice_card.free()
 	damage_row.free()
 	damage_chip.free()
+	open_group.free()
 
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
 	for viewport_size in [Vector2i(1280, 720), Vector2i(1280, 800), Vector2i(1024, 576), Vector2i(960, 540)]:
