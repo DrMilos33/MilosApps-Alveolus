@@ -169,6 +169,12 @@ func _measure_and_place(generation: int, phase: int) -> void:
 		)
 		return
 
+	# Result and campus targets can be rebuilt in the same frame in which the
+	# hint opens. Resolve their final layout now, after one process frame, then
+	# freeze the highlight for the paused modal instead of keeping a permanent
+	# polling owner alive.
+	_refresh_target_geometry()
+	highlighter.set_process(false)
 	var copy_height := ceilf(copy_stack.get_combined_minimum_size().y)
 	copy_scroll.custom_minimum_size.y = copy_height
 	copy_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -274,9 +280,6 @@ func _refresh_target_geometry() -> void:
 		resolved_target = logical_size * 0.5
 	highlighter.clear()
 	highlighter.follow(resolved_target, AlveolusVisualTheme.GOLD, 5.0)
-	# A discovery pauses the run, so its highlighted target cannot move between
-	# explicit geometry/viewport changes.
-	highlighter.set_process(false)
 	target_position = highlighter.center()
 	if _compact_sheet_active:
 		highlighter.hide()

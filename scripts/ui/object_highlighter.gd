@@ -114,7 +114,16 @@ func _resolve_tracked_geometry() -> void:
 	if body != null:
 		tracked_body = body
 		var body_transform := _relative_canvas_transform(body)
-		_set_contours(body.contours_transformed(body_transform, tracked_padding), Shape.CONTOURS)
+		var body_contours: Array[PackedVector2Array] = body.contours_transformed(body_transform, tracked_padding)
+		if body_contours.is_empty():
+			# Alpha-mask bodies expose precise hit testing without a precomputed
+			# polygon. Highlight their owning unit at the same screen position
+			# instead of silently collapsing the hint target to (0, 0).
+			var radius := tracked_radius if tracked_radius > 0.0 else _suggested_radius(tracked_target)
+			var scale_factor := maxf(body_transform.x.length(), body_transform.y.length())
+			_set_circle(body_transform.origin, (radius + tracked_padding) * maxf(scale_factor, 0.01))
+		else:
+			_set_contours(body_contours, Shape.CONTOURS)
 		visible = strength > 0.001 and shape != Shape.NONE
 		return
 	if tracked_target is Control:

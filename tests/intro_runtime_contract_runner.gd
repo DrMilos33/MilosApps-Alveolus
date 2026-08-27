@@ -107,9 +107,42 @@ func _run() -> void:
 	_check(game.flow_state == GameFlowState.State.DISCOVERY_PAUSE and game.hud.end_overlay.visible, "Der erste Introabschluss zeigt den normalen Rundenergebnis-Screen mit pausierendem Hinweis")
 	_check(game.hud.discovery_tooltip.visible and game.hud.discovery_tooltip.gameplay_label.text == "Nutze Forschung im Forschungsgebäude für dauerhafte Upgrades.", "Intro-Hinweis erklärt kompakt den nächsten Forschungsschritt")
 	_check(game.hud.discovery_tooltip.target_object == game.hud.end_reward, "Intro-Hinweis ist am tatsächlichen Forschungssymbol der Belohnung verankert")
+	for _frame in range(4):
+		await process_frame
+	var reward_icon_rect: Rect2 = game.hud.end_reward.get_global_rect()
+	var highlighted_reward_rect: Rect2 = game.hud.discovery_tooltip.highlighter.bounds()
+	_check(
+		reward_icon_rect.size.x > 0.0
+		and reward_icon_rect.size.y > 0.0
+		and highlighted_reward_rect.has_point(reward_icon_rect.get_center()),
+		"Intro-Hinweis löst die fertige Endscreen-Geometrie des Forschungssymbols statt der Bildschirmecke auf"
+	)
 	var expected_intro_reward := MetaProgressionState.intro_research_reward(1)
 	_check(game.meta.research_points == expected_intro_reward, "Intro-Ergebnis vergibt Basisforschung plus Bossmultiplikator: %d (aktuell %d)" % [expected_intro_reward, game.meta.research_points])
 	_check(game.meta.talent_points_earned() == 0, "Intro-Ergebnis vergibt noch keinen Talentpunkt")
+
+	var seen_except_treatment := {}
+	for discovery_id in game.discovery_definitions:
+		if discovery_id != &"automatic_therapy":
+			seen_except_treatment[discovery_id] = true
+	game.discovery_manager.configure(game.discovery_definitions, seen_except_treatment)
+	game.selected_level = game.levels[1]
+	game._on_projectile_discovery_ready(null)
+	for _frame in range(4):
+		await process_frame
+	var doctor_canvas_position: Vector2 = (
+		game.hud.discovery_tooltip.highlighter.get_global_transform_with_canvas().affine_inverse()
+		* game.avatar.get_global_transform_with_canvas().origin
+	)
+	_check(
+		game.discovery_manager.active.get("target") == game.avatar
+		and game.hud.discovery_tooltip.target_object == game.avatar,
+		"Der Behandlungshinweis zeigt unabhängig vom auslösenden Projektil auf Doctor Milos"
+	)
+	_check(
+		game.hud.discovery_tooltip.highlighter.bounds().has_point(doctor_canvas_position),
+		"Der Behandlungshinweis löst die sichtbare Bildschirmposition von Doctor Milos auf"
+	)
 
 	game.queue_free()
 	await process_frame

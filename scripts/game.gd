@@ -2954,7 +2954,8 @@ func _on_projectile_discovery_ready(projectile: TherapyProjectile) -> void:
 	if selected_level != null and selected_level.is_tutorial:
 		discovery_manager.mark_seen(&"automatic_therapy")
 		return
-	if discovery_manager.request(&"automatic_therapy", projectile):
+	var discovery_target: Variant = avatar if is_instance_valid(avatar) else projectile
+	if discovery_manager.request(&"automatic_therapy", discovery_target):
 		_try_present_next_discovery()
 
 func _immune_step(delta: float) -> void:
