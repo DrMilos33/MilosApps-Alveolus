@@ -476,7 +476,9 @@ func _run() -> void:
 	var research_events: Array[StringName] = []
 	hud.research_purchase_requested.connect(func(id: StringName) -> void: research_events.append(id))
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
-	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 10, "Die zehn Forschungen nutzen bei 1280 Pixeln ein kompaktes Vierspaltenbrett")
+	var foundation_research := hud.progression_screen.research_group_grid(&"foundation")
+	var unlock_research := hud.progression_screen.research_group_grid(&"unlock")
+	_check(foundation_research.columns == 4 and unlock_research.columns == 4 and foundation_research.get_child_count() == 6 and unlock_research.get_child_count() == 4, "Die zehn Forschungen nutzen bei 1280 Pixeln ein gruppiertes Vierspalten-Laborboard")
 	_check(hud.research_buy_buttons.has(&"movement_training") and SimpleIcon.supports(&"movement_training"), "Bewegungstraining ist als achte Forschung mit zentral registrierter Bewegungsglyphe verfügbar")
 	var movement_training_card := hud.research_buy_buttons[&"movement_training"] as Button
 	var movement_training_glyph_found := false
@@ -485,7 +487,7 @@ func _run() -> void:
 			movement_training_glyph_found = true
 			break
 	_check(movement_training_glyph_found, "Die Forschungskarte verwendet ihre semantische Bewegungsglyphe statt eines Fallback-Icons")
-	_check((hud.research_grid.get_child(0) as Control).custom_minimum_size.y <= 76.0, "Forschungskarten bleiben kompakt")
+	_check((foundation_research.get_child(0) as Control).custom_minimum_size.y <= 76.0, "Forschungskarten bleiben kompakt")
 	for research_button in hud.research_buy_buttons.values():
 		_check((research_button as Button).tooltip_text.is_empty(), "Forschung nutzt ausschließlich die gemeinsame Kontextkarte")
 	var research_source := hud.research_buy_buttons[&"therapy_precision"] as Button

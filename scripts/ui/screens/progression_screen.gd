@@ -21,6 +21,8 @@ const TalentTreeBranchType := preload("res://scripts/ui/talent_tree_branch.gd")
 const ROUTE_ID := &"research"
 const CONTEXT_DETAIL_SCOPE_ID := &"progression"
 const RESEARCH_WIDE_COLUMNS := 4
+const RESEARCH_GROUP_FOUNDATION := &"foundation"
+const RESEARCH_GROUP_UNLOCK := &"unlock"
 const TALENT_SYMBOLS_BY_ID := {
 	&"upgrade_rarity_training": &"research",
 	&"defense_cells_first": &"immune",
@@ -52,6 +54,8 @@ var _research_inline_balance: Label
 var _research_reset_row: HBoxContainer
 var _research_reset_button: Button
 var _research_grid: GridContainer
+var _research_group_grids: Dictionary = {}
+var _research_group_sections: Dictionary = {}
 var _talent_host: Control
 var _talent_scroll: ScrollContainer
 var _talent_stack: VBoxContainer
@@ -167,6 +171,10 @@ func selected_tab() -> StringName:
 
 func research_columns() -> int:
 	return _research_grid.columns
+
+
+func research_group_grid(group_id: StringName) -> GridContainer:
+	return _research_group_grids.get(group_id) as GridContainer
 
 
 func talent_columns() -> int:
@@ -364,14 +372,72 @@ func _build_research_view(parent: VBoxContainer) -> void:
 	_research_reset_button.name = "ResearchResetAction"
 	_research_reset_button.pressed.connect(func() -> void: research_reset.emit())
 	_research_reset_row.add_child(_research_reset_button)
-	_research_grid = GridContainer.new()
-	_research_grid.name = "ResearchGrid"
-	_research_grid.columns = RESEARCH_WIDE_COLUMNS
-	_research_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_research_grid.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_research_grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
-	_research_grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
-	_research_stack.add_child(_research_grid)
+	_build_research_group(
+		_research_stack,
+		RESEARCH_GROUP_FOUNDATION,
+		"Grundlagen",
+		&"research",
+		AlveolusVisualTheme.GOLD
+	)
+	_build_research_group(
+		_research_stack,
+		RESEARCH_GROUP_UNLOCK,
+		"Freischaltungen",
+		&"components",
+		AlveolusVisualTheme.TEAL
+	)
+	_research_grid = _research_group_grids[RESEARCH_GROUP_FOUNDATION] as GridContainer
+
+
+func _build_research_group(
+	parent: VBoxContainer,
+	group_id: StringName,
+	title_text: String,
+	icon_kind: StringName,
+	accent: Color
+) -> void:
+	var section := VBoxContainer.new()
+	section.name = "ResearchGroup_%s" % String(group_id)
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	section.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	section.set_meta(&"research_group_id", group_id)
+	parent.add_child(section)
+	_research_group_sections[group_id] = section
+
+	var heading := HBoxContainer.new()
+	heading.name = "ResearchGroupHeading"
+	heading.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	heading.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
+	section.add_child(heading)
+	var icon := SimpleIcon.new()
+	icon.name = "ResearchGroupIcon"
+	icon.custom_minimum_size = Vector2(22.0, 22.0)
+	icon.configure(icon_kind, accent)
+	heading.add_child(icon)
+	var title := AlveolusUIComponents.label(title_text, AlveolusVisualTheme.TYPE_SECTION_LABEL)
+	title.name = "ResearchGroupTitle"
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", accent.lightened(0.12))
+	heading.add_child(title)
+	var rail := ColorRect.new()
+	rail.name = "ResearchGroupRail"
+	rail.custom_minimum_size = Vector2(0.0, 2.0)
+	rail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rail.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	rail.color = Color(accent, 0.34)
+	rail.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	heading.add_child(rail)
+
+	var grid := GridContainer.new()
+	grid.name = "ResearchGrid_%s" % String(group_id)
+	grid.columns = RESEARCH_WIDE_COLUMNS
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	grid.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	grid.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	section.add_child(grid)
+	_research_group_grids[group_id] = grid
 
 
 func _build_talent_view(parent: VBoxContainer) -> void:
@@ -479,8 +545,15 @@ func _sync_research(items: Array) -> void:
 		_research_interactive.erase(id)
 		if removed_button != null and is_instance_valid(removed_button):
 			removed_button.queue_free()
-	for index in range(items.size()):
-		var item: Variant = items[index]
+	var group_indices := {
+		RESEARCH_GROUP_FOUNDATION: 0,
+		RESEARCH_GROUP_UNLOCK: 0,
+	}
+	for item in items:
+		var group_id: StringName = RESEARCH_GROUP_UNLOCK if item.group_id() == RESEARCH_GROUP_UNLOCK else RESEARCH_GROUP_FOUNDATION
+		var target_grid := _research_group_grids.get(group_id) as GridContainer
+		if target_grid == null:
+			continue
 		var button := _research_buttons.get(item.id()) as Button
 		if button == null:
 			button = AlveolusUIComponents.compact_research()
@@ -489,10 +562,18 @@ func _sync_research(items: Array) -> void:
 			button.clip_contents = true
 			button.tooltip_text = ""
 			button.pressed.connect(_on_research_pressed.bind(item.id()))
-			_research_grid.add_child(button)
+			target_grid.add_child(button)
 			_research_buttons[item.id()] = button
+		elif button.get_parent() != target_grid:
+			button.reparent(target_grid)
 		_update_research_button(button, item)
-		_research_grid.move_child(button, index)
+		var group_index := int(group_indices[group_id])
+		target_grid.move_child(button, group_index)
+		group_indices[group_id] = group_index + 1
+	for group_id in _research_group_sections:
+		var section := _research_group_sections[group_id] as Control
+		if section != null:
+			section.visible = int(group_indices.get(group_id, 0)) > 0
 
 
 func _update_research_button(button: Button, item: Variant) -> void:
@@ -502,19 +583,17 @@ func _update_research_button(button: Button, item: Variant) -> void:
 	button.set_meta(&"stable_focus_id", item.id())
 	button.set_meta(&"item_state", _state_name(state))
 	button.set_meta(&"item_interactive", item.interactive())
-	button.set_meta(&"alveolus_accessible_name", "%s, %s" % [item.title(), _accessible_state_name(state)])
+	button.set_meta(&"research_group_id", item.group_id())
+	button.set_meta(&"research_rank_current", item.rank_current())
+	button.set_meta(&"research_rank_maximum", item.rank_maximum())
+	button.set_meta(
+		&"alveolus_accessible_name",
+		"%s, %s, %s, %s" % [item.title(), item.rank_text(), item.cost_text(), _accessible_state_name(state)]
+	)
 	button.set_meta(&"ui_sound_cue", &"confirm" if item.interactive() else &"error")
 	_research_interactive[item.id()] = item.interactive()
 	_free_children(button)
-	_build_item_content(
-		button,
-		item.title(),
-		item.rank_text(),
-		item.cost_text(),
-		item.icon_kind(),
-		state,
-		AlveolusVisualTheme.GOLD
-	)
+	_build_research_card_content(button, item)
 	if item.milestone_lock_cover():
 		_build_research_lock_cover(button)
 	AlveolusUIComponents.refresh_button_state(button)
@@ -774,69 +853,117 @@ func _talent_symbol_kind(id: StringName, source_kind: StringName, used_symbols: 
 	return fallback
 
 
-func _build_item_content(
-	button: Button,
-	title_text: String,
-	subtitle_text: String,
-	value_text: String,
-	icon_kind: StringName,
-	state: int,
-	accent: Color,
-	talent_density: bool = false
-) -> void:
+func _build_research_card_content(button: Button, item: Variant) -> void:
 	var inset := MarginContainer.new()
+	inset.name = "ResearchCardInset"
 	inset.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	var horizontal_inset := AlveolusVisualTheme.GRID_UNIT if talent_density else AlveolusVisualTheme.CONTENT_GAP
-	var row_gap := AlveolusVisualTheme.GRID_UNIT if talent_density else AlveolusVisualTheme.CONTROL_GAP
-	inset.add_theme_constant_override("margin_left", horizontal_inset)
-	inset.add_theme_constant_override("margin_top", AlveolusVisualTheme.CONTROL_GAP)
-	inset.add_theme_constant_override("margin_right", horizontal_inset)
-	inset.add_theme_constant_override("margin_bottom", AlveolusVisualTheme.CONTROL_GAP)
+	inset.add_theme_constant_override("margin_left", AlveolusVisualTheme.CONTROL_GAP)
+	inset.add_theme_constant_override("margin_top", AlveolusVisualTheme.GRID_UNIT)
+	inset.add_theme_constant_override("margin_right", AlveolusVisualTheme.CONTROL_GAP)
+	inset.add_theme_constant_override("margin_bottom", AlveolusVisualTheme.GRID_UNIT)
 	inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	button.add_child(inset)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", row_gap)
+	row.name = "ResearchCardRow"
+	row.add_theme_constant_override("separation", AlveolusVisualTheme.CONTROL_GAP)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	inset.add_child(row)
+	var state := int(item.state())
 	var locked := state == ProgressionScreenViewModelType.ItemState.LOCKED
 	var active := state == ProgressionScreenViewModelType.ItemState.ACTIVE
 	var content_modulate := Color(AlveolusVisualTheme.SKY_DEEP, 0.48) if locked else Color.WHITE
+	var motif := VBoxContainer.new()
+	motif.name = "ResearchMotif"
+	motif.custom_minimum_size.x = 34.0
+	motif.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	motif.add_theme_constant_override("separation", 3)
+	motif.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(motif)
 	var icon := SimpleIcon.new()
 	icon.name = "PrimaryIcon"
-	icon.custom_minimum_size = Vector2.ONE * (22.0 if talent_density else 28.0)
-	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	icon.configure(icon_kind, accent if not locked else AlveolusVisualTheme.MUTED)
+	icon.custom_minimum_size = Vector2.ONE * 32.0
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	icon.configure(item.icon_kind(), AlveolusVisualTheme.GOLD if not locked else AlveolusVisualTheme.MUTED)
 	icon.modulate = content_modulate
-	row.add_child(icon)
+	motif.add_child(icon)
+	var rank_segments := HBoxContainer.new()
+	rank_segments.name = "ResearchRankSegments"
+	rank_segments.custom_minimum_size.x = 34.0
+	rank_segments.add_theme_constant_override("separation", 2)
+	rank_segments.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	motif.add_child(rank_segments)
+	for rank_index in range(item.rank_maximum()):
+		var segment := ColorRect.new()
+		segment.name = "ResearchRankSegment_%d" % rank_index
+		segment.custom_minimum_size = Vector2(6.0, 3.0)
+		segment.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		segment.color = AlveolusVisualTheme.GOLD if rank_index < item.rank_current() else Color(AlveolusVisualTheme.MUTED, 0.38)
+		segment.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rank_segments.add_child(segment)
 	var copy := VBoxContainer.new()
+	copy.name = "ResearchCardCopy"
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	copy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(copy)
-	var title := AlveolusUIComponents.label(title_text, AlveolusVisualTheme.TYPE_BODY_LABEL)
+	var title := AlveolusUIComponents.label(item.title(), AlveolusVisualTheme.TYPE_BODY_LABEL)
+	title.name = "ResearchTitle"
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title.modulate = content_modulate
 	copy.add_child(title)
-	if not subtitle_text.is_empty():
-		var subtitle := AlveolusUIComponents.label(subtitle_text, AlveolusVisualTheme.TYPE_MUTED_LABEL)
-		subtitle.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		subtitle.modulate = content_modulate
-		copy.add_child(subtitle)
-	var value := AlveolusUIComponents.label(value_text, AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
+	var rank_label := AlveolusUIComponents.label(item.rank_text(), AlveolusVisualTheme.TYPE_MUTED_LABEL)
+	rank_label.name = "ResearchRankLabel"
+	rank_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	rank_label.modulate = content_modulate
+	copy.add_child(rank_label)
+	var chip := AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_BADGE)
+	chip.name = "ResearchCostChip"
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var chip_margin := MarginContainer.new()
+	chip_margin.add_theme_constant_override("margin_left", AlveolusVisualTheme.GRID_UNIT)
+	chip_margin.add_theme_constant_override("margin_top", 3)
+	chip_margin.add_theme_constant_override("margin_right", AlveolusVisualTheme.GRID_UNIT)
+	chip_margin.add_theme_constant_override("margin_bottom", 3)
+	chip.add_child(chip_margin)
+	var chip_row := HBoxContainer.new()
+	chip_row.add_theme_constant_override("separation", 4)
+	chip_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chip_margin.add_child(chip_row)
+	var chip_icon := SimpleIcon.new()
+	chip_icon.name = "ResearchCostIcon"
+	chip_icon.custom_minimum_size = Vector2.ONE * 15.0
+	chip_icon.configure(&"research", AlveolusVisualTheme.GOLD if not locked else AlveolusVisualTheme.MUTED)
+	chip_icon.modulate = content_modulate
+	chip_row.add_child(chip_icon)
+	var value := AlveolusUIComponents.label(_compact_research_cost(item.cost_text()), AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
+	value.name = "ResearchCostValue"
 	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	value.modulate = content_modulate
-	row.add_child(value)
-	if active or locked:
-		var state_icon := SimpleIcon.new()
-		state_icon.name = "StateIcon"
-		state_icon.custom_minimum_size = Vector2.ONE * (16.0 if talent_density else 20.0)
-		state_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		state_icon.configure(
-			&"check" if active else &"locked",
-			AlveolusVisualTheme.TEAL if active else AlveolusVisualTheme.MUTED
-		)
-		row.add_child(state_icon)
+	chip_row.add_child(value)
+	row.add_child(chip)
+	var state_icon := SimpleIcon.new()
+	state_icon.name = "StateIcon"
+	state_icon.custom_minimum_size = Vector2.ONE * 18.0
+	state_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	state_icon.configure(
+		&"check" if active else (&"locked" if locked else &"diamond"),
+		AlveolusVisualTheme.TEAL if active else (AlveolusVisualTheme.MUTED if locked else AlveolusVisualTheme.GOLD)
+	)
+	row.add_child(state_icon)
+
+
+func _compact_research_cost(cost_text: String) -> String:
+	match cost_text:
+		"Maximum":
+			return "MAX"
+		"Kostenlos":
+			return "0"
+		"Freigeschaltet":
+			return "FREI"
+		"Gesperrt":
+			return "—"
+	return cost_text.trim_suffix(" Forschung")
 
 
 func _on_tab_pressed(tab: StringName) -> void:
@@ -1018,7 +1145,11 @@ func _update_responsive_layout() -> void:
 	var logical_width := size.x
 	if logical_width <= 0.0 and get_viewport() != null:
 		logical_width = get_viewport_rect().size.x
-	_research_grid.columns = RESEARCH_WIDE_COLUMNS if logical_width >= 1100.0 else (3 if logical_width >= 900.0 else (2 if logical_width >= 680.0 else 1))
+	var research_columns := RESEARCH_WIDE_COLUMNS if logical_width >= 1100.0 else (3 if logical_width >= 900.0 else (2 if logical_width >= 680.0 else 1))
+	for grid_value in _research_group_grids.values():
+		var grid := grid_value as GridContainer
+		if grid != null:
+			grid.columns = research_columns
 	var requested_talent_columns := 3 if logical_width >= 1080.0 else (2 if logical_width >= 760.0 else 1)
 	_talent_grid.columns = mini(requested_talent_columns, maxi(1, _branch_order.size()))
 	var compact := logical_width < 620.0

@@ -2221,7 +2221,10 @@ func _refresh_progression_research_cache(
 			available,
 			info,
 			definition.total_effect_text(rank),
-			milestone_locked
+			milestone_locked,
+			&"foundation" if definition.category == &"passive" else &"unlock",
+			rank,
+			definition.max_level
 		))
 
 
@@ -2363,7 +2366,9 @@ func _map_progression_compatibility_controls() -> void:
 	talent_scroll = progression_screen.talent_scroll()
 	research_content = research_scroll
 	talent_content = talent_scroll
-	research_grid = progression_screen.find_child("ResearchGrid", true, false) as GridContainer
+	# Legacy facade field remains the Grundlagen grid; production callers use
+	# research_buy_buttons for the complete grouped laboratory board.
+	research_grid = progression_screen.research_group_grid(&"foundation")
 	talent_grid = progression_screen.find_child("TalentBranches", true, false) as GridContainer
 	talent_reset_button = progression_screen.talent_reset_action()
 	talent_summary_grid = null
@@ -2586,7 +2591,8 @@ func show_level_select(meta: MetaProgressionState, levels: Array[LevelDefinition
 			record_summary,
 			level.is_tutorial,
 			unlocked,
-			_level_accent(level)
+			_level_accent(level),
+			record.victories > 0
 		))
 	level_screen.apply_view_model(CaseArchiveViewModel.new(level_view_revision, entries, &""))
 	level_buttons.clear()

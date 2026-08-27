@@ -3,6 +3,7 @@ extends SceneTree
 const OUTPUT_DIR := "res://.codex-temp/visual_restart/screens"
 const FULL_CAPTURE_COUNT := 32
 const STEP_ONE_CAPTURE_COUNT := 4
+const STEP_TWO_CAPTURE_COUNT := 3
 
 var capture_size := Vector2i(1280, 720)
 var capture_scale := 1.0
@@ -48,12 +49,14 @@ func _capture_views() -> void:
 	await _settle()
 	if capture_scope == "step1":
 		await _capture_step_one(game)
+	elif capture_scope == "step2":
+		await _capture_step_two(game)
 	else:
 		await _capture_suite(game)
 
 	game.queue_free()
 	await _settle()
-	var expected_count := STEP_ONE_CAPTURE_COUNT if capture_scope == "step1" else FULL_CAPTURE_COUNT
+	var expected_count := STEP_ONE_CAPTURE_COUNT if capture_scope == "step1" else (STEP_TWO_CAPTURE_COUNT if capture_scope == "step2" else FULL_CAPTURE_COUNT)
 	if capture_failed or capture_count != expected_count:
 		push_error("Visuelle Abnahme unvollständig: %d/%d für %s" % [capture_count, expected_count, capture_suffix])
 		quit(1)
@@ -108,6 +111,45 @@ func _capture_step_one(game: Node) -> void:
 	)
 	await _settle()
 	await _capture("result_abilities")
+
+
+func _capture_step_two(game: Node) -> void:
+	game.meta.highest_unlocked_level = 2
+	for index in range(game.levels.size()):
+		var record = game.meta.get_level_record(game.levels[index].id)
+		record.victories = 1 if index <= 1 else 0
+	game.meta.research_points = 46
+	game.meta.research_ranks[&"stability_reserve"] = 3
+	game.meta.research_ranks[&"therapy_precision"] = 1
+	game.meta.research_ranks[&"experience_gain"] = 0
+	game.meta.research_ranks[&"defense_training"] = 2
+	game.meta.research_ranks[&"life_regeneration"] = 0
+	game.meta.research_ranks[&"movement_training"] = 1
+	game._show_research()
+	await _settle()
+	if not _verify_research_capture(game):
+		return
+	await _capture("research")
+	var research_source: Button = game.hud.progression_screen.research_action(&"stability_reserve")
+	if research_source == null:
+		capture_failed = true
+		push_error("Mehr Leben besitzt keine stabile Tooltipquelle")
+		return
+	research_source.mouse_entered.emit()
+	await _settle()
+	var research_payload: Dictionary = game.hud.context_detail_controller.current_payload()
+	if game.hud.context_detail_controller.active_source() != research_source \
+		or not String(research_payload.get("body", "")).contains("Gesamt: +9 Leben"):
+		capture_failed = true
+		push_error("Laborboard bewahrt den vorberechneten Gesamtwert nicht im stabilen Tooltip")
+		return
+	await _capture("research_tooltip")
+	game.hud.close_all_context_details()
+	game._show_level_select()
+	await _settle()
+	if not _verify_case_journey(game.hud.level_screen):
+		return
+	await _capture("levels")
 
 func _capture_suite(game: Node) -> void:
 	game._show_campus()
@@ -436,7 +478,16 @@ func _verify_research_capture(game: Node) -> bool:
 	var definitions := ContentCatalog.research_definitions()
 	var logical_width := screen.size.x
 	var expected_columns := 4 if logical_width >= 1100.0 else (3 if logical_width >= 900.0 else (2 if logical_width >= 680.0 else 1))
-	var valid := screen.research_columns() == expected_columns and definitions.size() == 10
+	var foundation_grid := screen.research_group_grid(&"foundation")
+	var unlock_grid := screen.research_group_grid(&"unlock")
+	var valid := screen.research_columns() == expected_columns \
+		and definitions.size() == 10 \
+		and foundation_grid != null \
+		and unlock_grid != null \
+		and foundation_grid.columns == expected_columns \
+		and unlock_grid.columns == expected_columns \
+		and foundation_grid.get_child_count() == 6 \
+		and unlock_grid.get_child_count() == 4
 	for definition in definitions:
 		var action := screen.research_action(definition.id)
 		valid = valid \
@@ -454,6 +505,38 @@ func _verify_research_capture(game: Node) -> bool:
 		return true
 	capture_failed = true
 	push_error("Forschungs-Capture verwendet nicht das responsive Kompaktraster oder verrät Gesamtwerte auf der Karte (Breite %.1f, Spalten %d/%d)" % [logical_width, screen.research_columns(), expected_columns])
+	return false
+
+
+func _verify_case_journey(screen: CaseArchiveScreen) -> bool:
+	if screen == null:
+		capture_failed = true
+		push_error("Fallarchiv-Capture besitzt keinen modularen Screen")
+		return false
+	var cards := screen.find_children("Case_*", "Button", true, false)
+	var current_count := 0
+	var completed_count := 0
+	var locked_count := 0
+	for node in cards:
+		var card := node as Button
+		match StringName(card.get_meta(&"journey_state", &"")):
+			&"current":
+				current_count += 1
+			&"completed":
+				completed_count += 1
+			&"locked":
+				locked_count += 1
+	var connectors := screen.find_children("JourneyConnector", "ColorRect", true, false)
+	var valid := cards.size() == 7 \
+		and current_count == 1 \
+		and completed_count == 2 \
+		and locked_count == 4 \
+		and connectors.size() == 6 \
+		and screen.get_scroll_container().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED
+	if valid:
+		return true
+	capture_failed = true
+	push_error("Fallarchiv-Capture besitzt keine eindeutige chronologische Reise (Karten %d, fertig %d, aktuell %d, gesperrt %d, Verbinder %d)" % [cards.size(), completed_count, current_count, locked_count, connectors.size()])
 	return false
 
 

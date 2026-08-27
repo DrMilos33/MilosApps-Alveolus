@@ -61,12 +61,12 @@ func _run() -> void:
 	_check(hud.level_overlay.visible and campus_header_layer.z_index == 0, "Der Fallarchivheader bleibt frei vom abgedunkelten Campusheader")
 	for level in levels:
 		var level_button := hud.level_buttons[level.id] as Button
-		var placeholder: PanelContainer = null
-		var question: Label = null
+		var medallion: PanelContainer = null
+		var station_icon: SimpleIcon = null
 		if level_button != null:
-			placeholder = level_button.find_child("CasePlaceholder", true, false) as PanelContainer
-			question = level_button.find_child("QuestionMark", true, false) as Label
-		_check(level_button != null and level_button.find_child("CaseIllustration", true, false) == null and placeholder != null and question != null and question.text == "?", "Fallkarten ersetzen dekorative Icons durch einen klaren Fragezeichen-Platzhalter")
+			medallion = level_button.find_child("CaseStationMedallion", true, false) as PanelContainer
+			station_icon = level_button.find_child("CaseStationIcon", true, false) as SimpleIcon
+		_check(level_button != null and level_button.find_child("CaseIllustration", true, false) == null and medallion != null and station_icon != null and SimpleIcon.supports(station_icon.kind), "Fallstationen verwenden semantische Wegpunktmedaillons ohne externe Dekorationsassets")
 		_check(level_button != null and level_button.find_child("Title", true, false) != null and level_button.find_child("Status", true, false) != null, "Fallkarten tragen ihren Zustand über klare Text- und Kartenrollen")
 	hud.show_story()
 	await process_frame
@@ -83,10 +83,13 @@ func _run() -> void:
 	_check(meta.set_talent_active(&"treatment_damage_training", true), "Der Testzustand aktiviert die Revision-6-Wurzel des Behandlungsbaums")
 	hud.show_research_tabs(meta, ContentCatalog.research_definitions(), TalentDefinition.definitions())
 	await process_frame
-	_check(hud.research_grid.columns == 4 and hud.research_grid.get_child_count() == 10, "Die zehn aktiven Forschungen zeigen bei 1280 Pixeln vier kompakte Spalten")
+	var research_foundations := hud.progression_screen.research_group_grid(&"foundation")
+	var research_unlocks := hud.progression_screen.research_group_grid(&"unlock")
+	_check(research_foundations.columns == 4 and research_unlocks.columns == 4 and research_foundations.get_child_count() == 6 and research_unlocks.get_child_count() == 4, "Die zehn Forschungen bilden bei 1280 Pixeln ein gruppiertes Vier-Spalten-Laborboard")
 	_check(hud.research_buy_buttons.has(&"movement_training") and SimpleIcon.supports(&"movement_training"), "Bewegungstraining besitzt eine zentrale, registrierte Bewegungsglyphe")
-	for research_card in hud.research_grid.get_children():
-		_check((research_card as Control).custom_minimum_size.y <= 76.0, "Forschungskarten überschreiten die kompakte Höhe nicht")
+	for research_group in [research_foundations, research_unlocks]:
+		for research_card in research_group.get_children():
+			_check((research_card as Control).custom_minimum_size.y <= 76.0, "Forschungskarten überschreiten die kompakte Höhe nicht")
 	hud._select_research_tab(&"talents")
 	await process_frame
 	_check(hud.talent_grid.get_child_count() == 3, "Talente zeigen die drei aktiven Talentbaeume")

@@ -85,6 +85,9 @@ class ResearchItemViewModel extends RefCounted:
 	var _info: InfoViewModel
 	var _total_effect_text: String
 	var _milestone_lock_cover: bool
+	var _group_id: StringName
+	var _rank_current: int
+	var _rank_maximum: int
 
 
 	static func create(
@@ -97,7 +100,10 @@ class ResearchItemViewModel extends RefCounted:
 		interactive_value: bool,
 		info_value: InfoViewModel,
 		total_effect_text_value: String = "",
-		milestone_lock_cover_value: bool = false
+		milestone_lock_cover_value: bool = false,
+		group_id_value: StringName = &"foundation",
+		rank_current_value: int = 0,
+		rank_maximum_value: int = 0
 	) -> ResearchItemViewModel:
 		var model := ResearchItemViewModel.new()
 		model._id = id_value
@@ -110,6 +116,9 @@ class ResearchItemViewModel extends RefCounted:
 		model._info = info_value.duplicate_value() if info_value != null else InfoViewModel.create(title_value, "", "", icon_kind_value, Color.TRANSPARENT)
 		model._total_effect_text = total_effect_text_value
 		model._milestone_lock_cover = milestone_lock_cover_value
+		model._group_id = &"unlock" if group_id_value == &"unlock" else &"foundation"
+		model._rank_maximum = maxi(0, rank_maximum_value)
+		model._rank_current = clampi(rank_current_value, 0, model._rank_maximum)
 		return model
 
 
@@ -155,6 +164,18 @@ class ResearchItemViewModel extends RefCounted:
 		return _milestone_lock_cover
 
 
+	func group_id() -> StringName:
+		return _group_id
+
+
+	func rank_current() -> int:
+		return _rank_current
+
+
+	func rank_maximum() -> int:
+		return _rank_maximum
+
+
 	func detail_info() -> InfoViewModel:
 		if _total_effect_text.is_empty():
 			return _info.duplicate_value()
@@ -172,11 +193,39 @@ class ResearchItemViewModel extends RefCounted:
 
 
 	func duplicate_value() -> ResearchItemViewModel:
-		return create(_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info, _total_effect_text, _milestone_lock_cover)
+		return create(
+			_id,
+			_title,
+			_rank_text,
+			_cost_text,
+			_icon_kind,
+			_state,
+			_interactive,
+			_info,
+			_total_effect_text,
+			_milestone_lock_cover,
+			_group_id,
+			_rank_current,
+			_rank_maximum
+		)
 
 
 	func content_signature() -> Array:
-		return [_id, _title, _rank_text, _cost_text, _icon_kind, _state, _interactive, _info.content_signature(), _total_effect_text, _milestone_lock_cover]
+		return [
+			_id,
+			_title,
+			_rank_text,
+			_cost_text,
+			_icon_kind,
+			_state,
+			_interactive,
+			_info.content_signature(),
+			_total_effect_text,
+			_milestone_lock_cover,
+			_group_id,
+			_rank_current,
+			_rank_maximum,
+		]
 
 
 class TalentNodeViewModel extends RefCounted:

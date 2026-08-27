@@ -45,6 +45,12 @@ func _run() -> void:
 	_check(screen.research_tab_action().theme_type_variation == AlveolusVisualTheme.TYPE_SELECTED_SEGMENTED_TAB, "Aktiver Forschungstab verwendet den lesbaren Selected-Zustand")
 	_check(screen.talent_tab_action().theme_type_variation == AlveolusVisualTheme.TYPE_SEGMENTED_TAB, "Inaktiver Talenttab bleibt visuell getrennt")
 	_check(screen.research_columns() == 4, "Forschung nutzt bei 1280×720 exakt vier kompakte Spalten")
+	var foundation_grid := screen.research_group_grid(&"foundation")
+	var unlock_grid := screen.research_group_grid(&"unlock")
+	_check(foundation_grid != null and unlock_grid != null and foundation_grid.columns == 4 and unlock_grid.columns == 4, "Grundlagen und Freischaltungen besitzen eigene Vier-Spalten-Laborgruppen")
+	_check(foundation_grid.get_child_count() == 3 and unlock_grid.get_child_count() == 1, "Forschungskarten werden über explizite Präsentationsgruppen einsortiert")
+	var group_titles := screen.find_children("ResearchGroupTitle", "Label", true, false)
+	_check(group_titles.size() == 2 and (group_titles[0] as Label).text == "Grundlagen" and (group_titles[1] as Label).text == "Freischaltungen", "Laborboard benennt Grundlagen und Freischaltungen sichtbar")
 	_check(screen.talent_columns() == 1, "Der gemeinsame Root-Baum nutzt die verfügbare Breite")
 
 	var active_research := screen.research_action(&"research_active")
@@ -68,6 +74,13 @@ func _run() -> void:
 	_check(String(screen.info_payload_for(locked_research).get("body", "")).contains("Abschluss von Fall 1"), "Meilensteinforschung erklärt ihren Unlock im Hoverdetail")
 	_check(active_research.custom_minimum_size.y == AlveolusVisualTheme.COMPACT_RESEARCH_HEIGHT and active_research.get_combined_minimum_size().y <= 68.0, "Forschungskarten bleiben einschließlich Theme-Innenrändern kompakt")
 	_check(active_research.get_meta(&"alveolus_component", &"") == &"compact_research", "Forschung verwendet die zentrale Komponentenrolle compact_research")
+	_check(active_research.get_meta(&"research_group_id", &"") == &"foundation" and locked_research.get_meta(&"research_group_id", &"") == &"unlock", "Karten bewahren ihre semantische Laborgruppe")
+	_check(_rank_segment_count(active_research) == 3 and _active_rank_segment_count(active_research) == 3, "Mehrfachränge erscheinen als vollständig gefüllte Segmente am Hauptmotiv")
+	_check(_rank_segment_count(available_research) == 3 and _active_rank_segment_count(available_research) == 0, "Ungeskillte Forschung zeigt ihren erreichbaren Rang als leere Segmente")
+	var cost_chip := available_research.find_child("ResearchCostChip", true, false) as PanelContainer
+	var cost_icon := available_research.find_child("ResearchCostIcon", true, false) as SimpleIcon
+	var cost_value := available_research.find_child("ResearchCostValue", true, false) as Label
+	_check(cost_chip != null and cost_chip.theme_type_variation == AlveolusVisualTheme.TYPE_BADGE and cost_icon != null and cost_icon.kind == &"research" and cost_value != null and cost_value.text == "2", "Kosten erscheinen als kompaktes Forschungschip statt Browsercopy")
 	for card in [active_research, available_research, locked_research]:
 		var card_text := _descendant_text(card).to_lower()
 		_check(not card_text.contains("aktiv") and not card_text.contains("verfügbar") and not card_text.contains("gesperrt"), "Karten wiederholen ihren Zustand nicht als Statuswort")
@@ -83,6 +96,7 @@ func _run() -> void:
 	var active_research_payload := screen.info_payload_for(active_research)
 	_check(String(active_research_payload.get("body", "")).contains("Gesamt: +9 Leben"), "Tooltip ergänzt den vorberechneten Gesamtwert mit dem exakten Präfix")
 	_check(fixture.research_items()[0].total_effect_text() == "+9 Leben", "ViewModel transportiert Gesamtwirkung darstellungsfertig und ohne UI-Berechnung")
+	_check(fixture.research_items()[0].group_id() == &"foundation" and fixture.research_items()[0].rank_current() == 3 and fixture.research_items()[0].rank_maximum() == 3, "ViewModel transportiert Gruppe und Ränge als unveränderliche Präsentationsprimitive")
 	_check(available_research.tooltip_text.is_empty(), "Native Dauertooltips bleiben deaktiviert")
 	_check(screen.registered_info_source_count() == 8, "Alle Forschungs- und Talentknoten besitzen eine Informationsquelle")
 	var registrations := screen.context_detail_registrations()
@@ -204,7 +218,7 @@ func _run() -> void:
 
 	screen.size = Vector2(850.0, 720.0)
 	await process_frame
-	_check(screen.research_columns() == 2 and screen.talent_columns() == 1, "Mittlere Breite nutzt zwei Forschungsspalten und einen Root-Baum")
+	_check(screen.research_columns() == 2 and unlock_grid.columns == 2 and screen.talent_columns() == 1, "Mittlere Breite nutzt in beiden Laborgruppen zwei Forschungsspalten und einen Root-Baum")
 	screen.size = Vector2(640.0, 720.0)
 	await process_frame
 	_check(screen.research_columns() == 1 and screen.talent_columns() == 1, "Kompakte Breite verwendet eine Spalte")
@@ -236,10 +250,10 @@ func _run() -> void:
 
 func _fixture(revision: int, tab: StringName, research_balance: String, talent_balance: String) -> Variant:
 	var research: Array = [
-		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben"),
-		_research_item(&"research_available", "Mehr Erfahrung", "Rang 0/3", "2 Forschung", ProgressionViewModelScript.ItemState.AVAILABLE, true, "+0 % Erfahrung"),
-		_research_item(&"research_locked", "Fetter lazer", "Rang 0/1", "Nach Fall 1", ProgressionViewModelScript.ItemState.LOCKED, false, "Gesperrt", &"question"),
-		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit"),
+		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben", &"research", &"foundation", 3, 3),
+		_research_item(&"research_available", "Mehr Erfahrung", "Rang 0/3", "2 Forschung", ProgressionViewModelScript.ItemState.AVAILABLE, true, "+0 % Erfahrung", &"research", &"foundation", 0, 3),
+		_research_item(&"research_locked", "Fetter lazer", "Rang 0/1", "Nach Fall 1", ProgressionViewModelScript.ItemState.LOCKED, false, "Gesperrt", &"question", &"unlock", 0, 1),
+		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit", &"research", &"foundation", 1, 3),
 	]
 	return ProgressionViewModelScript.create(
 		revision,
@@ -254,7 +268,7 @@ func _fixture(revision: int, tab: StringName, research_balance: String, talent_b
 
 func _rank_change_fixture(revision: int, tab: StringName) -> Variant:
 	var research: Array = [
-		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben"),
+		_research_item(&"research_active", "Mehr Leben", "Rang 3/3", "Maximum", ProgressionViewModelScript.ItemState.ACTIVE, false, "+9 Leben", &"research", &"foundation", 3, 3),
 		ProgressionViewModelScript.ResearchItemViewModel.create(
 			&"research_available",
 			"Mehr Erfahrung",
@@ -264,10 +278,14 @@ func _rank_change_fixture(revision: int, tab: StringName) -> Variant:
 			ProgressionViewModelScript.ItemState.AVAILABLE,
 			true,
 			_info("Mehr Erfahrung", "+5 % Erfahrung.", "3 Forschung", &"research", AlveolusVisualTheme.GOLD),
-			"+5 % Erfahrung"
+			"+5 % Erfahrung",
+			false,
+			&"foundation",
+			1,
+			3
 		),
-		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+0 Analyse"),
-		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit"),
+		_research_item(&"research_locked", "Erweiterte Analyse", "Rang 0/1", "4 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+0 Analyse", &"research", &"unlock", 0, 1),
+		_research_item(&"research_fourth", "Bewegungstraining", "Rang 1/3", "6 Forschung", ProgressionViewModelScript.ItemState.LOCKED, false, "+3 % Geschwindigkeit", &"research", &"foundation", 1, 3),
 	]
 	var branches := _fixture_branches()
 	branches[0] = _branch(&"treatment", "Behandlung", &"treatment", AlveolusVisualTheme.TEAL, [
@@ -308,7 +326,10 @@ func _research_item(
 	state: int,
 	interactive: bool,
 	total_effect: String,
-	icon_kind: StringName = &"research"
+	icon_kind: StringName = &"research",
+	group_id: StringName = &"foundation",
+	rank_current: int = 0,
+	rank_maximum: int = 0
 ) -> Variant:
 	var info_body := "Wird nach Abschluss von Fall 1 freigeschaltet." if icon_kind == &"question" else "Wirkung pro Rang von %s." % title
 	return ProgressionViewModelScript.ResearchItemViewModel.create(
@@ -321,7 +342,10 @@ func _research_item(
 		interactive,
 		_info(title, info_body, cost, icon_kind, AlveolusVisualTheme.GOLD),
 		total_effect,
-		icon_kind == &"question"
+		icon_kind == &"question",
+		group_id,
+		rank_current,
+		rank_maximum
 	)
 
 
@@ -411,6 +435,19 @@ func _rank_pip_count(root: Node) -> int:
 	return rank_strip.get_child(0).get_child_count()
 
 
+func _rank_segment_count(root: Node) -> int:
+	return root.find_children("ResearchRankSegment_*", "ColorRect", true, false).size()
+
+
+func _active_rank_segment_count(root: Node) -> int:
+	var result := 0
+	for node in root.find_children("ResearchRankSegment_*", "ColorRect", true, false):
+		var segment := node as ColorRect
+		if segment != null and segment.color.is_equal_approx(AlveolusVisualTheme.GOLD):
+			result += 1
+	return result
+
+
 func _check_source_contracts() -> void:
 	var screen_source := FileAccess.get_file_as_string("res://scripts/ui/screens/progression_screen.gd")
 	var model_source := FileAccess.get_file_as_string("res://scripts/ui/view_models/progression_screen_view_model.gd")
@@ -430,12 +467,14 @@ func _check_source_contracts() -> void:
 	_check(screen_source.contains("context_detail_id") and screen_source.contains("_info_payload_for_stable_id"), "Kontextprovider werden über stabile fachliche IDs aufgelöst")
 	_check(screen_source.contains("TALENT_SYMBOLS_BY_ID") and screen_source.contains("_build_talent_symbol_content"), "Talentbaum baut seine Knoten ausschließlich aus eindeutigen Symbolen")
 	_check(screen_source.contains("RESEARCH_WIDE_COLUMNS := 4") and screen_source.contains("logical_width >= 1100.0"), "Breite Forschung besitzt einen expliziten Vier-Spalten-Vertrag")
+	_check(screen_source.contains("ResearchGroup_foundation") or screen_source.contains("_build_research_group"), "Forschung baut ein gruppiertes Laborboard statt eines einzelnen Kartenrasters")
 	_check(screen_source.contains("TalentRankPips") and screen_source.contains("talent_rank_current"), "Talentknoten stellen Mehrfachränge redundant als Pips dar")
 	_check(not screen_source.contains("AlveolusUIComponents.panel(AlveolusVisualTheme.TYPE_ACTION_CARD)"), "Talentbaum erzeugt keine große ActionCard-Fläche")
 	_check(branch_source.contains("draw_polyline") and not branch_source.contains("draw_circle"), "Talentverbindungen verwenden Linien ohne Kreispunkte")
 	_check(model_source.contains("Array[ResearchItemViewModel]") and model_source.contains("Array[TalentBranchViewModel]"), "ViewModel hält Kindeinträge typisiert")
 	_check(model_source.contains("total_effect_text_value") and model_source.contains("Gesamt: %s"), "Gesamtwirkung wird als vorbereiteter Wert ausschließlich im Detailpayload ergänzt")
 	_check(model_source.contains("milestone_lock_cover_value") and screen_source.contains("ResearchMilestoneLock"), "Der Lazer-Meilenstein transportiert seine Vollflächensperre explizit statt über jeden Locked-Zustand")
+	_check(model_source.contains("group_id_value") and model_source.contains("rank_current_value") and screen_source.contains("ResearchRankSegments"), "Forschungsgruppe und Rangsegmente gelangen als reine Präsentationsprimitive in die Oberfläche")
 	_check(model_source.contains("rank_current_value") and model_source.contains("rank_maximum_value"), "Talentränge gelangen als reine Präsentationsprimitive ins ViewModel")
 
 

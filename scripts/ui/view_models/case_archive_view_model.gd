@@ -19,6 +19,7 @@ class CaseEntryViewModel extends RefCounted:
 	var _is_tutorial: bool
 	var _is_unlocked: bool
 	var _accent: Color
+	var _is_completed: bool
 
 	func _init(
 		id_value: StringName,
@@ -30,7 +31,8 @@ class CaseEntryViewModel extends RefCounted:
 		record_text_value: String,
 		is_tutorial_value: bool,
 		is_unlocked_value: bool,
-		accent_value: Color
+		accent_value: Color,
+		is_completed_value: bool = false
 	) -> void:
 		_id = id_value
 		_order = order_value
@@ -42,6 +44,7 @@ class CaseEntryViewModel extends RefCounted:
 		_is_tutorial = is_tutorial_value
 		_is_unlocked = is_unlocked_value
 		_accent = accent_value
+		_is_completed = is_completed_value
 
 	func get_id() -> StringName:
 		return _id
@@ -73,6 +76,10 @@ class CaseEntryViewModel extends RefCounted:
 	func get_accent() -> Color:
 		return _accent
 
+
+	func is_completed() -> bool:
+		return _is_completed
+
 	func duplicate_immutable() -> CaseEntryViewModel:
 		return CaseEntryViewModel.new(
 			_id,
@@ -84,7 +91,8 @@ class CaseEntryViewModel extends RefCounted:
 			_record_text,
 			_is_tutorial,
 			_is_unlocked,
-			_accent
+			_accent,
+			_is_completed
 		)
 
 	func append_content_signature(parts: PackedStringArray) -> void:
@@ -98,6 +106,7 @@ class CaseEntryViewModel extends RefCounted:
 		parts.append("1" if _is_tutorial else "0")
 		parts.append("1" if _is_unlocked else "0")
 		parts.append(_accent.to_html(true))
+		parts.append("1" if _is_completed else "0")
 
 	func _signature_part(value: String) -> String:
 		return "%d:%s" % [value.length(), value]
@@ -141,6 +150,19 @@ func get_entry(case_id: StringName) -> CaseEntryViewModel:
 		if entry.get_id() == case_id:
 			return entry.duplicate_immutable()
 	return null
+
+
+## The first unlocked, unfinished campaign entry is the visual destination of
+## the journey. Presentation order is authoritative; localized status text is
+## deliberately not parsed for progression state.
+func get_next_case_id() -> StringName:
+	var next_entry: CaseEntryViewModel
+	for entry in _entries:
+		if entry == null or entry.is_tutorial() or not entry.is_unlocked() or entry.is_completed():
+			continue
+		if next_entry == null or entry.get_order() < next_entry.get_order():
+			next_entry = entry
+	return next_entry.get_id() if next_entry != null else &""
 
 
 func duplicate_immutable() -> CaseArchiveViewModel:
