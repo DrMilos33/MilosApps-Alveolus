@@ -240,6 +240,8 @@ func _test_case_one_event_target_profile() -> void:
 	await process_frame
 	game.persistence_enabled = false
 	game.run_test_settings.reset_defaults()
+	# Runtime fixtures must not inherit the developer's persisted hint opt-out.
+	game.meta.ui_settings.show_discovery_info = true
 	for discovery_id in game.discovery_definitions:
 		if discovery_id != GameScript.FALL_ONE_EVENT_HINT_ID:
 			game.discovery_manager.mark_seen(discovery_id)

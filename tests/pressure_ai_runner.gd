@@ -102,6 +102,7 @@ func _prepare_game(run_seed: int) -> Node:
 
 	game.quick_run = true
 	game.persistence_enabled = false
+	game.run_test_settings.reset_defaults()
 	game.meta.reset_defaults()
 	game.discovery_manager.configure(game.discovery_definitions, {})
 	for discovery_id in game.discovery_definitions:
