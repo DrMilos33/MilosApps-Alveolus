@@ -1095,14 +1095,6 @@ func _queue_responsive_layout() -> void:
 	_update_responsive_layout.call_deferred()
 
 
-func _has_expanded_build_section() -> bool:
-	for section_id_value in _expanded_sections:
-		var section_id := StringName(String(section_id_value))
-		if section_id != &"general" and bool(_expanded_sections[section_id_value]):
-			return true
-	return false
-
-
 func _update_responsive_layout() -> void:
 	if _center == null or _sheet == null or _body_scroll == null:
 		return
@@ -1131,10 +1123,9 @@ func _update_responsive_layout() -> void:
 	var compact_menu := sheet_width < COMPACT_MENU_BREAKPOINT
 	_menu_actions.columns = 2 if compact_menu or _has_test_settings() else 3
 	_set_compact_menu_layout(compact_menu)
-	# Resting build cards compare well in two columns. Once one card opens it
-	# becomes the focused dossier and receives the full row, avoiding a tall
-	# half-width card beside an unusable empty column.
-	_stats_grid.columns = 1 if sheet_width < BUILD_GRID_BREAKPOINT or _has_expanded_build_section() else 2
+	# Opening a build card reveals its values in place. It must not reflow the
+	# surrounding dossier or turn a half-width component into a full-width row.
+	_stats_grid.columns = 1 if sheet_width < BUILD_GRID_BREAKPOINT else 2
 	for section_id_value in _section_bodies:
 		var section_id := StringName(String(section_id_value))
 		var body_value: Variant = _section_bodies[section_id_value]

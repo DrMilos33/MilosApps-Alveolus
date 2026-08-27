@@ -166,7 +166,7 @@ func _test_pause_and_stats_modes(view_model: PauseOverlayViewModel) -> void:
 	await _settle()
 	_check(treatment_header.button_pressed and overlay.section_body(&"treatment:treatment_precision").is_visible_in_tree(), "Buttonzustand und sichtbarer Sektionsbody bleiben synchron")
 	_check(not overlay.section_body(&"general").visible, "Eingeklappte Grundwerte lassen keinen versteckten Platz stehen")
-	_check(overlay.stats_grid().columns == 1, "Eine geöffnete Buildkarte erhält die volle Dossierbreite statt einer leeren Nachbarspalte")
+	_check(overlay.stats_grid().columns == 2, "Eine geöffnete Buildkarte behält ihre halbe Dossierbreite ohne Layoutsprung")
 	_assert_section_disclosure_state(overlay, &"treatment:treatment_precision", true)
 	_assert_section_disclosure_state(overlay, &"general", false)
 

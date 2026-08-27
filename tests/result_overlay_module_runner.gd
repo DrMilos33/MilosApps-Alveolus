@@ -69,6 +69,7 @@ func _run() -> void:
 	var outcome_title := overlay.find_child("OutcomeTitle", true, false) as Label
 	_check(outcome_title != null and outcome_title.get_line_count() == 1, "Ergebnistitel nutzt breit eine vollständige Zeile statt Zeichenumbruch")
 	_check(outcome_title != null and outcome_title.size.x >= 180.0, "Ergebnistitel erhält die verfügbare Überschriftenbreite")
+	_check(overlay.find_child("OutcomeEmblem", true, false) == null and overlay.find_child("OutcomeIcon", true, false) == null, "Die eindeutige Ergebnisüberschrift benötigt kein zusätzlich gerahmtes Check-Emblem")
 	_check(overlay.get_modal().size.y < host.size.y * 0.9, "Breites Ergebnis bleibt inhaltsgetrieben statt viewportfüllend (Modal %.1f / Host %.1f)" % [overlay.get_modal().size.y, host.size.y])
 	_check(overlay.get_stats_column_count() == 3, "Drei kompakte Wertezeilen stehen breit nebeneinander")
 	var ability_section := overlay.find_child("AbilitySection", true, false) as PanelContainer

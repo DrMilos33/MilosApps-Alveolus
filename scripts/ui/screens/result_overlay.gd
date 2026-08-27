@@ -28,7 +28,6 @@ var _modal_host: VBoxContainer
 var _modal: PanelContainer
 var _body_content: VBoxContainer
 var _action_row: HBoxContainer
-var _outcome_emblem_center: CenterContainer
 var _outcome_title: Label
 var _stats_grid: GridContainer
 var _reward_grid: GridContainer
@@ -219,20 +218,6 @@ func _rebuild_modal() -> void:
 	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
 	_body_content.add_child(heading)
-	_outcome_emblem_center = CenterContainer.new()
-	_outcome_emblem_center.name = "OutcomeEmblemCenter"
-	_outcome_emblem_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	heading.add_child(_outcome_emblem_center)
-	var emblem := AlveolusUIComponents.surface(AlveolusVisualTheme.SurfaceRole.DETAIL_CARD, accent)
-	emblem.name = "OutcomeEmblem"
-	emblem.custom_minimum_size = Vector2(52.0, 52.0)
-	emblem.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_outcome_emblem_center.add_child(emblem)
-	var outcome_icon := SimpleIcon.new()
-	outcome_icon.name = "OutcomeIcon"
-	outcome_icon.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, 12)
-	outcome_icon.configure(&"check" if _view_model.is_success() else &"remove", accent)
-	emblem.add_child(outcome_icon)
 	_outcome_title = AlveolusUIComponents.label(_view_model.get_title(), AlveolusVisualTheme.TYPE_TITLE_LABEL)
 	_outcome_title.name = "OutcomeTitle"
 	_outcome_title.add_theme_color_override("font_color", accent.lightened(0.12))
@@ -680,10 +665,6 @@ func _refresh_responsive_layout() -> void:
 		_modal.custom_minimum_size.y = 0.0
 	if _stats_grid != null:
 		_stats_grid.columns = 1 if _compact_layout else maxi(1, mini(3, _stats_grid.get_child_count()))
-	if _outcome_emblem_center != null:
-		# On the 480 × 270 logical stage the title is the outcome signal; hiding
-		# only the decorative emblem keeps the first earned reward in view.
-		_outcome_emblem_center.visible = not _compact_layout
 	if _outcome_title != null:
 		_outcome_title.add_theme_font_size_override(
 			"font_size",
