@@ -645,7 +645,7 @@ func _verify_upgrade_capture(game: Node, options: Array[UpgradeDefinition]) -> b
 		valid = valid \
 			and icon != null \
 			and icon.kind == expected_icon \
-			and icon.custom_minimum_size.x >= 72.0 \
+			and icon.custom_minimum_size.x >= 64.0 \
 			and icon.framed \
 			and heading != null \
 			and heading.text == option.resolved_component_name(stats.prepared_treatment, game.hud._upgrade_component_titles()) \

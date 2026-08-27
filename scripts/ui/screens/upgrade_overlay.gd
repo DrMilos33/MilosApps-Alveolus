@@ -20,8 +20,8 @@ const MINIMUM_CARD_WIDTH := 240.0
 const CARD_HEIGHT := 232.0
 const COMPACT_CARD_HEIGHT := 116.0
 const EXTRA_VALUE_ROW_HEIGHT := 20.0
-const UPGRADE_ICON_SIZE := 72.0
-const COMPACT_UPGRADE_ICON_SIZE := 52.0
+const UPGRADE_ICON_SIZE := 64.0
+const COMPACT_UPGRADE_ICON_SIZE := 46.0
 const MODAL_PADDING := 20
 const COMPACT_MODAL_PADDING := 12
 const FOCUS_LINE_WIDTH := 2.0
@@ -452,7 +452,7 @@ func _build_compact_card_copy(option: UpgradeOverlayViewModel.UpgradeOptionViewM
 	content.add_theme_constant_override("separation", AlveolusVisualTheme.CONTENT_GAP)
 	var icon_center := CenterContainer.new()
 	icon_center.name = "CompactIconStage"
-	icon_center.custom_minimum_size.x = 64.0
+	icon_center.custom_minimum_size.x = 58.0
 	icon_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon_center.add_child(_build_component_icon(option, "CompactUpgradeIcon", COMPACT_UPGRADE_ICON_SIZE))
 	content.add_child(icon_center)
@@ -463,15 +463,24 @@ func _build_compact_card_copy(option: UpgradeOverlayViewModel.UpgradeOptionViewM
 	copy_stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	copy_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	copy_stack.add_theme_constant_override("separation", 2)
-	copy_stack.add_child(_build_component_title(option, "CompactUpgradeTitle"))
+	var compact_title := _build_component_title(option, "CompactUpgradeTitle")
+	compact_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	copy_stack.add_child(compact_title)
 	copy_stack.add_child(_build_effect_copy(
 		option.effect(),
 		"CompactUpgradeEffect",
 		AlveolusVisualTheme.TEXT_SECTION,
-		HORIZONTAL_ALIGNMENT_LEFT
+		HORIZONTAL_ALIGNMENT_CENTER
 	))
-	_add_value_presentation(copy_stack, option, "Compact", AlveolusVisualTheme.TEXT_CAPTION, HORIZONTAL_ALIGNMENT_LEFT)
+	_add_value_presentation(copy_stack, option, "Compact", AlveolusVisualTheme.TEXT_CAPTION, HORIZONTAL_ALIGNMENT_CENTER)
 	content.add_child(copy_stack)
+	# The equal-width silent counterweight keeps the reward delta on the true
+	# card axis instead of centering it only inside the area left by the icon.
+	var balance := Control.new()
+	balance.name = "CompactIconBalance"
+	balance.custom_minimum_size.x = 58.0
+	balance.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(balance)
 	return content
 
 

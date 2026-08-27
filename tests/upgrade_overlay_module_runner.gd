@@ -272,7 +272,7 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var value_focus := value_card.find_child("KeyboardFocus", true, false) as Control
 	var effect_badge := value_card.find_child("EffectBadge_radius", true, false) as Control
 	var effect_badge_icon := effect_badge.find_child("EffectBadgeIcon", true, false) as SimpleIcon if effect_badge != null else null
-	_check(value_icon != null and value_icon.kind == &"neutrophil_orbit" and value_icon.custom_minimum_size == Vector2(72.0, 72.0) and value_icon.framed, "Ausbaukarte inszeniert das datengetriebene Presenter-Icon als großes gerahmtes Medaillon")
+	_check(value_icon != null and value_icon.kind == &"neutrophil_orbit" and value_icon.custom_minimum_size == Vector2(64.0, 64.0) and value_icon.framed, "Ausbaukarte inszeniert das datengetriebene Presenter-Icon als zurückgenommenes gerahmtes Medaillon")
 	_check(value_title != null and value_title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Komponentenname verwendet die kleinere zentrale Body-Typografie")
 	_check(effect_badge != null and effect_badge.get_meta(&"upgrade_effect_label", "") == "RADIUS", "Ausbaukarte bewahrt die feste Radiussemantik in Presenter-Metadaten")
 	_check(effect_badge_icon != null and effect_badge_icon.kind == &"target" and effect_badge.get_meta(&"upgrade_effect_accent", Color.TRANSPARENT).is_equal_approx(AlveolusVisualTheme.COBALT), "Effektmarker kombiniert DTO-Icon und semantische Farbe")
@@ -374,7 +374,10 @@ func _test_overlay_contract(ordinary_single: UpgradeOverlayViewModel) -> void:
 	var compact_copy := compact_card.find_child("CompactCardCopy", true, false) as Control
 	var compact_icon := compact_card.find_child("CompactUpgradeIcon", true, false) as SimpleIcon
 	_check(is_equal_approx(compact_card.custom_minimum_size.y, UpgradeOverlay.COMPACT_CARD_HEIGHT), "Kompakte Bühne verwendet die feste vollständige Querkarte")
-	_check(compact_copy != null and compact_copy.visible and compact_icon != null and compact_icon.custom_minimum_size == Vector2(52.0, 52.0), "200 Prozent zeigt die eigenständige Querfassung mit lesbarem Medaillon")
+	var compact_balance := compact_card.find_child("CompactIconBalance", true, false) as Control
+	var compact_effect := compact_card.find_child("CompactUpgradeEffect", true, false) as RichTextLabel
+	_check(compact_copy != null and compact_copy.visible and compact_icon != null and compact_icon.custom_minimum_size == Vector2(46.0, 46.0), "200 Prozent zeigt die eigenständige Querfassung mit zurückgenommenem Medaillon")
+	_check(compact_balance != null and compact_balance.custom_minimum_size.x == 58.0 and compact_effect != null and compact_effect.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "Der kompakte Wirkungswert liegt durch den symmetrischen Gegenraum auf der echten Kartenachse")
 	_check(overlay.body_scroll().get_global_rect().encloses(compact_card.get_global_rect()), "Die erste kompakte Ausbaukarte ist beim Öffnen vollständig sichtbar")
 	_check(
 		overlay.modal_sheet().size.x <= host.size.x + 0.5 and overlay.modal_sheet().size.y <= host.size.y + 0.5,
@@ -413,7 +416,7 @@ func _assert_card_contract(card: Button, option_id: StringName) -> void:
 	var effect := card.find_child("UpgradeEffect", true, false) as RichTextLabel
 	var comparison := card.find_child("UpgradeComparison", true, false) as RichTextLabel
 	_check(title != null and effect != null and comparison != null, "Karte besitzt Iconzeile, Kurztext und Vorher-nachher-Wert")
-	_check(icon != null and icon.kind != &"" and icon.custom_minimum_size == Vector2(72.0, 72.0) and icon.framed, "Karte übernimmt ein sichtbares 72-Pixel-Medaillon direkt aus dem View-Model")
+	_check(icon != null and icon.kind != &"" and icon.custom_minimum_size == Vector2(64.0, 64.0) and icon.framed, "Karte übernimmt ein sichtbares 64-Pixel-Medaillon direkt aus dem View-Model")
 	_check(title != null and title.theme_type_variation == AlveolusVisualTheme.TYPE_BODY_LABEL, "Kartenname bleibt mit zentraler Body-Typografie etwas kleiner als der Wertakzent")
 	if effect != null:
 		_check(effect.fit_content and not effect.scroll_active and effect.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART, "Kurze Wirkung wächst in höchstens den verfügbaren Kartenraum statt intern zu scrollen")
