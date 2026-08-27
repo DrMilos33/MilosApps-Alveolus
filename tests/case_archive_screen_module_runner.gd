@@ -11,24 +11,26 @@ func _initialize() -> void:
 func _run() -> void:
 	var screen_source := _read_source("res://scripts/ui/screens/case_archive_screen.gd")
 	_check(not screen_source.contains("LevelCaseIllustration"), "Fallarchiv baut keine Fallillustrationen mehr")
-	_check(screen_source.contains("CaseJourney") and screen_source.contains("JourneyConnector"), "Fallarchiv baut einen echten chronologischen Einsatzpfad")
+	_check(screen_source.contains("CaseBoard") and not screen_source.contains("JourneyConnector"), "Fallarchiv baut ein kompaktes chronologisches Fallbrett ohne Pfaddekoration")
 	_check(screen_source.contains("AlveolusUIComponents.choice_row"), "Einsatzstationen verwenden die zentrale kompakte ChoiceRow-Rolle")
+	_check(screen_source.contains("MOUSE_BUTTON_WHEEL_UP") and screen_source.contains("MOUSE_BUTTON_WHEEL_DOWN"), "Fallbrett besitzt eine explizite Mausradnavigation")
 	_check(not screen_source.contains("add_theme_stylebox_override"), "Fallarchiv erzeugt keine lokalen StyleBoxen")
 	var host := _create_logical_host(Vector2i(1280, 720))
 	var source_entries := _fixture_entries()
+	source_entries.reverse()
 	var view_model := CaseArchiveViewModel.new(7, source_entries, &"case_01")
 	var original_hash := view_model.get_content_hash()
 	source_entries.clear()
-	_check(view_model.get_entries().size() == 4, "View-Model kopiert das Eingabearray tief")
+	_check(view_model.get_entries().size() == 7, "View-Model kopiert das Eingabearray tief")
 	var returned_entries := view_model.get_entries()
 	returned_entries.remove_at(0)
-	_check(view_model.get_entries().size() == 4, "View-Model gibt keine veränderbare interne Collection frei")
+	_check(view_model.get_entries().size() == 7, "View-Model gibt keine veränderbare interne Collection frei")
 	_check(view_model.get_content_hash() == original_hash, "Externe Arrayänderungen verändern den Content-Hash nicht")
 	_check(view_model.get_entry(&"case_01").get_order() == 1, "IDs und Reihenfolge bleiben im View-Model erhalten")
 	_check(view_model.get_entry(&"intro").is_completed(), "Abschlusszustand wird explizit und ohne Statustextanalyse transportiert")
 	_check(view_model.get_next_case_id() == &"case_01", "Der früheste freigeschaltete unvollständige Fall ist das einzige nächste Ziel")
 	var completion_changed := CaseArchiveViewModel.new(7, _fixture_entries(true), &"case_01")
-	_check(completion_changed.get_content_hash() != original_hash and completion_changed.get_next_case_id() == &"", "Abschlusszustand beeinflusst Hash und Next-Bestimmung")
+	_check(completion_changed.get_content_hash() != original_hash and completion_changed.get_next_case_id() == &"case_02", "Abschlusszustand beeinflusst Hash und Next-Bestimmung")
 
 	var screen := CaseArchiveScreen.new()
 	screen.theme = AlveolusVisualTheme.create_theme()
@@ -48,7 +50,7 @@ func _run() -> void:
 	var changed_same_revision := CaseArchiveViewModel.new(8, _fixture_entries(), &"intro")
 	_check(not screen.apply_view_model(changed_same_revision), "Abweichender Inhalt ohne neue Revision wird als ungültig verworfen")
 	_check(screen.get_scroll_container().follow_focus, "Fallliste hält fokussierte Karten sichtbar")
-	_check(screen.get_scroll_container().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Responsive Fallkarten benötigen keinen horizontalen Scrollzwang")
+	_check(screen.get_scroll_container().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "Fallbrett wächst mit weiteren Fällen vertikal statt als endloses horizontales Band")
 	_check(screen.get_default_focus_control() == screen.card_for_case(&"case_01"), "Vorbereiteter Defaultfokus folgt dem nächsten freigeschalteten Fall")
 	_check(get_root().gui_get_focus_owner() == null, "Apply greift keinen sichtbaren Fokus")
 	_check(screen.get_node_or_null("PageShell") != null, "Fallarchiv verwendet den zentralen PageShell")
@@ -75,17 +77,26 @@ func _run() -> void:
 	var summary := unlocked.find_child("Summary", true, false) as Label
 	_check(summary != null and summary.max_lines_visible == 1 and summary.text == "Bereit zur Einsatzplanung", "Nächster Fall zeigt eine knappe handlungsbezogene Zusammenfassung")
 	var unlocked_title := unlocked.find_child("Title", true, false) as Label
-	_check(unlocked_title != null and unlocked_title.size.x >= 150.0 and unlocked_title.text == "Lokaler Herd", "Falltitel nutzt die verfügbare Kartenbreite ohne unnötige Ellipse")
+	_check(unlocked_title != null and unlocked_title.size.x >= 80.0 and unlocked_title.text == "Lokaler Herd", "Falltitel bleibt in der kompakten Rasterkarte lesbar")
 	_check(unlocked.find_child("Best", true, false) == null and unlocked.find_child("Record", true, false) == null, "Fallkarte reserviert keine getrennten Metadatenzeilen")
-	_check(is_equal_approx(unlocked.custom_minimum_size.y, CaseArchiveScreen.CARD_HEIGHT_CURRENT), "Der nächste Fall besitzt die größere Hauptstation")
-	_check(completed.custom_minimum_size.y == CaseArchiveScreen.CARD_HEIGHT and unlocked.custom_minimum_size.x > completed.custom_minimum_size.x and completed.custom_minimum_size.x > locked.custom_minimum_size.x, "Aktueller, abgeschlossener und gesperrter Fall bilden eine klare Größenhierarchie")
-	var journey := screen.find_child("CaseJourney", true, false) as VBoxContainer
-	_check(journey != null and journey.get_meta(&"alveolus_component", &"") == &"case_journey", "Chronologischer Pfad besitzt eine stabile semantische Komponente")
-	_check(screen.find_children("JourneyConnector", "ColorRect", true, false).size() == view_model.get_entries().size() - 1, "Zwischen allen Stationen liegt genau ein Pfadverbinder")
-	_check(unlocked.get_node_or_null(unlocked.focus_neighbor_top) == completed and unlocked.focus_neighbor_bottom.is_empty(), "D-Pad-Pfad verbindet nur auswählbare Stationen und überspringt Locks")
+	_check(completed.custom_minimum_size.y == CaseArchiveScreen.CARD_HEIGHT and unlocked.custom_minimum_size.y == CaseArchiveScreen.CARD_HEIGHT and locked.custom_minimum_size.y == CaseArchiveScreen.CARD_HEIGHT, "Alle Fälle verwenden eine gleichmäßig kompakte Kartenhöhe")
+	var board := screen.find_child("CaseBoard", true, false) as GridContainer
+	_check(board != null and board.get_meta(&"alveolus_component", &"") == &"case_board", "Fallbrett besitzt eine stabile semantische Komponente")
+	_check(board != null and board.columns == 4 and board.get_child_count() == 7 and ceili(float(board.get_child_count()) / float(board.columns)) == 2, "Sieben Fälle stehen auf der breiten Bühne in genau zwei Reihen")
+	_check(board != null and board.get_child(0) == completed and board.get_child(6) == screen.card_for_case(&"case_06"), "Raster und Eingaben verwenden trotz unsortierter Quelldaten dieselbe Chronologie")
+	_check(screen.find_children("JourneyConnector", "ColorRect", true, false).is_empty(), "Das kompakte Fallbrett reserviert keinen Platz für Pfadverbinder")
+	_check(unlocked.get_node_or_null(unlocked.focus_neighbor_left) == completed and unlocked.get_node_or_null(unlocked.focus_neighbor_right) == screen.find_child("BackButton", true, false), "Räumliche Pfeilnavigation verbindet Bedienbares, überspringt Locks und endet in der Kopfaktion")
+	_check(bool(unlocked.get_meta(&"alveolus_owns_directional_focus", false)), "Fallkarten schützen ihre räumliche Navigation vor dem globalen Fokuszyklus")
 
 	var selected_ids: Array[StringName] = []
 	screen.case_selected.connect(func(case_id: StringName) -> void: selected_ids.append(case_id))
+	_emit_wheel(screen.get_scroll_container(), MOUSE_BUTTON_WHEEL_UP)
+	_check(get_root().gui_get_focus_owner() == completed, "Mausradnavigation bewegt den vorbereiteten Marker zu einem früheren Fall")
+	_check(get_root().gui_get_focus_owner() == completed and selected_ids.is_empty(), "Reine Navigation fokussiert den früheren Fall, startet ihn aber nicht")
+	_emit_wheel(screen.get_scroll_container(), MOUSE_BUTTON_WHEEL_DOWN)
+	_check(get_root().gui_get_focus_owner() == unlocked, "Mausradnavigation bewegt den Marker wieder zum nächsten Fall")
+	_check(get_root().gui_get_focus_owner() == unlocked and selected_ids.is_empty(), "Vorwärtsnavigation fokussiert exakt den nächsten bedienbaren Fall")
+	_check(not screen._move_focus_by_case(1) and get_root().gui_get_focus_owner() == unlocked, "Mausradnavigation klemmt am letzten freigeschalteten Fall ohne Wrap")
 	unlocked.pressed.emit()
 	_check(selected_ids == [&"case_01"], "Kartenklick emittiert ausschließlich den stabilen Fall-ID-Intent")
 	var replay_count := [0]
@@ -106,18 +117,31 @@ func _run() -> void:
 	var page_header := _semantic_component(shell, &"page_header")
 	var scroll := screen.get_scroll_container()
 	var scroll_bar := scroll.get_v_scroll_bar()
+	board = screen.find_child("CaseBoard", true, false) as GridContainer
 	_check(shell != null and _fully_inside(shell, host), "PageShell bleibt im echten logischen 480-mal-270-Host")
 	_check(page_header != null and _fully_inside(page_header, host), "Fallarchivheader bleibt im echten logischen 480-mal-270-Host")
 	_check(header_actions != null and _fully_inside(header_actions, host) and _fully_inside(header_actions, page_header), "Kompakte Headeraktionen bleiben vollständig in Header und Host")
 	_check(back_button != null and _fully_inside(back_button, host) and _fully_inside(back_button, page_header), "Campus-Navigation bleibt vollständig in Header und Host")
 	_check(scroll != null and _right_inside(scroll, host), "Fallscrollfläche bleibt rechts vollständig im Host")
-	_check(scroll_bar.visible, "Vier kompakte Fallkarten aktivieren den erwarteten vertikalen Scrollpfad")
+	_check(board != null and board.columns == 2 and ceili(float(board.get_child_count()) / float(board.columns)) == 4, "Kompakte Bühne stapelt dieselben Fälle als vier zweispaltige Reihen")
+	_check(scroll_bar.visible, "Vier kompakte Fallreihen aktivieren den erwarteten vertikalen Scrollpfad")
 	_check(shell != null and shell.size.x <= host.size.x + 0.5 and _right_inside(shell, host), "Scrollbarreserve verbreitert die kompakte PageShell nicht horizontal")
 	for entry in view_model.get_entries():
 		var card := screen.card_for_case(entry.get_id())
-		_check(card != null and card.size.x <= screen.get_scroll_container().size.x + 0.5, "Responsive Karte %s bleibt im sichtbaren Scrollbereich" % entry.get_id())
-		_check(card != null and _right_inside(card, host), "Responsive Karte %s bleibt rechts vollständig im Host" % entry.get_id())
+		_check(card != null and card.size.x <= screen.get_scroll_container().size.x + 0.5, "Responsive Karte %s bleibt schmaler als der sichtbare Scrollbereich" % entry.get_id())
 		_check(card != null and _right_inside_scroll_content(card, scroll), "Responsive Karte %s respektiert die vertikale Scrollbarreserve" % entry.get_id())
+
+	var replay_model := CaseArchiveViewModel.new(9, _fixture_entries(true), &"case_02")
+	_check(screen.apply_view_model(replay_model), "Ein späterer Fortschrittsstand baut das Fallbrett gezielt neu")
+	await process_frame
+	await process_frame
+	var replay_case := screen.card_for_case(&"case_01")
+	var next_case := screen.card_for_case(&"case_02")
+	_check(replay_case != null and not replay_case.disabled and replay_case.get_meta(&"journey_state", &"") == &"completed", "Abgeschlossene Kampagnenfälle bleiben als Grind-Ziele bedienbar")
+	_check(next_case != null and next_case.get_meta(&"journey_state", &"") == &"current", "Der Fortschrittsmarker wandert unabhängig von wiederholbaren Fällen weiter")
+	selected_ids.clear()
+	replay_case.pressed.emit()
+	_check(selected_ids == [&"case_01"], "Ein wiederholter abgeschlossener Kampagnenfall emittiert weiterhin seine stabile ID")
 
 	host.queue_free()
 	await process_frame
@@ -136,12 +160,17 @@ func _fixture_entries(case_one_completed: bool = false) -> Array[CaseArchiveView
 	))
 	result.append(CaseArchiveViewModel.CaseEntryViewModel.new(
 		&"case_02", 2, "Die Ausbreitung", "Fall 02 · Gesperrt", "4:00 Min. · Boss 3:00 Min.",
-		"", "Noch kein Sieg", false, false, AlveolusVisualTheme.CORAL
+		"", "Noch kein Sieg", false, case_one_completed, AlveolusVisualTheme.CORAL
 	))
 	result.append(CaseArchiveViewModel.CaseEntryViewModel.new(
 		&"case_03", 3, "Schwerer Verlauf", "Fall 03 · Gesperrt", "5:00 Min. · Boss 3:45 Min.",
 		"", "Noch kein Sieg", false, false, AlveolusVisualTheme.TURQUOISE
 	))
+	for order in range(4, 7):
+		result.append(CaseArchiveViewModel.CaseEntryViewModel.new(
+			StringName("case_%02d" % order), order, "Fallziel %02d" % order, "Fall %02d · Gesperrt" % order, "5:00 Min.",
+			"", "Noch kein Sieg", false, false, AlveolusVisualTheme.COBALT
+		))
 	return result
 
 
@@ -169,6 +198,13 @@ func _create_logical_host(logical_size: Vector2i) -> Control:
 
 func _resize_logical_host(host: Control, logical_size: Vector2i) -> void:
 	host.size = Vector2(logical_size)
+
+
+func _emit_wheel(control: Control, button_index: MouseButton) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = button_index
+	event.pressed = true
+	control.gui_input.emit(event)
 
 
 func _fully_inside(control: Control, container: Control, tolerance: float = 0.5) -> bool:
@@ -203,10 +239,9 @@ func _right_inside_scroll_content(control: Control, scroll: ScrollContainer, tol
 func _assert_case_station(card: Button, expected_icon: StringName) -> void:
 	var medallion := card.find_child("CaseStationMedallion", true, false) as PanelContainer
 	var icon := card.find_child("CaseStationIcon", true, false) as SimpleIcon
-	var state_icon := card.find_child("CaseStateIcon", true, false) as SimpleIcon
 	_check(medallion != null and medallion.theme_type_variation == AlveolusVisualTheme.TYPE_DOCUMENT_INSET, "Station verwendet ein zentral gestyltes Wegpunktmedaillon")
 	_check(medallion != null and medallion.get_meta(&"alveolus_component", &"") == &"case_station_medallion", "Wegpunktmedaillon besitzt eine stabile semantische Rolle")
-	_check(icon != null and state_icon != null and icon.kind == expected_icon and state_icon.kind == expected_icon, "Stationszustand ist redundant über Wegpunkt und Randmarker lesbar")
+	_check(icon != null and icon.kind == expected_icon, "Stationszustand verwendet das erwartete semantische Wegpunktsymbol")
 
 
 func _visible_label_copy(card: Button) -> String:

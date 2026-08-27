@@ -5,15 +5,13 @@ signal case_selected(case_id: StringName)
 signal replay_story
 signal back
 
-const CARD_MINIMUM_WIDTH := 260.0
-const CARD_HEIGHT := 84.0
-const CARD_HEIGHT_CURRENT := 100.0
-const CARD_HEIGHT_COMPACT := 88.0
-const STATION_WIDTH := 650.0
-const STATION_WIDTH_CURRENT := 820.0
-const STATION_WIDTH_LOCKED := 560.0
-const STATION_MEDALLION_SIZE := 46.0
-const CONNECTOR_HEIGHT := 10.0
+const CARD_HEIGHT := 88.0
+const CARD_HEIGHT_COMPACT := 84.0
+const STATION_MEDALLION_SIZE := 40.0
+const WIDE_BOARD_COLUMNS := 4
+const COMPACT_BOARD_COLUMNS := 2
+const SINGLE_BOARD_BREAKPOINT := 400.0
+const COMPACT_BOARD_BREAKPOINT := 760.0
 
 var _applied_revision := -1
 var _applied_content_hash := 0
@@ -23,13 +21,11 @@ var _safe_area: MarginContainer
 var _shell_stack: VBoxContainer
 var _header: PanelContainer
 var _scroll: ScrollContainer
-var _journey: VBoxContainer
+var _board: GridContainer
 var _header_actions: HBoxContainer
 var _replay_button: Button
 var _back_button: Button
 var _cards: Dictionary = {}
-var _station_rows: Dictionary = {}
-var _connectors: Array[ColorRect] = []
 
 
 func _init() -> void:
@@ -148,16 +144,19 @@ func _build_interface() -> void:
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	_scroll.follow_focus = true
+	_scroll.gui_input.connect(_on_board_gui_input)
 	content.add_child(_scroll)
 
-	_journey = VBoxContainer.new()
-	_journey.name = "CaseJourney"
-	_journey.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_journey.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_journey.add_theme_constant_override("separation", 0)
-	_journey.set_meta(&"alveolus_component", &"case_journey")
-	_scroll.add_child(_journey)
-	_scroll.resized.connect(_refresh_station_geometry)
+	_board = GridContainer.new()
+	_board.name = "CaseBoard"
+	_board.columns = WIDE_BOARD_COLUMNS
+	_board.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_board.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_board.add_theme_constant_override("h_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_board.add_theme_constant_override("v_separation", AlveolusVisualTheme.CONTROL_GAP)
+	_board.set_meta(&"alveolus_component", &"case_board")
+	_scroll.add_child(_board)
+	_scroll.resized.connect(_refresh_board_geometry)
 
 	var shell_parts := AlveolusUIComponents.page_shell(header, content)
 	_shell = shell_parts["shell"] as PanelContainer
@@ -170,87 +169,43 @@ func _build_interface() -> void:
 
 
 func _rebuild_cards() -> void:
-	for child in _journey.get_children():
-		_journey.remove_child(child)
+	for child in _board.get_children():
+		_board.remove_child(child)
 		child.queue_free()
 	_cards.clear()
-	_station_rows.clear()
-	_connectors.clear()
 	if _view_model == null:
 		return
-	var selected_id := _view_model.get_selected_case_id()
 	var next_id := _view_model.get_next_case_id()
-	var entries := _view_model.get_entries()
-	entries.sort_custom(func(a: CaseArchiveViewModel.CaseEntryViewModel, b: CaseArchiveViewModel.CaseEntryViewModel) -> bool: return a.get_order() < b.get_order())
-	for index in range(entries.size()):
-		var entry := entries[index] as CaseArchiveViewModel.CaseEntryViewModel
+	for entry_value in _sorted_entries():
+		var entry := entry_value as CaseArchiveViewModel.CaseEntryViewModel
 		if entry == null:
 			continue
 		var state := _journey_state(entry, next_id)
-		var row := _build_station_row(entry.get_id())
-		var card := _build_case_card(entry, state, entry.get_id() == selected_id)
-		row.add_child(card)
-		var right_spacer := Control.new()
-		right_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(right_spacer)
-		_journey.add_child(row)
+		var card := _build_case_card(entry, state)
+		_board.add_child(card)
 		_cards[entry.get_id()] = card
-		_station_rows[entry.get_id()] = row
-		if index < entries.size() - 1:
-			var connector := _build_connector(entry.is_completed())
-			_journey.add_child(connector.get_parent())
-			_connectors.append(connector)
 	_configure_focus_path()
 	_refresh_responsive_layout.call_deferred()
-	_scroll_to_primary_station.call_deferred()
-
-
-func _build_station_row(case_id: StringName) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.name = "StationRow_%s" % String(case_id)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var left_spacer := Control.new()
-	left_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	left_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(left_spacer)
-	return row
-
-
-func _build_connector(progressed: bool) -> ColorRect:
-	var center := CenterContainer.new()
-	center.name = "JourneyConnectorHost"
-	center.custom_minimum_size.y = CONNECTOR_HEIGHT
-	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var connector := ColorRect.new()
-	connector.name = "JourneyConnector"
-	connector.custom_minimum_size = Vector2(3.0, CONNECTOR_HEIGHT)
-	connector.color = Color(AlveolusVisualTheme.TEAL, 0.72) if progressed else Color(AlveolusVisualTheme.MUTED, 0.30)
-	connector.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	connector.set_meta(&"journey_progressed", progressed)
-	center.add_child(connector)
-	return connector
+	_scroll_to_primary_card.call_deferred()
 
 
 func _build_case_card(
 	entry: CaseArchiveViewModel.CaseEntryViewModel,
-	state: StringName,
-	selected: bool
+	state: StringName
 ) -> Button:
 	var visually_primary := state == &"current"
 	var card := AlveolusUIComponents.choice_row("", "", "", visually_primary, not entry.is_unlocked())
 	card.name = "Case_%s" % String(entry.get_id())
-	card.custom_minimum_size = Vector2(CARD_MINIMUM_WIDTH, CARD_HEIGHT_CURRENT if visually_primary else CARD_HEIGHT)
-	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	card.custom_minimum_size = Vector2(0.0, CARD_HEIGHT)
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	card.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	card.set_meta(&"case_id", entry.get_id())
 	card.set_meta(&"journey_state", state)
-	card.set_meta(&"journey_selected", selected)
-	card.set_meta(&"alveolus_accessible_name", _accessible_name(entry, state, selected))
+	card.set_meta(&"alveolus_owns_directional_focus", true)
+	card.set_meta(&"alveolus_accessible_name", _accessible_name(entry, state))
+	card.focus_entered.connect(_ensure_card_visible.bind(card))
+	card.gui_input.connect(_on_board_gui_input)
 	card.pressed.connect(_emit_case_selected.bind(entry.get_id()))
 
 	var row := HBoxContainer.new()
@@ -271,7 +226,7 @@ func _build_case_card(
 	medallion.add_child(medallion_center)
 	var station_icon := SimpleIcon.new()
 	station_icon.name = "CaseStationIcon"
-	station_icon.custom_minimum_size = Vector2.ONE * 28.0
+	station_icon.custom_minimum_size = Vector2.ONE * 24.0
 	station_icon.configure(_station_icon_kind(entry, state), _station_accent(entry, state))
 	medallion_center.add_child(station_icon)
 	row.add_child(medallion)
@@ -280,18 +235,23 @@ func _build_case_card(
 	copy.name = "CaseCopy"
 	copy.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	copy.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	copy.add_theme_constant_override("separation", AlveolusVisualTheme.GRID_UNIT)
+	copy.add_theme_constant_override("separation", 2)
 	row.add_child(copy)
 
 	var status := AlveolusUIComponents.label(_station_status_text(entry, state), AlveolusVisualTheme.TYPE_EYEBROW_LABEL)
 	status.name = "Status"
 	status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status.clip_text = true
+	status.autowrap_mode = TextServer.AUTOWRAP_OFF
+	status.max_lines_visible = 1
+	status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	status.add_theme_color_override("font_color", _station_accent(entry, state).lightened(0.16))
 	copy.add_child(status)
 
 	var title := AlveolusUIComponents.label(entry.get_title(), AlveolusVisualTheme.TYPE_SECTION_LABEL)
 	title.name = "Title"
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.clip_text = true
 	title.autowrap_mode = TextServer.AUTOWRAP_OFF
 	title.max_lines_visible = 1
 	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -303,24 +263,21 @@ func _build_case_card(
 	)
 	summary.name = "Summary"
 	summary.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	summary.clip_text = true
 	summary.autowrap_mode = TextServer.AUTOWRAP_OFF
 	summary.max_lines_visible = 1
 	summary.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	copy.add_child(summary)
 
-	var state_icon := SimpleIcon.new()
-	state_icon.name = "CaseStateIcon"
-	state_icon.custom_minimum_size = Vector2.ONE * (26.0 if state == &"current" else 22.0)
-	state_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	state_icon.configure(_station_icon_kind(entry, state), _station_accent(entry, state))
-	row.add_child(state_icon)
 	if state == &"locked":
 		row.modulate = Color(0.82, 0.86, 0.87, 0.82)
 
 	var card_margin := AlveolusUIComponents.margin(row, 12)
 	card_margin.name = "CaseCardMargin"
-	for side in [&"margin_left", &"margin_top", &"margin_right", &"margin_bottom"]:
-		card_margin.add_theme_constant_override(side, 10)
+	card_margin.add_theme_constant_override("margin_left", 10)
+	card_margin.add_theme_constant_override("margin_top", 8)
+	card_margin.add_theme_constant_override("margin_right", 10)
+	card_margin.add_theme_constant_override("margin_bottom", 8)
 	card_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(card_margin)
 	card_margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -392,23 +349,29 @@ func _station_accent(entry: CaseArchiveViewModel.CaseEntryViewModel, state: Stri
 	return entry.get_accent()
 
 
-func _refresh_station_geometry() -> void:
-	if _scroll == null or _journey == null or _cards.is_empty():
+func _refresh_board_geometry() -> void:
+	if _scroll == null or _board == null:
 		return
 	var logical_width := _layout_authority_width()
-	var compact := logical_width < 620.0
-	var screen_margin := AlveolusVisualTheme.SCREEN_MARGIN_COMPACT if compact else AlveolusVisualTheme.SCREEN_MARGIN
-	# The compact scrollbar reserves twenty logical pixels in this theme. Keep it
-	# outside the station width so the PageShell never grows past its host.
-	var available_width := maxf(logical_width - float(screen_margin * 2) - 20.0, CARD_MINIMUM_WIDTH)
+	var columns := _board_columns_for_width(logical_width)
+	if _board.columns != columns:
+		_board.columns = columns
+		_configure_focus_path()
+	var compact := columns < WIDE_BOARD_COLUMNS
 	for card_value in _cards.values():
 		var card := card_value as Button
 		if card == null:
 			continue
-		var state := StringName(card.get_meta(&"journey_state", &"available"))
-		var target_width := STATION_WIDTH_CURRENT if state == &"current" else (STATION_WIDTH_LOCKED if state == &"locked" else STATION_WIDTH)
-		card.custom_minimum_size.x = available_width if compact else minf(available_width, target_width)
-		card.custom_minimum_size.y = (CARD_HEIGHT_CURRENT if state == &"current" else CARD_HEIGHT_COMPACT) if compact else (CARD_HEIGHT_CURRENT if state == &"current" else CARD_HEIGHT)
+		card.custom_minimum_size = Vector2(0.0, CARD_HEIGHT_COMPACT if compact else CARD_HEIGHT)
+	_scroll_to_primary_card.call_deferred()
+
+
+func _board_columns_for_width(logical_width: float) -> int:
+	if logical_width < SINGLE_BOARD_BREAKPOINT:
+		return 1
+	if logical_width < COMPACT_BOARD_BREAKPOINT:
+		return COMPACT_BOARD_COLUMNS
+	return WIDE_BOARD_COLUMNS
 
 
 func _refresh_responsive_layout() -> void:
@@ -429,7 +392,7 @@ func _refresh_responsive_layout() -> void:
 		(_back_button as IconTextButton).set_caption("Campus" if compact else "Zum Campus", compact)
 	_back_button.set_meta(&"alveolus_accessible_name", "Zum Campus")
 	_back_button.tooltip_text = "Zum Campus" if compact else ""
-	_refresh_station_geometry.call_deferred()
+	_refresh_board_geometry.call_deferred()
 
 
 func _layout_authority_width() -> float:
@@ -441,22 +404,138 @@ func _layout_authority_width() -> float:
 
 
 func _configure_focus_path() -> void:
-	var focusable: Array[Button] = []
-	if _view_model == null:
+	if _view_model == null or _board == null:
 		return
-	for entry in _view_model.get_entries():
+	var sorted_entries := _sorted_entries()
+	var focusable_indices: Array[int] = []
+	for index in range(sorted_entries.size()):
+		var entry := sorted_entries[index] as CaseArchiveViewModel.CaseEntryViewModel
+		var card := card_for_case(entry.get_id())
+		if card == null:
+			continue
+		card.focus_neighbor_left = NodePath()
+		card.focus_neighbor_top = NodePath()
+		card.focus_neighbor_right = NodePath()
+		card.focus_neighbor_bottom = NodePath()
+		if not card.disabled:
+			focusable_indices.append(index)
+	var columns := maxi(1, _board.columns)
+	for source_index in focusable_indices:
+		var source_entry := sorted_entries[source_index] as CaseArchiveViewModel.CaseEntryViewModel
+		var source := card_for_case(source_entry.get_id())
+		_set_focus_neighbor(source, &"focus_neighbor_left", _spatial_neighbor(source_index, focusable_indices, columns, Vector2i.LEFT), sorted_entries, _replay_button)
+		_set_focus_neighbor(source, &"focus_neighbor_right", _spatial_neighbor(source_index, focusable_indices, columns, Vector2i.RIGHT), sorted_entries, _back_button)
+		_set_focus_neighbor(source, &"focus_neighbor_top", _spatial_neighbor(source_index, focusable_indices, columns, Vector2i.UP), sorted_entries, _replay_button)
+		_set_focus_neighbor(source, &"focus_neighbor_bottom", _spatial_neighbor(source_index, focusable_indices, columns, Vector2i.DOWN), sorted_entries, _back_button)
+
+
+func _spatial_neighbor(source_index: int, candidates: Array[int], columns: int, direction: Vector2i) -> int:
+	var source_row := source_index / columns
+	var source_column := source_index % columns
+	var best_index := -1
+	var best_primary := 1000000
+	var best_secondary := 1000000
+	for candidate_index in candidates:
+		if candidate_index == source_index:
+			continue
+		var candidate_row := candidate_index / columns
+		var candidate_column := candidate_index % columns
+		var primary := 0
+		var secondary := 0
+		if direction == Vector2i.LEFT or direction == Vector2i.RIGHT:
+			if candidate_row != source_row:
+				continue
+			var delta_column := candidate_column - source_column
+			if direction == Vector2i.LEFT and delta_column >= 0:
+				continue
+			if direction == Vector2i.RIGHT and delta_column <= 0:
+				continue
+			primary = absi(delta_column)
+		else:
+			var delta_row := candidate_row - source_row
+			if direction == Vector2i.UP and delta_row >= 0:
+				continue
+			if direction == Vector2i.DOWN and delta_row <= 0:
+				continue
+			primary = absi(delta_row)
+			secondary = absi(candidate_column - source_column)
+		if primary < best_primary or (primary == best_primary and secondary < best_secondary):
+			best_index = candidate_index
+			best_primary = primary
+			best_secondary = secondary
+	return best_index
+
+
+func _set_focus_neighbor(
+	source: Control,
+	property_name: StringName,
+	target_index: int,
+	sorted_entries: Array[CaseArchiveViewModel.CaseEntryViewModel],
+	fallback: Control
+) -> void:
+	if source == null:
+		return
+	var target := fallback
+	if target_index >= 0 and target_index < sorted_entries.size():
+		target = card_for_case(sorted_entries[target_index].get_id())
+	if target != null:
+		source.set(property_name, source.get_path_to(target))
+
+
+func _on_board_gui_input(event: InputEvent) -> void:
+	if not event is InputEventMouseButton or not (event as InputEventMouseButton).pressed:
+		return
+	var mouse_event := event as InputEventMouseButton
+	var step := 0
+	if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		step = -1
+	elif mouse_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		step = 1
+	if step == 0:
+		return
+	_move_focus_by_case(step)
+	accept_event()
+
+
+func _move_focus_by_case(step: int) -> bool:
+	var focusable := _focusable_cards_in_order()
+	if focusable.is_empty():
+		return false
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	var source_index := focusable.find(focus_owner)
+	if source_index < 0:
+		source_index = focusable.find(get_default_focus_control())
+		if source_index < 0:
+			source_index = 0
+	var target_index := clampi(source_index + signi(step), 0, focusable.size() - 1)
+	var target := focusable[target_index]
+	if focus_owner != target:
+		target.grab_focus()
+	_ensure_card_visible(target)
+	return target_index != source_index or focus_owner != target
+
+
+func _focusable_cards_in_order() -> Array[Button]:
+	var result: Array[Button] = []
+	for entry in _sorted_entries():
 		var card := card_for_case(entry.get_id())
 		if card != null and not card.disabled:
-			focusable.append(card)
-	for index in range(focusable.size()):
-		var card := focusable[index]
-		if index > 0:
-			card.focus_neighbor_top = card.get_path_to(focusable[index - 1])
-		if index + 1 < focusable.size():
-			card.focus_neighbor_bottom = card.get_path_to(focusable[index + 1])
+			result.append(card)
+	return result
 
 
-func _scroll_to_primary_station() -> void:
+func _sorted_entries() -> Array[CaseArchiveViewModel.CaseEntryViewModel]:
+	var entries := _view_model.get_entries() if _view_model != null else []
+	entries.sort_custom(func(a: CaseArchiveViewModel.CaseEntryViewModel, b: CaseArchiveViewModel.CaseEntryViewModel) -> bool: return a.get_order() < b.get_order())
+	return entries
+
+
+func _ensure_card_visible(card: Control) -> void:
+	if card != null and _scroll != null:
+		_scroll.ensure_control_visible(card)
+
+
+func _scroll_to_primary_card() -> void:
 	var primary := get_default_focus_control()
 	if primary != null and _scroll != null:
 		_scroll.ensure_control_visible(primary)
@@ -469,10 +548,6 @@ func _fit_shell_to_host() -> void:
 
 func _accessible_name(
 	entry: CaseArchiveViewModel.CaseEntryViewModel,
-	state: StringName,
-	selected: bool
+	state: StringName
 ) -> String:
-	var state_text := _station_status_text(entry, state)
-	if selected:
-		state_text += ". Ausgewählt"
-	return "%s. %s. %s" % [entry.get_title(), state_text, entry.get_record_text()]
+	return "%s. %s. %s" % [entry.get_title(), _station_status_text(entry, state), entry.get_record_text()]

@@ -526,17 +526,23 @@ func _verify_case_journey(screen: CaseArchiveScreen) -> bool:
 				completed_count += 1
 			&"locked":
 				locked_count += 1
-	var connectors := screen.find_children("JourneyConnector", "ColorRect", true, false)
+	var board := screen.find_child("CaseBoard", true, false) as GridContainer
+	var expected_columns := 4 if screen.size.x >= CaseArchiveScreen.COMPACT_BOARD_BREAKPOINT else (2 if screen.size.x >= CaseArchiveScreen.SINGLE_BOARD_BREAKPOINT else 1)
+	var expected_rows := ceili(float(cards.size()) / float(expected_columns))
+	var target_rows := 2 if expected_columns == 4 else (4 if expected_columns == 2 else 7)
 	var valid := cards.size() == 7 \
 		and current_count == 1 \
 		and completed_count == 2 \
 		and locked_count == 4 \
-		and connectors.size() == 6 \
+		and board != null \
+		and board.columns == expected_columns \
+		and expected_rows == target_rows \
+		and screen.find_children("JourneyConnector", "ColorRect", true, false).is_empty() \
 		and screen.get_scroll_container().horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED
 	if valid:
 		return true
 	capture_failed = true
-	push_error("Fallarchiv-Capture besitzt keine eindeutige chronologische Reise (Karten %d, fertig %d, aktuell %d, gesperrt %d, Verbinder %d)" % [cards.size(), completed_count, current_count, locked_count, connectors.size()])
+	push_error("Fallarchiv-Capture besitzt kein kompaktes chronologisches Fallbrett (Karten %d, fertig %d, aktuell %d, gesperrt %d, Spalten %d/%d, Reihen %d)" % [cards.size(), completed_count, current_count, locked_count, board.columns if board != null else -1, expected_columns, expected_rows])
 	return false
 
 

@@ -139,8 +139,9 @@ Die Fallkurzinfo ist keine massive Karte und keine zweite Textwand. Sie besteht 
 
 ## Fallarchiv
 
-- Intro und sechs Kampagnenfälle bilden eine vertikale chronologische Reise statt einer gleichgewichteten Kartenbibliothek. Abgeschlossene Fälle erscheinen als kompakte Stationen mit Check, der früheste freigeschaltete unvollständige Fall ist mit Zielmotiv, Goldakzent und größerer Geometrie genau einmal dominant, gesperrte Fälle folgen als schmalere Fernziele mit Padlock. Der Pfad bleibt dekorativ und nicht fokussierbar; D-Pad-Navigation verbindet ausschließlich bedienbare Stationen.
-- Der nächste Fall wird nicht automatisch fokussiert. Der vorbereitete Fokuspfad beginnt dort erst nach bewusster Tastatur- oder Gamepadnavigation. Auf kleinen Ansichten bleibt die Reise einspaltig, vertikal scrollbar und ohne horizontalen Scrollzwang.
+- Intro und Kampagnenfälle bilden ein kompaktes, chronologisch zeilenweise gefülltes Fallbrett. Bei 1280×720 stehen vier gleich große Karten pro Reihe; Intro plus sechs Fälle benötigen damit genau zwei Reihen. Unter 760 logischen Pixeln stehen zwei Karten pro Reihe, unter 400 eine. Weitere Fälle erzeugen zusätzliche vertikal scrollbare Reihen; ein endloses horizontales Band und dekorative Pfadverbinder sind unzulässig.
+- Abgeschlossene Fälle bleiben als wiederholbare Einsätze voll bedienbar und zeigen ihren Rekord. Der früheste freigeschaltete unvollständige Fall bleibt unabhängig von der Navigation genau einmal durch Zielmotiv, Goldakzent und `NÄCHSTER FALL` ausgezeichnet. Gesperrte Fälle besitzen Padlock und werden von jeder Eingabenavigation übersprungen.
+- Das Öffnen greift keinen Fokus. Nach bewusster Tastatur-/Gamepadnavigation bewegt sich der Fokus räumlich über das Fallbrett; das Mausrad verschiebt ihn chronologisch um genau einen bedienbaren Fall und klemmt an den Enden. Navigation startet keinen Einsatz. Erst Klick beziehungsweise `ui_accept` emittiert den stabilen Fallauswahl-Intent und erlaubt dadurch auch gezieltes Wiederholen zum Grinden.
 
 ## Forschung und Talente
 
